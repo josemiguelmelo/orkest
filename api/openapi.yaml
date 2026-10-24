@@ -1,0 +1,21 @@
+openapi: 3.1.0
+info:
+  title: Orkest API
+  version: 0.0.0
+paths:
+  /healthz:
+    get:
+      operationId: getHealth
+      summary: Process liveness (does not check database or runtime readiness)
+      responses:
+        '200':
+          description: HTTP process is running
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status:
+                    type: string
+                    const: ok
