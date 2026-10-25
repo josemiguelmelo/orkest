@@ -18,6 +18,7 @@ import (
 
 	acp "github.com/coder/acp-go-sdk"
 	"github.com/josemiguelmelo/orkest/internal/agentctl"
+	coreruntime "github.com/josemiguelmelo/orkest/internal/core/runtime"
 )
 
 const Version = "opencode v2.1.4"
@@ -27,7 +28,7 @@ type OpenCodeProvider struct {
 	Env                       []string
 }
 
-func (p *OpenCodeProvider) Runtime() string { return "opencode" }
+func (p *OpenCodeProvider) Runtime() coreruntime.Runtime { return coreruntime.OpenCode }
 
 func (p *OpenCodeProvider) Launch(ctx context.Context, config agentctl.RunConfig) (agentctl.Process, error) {
 	process, err := p.launch(ctx, config)

@@ -8,6 +8,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	coreruntime "github.com/josemiguelmelo/orkest/internal/core/runtime"
 )
 
 type chatProcess struct {
@@ -32,7 +34,7 @@ func (p *chatProcess) Cancel(context.Context) error { return nil }
 
 type chatProvider struct{ process *chatProcess }
 
-func (p chatProvider) Runtime() string                                    { return "opencode" }
+func (p chatProvider) Runtime() coreruntime.Runtime                       { return coreruntime.OpenCode }
 func (p chatProvider) Launch(context.Context, RunConfig) (Process, error) { return p.process, nil }
 
 func TestJournalBeforeDeliveryAndSlowSubscriber(t *testing.T) {

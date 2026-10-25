@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	coreruntime "github.com/josemiguelmelo/orkest/internal/core/runtime"
 )
 
 type controlledProcess struct {
@@ -41,7 +43,7 @@ func (p *controlledProcess) Cancel(ctx context.Context) error {
 
 type conversationProvider struct{ process Process }
 
-func (p conversationProvider) Runtime() string { return "opencode" }
+func (p conversationProvider) Runtime() coreruntime.Runtime { return coreruntime.OpenCode }
 func (p conversationProvider) Launch(context.Context, RunConfig) (Process, error) {
 	return p.process, nil
 }

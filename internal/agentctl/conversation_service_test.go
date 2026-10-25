@@ -5,6 +5,8 @@ import (
 	"errors"
 	"testing"
 	"time"
+
+	coreruntime "github.com/josemiguelmelo/orkest/internal/core/runtime"
 )
 
 func TestConversationServiceDoesNotOwnProcess(t *testing.T) {
@@ -59,7 +61,7 @@ type delayedLaunchProvider struct {
 	process *testProcess
 }
 
-func (p delayedLaunchProvider) Runtime() string { return "opencode" }
+func (p delayedLaunchProvider) Runtime() coreruntime.Runtime { return coreruntime.OpenCode }
 func (p delayedLaunchProvider) Launch(context.Context, RunConfig) (Process, error) {
 	close(p.started)
 	<-p.release

@@ -8,6 +8,19 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type Agent struct {
+	ID           string             `json:"id"`
+	WorkspaceID  string             `json:"workspace_id"`
+	Name         string             `json:"name"`
+	Runtime      string             `json:"runtime"`
+	Provider     string             `json:"provider"`
+	Model        string             `json:"model"`
+	Description  string             `json:"description"`
+	SystemPrompt string             `json:"system_prompt"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Organization struct {
 	ID        string             `json:"id"`
 	Name      string             `json:"name"`

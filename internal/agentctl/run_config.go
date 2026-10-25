@@ -3,18 +3,20 @@ package agentctl
 import (
 	"fmt"
 	"strings"
+
+	coreruntime "github.com/josemiguelmelo/orkest/internal/core/runtime"
 )
 
 // RunConfig is the resolved configuration bound to one task execution run.
 // It is separate from reusable agent definitions and process startup options.
 type RunConfig struct {
-	OrganizationID string         `json:"organizationId"`
-	WorkspaceID    string         `json:"workspaceId"`
-	TaskID         string         `json:"taskId"`
-	RunID          string         `json:"runId"`
-	Runtime        string         `json:"runtime"`
-	Model          ModelSelection `json:"model"`
-	SystemPrompt   string         `json:"systemPrompt"`
+	OrganizationID string              `json:"organizationId"`
+	WorkspaceID    string              `json:"workspaceId"`
+	TaskID         string              `json:"taskId"`
+	RunID          string              `json:"runId"`
+	Runtime        coreruntime.Runtime `json:"runtime"`
+	Model          ModelSelection      `json:"model"`
+	SystemPrompt   string              `json:"systemPrompt"`
 }
 
 type ModelSelection struct {
@@ -34,7 +36,7 @@ func (c RunConfig) Validate() error {
 		{"workspaceId", c.WorkspaceID},
 		{"taskId", c.TaskID},
 		{"runId", c.RunID},
-		{"runtime", c.Runtime},
+		{"runtime", string(c.Runtime)},
 		{"model.provider", c.Model.Provider},
 		{"model.id", c.Model.ID},
 		{"systemPrompt", c.SystemPrompt},
@@ -42,6 +44,9 @@ func (c RunConfig) Validate() error {
 		if strings.TrimSpace(field.value) == "" {
 			return &ValidationError{Field: field.name}
 		}
+	}
+	if !c.Runtime.Available() {
+		return &ValidationError{Field: "runtime"}
 	}
 
 	return nil
