@@ -1,0 +1,31 @@
+{
+  "realm": "orkest",
+  "enabled": true,
+  "displayName": "Orkest Local",
+  "clients": [
+    {
+      "clientId": "orkest-web",
+      "name": "Orkest local app",
+      "enabled": true,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "orkest-local-secret",
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "redirectUris": ["http://localhost:8080/auth/callback"],
+      "webOrigins": ["http://localhost:8080"]
+    }
+  ],
+  "users": [
+    {
+      "username": "local",
+      "enabled": true,
+      "email": "local@example.test",
+      "emailVerified": true,
+      "firstName": "Local",
+      "lastName": "Developer",
+      "credentials": [
+        { "type": "password", "value": "local", "temporary": false }
+      ]
+    }
+  ]
+}

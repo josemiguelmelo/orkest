@@ -2,6 +2,7 @@
 .env.*
 !.env.example
 /bin/
+/tmp/
 /web/node_modules/
 /web/dist/
 *.tsbuildinfo
