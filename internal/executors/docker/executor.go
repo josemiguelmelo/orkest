@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/containerd/errdefs"
 	"github.com/josemiguelmelo/orkest/internal/agentctl"
 	"github.com/josemiguelmelo/orkest/internal/orchestration"
 	"github.com/moby/moby/api/types/container"
@@ -33,6 +34,7 @@ const (
 type EngineClient interface {
 	ContainerCreate(context.Context, mobyclient.ContainerCreateOptions) (mobyclient.ContainerCreateResult, error)
 	ContainerStart(context.Context, string, mobyclient.ContainerStartOptions) (mobyclient.ContainerStartResult, error)
+	ContainerStop(context.Context, string, mobyclient.ContainerStopOptions) (mobyclient.ContainerStopResult, error)
 	ContainerInspect(context.Context, string, mobyclient.ContainerInspectOptions) (mobyclient.ContainerInspectResult, error)
 	ContainerRemove(context.Context, string, mobyclient.ContainerRemoveOptions) (mobyclient.ContainerRemoveResult, error)
 	Close() error
@@ -101,7 +103,10 @@ func NewWithClient(ctx context.Context, config Config, client EngineClient) (*Ex
 	return &Executor{client: client, config: config}, nil
 }
 
-var _ orchestration.ProcessExecutor = (*Executor)(nil)
+var (
+	_ orchestration.ProcessExecutor        = (*Executor)(nil)
+	_ orchestration.AgentProcessController = (*Executor)(nil)
+)
 
 func (e *Executor) StartAgentctl(ctx context.Context, config agentctl.RunConfig) (orchestration.Process, error) {
 	if err := config.Validate(); err != nil {
@@ -211,6 +216,70 @@ func (e *Executor) providerEnvironment() []string {
 }
 
 func (e *Executor) Close() error { return e.client.Close() }
+
+// TerminateAgentctl gracefully stops agentctl so it can close its runtime
+// subprocess, then removes the stopped container while retaining bind-mounted data.
+func (e *Executor) TerminateAgentctl(ctx context.Context, processID string) error {
+	if strings.TrimSpace(processID) == "" {
+		return errors.New("agentctl process identity is required")
+	}
+	inspection, err := e.client.ContainerInspect(ctx, processID, mobyclient.ContainerInspectOptions{})
+	if err != nil {
+		if errdefs.IsNotFound(err) {
+			return nil
+		}
+		return fmt.Errorf("inspect agentctl container before shutdown: %w", err)
+	}
+	if inspection.Container.State == nil {
+		return errors.New("docker did not report agentctl container state during shutdown")
+	}
+	if inspection.Container.State.Running {
+		timeout := 10
+		if _, err = e.client.ContainerStop(ctx, processID, mobyclient.ContainerStopOptions{Timeout: &timeout}); err != nil {
+			if errdefs.IsNotFound(err) {
+				return nil
+			}
+			return fmt.Errorf("stop agentctl container: %w", err)
+		}
+	}
+	if _, err = e.client.ContainerRemove(ctx, processID, mobyclient.ContainerRemoveOptions{}); err != nil && !errdefs.IsNotFound(err) {
+		return fmt.Errorf("remove stopped agentctl container: %w", err)
+	}
+	return nil
+}
+
+// TerminateAgentctlByRunID resolves the deterministic container name used before
+// the Docker ID is persisted, covering a platform crash during container startup.
+func (e *Executor) TerminateAgentctlByRunID(ctx context.Context, runID string) error {
+	if strings.TrimSpace(runID) == "" {
+		return errors.New("agent run identity is required")
+	}
+	return e.TerminateAgentctl(ctx, containerName(runID))
+}
+
+func (e *Executor) AgentctlRunning(ctx context.Context, processID string) (bool, error) {
+	if strings.TrimSpace(processID) == "" {
+		return false, errors.New("agentctl process identity is required")
+	}
+	inspection, err := e.client.ContainerInspect(ctx, processID, mobyclient.ContainerInspectOptions{})
+	if err != nil {
+		if errdefs.IsNotFound(err) {
+			return false, nil
+		}
+		return false, fmt.Errorf("inspect agentctl container state: %w", err)
+	}
+	if inspection.Container.State == nil {
+		return false, errors.New("docker did not report agentctl container state")
+	}
+	return inspection.Container.State.Running, nil
+}
+
+func (e *Executor) AgentctlRunningByRunID(ctx context.Context, runID string) (bool, error) {
+	if strings.TrimSpace(runID) == "" {
+		return false, errors.New("agent run identity is required")
+	}
+	return e.AgentctlRunning(ctx, containerName(runID))
+}
 
 func (e *Executor) taskDirectories(config agentctl.RunConfig) (string, string, error) {
 	scope, err := json.Marshal([]string{config.OrganizationID, config.WorkspaceID, config.TaskID})

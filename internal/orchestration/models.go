@@ -10,10 +10,13 @@ import (
 type LaunchStatus string
 
 const (
-	LaunchStarting       LaunchStatus = "starting"
-	LaunchProcessStarted LaunchStatus = "process_started"
-	LaunchReady          LaunchStatus = "ready"
-	LaunchFailed         LaunchStatus = "failed"
+	LaunchStarting              LaunchStatus = "starting"
+	LaunchProcessStarted        LaunchStatus = "process_started"
+	LaunchReady                 LaunchStatus = "ready"
+	LaunchFailed                LaunchStatus = "failed"
+	LaunchCompletedPendingClose LaunchStatus = "completed_pending_close"
+	LaunchFailedPendingClose    LaunchStatus = "failed_pending_close"
+	LaunchCompleted             LaunchStatus = "completed"
 )
 
 type Process struct {
@@ -32,6 +35,7 @@ type Launch struct {
 	FailureStage   string
 	FailureReason  string
 	LastSequence   uint64
+	LastEventType  string
 	UpdatedAt      time.Time
 }
 

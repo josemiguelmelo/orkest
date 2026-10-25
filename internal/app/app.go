@@ -52,25 +52,35 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 	workspaces := workspace.NewWorkspaceService(postgres.NewWorkspacePostgresRepository(database), organizations)
 	agents := agent.NewService(postgres.NewAgentPostgresRepository(database), workspaces)
 	codeRepositories := coderepository.NewService(postgres.NewCodeReposPostgresRepository(database), workspaces, dataRoot, githubprovider.NewGitHubCodeRepositoryProvider())
+	launchRepo := postgres.NewAgentLaunchPostgresRepository(database)
+	client := orchestration.NewHTTPAgentctlClient(&http.Client{Timeout: 10 * time.Second})
+	executor, executorErr := docker.New(ctx, docker.Config{
+		DataRoot:    filepath.Join(dataRoot, "agent-executions"),
+		ProviderEnv: splitEnvironmentNames(os.Getenv("ORKEST_AGENT_PROVIDER_ENV")),
+	})
+	if executorErr != nil {
+		return fmt.Errorf("initialize Docker agent executor: %w", executorErr)
+	}
+	defer func() { _ = executor.Close() }()
+	completion, completionErr := orchestration.NewLaunchCompletionService(launchRepo, executor)
+	if completionErr != nil {
+		return completionErr
+	}
+	if err = completion.RecoverPending(ctx); err != nil {
+		return err
+	}
+	communication, communicationErr := orchestration.NewConnectionService(ctx, client, launchRepo, completion)
+	if communicationErr != nil {
+		return communicationErr
+	}
+	if err = communication.ReconnectRecorded(); err != nil {
+		return err
+	}
 	var router http.Handler
 	if strings.EqualFold(os.Getenv("ORKEST_ENABLE_TEMP_AGENT_LAUNCH"), "true") {
-		executor, executorErr := docker.New(ctx, docker.Config{
-			DataRoot:    filepath.Join(dataRoot, "agent-executions"),
-			ProviderEnv: splitEnvironmentNames(os.Getenv("ORKEST_AGENT_PROVIDER_ENV")),
-		})
-		if executorErr != nil {
-			return fmt.Errorf("initialize temporary Docker agent launcher: %w", executorErr)
-		}
-		defer func() { _ = executor.Close() }()
 		launcher, launcherErr := orchestration.NewAgentLauncher(executor)
 		if launcherErr != nil {
 			return launcherErr
-		}
-		launchRepo := postgres.NewAgentLaunchPostgresRepository(database)
-		client := orchestration.NewHTTPAgentctlClient(&http.Client{Timeout: 10 * time.Second})
-		communication, communicationErr := orchestration.NewConnectionService(ctx, client, launchRepo)
-		if communicationErr != nil {
-			return communicationErr
 		}
 		launchService, serviceErr := orchestration.NewLaunchService(launchRepo, launcher, client, communication)
 		if serviceErr != nil {

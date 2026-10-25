@@ -9,6 +9,7 @@ import (
 // AgentctlClient owns request and stream transport to the agentctl process.
 type AgentctlClient interface {
 	WaitHealthy(context.Context, string) error
+	Status(context.Context, string) (agentctl.Status, error)
 	Configure(context.Context, string, agentctl.RunConfig) error
 	StartAgent(context.Context, string) error
 	Prompt(context.Context, string, string, string) error

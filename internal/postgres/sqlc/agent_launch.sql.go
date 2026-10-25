@@ -7,6 +7,8 @@ package sqlc
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const insertAgentLaunch = `-- name: InsertAgentLaunch :exec
@@ -33,6 +35,72 @@ func (q *Queries) InsertAgentLaunch(ctx context.Context, arg InsertAgentLaunchPa
 	return err
 }
 
+const listReconnectableAgentLaunches = `-- name: ListReconnectableAgentLaunches :many
+SELECT launch.run_id, launch.organization_id, launch.workspace_id, launch.task_id,
+       launch.status, launch.process_id, launch.endpoint, launch.failure_stage,
+       launch.failure_reason, launch.last_sequence,
+       COALESCE(latest.event->>'type', '')::text AS last_event_type, launch.updated_at
+FROM agent_launches AS launch
+LEFT JOIN LATERAL (
+    SELECT event FROM agent_launch_events
+    WHERE run_id = launch.run_id
+    ORDER BY sequence DESC LIMIT 1
+) AS latest ON true
+WHERE launch.status IN (
+    'starting', 'process_started', 'ready', 'failed',
+    'completed_pending_close', 'failed_pending_close'
+)
+ORDER BY launch.created_at
+`
+
+type ListReconnectableAgentLaunchesRow struct {
+	RunID          string             `json:"run_id"`
+	OrganizationID string             `json:"organization_id"`
+	WorkspaceID    string             `json:"workspace_id"`
+	TaskID         string             `json:"task_id"`
+	Status         string             `json:"status"`
+	ProcessID      string             `json:"process_id"`
+	Endpoint       string             `json:"endpoint"`
+	FailureStage   string             `json:"failure_stage"`
+	FailureReason  string             `json:"failure_reason"`
+	LastSequence   int64              `json:"last_sequence"`
+	LastEventType  string             `json:"last_event_type"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) ListReconnectableAgentLaunches(ctx context.Context) ([]ListReconnectableAgentLaunchesRow, error) {
+	rows, err := q.db.Query(ctx, listReconnectableAgentLaunches)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListReconnectableAgentLaunchesRow
+	for rows.Next() {
+		var i ListReconnectableAgentLaunchesRow
+		if err := rows.Scan(
+			&i.RunID,
+			&i.OrganizationID,
+			&i.WorkspaceID,
+			&i.TaskID,
+			&i.Status,
+			&i.ProcessID,
+			&i.Endpoint,
+			&i.FailureStage,
+			&i.FailureReason,
+			&i.LastSequence,
+			&i.LastEventType,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const saveAgentLaunchEvent = `-- name: SaveAgentLaunchEvent :execrows
 WITH inserted AS (
     INSERT INTO agent_launch_events (run_id, sequence, event)
@@ -56,6 +124,55 @@ func (q *Queries) SaveAgentLaunchEvent(ctx context.Context, arg SaveAgentLaunchE
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const saveTerminalAgentLaunchEvent = `-- name: SaveTerminalAgentLaunchEvent :exec
+WITH inserted AS (
+    INSERT INTO agent_launch_events (run_id, sequence, event)
+    VALUES ($1, $2, $3)
+    ON CONFLICT (run_id, sequence) DO NOTHING
+    RETURNING run_id
+)
+UPDATE agent_launches AS launch
+SET status = $4, last_sequence = GREATEST(launch.last_sequence, $2), updated_at = now()
+WHERE launch.run_id = $1
+  AND EXISTS (
+      SELECT 1 FROM agent_launch_events AS event
+      WHERE event.run_id = $1 AND event.sequence = $2
+  )
+`
+
+type SaveTerminalAgentLaunchEventParams struct {
+	RunID        string `json:"run_id"`
+	LastSequence int64  `json:"last_sequence"`
+	Event        []byte `json:"event"`
+	Status       string `json:"status"`
+}
+
+func (q *Queries) SaveTerminalAgentLaunchEvent(ctx context.Context, arg SaveTerminalAgentLaunchEventParams) error {
+	_, err := q.db.Exec(ctx, saveTerminalAgentLaunchEvent,
+		arg.RunID,
+		arg.LastSequence,
+		arg.Event,
+		arg.Status,
+	)
+	return err
+}
+
+const setAgentLaunchStatus = `-- name: SetAgentLaunchStatus :exec
+UPDATE agent_launches
+SET status = $2, updated_at = now()
+WHERE run_id = $1
+`
+
+type SetAgentLaunchStatusParams struct {
+	RunID  string `json:"run_id"`
+	Status string `json:"status"`
+}
+
+func (q *Queries) SetAgentLaunchStatus(ctx context.Context, arg SetAgentLaunchStatusParams) error {
+	_, err := q.db.Exec(ctx, setAgentLaunchStatus, arg.RunID, arg.Status)
+	return err
 }
 
 const updateAgentLaunch = `-- name: UpdateAgentLaunch :exec

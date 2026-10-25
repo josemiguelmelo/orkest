@@ -17,6 +17,14 @@ type ProcessExecutor interface {
 	StartAgentctl(context.Context, agentctl.RunConfig) (Process, error)
 }
 
+// AgentProcessController inspects and closes processes started by an executor.
+type AgentProcessController interface {
+	AgentctlRunning(context.Context, string) (bool, error)
+	AgentctlRunningByRunID(context.Context, string) (bool, error)
+	TerminateAgentctl(context.Context, string) error
+	TerminateAgentctlByRunID(context.Context, string) error
+}
+
 type ExecutorAgentLauncher struct{ executor ProcessExecutor }
 
 func NewAgentLauncher(executor ProcessExecutor) (*ExecutorAgentLauncher, error) {

@@ -16,9 +16,10 @@ func validConfig() agentctl.RunConfig {
 }
 
 type launchRepoFake struct {
-	mu       sync.Mutex
-	launches []Launch
-	events   []Event
+	mu        sync.Mutex
+	launches  []Launch
+	reconnect []Launch
+	events    []Event
 }
 
 func (r *launchRepoFake) CreateLaunch(_ context.Context, l Launch) error {
@@ -32,6 +33,33 @@ func (r *launchRepoFake) UpdateLaunch(_ context.Context, l Launch) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.launches = append(r.launches, l)
+	return nil
+}
+
+func (r *launchRepoFake) ListReconnectableLaunches(context.Context) ([]Launch, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]Launch(nil), r.reconnect...), nil
+}
+
+func (r *launchRepoFake) SaveTerminalEvent(ctx context.Context, event Event, status LaunchStatus) error {
+	if err := r.SaveEvent(ctx, event); err != nil {
+		return err
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.reconnect = append(r.reconnect, Launch{RunID: event.RunID, Status: status})
+	return nil
+}
+
+func (r *launchRepoFake) SetLaunchStatus(_ context.Context, runID string, status LaunchStatus) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i := range r.reconnect {
+		if r.reconnect[i].RunID == runID {
+			r.reconnect[i].Status = status
+		}
+	}
 	return nil
 }
 
@@ -60,6 +88,10 @@ type agentctlFake struct {
 func (c *agentctlFake) WaitHealthy(context.Context, string) error {
 	c.calls = append(c.calls, "healthy")
 	return nil
+}
+
+func (*agentctlFake) Status(context.Context, string) (agentctl.Status, error) {
+	return agentctl.Status{Configured: true, ExecutionAvailable: true, ProcessAlive: true, State: agentctl.StateReady}, nil
 }
 
 func (c *agentctlFake) Configure(context.Context, string, agentctl.RunConfig) error {
@@ -150,7 +182,7 @@ func TestConnectionServicePersistsEventAndReconnectsFromCursor(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = service.Start("run", "http://agentctl:8080", 4); err != nil {
+	if err = service.Start(Launch{RunID: "run", ProcessID: "container-1", Endpoint: "http://agentctl:8080", LastSequence: 4}); err != nil {
 		t.Fatal(err)
 	}
 	select {
@@ -186,7 +218,10 @@ type eventClientFake struct {
 	mu       sync.Mutex
 }
 
-func (*eventClientFake) WaitHealthy(context.Context, string) error                   { return nil }
+func (*eventClientFake) WaitHealthy(context.Context, string) error { return nil }
+func (*eventClientFake) Status(context.Context, string) (agentctl.Status, error) {
+	return agentctl.Status{Configured: true, ExecutionAvailable: true, ProcessAlive: true, State: agentctl.StateReady}, nil
+}
 func (*eventClientFake) Configure(context.Context, string, agentctl.RunConfig) error { return nil }
 func (*eventClientFake) StartAgent(context.Context, string) error                    { return nil }
 func (*eventClientFake) Prompt(context.Context, string, string, string) error        { return nil }

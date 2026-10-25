@@ -25,6 +25,31 @@ func (r *AgentLaunchPostgresRepository) UpdateLaunch(ctx context.Context, launch
 	return r.queries.UpdateAgentLaunch(ctx, sqlc.UpdateAgentLaunchParams{RunID: launch.RunID, Status: string(launch.Status), ProcessID: launch.ProcessID, Endpoint: launch.Endpoint, FailureStage: launch.FailureStage, FailureReason: launch.FailureReason})
 }
 
+func (r *AgentLaunchPostgresRepository) ListReconnectableLaunches(ctx context.Context) ([]orchestration.Launch, error) {
+	rows, err := r.queries.ListReconnectableAgentLaunches(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list reconnectable agent launches: %w", err)
+	}
+	launches := make([]orchestration.Launch, 0, len(rows))
+	for _, row := range rows {
+		launches = append(launches, orchestration.Launch{
+			RunID:          row.RunID,
+			OrganizationID: row.OrganizationID,
+			WorkspaceID:    row.WorkspaceID,
+			TaskID:         row.TaskID,
+			Status:         orchestration.LaunchStatus(row.Status),
+			ProcessID:      row.ProcessID,
+			Endpoint:       row.Endpoint,
+			FailureStage:   row.FailureStage,
+			FailureReason:  row.FailureReason,
+			LastSequence:   uint64(row.LastSequence),
+			LastEventType:  row.LastEventType,
+			UpdatedAt:      row.UpdatedAt.Time,
+		})
+	}
+	return launches, nil
+}
+
 func (r *AgentLaunchPostgresRepository) SaveEvent(ctx context.Context, event orchestration.Event) error {
 	payload, err := json.Marshal(event.Payload)
 	if err != nil {
@@ -32,4 +57,18 @@ func (r *AgentLaunchPostgresRepository) SaveEvent(ctx context.Context, event orc
 	}
 	_, err = r.queries.SaveAgentLaunchEvent(ctx, sqlc.SaveAgentLaunchEventParams{RunID: event.RunID, LastSequence: int64(event.Sequence), Event: payload})
 	return err
+}
+
+func (r *AgentLaunchPostgresRepository) SaveTerminalEvent(ctx context.Context, event orchestration.Event, status orchestration.LaunchStatus) error {
+	payload, err := json.Marshal(event.Payload)
+	if err != nil {
+		return fmt.Errorf("encode terminal agent event: %w", err)
+	}
+	return r.queries.SaveTerminalAgentLaunchEvent(ctx, sqlc.SaveTerminalAgentLaunchEventParams{
+		RunID: event.RunID, LastSequence: int64(event.Sequence), Event: payload, Status: string(status),
+	})
+}
+
+func (r *AgentLaunchPostgresRepository) SetLaunchStatus(ctx context.Context, runID string, status orchestration.LaunchStatus) error {
+	return r.queries.SetAgentLaunchStatus(ctx, sqlc.SetAgentLaunchStatusParams{RunID: runID, Status: string(status)})
 }

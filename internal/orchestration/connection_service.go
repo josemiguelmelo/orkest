@@ -3,73 +3,273 @@ package orchestration
 import (
 	"context"
 	"errors"
+	"fmt"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/josemiguelmelo/orkest/internal/agentctl"
 )
 
 type AgentCommunication interface {
-	Start(string, string, uint64) error
+	Start(Launch) error
+}
+
+type connectionRun struct {
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 type ConnectionService struct {
-	ctx    context.Context
-	client AgentctlClient
-	repo   LaunchRepository
+	ctx        context.Context
+	client     AgentctlClient
+	repo       LaunchRepository
+	completion *LaunchCompletionService
+	mu         sync.Mutex
+	runs       map[string]connectionRun
 }
 
-func NewConnectionService(ctx context.Context, client AgentctlClient, repo LaunchRepository) (*ConnectionService, error) {
+func NewConnectionService(ctx context.Context, client AgentctlClient, repo LaunchRepository, completion ...*LaunchCompletionService) (*ConnectionService, error) {
 	if ctx == nil || client == nil || repo == nil {
 		return nil, errors.New("agentctl client and launch repository are required")
 	}
-	return &ConnectionService{ctx: ctx, client: client, repo: repo}, nil
+	service := &ConnectionService{ctx: ctx, client: client, repo: repo, runs: make(map[string]connectionRun)}
+	if len(completion) > 0 {
+		service.completion = completion[0]
+	}
+	return service, nil
 }
 
 // Start performs an initial WebSocket handshake, then reconnects in the background.
-func (s *ConnectionService) Start(runID, endpoint string, cursor uint64) error {
+func (s *ConnectionService) Start(launch Launch) error {
+	return s.start(launch, true, false)
+}
+
+// ReconnectRecorded resumes event streams for persisted active launches. It never
+// starts, configures, or replaces an agent process.
+func (s *ConnectionService) ReconnectRecorded() error {
+	launches, err := s.repo.ListReconnectableLaunches(s.ctx)
+	if err != nil {
+		return fmt.Errorf("load launches for reconnect: %w", err)
+	}
+	for _, launch := range launches {
+		if launch.Status == LaunchCompletedPendingClose || launch.Status == LaunchFailedPendingClose {
+			continue
+		}
+		if s.completion != nil && (launch.Status == LaunchStarting || launch.Status == LaunchFailed) {
+			pendingStatus := LaunchFailedPendingClose
+			if launch.LastEventType == string(agentctl.EventPromptCompleted) {
+				pendingStatus = LaunchCompletedPendingClose
+			}
+			go s.completion.CloseAbandoned(s.ctx, launch, pendingStatus)
+			continue
+		}
+		if strings.TrimSpace(launch.RunID) == "" || strings.TrimSpace(launch.ProcessID) == "" || !validEndpoint(launch.Endpoint) {
+			if s.completion != nil {
+				go s.completion.CloseAbandoned(s.ctx, launch, LaunchFailedPendingClose)
+			}
+			continue
+		}
+		if s.completion == nil {
+			if err = s.start(launch, false, true); err != nil {
+				return fmt.Errorf("reconnect launch %q: %w", launch.RunID, err)
+			}
+			continue
+		}
+		go s.reconcileAndReconnect(launch)
+	}
+	return nil
+}
+
+func (s *ConnectionService) reconcileAndReconnect(launch Launch) {
+	if launch.LastEventType == string(agentctl.EventPromptCompleted) {
+		s.completion.CloseAbandoned(s.ctx, launch, LaunchCompletedPendingClose)
+		return
+	}
+	if launch.LastEventType == string(agentctl.EventPromptFailed) {
+		s.completion.CloseAbandoned(s.ctx, launch, LaunchFailedPendingClose)
+		return
+	}
+	statusCtx, cancel := context.WithTimeout(s.ctx, 5*time.Second)
+	status, err := s.client.Status(statusCtx, launch.Endpoint)
+	cancel()
+	if err == nil && agentctlProcessHasEnded(status) {
+		s.completion.CloseAbandoned(s.ctx, launch, LaunchFailedPendingClose)
+		return
+	}
+	if err != nil && s.containerConfirmedStopped(s.ctx, launch) {
+		s.completion.CloseAbandoned(s.ctx, launch, LaunchFailedPendingClose)
+		return
+	}
+	if s.start(launch, false, true) == nil {
+		if runCtx := s.runContext(launch.RunID); runCtx != nil {
+			go s.monitorLaunch(runCtx, launch)
+		}
+	}
+}
+
+func agentctlProcessHasEnded(status agentctl.Status) bool {
+	if !status.Configured {
+		return true
+	}
+	if status.State == agentctl.StateFailed || status.State == agentctl.StateInterrupted || status.State == agentctl.StateExited {
+		return true
+	}
+	if status.State == agentctl.StateStarting {
+		return false
+	}
+	return status.Configured && (!status.ProcessAlive || !status.ExecutionAvailable)
+}
+
+func (s *ConnectionService) monitorLaunch(ctx context.Context, launch Launch) {
+	ticker := time.NewTicker(5 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+		statusCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		status, err := s.client.Status(statusCtx, launch.Endpoint)
+		cancel()
+		if err != nil {
+			if s.containerConfirmedStopped(ctx, launch) {
+				s.cancelRun(launch.RunID)
+				s.completion.CloseAbandoned(s.ctx, launch, LaunchFailedPendingClose)
+				return
+			}
+			continue
+		}
+		if !agentctlProcessHasEnded(status) {
+			continue
+		}
+		s.cancelRun(launch.RunID)
+		s.completion.CloseAbandoned(s.ctx, launch, LaunchFailedPendingClose)
+		return
+	}
+}
+
+func (s *ConnectionService) containerConfirmedStopped(ctx context.Context, launch Launch) bool {
+	inspectCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+	defer cancel()
+	running, err := s.completion.AgentctlRunning(inspectCtx, launch)
+	return err == nil && !running
+}
+
+func (s *ConnectionService) start(launch Launch, waitForConnection, retryInitial bool) error {
+	if strings.TrimSpace(launch.RunID) == "" || !validEndpoint(launch.Endpoint) {
+		return errors.New("run identity and valid agentctl endpoint are required")
+	}
 	ctx := s.ctx
-	connected := make(chan error, 1)
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	if _, exists := s.runs[launch.RunID]; exists {
+		s.mu.Unlock()
+		return nil
+	}
+	runCtx, cancelRun := context.WithCancel(ctx)
+	s.runs[launch.RunID] = connectionRun{ctx: runCtx, cancel: cancelRun}
+	s.mu.Unlock()
+
+	var connected chan error
+	if waitForConnection {
+		connected = make(chan error, 1)
+	}
 	go func() {
+		defer func() {
+			s.mu.Lock()
+			delete(s.runs, launch.RunID)
+			s.mu.Unlock()
+			cancelRun()
+		}()
 		first := true
 		for {
-			connectErr := s.client.Connect(ctx, endpoint, cursor, func() {
+			connectErr := s.client.Connect(runCtx, launch.Endpoint, launch.LastSequence, func() {
 				if first {
-					connected <- nil
+					if connected != nil {
+						connected <- nil
+					}
 					first = false
 				}
 			}, func(event agentctl.Event) error {
-				if event.RunID != runID {
+				if event.RunID != launch.RunID {
 					return errors.New("agentctl event run identity mismatch")
 				}
-				if err := s.repo.SaveEvent(ctx, Event{RunID: runID, Sequence: event.Sequence, Payload: event}); err != nil {
+				wrapped := Event{RunID: launch.RunID, Sequence: event.Sequence, Payload: event}
+				if s.completion != nil {
+					if err := s.completion.HandleEvent(runCtx, launch, wrapped); err != nil {
+						return err
+					}
+				} else if err := s.repo.SaveEvent(runCtx, wrapped); err != nil {
 					return err
 				}
-				cursor = event.Sequence
+				launch.LastSequence = event.Sequence
 				return nil
 			})
+			if errors.Is(connectErr, ErrAgentRunClosed) {
+				cancelRun()
+				return
+			}
 			if first {
-				connected <- connectErr
-				first = false
-				if connectErr != nil {
+				if retryInitial && runCtx.Err() == nil {
+					if !waitForRetry(runCtx) {
+						return
+					}
+					continue
+				}
+				if connected != nil {
+					connected <- connectErr
+				}
+				if connectErr != nil || runCtx.Err() != nil {
 					return
 				}
+				first = false
 			}
-			if ctx.Err() != nil {
+			if runCtx.Err() != nil || !waitForRetry(runCtx) {
 				return
-			}
-			timer := time.NewTimer(time.Second)
-			select {
-			case <-ctx.Done():
-				timer.Stop()
-				return
-			case <-timer.C:
 			}
 		}
 	}()
+	if connected == nil {
+		return nil
+	}
 	select {
-	case <-ctx.Done():
-		return ctx.Err()
+	case <-runCtx.Done():
+		return runCtx.Err()
 	case err := <-connected:
 		return err
+	}
+}
+
+func (s *ConnectionService) runContext(runID string) context.Context {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	run, exists := s.runs[runID]
+	if !exists {
+		return nil
+	}
+	return run.ctx
+}
+
+func (s *ConnectionService) cancelRun(runID string) {
+	s.mu.Lock()
+	run := s.runs[runID]
+	s.mu.Unlock()
+	if run.cancel != nil {
+		run.cancel()
+	}
+}
+
+func waitForRetry(ctx context.Context) bool {
+	timer := time.NewTimer(time.Second)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return false
+	case <-timer.C:
+		return true
 	}
 }

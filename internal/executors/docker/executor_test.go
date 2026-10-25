@@ -229,6 +229,7 @@ type fakeEngine struct {
 	containerID  string
 	hostPort     string
 	startedID    string
+	stoppedID    string
 	removedID    string
 	startErr     error
 	removeErr    error
@@ -245,6 +246,12 @@ func (f *fakeEngine) ContainerCreate(_ context.Context, options mobyclient.Conta
 func (f *fakeEngine) ContainerStart(_ context.Context, id string, _ mobyclient.ContainerStartOptions) (mobyclient.ContainerStartResult, error) {
 	f.startedID = id
 	return mobyclient.ContainerStartResult{}, f.startErr
+}
+
+func (f *fakeEngine) ContainerStop(_ context.Context, id string, _ mobyclient.ContainerStopOptions) (mobyclient.ContainerStopResult, error) {
+	f.stoppedID = id
+	f.running = false
+	return mobyclient.ContainerStopResult{}, nil
 }
 
 func (f *fakeEngine) ContainerInspect(_ context.Context, _ string, _ mobyclient.ContainerInspectOptions) (mobyclient.ContainerInspectResult, error) {

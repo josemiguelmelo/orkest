@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"strings"
@@ -58,6 +59,35 @@ func (c *HTTPAgentctlClient) WaitHealthy(ctx context.Context, endpoint string) e
 		case <-ticker.C:
 		}
 	}
+}
+
+func (c *HTTPAgentctlClient) Status(ctx context.Context, endpoint string) (agentctl.Status, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(endpoint, "/")+"/info", nil)
+	if err != nil {
+		return agentctl.Status{}, fmt.Errorf("create agentctl status request: %w", err)
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return agentctl.Status{}, fmt.Errorf("read agentctl status: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return agentctl.Status{}, fmt.Errorf("agentctl status endpoint returned HTTP %d", resp.StatusCode)
+	}
+	var status struct {
+		Configured         bool           `json:"configured"`
+		ExecutionAvailable bool           `json:"executionAvailable"`
+		ProcessAlive       bool           `json:"processAlive"`
+		State              agentctl.State `json:"state"`
+		SessionID          string         `json:"sessionId"`
+	}
+	if err = json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&status); err != nil {
+		return agentctl.Status{}, fmt.Errorf("decode agentctl status: %w", err)
+	}
+	return agentctl.Status{
+		Configured: status.Configured, ExecutionAvailable: status.ExecutionAvailable,
+		ProcessAlive: status.ProcessAlive, State: status.State, SessionID: status.SessionID,
+	}, nil
 }
 
 func (c *HTTPAgentctlClient) Configure(ctx context.Context, endpoint string, config agentctl.RunConfig) error {

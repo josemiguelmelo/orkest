@@ -54,9 +54,13 @@ Request body:
 }
 ```
 
-The endpoint returns `202` when the prompt is accepted. Inspect the launch row
-and `agent_launch_events` table for lifecycle and activity. The temporary flow
-does not prepare a repository checkout; the Docker work directory starts empty.
+The endpoint returns `202` when the prompt is accepted. On `prompt_completed` or
+`prompt_failed`, Orkest gracefully stops agentctl, which closes the runtime
+subprocess, then removes the Docker container. Cleanup intent is persisted and
+retried after platform restart if stopping is interrupted. Inspect the launch
+row and `agent_launch_events` table for lifecycle and activity. The temporary
+flow does not prepare a repository checkout; the Docker work directory starts
+empty.
 
 ## Runtime and recovery
 
@@ -69,9 +73,17 @@ does not prepare a repository checkout; the Docker work directory starts empty.
   events can use substantial memory. Older events remain on disk, but there is no
   disk-history API.
 - Configuration, live status, and acknowledgement cursors are not persisted.
-  Journal/session restoration, command reconciliation, and process/container
-  continuation after an `agentctl` restart are not implemented. A client or
-  platform disconnect does not stop work while `agentctl` remains alive.
+  The platform persists launch identity and the last committed event sequence.
+  On platform startup it checks recorded `process_started` and `ready` launches,
+  closes any whose provider is reported ended or whose agentctl lost its run
+  configuration, and reconnects healthy agents to replay events after that
+  sequence. An unreachable endpoint is retried because disconnection alone does
+  not prove the agent stopped. `starting` and failed rows are cleaned up by the
+  deterministic Docker container name when the process ID was not persisted.
+  Journal/session restoration,
+  command reconciliation, and process/container continuation after an
+  `agentctl` restart are not implemented. A client or platform disconnect does
+  not stop work while `agentctl` remains alive.
 
 ## Verification
 

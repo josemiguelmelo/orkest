@@ -63,7 +63,7 @@ func (s *LaunchService) Start(ctx context.Context, config agentctl.RunConfig) (L
 	if err = s.client.Configure(ctx, launch.Endpoint, config); err != nil {
 		return fail("configure", err)
 	}
-	if err = s.communication.Start(launch.RunID, launch.Endpoint, launch.LastSequence); err != nil {
+	if err = s.communication.Start(launch); err != nil {
 		return fail("connect", err)
 	}
 	if err = s.client.StartAgent(ctx, launch.Endpoint); err != nil {
