@@ -111,6 +111,26 @@ func TestPostgresRepositories(t *testing.T) {
 		t.Fatalf("workspace query crossed organization boundary: workspaces=%+v err=%v", isolated, err)
 	}
 
+	codeRepositoryID, err := ids.NewUUID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	codeRepositoryRepository := NewCodeReposPostgresRepository(database)
+	codeRepository, err := codeRepositoryRepository.CreateCodeRepository(ctx, codeRepositoryID, workspaceID, "github", "https://github.com/acme/project.git")
+	if err != nil || codeRepository.ID != codeRepositoryID || codeRepository.WorkspaceID != workspaceID || codeRepository.ProviderName != "github" {
+		t.Fatalf("create code repository: repository=%+v err=%v", codeRepository, err)
+	}
+	codeRepositories, err := codeRepositoryRepository.CodeRepositories(ctx, org.ID, workspaceID)
+	if err != nil || len(codeRepositories) != 1 || codeRepositories[0] != codeRepository {
+		t.Fatalf("list code repositories: repositories=%+v err=%v", codeRepositories, err)
+	}
+	if _, err = codeRepositoryRepository.CodeRepository(ctx, "another-organization", workspaceID, codeRepositoryID); !errors.Is(err, modelerrors.ErrNotFound) {
+		t.Fatalf("code repository read crossed organization boundary: %v", err)
+	}
+	if _, err = codeRepositoryRepository.CreateCodeRepository(ctx, "duplicate-repository", workspaceID, "github", codeRepository.URL); !errors.Is(err, modelerrors.ErrConflict) {
+		t.Fatalf("expected duplicate repository conflict, got %v", err)
+	}
+
 	// Exercise generated row mappings and affected-row handling through the repositories.
 	updatedOrg, err := organizationRepository.UpdateOrganization(ctx, org.ID, owner.ID, "updated organization")
 	if err != nil || updatedOrg.Name != "updated organization" || updatedOrg.Role != "owner" {
@@ -160,6 +180,9 @@ func TestPostgresRepositories(t *testing.T) {
 	}
 	if err = workspaceRepository.DeleteWorkspace(ctx, org.ID, workspaceID); err != nil {
 		t.Fatalf("delete workspace: %v", err)
+	}
+	if _, err = codeRepositoryRepository.CodeRepository(ctx, org.ID, workspaceID, codeRepositoryID); !errors.Is(err, modelerrors.ErrNotFound) {
+		t.Fatalf("code repository survived workspace deletion: %v", err)
 	}
 	if err = workspaceRepository.DeleteWorkspace(ctx, org.ID, workspaceID); !errors.Is(err, modelerrors.ErrNotFound) {
 		t.Fatalf("expected missing workspace on repeated delete: %v", err)
