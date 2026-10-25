@@ -123,8 +123,11 @@ func (c *ConversationService) Prompt(commandID, text string) error {
 	defer c.turnMu.Unlock()
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.closed || c.process == nil || c.state == StateFailed || c.state == StateInterrupted {
+	if c.closed || c.process == nil || c.state == StateFailed {
 		return ErrConversation
+	}
+	if c.state == StateInterrupted {
+		return ErrConversationInterrupted
 	}
 	select {
 	case <-c.process.Done():
@@ -148,7 +151,7 @@ func (c *ConversationService) Prompt(commandID, text string) error {
 		return ErrCommandLimit
 	}
 	if c.activeCommand != "" {
-		return ErrConversation
+		return ErrConversationBusy
 	}
 	if err := c.recordLocked(Event{Type: "prompt_accepted", CommandID: commandID, Text: text}); err != nil {
 		return err

@@ -1,6 +1,7 @@
 package protocol
 
 import (
+	"encoding/json"
 	"errors"
 	"io"
 	"net/http/httptest"
@@ -46,6 +47,15 @@ func TestReadJSON(t *testing.T) {
 			}
 			if !ok && w.Header().Get("Content-Type") != "application/json" {
 				t.Fatal("error is not JSON")
+			}
+			if !ok {
+				var body Error
+				if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+					t.Fatal(err)
+				}
+				if body.Code == "" || body.Message == "" {
+					t.Fatalf("incomplete error: %+v", body)
+				}
 			}
 		})
 	}

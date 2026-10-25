@@ -8,8 +8,15 @@ import (
 	"net/http"
 )
 
-func WriteError(w http.ResponseWriter, status int, message string) {
-	WriteJSON(w, status, map[string]string{"error": message})
+// Error is the common response for application and request-decoding failures.
+type Error struct {
+	Code    string `json:"errorCode"`
+	Message string `json:"error"`
+	Field   string `json:"field,omitempty"`
+}
+
+func WriteError(w http.ResponseWriter, status int, code, message string) {
+	WriteJSON(w, status, Error{Code: code, Message: message})
 }
 
 func WriteJSON(w http.ResponseWriter, status int, value any) {
@@ -26,21 +33,21 @@ const maxMessageBytes = 1024 * 1024
 func ReadJSON(w http.ResponseWriter, r *http.Request, destination any) bool {
 	mediaType, _, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
 	if err != nil || mediaType != "application/json" {
-		WriteError(w, http.StatusUnsupportedMediaType, "application/json required")
+		WriteError(w, http.StatusUnsupportedMediaType, "unsupported_media_type", "application/json required")
 		return false
 	}
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxMessageBytes))
 	if err != nil {
 		var limit *http.MaxBytesError
 		if errors.As(err, &limit) {
-			WriteError(w, http.StatusRequestEntityTooLarge, "request body exceeds 1 MiB")
+			WriteError(w, http.StatusRequestEntityTooLarge, "body_too_large", "request body exceeds 1 MiB")
 		} else {
-			WriteError(w, http.StatusBadRequest, "could not read request body")
+			WriteError(w, http.StatusBadRequest, "unreadable_body", "could not read request body")
 		}
 		return false
 	}
 	if err := json.Unmarshal(body, destination); err != nil {
-		WriteError(w, http.StatusBadRequest, "request body must be valid JSON matching the expected format")
+		WriteError(w, http.StatusBadRequest, "invalid_json", "request body must be valid JSON matching the expected format")
 		return false
 	}
 	return true

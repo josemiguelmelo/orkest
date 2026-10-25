@@ -47,7 +47,7 @@ Configure with `POST /agent/configure`, Content-Type `application/json`:
 The `RunConfig` model binds one execution run to its resolved scope, runtime, model,
 and system prompt. Configuring it starts no work and invokes no runtime. All values above are required.
 Extra fields are ignored; JSON bodies are limited to 1 MiB. Identical configuration can be
-submitted again; changes return 409. Each process serves one run. Configuration
+submitted again; changes return 409. A runtime that does not match the wired provider returns 503. Each process serves one run. Configuration
 is memory-only and must be resubmitted after restart. No credentials are accepted
 in this contract, and info responses never echo configuration.
 
@@ -155,13 +155,33 @@ returns accepted without running it again; changing its text returns an error.
 Use a new commandId for a new explicit turn. At most 4096 distinct prompt identities
 are accepted per process; reaching the cap rejects new identities with `command_limit`.
 Existing identities remain deduplicated using SHA-256 prompt hashes. Ordinary failures never auto-retry.
-REST command errors include sanitized `error` text and stable `errorCode` values:
-`invalid_command`, `invalid_permission`, `conversation_unavailable`, `command_limit`,
-`cancellation_failed`, and `storage_unavailable`. Clients should branch on the code.
-Invalid command identities/text return 400; unavailable/busy/interrupted conversations,
-command capacity, and invalid permissions return 409. Cancellation delivery failures
-return 502 and storage failures return 503. Invalid JSON returns 400; unsupported
-Content-Type returns 415.
+Application errors from REST and pre-upgrade stream validation use one JSON shape:
+
+```json
+{"errorCode":"invalid_configuration","error":"model.id is required","field":"model.id"}
+```
+
+`errorCode` and sanitized `error` are always present. `field` appears only for
+configuration validation and names the missing field; values are never echoed.
+Clients should branch on `errorCode`, not the human-readable message.
+
+| HTTP | Error codes |
+| --- | --- |
+| 400 | `invalid_configuration`, `invalid_command`, `invalid_json`, `unreadable_body`, `invalid_cursor` |
+| 409 | `configuration_conflict`, `not_configured`, `launch_conflict`, `invalid_permission`, `conversation_unavailable`, `conversation_busy`, `conversation_interrupted`, `command_limit` |
+| 413 | `body_too_large` |
+| 415 | `unsupported_media_type` |
+| 500 | `internal_error` |
+| 502 | `launch_failed`, `cancellation_failed` |
+| 503 | `provider_unavailable`, `storage_unavailable` |
+
+Busy means another prompt is active; interrupted requires reconciliation rather
+than automatic retry. Both still match the domain `ErrConversation` category.
+Unknown startup failures return a sanitized `launch_failed`; other unexpected
+service failures return `internal_error` rather than being mislabeled as storage
+failures. Router-generated errors and WebSocket upgrade/protocol rejections are
+owned by Chi/the WebSocket library and do not use this application error shape.
+
 This internal API does not enforce platform workflow rules or member slot allocation;
 the platform remains responsible for authorizing each explicit turn.
 
@@ -199,6 +219,8 @@ HTTP responses; readiness and activity remain WebSocket frames.
 Implementation modules live in `internal/agentctl/httpapi/rest` (commands/status)
 and `internal/agentctl/httpapi/websocket` (event delivery). The parent `httpapi`
 package composes their routes; `httpapi/protocol` holds shared wire representations.
-Both transports use the same `RunController` and startup timestamp. The controller
+Both transports declare consumer-owned controller interfaces: REST consumes
+commands and status; WebSocket consumes status and subscriptions. The parent
+composes them with the same `RunController` and startup timestamp. The controller
 composes a `ConversationService` for prompts, permissions, journaling, and
 subscriptions; process launch and shutdown remain with the controller.

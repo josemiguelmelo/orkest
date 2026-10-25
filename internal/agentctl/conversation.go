@@ -2,6 +2,7 @@ package agentctl
 
 import (
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -11,11 +12,13 @@ const (
 )
 
 var (
-	ErrCommandLimit = errors.New("conversation command limit reached")
-	ErrCancellation = errors.New("provider cancellation delivery failed")
-	ErrConversation = errors.New("conversation unavailable, busy, or interrupted")
-	ErrCommand      = errors.New("invalid or conflicting command identity")
-	ErrPermission   = errors.New("permission identity or option does not match a pending request")
+	ErrCommandLimit            = errors.New("conversation command limit reached")
+	ErrCancellation            = errors.New("provider cancellation delivery failed")
+	ErrConversation            = errors.New("conversation unavailable")
+	ErrConversationBusy        = fmt.Errorf("%w: prompt already running", ErrConversation)
+	ErrConversationInterrupted = fmt.Errorf("%w: reconciliation required", ErrConversation)
+	ErrCommand                 = errors.New("invalid or conflicting command identity")
+	ErrPermission              = errors.New("permission identity or option does not match a pending request")
 )
 
 // Event is sensitive task activity, persisted before subscribers are notified.

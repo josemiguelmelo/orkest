@@ -44,16 +44,16 @@ type Journal struct {
 
 func openJournal(stateDir string, config RunConfig) (*Journal, error) {
 	if !filepath.IsAbs(stateDir) {
-		return nil, errors.New("absolute state directory required for conversation journal")
+		return nil, fmt.Errorf("%w: absolute state directory required", ErrJournal)
 	}
 	scope, _ := json.Marshal([]string{config.OrganizationID, config.WorkspaceID, config.TaskID, config.RunID})
 	dir := filepath.Join(stateDir, "conversations")
 	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return nil, errors.New("create conversation storage failed")
+		return nil, fmt.Errorf("%w: create conversation storage failed", ErrJournal)
 	}
 	file, err := os.OpenFile(filepath.Join(dir, fmt.Sprintf("%x.jsonl", sha256.Sum256(scope))), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
-		return nil, errors.New("conversation history exists or is unavailable; reconciliation required")
+		return nil, fmt.Errorf("%w: conversation history exists or is unavailable; reconciliation required", ErrJournal)
 	}
 	return &Journal{file: file}, nil
 }

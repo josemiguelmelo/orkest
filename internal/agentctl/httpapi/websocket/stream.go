@@ -24,7 +24,7 @@ type streamMessage struct {
 
 func (s *Server) stream(w http.ResponseWriter, r *http.Request) {
 	if !protocol.Snapshot(s.controller.Status(), s.startedAt).Configured {
-		protocol.WriteError(w, 409, "configure the agent before connecting")
+		protocol.WriteError(w, http.StatusConflict, "not_configured", "configure the agent before connecting")
 		return
 	}
 	after, err := strconv.ParseUint(r.URL.Query().Get("afterSequence"), 10, 64)
@@ -33,15 +33,17 @@ func (s *Server) stream(w http.ResponseWriter, r *http.Request) {
 		err = nil
 	}
 	if err != nil {
-		protocol.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid afterSequence", "errorCode": "invalid_cursor"})
+		protocol.WriteError(w, http.StatusBadRequest, "invalid_cursor", "invalid afterSequence")
 		return
 	}
 	replay, events, unsubscribe, err := s.controller.Subscribe(after)
 	if err != nil {
 		if errors.Is(err, agentctl.ErrCursor) {
-			protocol.WriteJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error(), "errorCode": "invalid_cursor"})
+			protocol.WriteError(w, http.StatusBadRequest, "invalid_cursor", agentctl.ErrCursor.Error())
+		} else if errors.Is(err, agentctl.ErrConversation) {
+			protocol.WriteError(w, http.StatusConflict, "conversation_unavailable", "conversation unavailable")
 		} else {
-			protocol.WriteError(w, http.StatusConflict, "conversation unavailable")
+			protocol.WriteError(w, http.StatusInternalServerError, "internal_error", "internal service error")
 		}
 		return
 	}

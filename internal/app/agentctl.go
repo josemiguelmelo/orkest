@@ -2,10 +2,7 @@ package app
 
 import (
 	"context"
-	"errors"
-	"fmt"
 	"log/slog"
-	"net"
 	"net/http"
 	"time"
 
@@ -23,27 +20,6 @@ func RunAgentctl(ctx context.Context, logger *slog.Logger, address string, provi
 	if err != nil {
 		return err
 	}
-	listener, err := net.Listen("tcp", address)
-	if err != nil {
-		return fmt.Errorf("listen agentctl: %w", err)
-	}
-	server := &http.Server{Handler: api.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, IdleTimeout: 60 * time.Second}
-	result := make(chan error, 1)
-	go func() { result <- server.Serve(listener) }()
-	logger.Info("agentctl listening", "address", listener.Addr().String())
-	select {
-	case err := <-result:
-		if errors.Is(err, http.ErrServerClosed) {
-			return nil
-		}
-		return fmt.Errorf("serve agentctl: %w", err)
-	case <-ctx.Done():
-		shutdownCtx, stop := context.WithTimeout(context.Background(), 10*time.Second)
-		defer stop()
-		if err := server.Shutdown(shutdownCtx); err != nil {
-			_ = server.Close()
-			return fmt.Errorf("shutdown agentctl: %w", err)
-		}
-		return nil
-	}
+	server := &http.Server{Addr: address, Handler: api.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, IdleTimeout: 60 * time.Second}
+	return runHTTPServer(ctx, logger, "agentctl", server)
 }

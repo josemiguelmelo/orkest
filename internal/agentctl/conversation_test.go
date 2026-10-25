@@ -3,6 +3,7 @@ package agentctl
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -52,6 +53,9 @@ func TestJournalBeforeDeliveryAndSlowSubscriber(t *testing.T) {
 	defer stop()
 	if err := service.Prompt("command", "hello"); err != nil {
 		t.Fatal(err)
+	}
+	if err := service.Prompt("other", "new turn"); !errors.Is(err, ErrConversationBusy) || !errors.Is(err, ErrConversation) {
+		t.Fatalf("expected busy conversation category, got %v", err)
 	}
 	select {
 	case event := <-events:
@@ -130,6 +134,9 @@ func TestJournalFailurePreventsProviderPrompt(t *testing.T) {
 	}
 	if service.Status().State != "interrupted" {
 		t.Fatal("journal failure not visible")
+	}
+	if err := service.Prompt("other", "new turn"); !errors.Is(err, ErrConversationInterrupted) || !errors.Is(err, ErrConversation) {
+		t.Fatalf("expected interrupted conversation category, got %v", err)
 	}
 	select {
 	case <-process.calls:

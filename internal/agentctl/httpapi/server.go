@@ -3,6 +3,7 @@ package httpapi
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"time"
 
@@ -20,6 +21,9 @@ type Server struct {
 // NewServer binds both transports to the same controller and startup timestamp.
 // The context owns stream connections, independently of accepted execution.
 func NewServer(ctx context.Context, controller *agentctl.RunController) (*Server, error) {
+	if controller == nil {
+		return nil, errors.New("agentctl controller is required")
+	}
 	startedAt := time.Now().UTC()
 	restServer, err := rest.NewServer(controller, startedAt)
 	if err != nil {

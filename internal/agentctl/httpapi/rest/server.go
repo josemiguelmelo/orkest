@@ -11,12 +11,22 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/agentctl/httpapi/protocol"
 )
 
+// Controller describes only the operations consumed by this transport.
+type Controller interface {
+	Status() agentctl.Status
+	Configure(agentctl.RunConfig) error
+	Launch() error
+	Prompt(string, string) error
+	CancelPrompt(string) error
+	RespondPermission(agentctl.PermissionResponse) error
+}
+
 type Server struct {
-	controller *agentctl.RunController
+	controller Controller
 	startedAt  time.Time
 }
 
-func NewServer(controller *agentctl.RunController, startedAt time.Time) (*Server, error) {
+func NewServer(controller Controller, startedAt time.Time) (*Server, error) {
 	if controller == nil {
 		return nil, errors.New("agentctl controller is required")
 	}

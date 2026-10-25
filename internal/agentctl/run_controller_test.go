@@ -34,8 +34,17 @@ func TestConfigurationValidation(t *testing.T) {
 				config.Runtime = ""
 			}
 			service := NewRunController()
-			if err := service.Configure(config); err == nil {
-				t.Fatal("accepted invalid configuration")
+			var validation *ValidationError
+			if err := service.Configure(config); !errors.As(err, &validation) {
+				t.Fatalf("expected field validation error, got %v", err)
+			}
+			expected := map[string]string{
+				"organization": "organizationId", "workspace": "workspaceId",
+				"task": "taskId", "run": "runId", "provider": "model.provider",
+				"model": "model.id", "prompt": "systemPrompt", "runtime": "runtime",
+			}[field]
+			if validation.Field != expected {
+				t.Fatalf("got field %q, want %q", validation.Field, expected)
 			}
 			if service.Status().Configured {
 				t.Fatal("invalid request changed state")

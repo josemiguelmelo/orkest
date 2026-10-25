@@ -1,7 +1,7 @@
 package agentctl
 
 import (
-	"errors"
+	"fmt"
 	"strings"
 )
 
@@ -22,11 +22,25 @@ type Model struct {
 	ID       string `json:"id"`
 }
 
+// ValidationError identifies a missing field without retaining its value.
+type ValidationError struct{ Field string }
+
+func (e *ValidationError) Error() string { return fmt.Sprintf("%s is required", e.Field) }
+
 // Validate checks the resolved run configuration without starting execution.
 func (c RunConfig) Validate() error {
-	for _, value := range []string{c.OrganizationID, c.WorkspaceID, c.TaskID, c.RunID, c.Runtime, c.Model.Provider, c.Model.ID, c.SystemPrompt} {
-		if strings.TrimSpace(value) == "" {
-			return errors.New("scope, model and systemPrompt are required")
+	for _, field := range []struct{ name, value string }{
+		{"organizationId", c.OrganizationID},
+		{"workspaceId", c.WorkspaceID},
+		{"taskId", c.TaskID},
+		{"runId", c.RunID},
+		{"runtime", c.Runtime},
+		{"model.provider", c.Model.Provider},
+		{"model.id", c.Model.ID},
+		{"systemPrompt", c.SystemPrompt},
+	} {
+		if strings.TrimSpace(field.value) == "" {
+			return &ValidationError{Field: field.name}
 		}
 	}
 

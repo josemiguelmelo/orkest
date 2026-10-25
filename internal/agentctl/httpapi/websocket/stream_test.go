@@ -2,12 +2,16 @@ package websocket
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/josemiguelmelo/orkest/internal/agentctl"
+	"github.com/josemiguelmelo/orkest/internal/agentctl/httpapi/protocol"
 
 	ws "github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
@@ -93,7 +97,7 @@ func TestInvalidStreamMessages(t *testing.T) {
 func setup(t *testing.T) (*Server, *httptest.Server, context.CancelFunc) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
-	server, err := NewServer(ctx, agentctl.NewRunController(), time.Now().UTC())
+	server, err := NewServer(ctx, &streamController{}, time.Now().UTC())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -102,12 +106,54 @@ func setup(t *testing.T) (*Server, *httptest.Server, context.CancelFunc) {
 	return server, httpServer, cancel
 }
 
+type streamController struct {
+	configured     bool
+	subscribeError error
+}
+
+func (c *streamController) Status() agentctl.Status {
+	return agentctl.Status{Configured: c.configured}
+}
+
+func (c *streamController) Subscribe(uint64) ([]agentctl.Event, <-chan agentctl.Event, func(), error) {
+	return nil, make(chan agentctl.Event), func() {}, c.subscribeError
+}
+
 func configure(t *testing.T, server *Server) {
 	t.Helper()
-	if err := server.controller.Configure(agentctl.RunConfig{
-		OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", RunID: "run",
-		Runtime: "opencode", Model: agentctl.Model{Provider: "provider", ID: "model"}, SystemPrompt: "Work on this task",
-	}); err != nil {
-		t.Fatal(err)
+	server.controller.(*streamController).configured = true
+}
+
+func TestStreamValidationErrors(t *testing.T) {
+	for _, tc := range []struct {
+		name, query, code string
+		configured        bool
+		err               error
+		status            int
+	}{
+		{"unconfigured", "", "not_configured", false, nil, 409},
+		{"malformed cursor", "?afterSequence=no", "invalid_cursor", true, nil, 400},
+		{"expired cursor", "?afterSequence=1", "invalid_cursor", true, agentctl.ErrCursor, 400},
+		{"unavailable", "", "conversation_unavailable", true, agentctl.ErrConversation, 409},
+		{"unexpected", "", "internal_error", true, errors.New("SECRET"), 500},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server, err := NewServer(context.Background(), &streamController{configured: tc.configured, subscribeError: tc.err}, time.Now())
+			if err != nil {
+				t.Fatal(err)
+			}
+			response := httptest.NewRecorder()
+			server.Handler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/agent/stream"+tc.query, nil))
+			var body protocol.Error
+			if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+				t.Fatal(err)
+			}
+			if response.Code != tc.status || body.Code != tc.code || body.Message == "" {
+				t.Fatalf("unexpected error: %d %+v", response.Code, body)
+			}
+			if strings.Contains(response.Body.String(), "SECRET") {
+				t.Fatal("error leaked internal details")
+			}
+		})
 	}
 }

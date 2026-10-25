@@ -11,13 +11,19 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/agentctl"
 )
 
+// Controller describes only the operations consumed by this transport.
+type Controller interface {
+	Status() agentctl.Status
+	Subscribe(uint64) ([]agentctl.Event, <-chan agentctl.Event, func(), error)
+}
+
 type Server struct {
 	ctx        context.Context
-	controller *agentctl.RunController
+	controller Controller
 	startedAt  time.Time
 }
 
-func NewServer(ctx context.Context, controller *agentctl.RunController, startedAt time.Time) (*Server, error) {
+func NewServer(ctx context.Context, controller Controller, startedAt time.Time) (*Server, error) {
 	if controller == nil {
 		return nil, errors.New("agentctl controller is required")
 	}

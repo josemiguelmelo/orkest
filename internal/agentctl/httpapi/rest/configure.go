@@ -1,7 +1,6 @@
 package rest
 
 import (
-	"errors"
 	"net/http"
 
 	"github.com/josemiguelmelo/orkest/internal/agentctl/httpapi/protocol"
@@ -15,12 +14,8 @@ func (s *Server) configure(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := s.controller.Configure(config); err != nil {
-		if errors.Is(err, agentctl.ErrConfigurationConflict) {
-			protocol.WriteError(w, http.StatusConflict, err.Error())
-		} else {
-			protocol.WriteError(w, http.StatusBadRequest, err.Error())
-		}
+		writeServiceError(w, err, http.StatusInternalServerError, "internal_error", "internal service error")
 		return
 	}
-	protocol.WriteJSON(w, 200, map[string]string{"status": "configured"})
+	protocol.WriteJSON(w, http.StatusOK, map[string]string{"status": "configured"})
 }
