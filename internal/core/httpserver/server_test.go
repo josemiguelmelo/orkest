@@ -1,4 +1,4 @@
-package app
+package httpserver
 
 import (
 	"context"
@@ -18,7 +18,7 @@ func TestHTTPServerListenFailure(t *testing.T) {
 	}
 	defer func() { _ = listener.Close() }()
 	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
-	if err := runHTTPServer(context.Background(), logger, "test", &http.Server{Addr: listener.Addr().String()}); err == nil {
+	if err := Run(context.Background(), logger, "test", &http.Server{Addr: listener.Addr().String()}); err == nil {
 		t.Fatal("occupied address accepted")
 	}
 }
@@ -38,7 +38,7 @@ func TestHTTPServerDrainsActiveRequest(t *testing.T) {
 	logger := slog.New(&addressHandler{addresses: addresses})
 	done := make(chan error, 1)
 	go func() {
-		done <- runHTTPServer(ctx, logger, "test", &http.Server{Addr: "127.0.0.1:0", Handler: handler, ReadHeaderTimeout: time.Second})
+		done <- Run(ctx, logger, "test", &http.Server{Addr: "127.0.0.1:0", Handler: handler, ReadHeaderTimeout: time.Second})
 	}()
 	var address string
 	select {

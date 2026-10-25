@@ -12,8 +12,6 @@ import (
 
 const (
 	maxReplayEvents = 4096
-	maxEventBytes   = 1024 * 1024
-	maxReplayBytes  = 8 * 1024 * 1024
 )
 
 var (
@@ -38,8 +36,6 @@ type Journal struct {
 	closed   bool
 	sequence uint64
 	events   []Event
-	sizes    []int
-	bytes    int
 }
 
 func openJournal(stateDir string, config RunConfig) (*Journal, error) {
@@ -63,9 +59,6 @@ func (j *Journal) Append(event Event) error {
 		return ErrJournal
 	}
 	data, err := json.Marshal(event)
-	if err == nil && len(data) > maxEventBytes {
-		err = ErrJournal
-	}
 	if err == nil {
 		var written int
 		written, err = j.file.Write(append(data, '\n'))
@@ -82,13 +75,9 @@ func (j *Journal) Append(event Event) error {
 	}
 	j.sequence = event.Sequence
 	j.events = append(j.events, event)
-	j.sizes = append(j.sizes, len(data))
-	j.bytes += len(data)
-	for len(j.events) > maxReplayEvents || j.bytes > maxReplayBytes {
-		j.bytes -= j.sizes[0]
+	for len(j.events) > maxReplayEvents {
 		j.events[0] = Event{}
 		j.events = j.events[1:]
-		j.sizes = j.sizes[1:]
 	}
 	return nil
 }

@@ -21,9 +21,9 @@ Minimal Go and React/Vite scaffolding exists with PostgreSQL-only Compose and Ma
 - Go; Chi/`net/http`; PostgreSQL/`pgx`/`sqlc`; manual constructor injection; `log/slog`. React/TypeScript/Vite frontend. Keycloak/OIDC authenticates; Orkest authorizes.
 - One root Go module; entry points `cmd/orkest`, `cmd/agentctl`; frontend `web/`. Small `main.go`; wiring/lifecycle in `internal/app`.
 - Feature packages under `internal/`: identity, workspace, task, team, orchestration, integrations, executors, agent runtimes.
-- `internal/httpapi`: thin handlers, routing, middleware, browser events. Services own business rules; consumers own interfaces (e.g. task owns repository interface).
+- `internal/app/httpapi` and `internal/agentctl/httpapi`: thin handlers and routing for their respective APIs. Services own business rules; consumers own interfaces (e.g. task owns repository interface).
 - `internal/postgres`: persistence adapters; `db/queries`: SQL inputs; `db/migrations`: migrations; `internal/postgres/sqlc`: generated code. Keep generated types out of business interfaces.
-- Keep `api/openapi.yaml` synchronized with the browser API and `api/agentctl.openapi.yaml` synchronized with the standalone agentctl API.
+- Keep `internal/app/httpapi/openapi.yaml` synchronized with the platform/orchestrator API and `internal/agentctl/httpapi/openapi.yaml` synchronized with the standalone agentctl API. Shared OpenAPI serving and validation belongs in `internal/core/openapi`.
 - Hide Docker/OpenCode/GitHub behind contracts; separate shared platform–agentctl messages from platform services.
 - Avoid service registries, DI containers, speculative abstractions, or extra infrastructure without concrete need.
 

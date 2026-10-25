@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/josemiguelmelo/orkest/internal/agentctl"
-	"github.com/josemiguelmelo/orkest/internal/agentruntime/opencode"
+	"github.com/josemiguelmelo/orkest/internal/agentctl/runtime/opencode"
 )
 
 // TestOpenCodeHandshake needs the pinned executable but makes no model request.

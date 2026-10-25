@@ -9,7 +9,7 @@ Status: Mixed. This document distinguishes implemented technology from the propo
 - **Manual constructor dependency injection** with wiring at the application boundary. Services receive explicit dependencies and do not look them up through a container. No DI framework is needed for the MVP; reconsider Uber Fx if wiring and lifecycle management become cumbersome.
 - **`log/slog`** for structured logging, with credentials redacted.
 - **`godotenv v1.5.1`** loads the optional local `.env` file for `agentctl` configuration.
-- **OpenAPI 3.1 YAML contracts** live in `api/openapi.yaml` (platform) and `api/agentctl.openapi.yaml` (`agentctl`). **kin-openapi v0.133.0** parses and validates each contract at server startup. **swaggest/swgui v1.8.9** serves embedded Swagger UI assets, so the UI does not depend on a CDN.
+- **OpenAPI 3.1 YAML contracts** live inside their API packages: `internal/app/httpapi/openapi.yaml` (platform/orchestrator) and `internal/agentctl/httpapi/openapi.yaml` (`agentctl`). The shared core OpenAPI package validates and serves each contract at server startup. **kin-openapi v0.133.0** parses and validates the contracts; **swaggest/swgui v1.8.9** serves embedded Swagger UI assets, so the UI does not depend on a CDN.
 
 The Makefile pins **golangci-lint v2.15.0** and enables the **gofumpt** formatter. Go and frontend dependencies are locked with `go.sum` and `web/package-lock.json`.
 
@@ -62,6 +62,11 @@ Agents create and update pull requests through their permitted runtime capabilit
 
 - **Modular monolith** is the proposed core platform shape. Implemented Go packages currently cover app lifecycle, HTTP API scaffolding, and standalone agentctl/OpenCode runtime code; identity, workspace, task, orchestration, and integration services are not implemented.
 - **Independent `agentctl` process** is implemented as a separate binary, but deployment inside executor environments is not.
+- **Go code organization** stays in one root Go module, with logical package areas rather than nested Go modules:
+  - `internal/app` owns platform wiring and lifecycle; platform features belong under `internal/` packages such as `identity`, `workspace`, `task`, and `orchestration`.
+  - `internal/agentctl` owns agentctl run state, provider contracts, transport APIs, daemon lifecycle (`internal/agentctl/daemon`), and runtime adapters (`internal/agentctl/runtime`). It runs independently of platform lifecycle.
+  - `internal/core` holds only concrete code shared by platform and agentctl, currently graceful HTTP server lifecycle (`internal/core/httpserver`).
+  - `cmd/orkest` and `cmd/agentctl` remain thin executable wiring; platform HTTP lives in `internal/app/httpapi` and agentctl HTTP lives in `internal/agentctl/httpapi`. `internal/core/openapi` owns shared serving and validation code.
 - **Docker Compose** currently starts PostgreSQL only. Keycloak and the platform are not Compose services.
 
 Avoid introducing microservices or a distributed workflow engine for the initial implementation. Durable execution state, ownership, event replay, and reconciliation are explicit application responsibilities.

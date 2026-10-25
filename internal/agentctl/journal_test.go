@@ -3,7 +3,6 @@ package agentctl
 import (
 	"errors"
 	"os"
-	"strings"
 	"testing"
 )
 
@@ -40,10 +39,8 @@ func TestJournalReplayWindow(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = journal.Close() }()
-	// The byte budget expires before the event count budget in this case.
-	text := strings.Repeat("x", maxEventBytes/2)
-	for sequence := uint64(1); sequence <= 20; sequence++ {
-		if err := journal.Append(Event{Sequence: sequence, Text: text}); err != nil {
+	for sequence := uint64(1); sequence <= maxReplayEvents+1; sequence++ {
+		if err := journal.Append(Event{Sequence: sequence}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -57,12 +54,9 @@ func TestJournalReplayWindow(t *testing.T) {
 	if err != nil || len(events) != 1 || events[0].Sequence != 20 {
 		t.Fatalf("replay: %v, %v", len(events), err)
 	}
-	if journal.bytes > maxReplayBytes {
-		t.Fatal("replay byte limit exceeded")
-	}
 	// Full history remains durable after it leaves the replay window.
 	info, err := journal.file.(*os.File).Stat()
-	if err != nil || info.Size() <= maxReplayBytes {
+	if err != nil || info.Size() <= int64(maxReplayEvents) {
 		t.Fatal("durable history was truncated", err)
 	}
 }
@@ -89,12 +83,14 @@ func TestJournalReplayEventLimit(t *testing.T) {
 	}
 }
 
-func TestJournalOversizedEventInterruptsAppend(t *testing.T) {
+func TestJournalAcceptsLargeEvent(t *testing.T) {
 	journal := &Journal{file: successfulFile{}}
-	if err := journal.Append(Event{Sequence: 1, Text: strings.Repeat("x", maxEventBytes)}); !errors.Is(err, ErrJournal) {
-		t.Fatal("oversized event accepted", err)
+	text := string(make([]byte, 1024*1024+1))
+	if err := journal.Append(Event{Sequence: 1, Text: text}); err != nil {
+		t.Fatal("large event rejected", err)
 	}
-	if journal.sequence != 0 {
-		t.Fatal("oversized event advanced cursor")
+	events, err := journal.Replay(0)
+	if err != nil || len(events) != 1 || len(events[0].Text) != len(text) {
+		t.Fatal("large event missing from replay", err)
 	}
 }

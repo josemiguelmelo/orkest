@@ -261,8 +261,8 @@ paths:
         messages close the connection with status 1008. Protocol ping/pong and close
         frames remain supported. Read current status through GET /info.
         Disconnect leaves execution and pending permissions running. afterSequence selects
-        events after the last processed sequence. Replay retains at most 4096 events and
-        8 MiB of serialized JSON. Omit the cursor only while sequence zero is retained.
+        events after the last processed sequence. Replay retains at most 4096 events.
+        Omit the cursor only while sequence zero is retained. Event size is not capped.
         Invalid, expired, or future cursors return 400 with errorCode invalid_cursor.
         Slow subscribers are detached without stopping work. Events are synced to private
         storage before streaming. Process restart recovery is not implemented.

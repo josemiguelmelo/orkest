@@ -2,13 +2,13 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"os"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
 
-// loadEnvironment leaves existing process variables intact. A missing local
-// development file is optional; malformed files fail without logging their contents.
 func loadEnvironment(path string) error {
 	if err := godotenv.Load(path); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return errors.New("cannot load .env: check file access and dotenv syntax")
@@ -21,4 +21,16 @@ func environmentDefault(name, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+func appendGrantedEnvironmentVariable(env *[]string, name string) error {
+	if strings.TrimSpace(name) == "" || strings.Contains(name, "=") {
+		return fmt.Errorf("invalid environment variable name")
+	}
+	value, ok := os.LookupEnv(name)
+	if !ok {
+		return fmt.Errorf("environment variable %s is unset", name)
+	}
+	*env = append(*env, name+"="+value)
+	return nil
 }
