@@ -4,8 +4,19 @@ info:
   version: 0.1.0
   description: Standalone process-local control API. REST commands and status; receive-only WebSocket activity with private journaling and reconnect replay. Application failures, including request decoding and pre-upgrade validation, use Error. Router and WebSocket library rejections retain their native responses. Process restart recovery is not implemented.
 servers:
-  - url: http://127.0.0.1:8081
+  - url: /
 paths:
+  /openapi.yaml:
+    get:
+      operationId: getAgentctlOpenAPI
+      summary: Retrieve this OpenAPI contract
+      responses:
+        '200':
+          description: OpenAPI document
+          content:
+            application/yaml:
+              schema:
+                type: string
   /health:
     get:
       operationId: agentctlHealth
@@ -19,7 +30,7 @@ paths:
                 type: object
                 required: [status]
                 properties:
-                  status: {type: string, const: ok}
+                  status: {type: string, enum: [ok]}
   /info:
     get:
       operationId: agentctlInfo
@@ -49,7 +60,7 @@ paths:
                 type: object
                 required: [status]
                 properties:
-                  status: {type: string, const: configured}
+                  status: {type: string, enum: [configured]}
         '400':
           description: Unreadable body, invalid JSON, or missing values
           content:
@@ -327,8 +338,8 @@ components:
       type: object
       required: [service, apiVersion, goVersion, os, arch, startedAt, configured, executionAvailable, processAlive]
       properties:
-        service: {type: string, const: agentctl}
-        apiVersion: {type: string, const: v1}
+        service: {type: string, enum: [agentctl]}
+        apiVersion: {type: string, enum: [v1]}
         goVersion: {type: string}
         os: {type: string}
         arch: {type: string}

@@ -8,7 +8,7 @@ paths:
       operationId: getHealth
       summary: Process liveness (does not check database or runtime readiness)
       responses:
-        '200':
+        "200":
           description: HTTP process is running
           content:
             application/json:
@@ -18,4 +18,4 @@ paths:
                 properties:
                   status:
                     type: string
-                    const: ok
+                    enum: [ok]

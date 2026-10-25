@@ -16,6 +16,10 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 	if addr == "" {
 		addr = "127.0.0.1:8080"
 	}
-	server := &http.Server{Addr: addr, Handler: httpapi.NewRouter(), ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
+	router, err := httpapi.NewRouter()
+	if err != nil {
+		return err
+	}
+	server := &http.Server{Addr: addr, Handler: router, ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
 	return runHTTPServer(ctx, logger, "platform", server)
 }
