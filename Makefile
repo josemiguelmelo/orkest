@@ -1,8 +1,9 @@
 .DEFAULT_GOAL := help
-.PHONY: help setup dev dev-web db-up db-down db-logs fmt check build test-integration test-recovery
+.PHONY: help setup dev dev-agentctl dev-web db-up db-down db-logs fmt check build test-integration test-recovery
 
 help:
 	@echo "setup             Install frontend dependencies"
+	@echo "dev-agentctl      Run the internal agentctl API"
 	@echo "dev / dev-web     Run backend / frontend (separate terminals)"
 	@echo "db-up / db-down   Start / stop PostgreSQL (retains data)"
 	@echo "db-logs           Follow PostgreSQL logs"
@@ -15,6 +16,9 @@ setup:
 
 dev:
 	go run ./cmd/orkest
+
+dev-agentctl:
+	go run ./cmd/agentctl
 
 dev-web:
 	npm --prefix web run dev
