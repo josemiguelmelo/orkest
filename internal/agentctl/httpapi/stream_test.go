@@ -19,7 +19,7 @@ func TestStream(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer conn.CloseNow()
+	defer func(conn *websocket.Conn) { _ = conn.CloseNow() }(conn)
 	var event message
 	if err := wsjson.Read(ctx, conn, &event); err != nil {
 		t.Fatal(err)
@@ -58,7 +58,7 @@ func TestStream(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer conn.CloseNow()
+	defer func(conn *websocket.Conn) { _ = conn.CloseNow() }(conn)
 	if err := wsjson.Read(ctx, conn, &event); err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +87,7 @@ func TestInvalidStreamMessages(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			defer conn.CloseNow()
+			defer func(conn *websocket.Conn) { _ = conn.CloseNow() }(conn)
 			if _, _, err := conn.Read(ctx); err != nil {
 				t.Fatal(err)
 			}

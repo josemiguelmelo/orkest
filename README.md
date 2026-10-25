@@ -33,8 +33,12 @@ credentials or remove the volume unless you intend to delete local data.
 
 ## Verification and builds
 
-- `make check`: Go formatting, vet, tests, frontend type checks, and all builds.
-- `make fmt`: format Go sources.
+- `make check`: Go lint/formatting checks, tests, frontend type checks, and all builds.
+- `make lint`: run golangci-lint v2.15.0 with the standard linters and gofumpt.
+- `make fmt`: format Go sources with gofumpt, including blank lines between
+  multiline functions.
+- `make lint-install`: install the pinned linter under `bin/tools/` (requires curl
+  and network access). `lint`, `fmt`, and `check` install it automatically if absent.
 - `make build`: create `bin/orkest`, `bin/agentctl`, and `web/dist`.
 - `make test-integration` and `make test-recovery`: explicitly fail until real
   suites and prerequisites exist. No recovery behavior is claimed by this scaffold.

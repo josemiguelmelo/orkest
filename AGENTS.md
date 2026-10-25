@@ -54,8 +54,11 @@ Minimal Go and React/Vite scaffolding exists with PostgreSQL-only Compose and Ma
 - Pin dependencies/runtime versions; commit lockfiles. Regenerate `sqlc` from SQL, never hand-edit generated code. Version schema migrations; document destructive operational effects.
 - Unit tests beside code; cross-component tests in `tests/integration`. Test observable behavior. Prioritize real PostgreSQL slot/concurrency tests, authorization boundaries, integration idempotency, and requirements §7.3 recovery/approvals. Use race detection for concurrency changes.
 - First validate the OpenCode/ACP execution/recovery prototype, before the full UI.
+- Before completing Go code or lint configuration changes, run `make lint` and fix findings. Use `make fmt` to apply formatting fixes. `make check` includes `make lint`, so a successful full check satisfies this requirement. Report any blocker that prevents lint from running; never claim an unrun check passed.
 - Establish documented local/CI commands as tooling arrives:
-  - `make check`: formatting, static analysis, unit tests, frontend type checks, builds.
+  - `make lint`: pinned golangci-lint standard linters and gofumpt formatting checks.
+  - `make fmt`: apply gofumpt formatting, including blank lines between multiline functions.
+  - `make check`: lint, unit tests, frontend type checks, builds.
   - `make test-integration`: integrations with documented prerequisites.
   - `make test-recovery`: restart, replay, approvals, duplicate prevention.
 - `make check` exists. Integration and recovery targets currently fail explicitly because their suites are not implemented. Never mark unavailable/skipped checks as passed.
