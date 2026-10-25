@@ -30,7 +30,7 @@ func conversationService(t *testing.T) *agentctl.RunController {
 	return service
 }
 
-func nextEvent(t *testing.T, events <-chan agentctl.Event, kind string) agentctl.Event {
+func nextEvent(t *testing.T, events <-chan agentctl.Event, kind agentctl.EventType) agentctl.Event {
 	t.Helper()
 	timer := time.NewTimer(5 * time.Second)
 	defer timer.Stop()

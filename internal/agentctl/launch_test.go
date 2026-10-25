@@ -21,10 +21,19 @@ func (p *testProvider) Launch(context.Context, RunConfig) (Process, error) {
 }
 
 type testProcess struct {
-	done chan struct{}
-	once sync.Once
+	done    chan struct{}
+	once    sync.Once
+	exitErr error
 }
 
+func (p *testProcess) Err() error {
+	select {
+	case <-p.done:
+		return p.exitErr
+	default:
+		return nil
+	}
+}
 func (p *testProcess) SessionID() string     { return "session" }
 func (p *testProcess) Done() <-chan struct{} { return p.done }
 func (p *testProcess) Close() error          { p.once.Do(func() { close(p.done) }); return nil }
@@ -83,5 +92,25 @@ func TestLaunchFailureDoesNotRetry(t *testing.T) {
 	}
 	if err := service.Launch(); !errors.Is(err, ErrLaunchConflict) {
 		t.Fatal("failed attempt retried")
+	}
+}
+
+func TestUnexpectedProcessExitIsFailed(t *testing.T) {
+	process := &testProcess{done: make(chan struct{}), exitErr: errors.New("runtime exited")}
+	controller := NewRunControllerWithProvider(context.Background(), &testProvider{process: process}, "")
+	defer func() { _ = controller.Close() }()
+	config := runConfig()
+	config.Runtime = "alternative"
+	if err := controller.Configure(config); err != nil {
+		t.Fatal(err)
+	}
+	if err := controller.Launch(); err != nil {
+		t.Fatal(err)
+	}
+	if err := process.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if status := controller.Status(); status.State != StateFailed || status.ProcessAlive {
+		t.Fatalf("unexpected status: %+v", status)
 	}
 }

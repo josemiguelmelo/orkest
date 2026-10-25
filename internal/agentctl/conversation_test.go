@@ -89,6 +89,7 @@ func TestJournalBeforeDeliveryAndSlowSubscriber(t *testing.T) {
 		t.Fatal("journal is not private")
 	}
 	// Fill the bounded queue without consuming it. Execution never waits on a subscriber.
+	service.conversation.eventMu.Lock()
 	service.conversation.mu.Lock()
 	for range 100 {
 		if err := service.conversation.recordLocked(Event{Type: "update"}); err != nil {
@@ -96,6 +97,7 @@ func TestJournalBeforeDeliveryAndSlowSubscriber(t *testing.T) {
 		}
 	}
 	service.conversation.mu.Unlock()
+	service.conversation.eventMu.Unlock()
 	for range events {
 	}
 	close(process.release)
@@ -120,9 +122,11 @@ func TestJournalFailurePreventsProviderPrompt(t *testing.T) {
 	if err := service.Launch(); err != nil {
 		t.Fatal(err)
 	}
+	service.conversation.eventMu.Lock()
 	service.conversation.mu.Lock()
 	err := service.conversation.openJournalLocked()
 	service.conversation.mu.Unlock()
+	service.conversation.eventMu.Unlock()
 	if err != nil {
 		t.Fatal(err)
 	}

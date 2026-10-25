@@ -8,6 +8,8 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sync"
+	"time"
 )
 
 const (
@@ -27,10 +29,11 @@ type durableFile interface {
 	Close() error
 }
 
-// Journal owns durable JSONL storage and a bounded replay window. ConversationService.mu
-// serializes access; an append failure permanently fences further appends.
+// Journal owns sequence allocation, durable JSONL storage, and a bounded replay
+// window. Its methods are safe for concurrent use; append failures fence writes.
 // Old records remain on disk, but are not loaded automatically after restart.
 type Journal struct {
+	mu       sync.Mutex
 	file     durableFile
 	failed   bool
 	closed   bool
@@ -54,10 +57,15 @@ func openJournal(stateDir string, config RunConfig) (*Journal, error) {
 	return &Journal{file: file}, nil
 }
 
-func (j *Journal) Append(event Event) error {
+// Append assigns commit metadata and returns the event only after it is synced.
+func (j *Journal) Append(event Event) (Event, error) {
+	j.mu.Lock()
+	defer j.mu.Unlock()
 	if j.failed || j.closed {
-		return ErrJournal
+		return Event{}, ErrJournal
 	}
+	event.Sequence = j.sequence + 1
+	event.At = time.Now().UTC()
 	data, err := json.Marshal(event)
 	if err == nil {
 		var written int
@@ -71,7 +79,7 @@ func (j *Journal) Append(event Event) error {
 	}
 	if err != nil {
 		j.failed = true
-		return ErrJournal
+		return Event{}, ErrJournal
 	}
 	j.sequence = event.Sequence
 	j.events = append(j.events, event)
@@ -79,7 +87,7 @@ func (j *Journal) Append(event Event) error {
 		j.events[0] = Event{}
 		j.events = j.events[1:]
 	}
-	return nil
+	return event, nil
 }
 
 func (j *Journal) Replay(after uint64) ([]Event, error) {
@@ -89,6 +97,8 @@ func (j *Journal) Replay(after uint64) ([]Event, error) {
 		}
 		return nil, nil
 	}
+	j.mu.Lock()
+	defer j.mu.Unlock()
 	first := j.sequence - uint64(len(j.events))
 	if after < first || after > j.sequence {
 		return nil, ErrCursor
@@ -97,6 +107,8 @@ func (j *Journal) Replay(after uint64) ([]Event, error) {
 }
 
 func (j *Journal) Close() error {
+	j.mu.Lock()
+	defer j.mu.Unlock()
 	if j.closed {
 		return nil
 	}

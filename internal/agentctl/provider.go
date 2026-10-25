@@ -12,6 +12,9 @@ type Provider interface {
 type Process interface {
 	SessionID() string
 	Done() <-chan struct{}
+	// Err returns the sanitized exit error after Done closes, or nil while running.
+	// Wrapped causes are for internal diagnosis and must not be logged directly.
+	Err() error
 	Close() error
 }
 

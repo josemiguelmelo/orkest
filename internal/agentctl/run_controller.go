@@ -17,9 +17,13 @@ var (
 
 // LaunchError carries a provider-sanitized message suitable for API responses.
 // Arbitrary provider errors remain internal and are mapped to a generic response.
-type LaunchError struct{ Message string }
+type LaunchError struct {
+	Message string
+	Cause   error
+}
 
 func (e *LaunchError) Error() string { return e.Message }
+func (e *LaunchError) Unwrap() error { return e.Cause }
 
 type Status struct {
 	Configured         bool
@@ -90,6 +94,9 @@ func (c *RunController) Status() Status {
 		case <-c.process.Done():
 			if status.State != StateInterrupted && status.State != StateFailed {
 				status.State = StateExited
+				if c.process.Err() != nil {
+					status.State = StateFailed
+				}
 			}
 		default:
 			status.ProcessAlive = true

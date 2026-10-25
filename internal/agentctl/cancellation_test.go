@@ -85,16 +85,24 @@ func TestCancellationAllowsStatusAndUpdates(t *testing.T) {
 	if err := <-cancelled; !errors.Is(err, ErrCancellation) {
 		t.Fatalf("cancel: %v", err)
 	}
-	_, events, stop, err := service.Subscribe(0)
+	replay, events, stop, err := service.Subscribe(0)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer stop()
 	close(p.finish)
-	select {
-	case <-events:
-	case <-time.After(time.Second):
-		t.Fatal("missing terminal event")
+	terminal := false
+	for _, event := range replay {
+		terminal = terminal || event.Type == EventPromptFailed
+	}
+	deadline := time.After(time.Second)
+	for !terminal {
+		select {
+		case event := <-events:
+			terminal = event.Type == EventPromptFailed
+		case <-deadline:
+			t.Fatal("missing terminal event")
+		}
 	}
 	if status := service.Status(); status.State != StateInterrupted || !status.ProcessAlive {
 		t.Fatalf("completion erased uncertain cancellation: %+v", status)

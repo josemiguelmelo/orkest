@@ -11,6 +11,7 @@ import (
 
 type pendingPermission struct {
 	permission Permission
+	ctx        context.Context
 	commandID  string
 	response   chan string
 	answered   bool
@@ -20,9 +21,12 @@ type pendingPermission struct {
 // for one bound runtime session. It does not launch or close the runtime process.
 type ConversationService struct {
 	// turnMu serializes acceptance, completion, and cancellation delivery.
-	// Acquire turnMu before mu when both are needed.
+	// Lock order: turnMu, eventMu, mu. Never acquire in reverse order.
 	turnMu sync.Mutex
-	// mu protects conversation state, the journal, subscriptions, and work admission.
+	// eventMu orders durable events and their state transitions, including replay
+	// subscription handoff. It remains held while mu is released for storage I/O.
+	eventMu sync.Mutex
+	// mu protects in-memory state and work admission. Status and stop need only mu.
 	mu                 sync.RWMutex
 	ctx                context.Context
 	cancel             context.CancelFunc
@@ -73,21 +77,28 @@ func (c *ConversationService) stop() {
 func (c *ConversationService) close() error {
 	c.stop()
 	c.work.Wait()
+	c.eventMu.Lock()
+	defer c.eventMu.Unlock()
 	c.mu.Lock()
-	defer c.mu.Unlock()
 	c.subscriptions.Close()
-	if c.journal != nil {
-		return c.journal.Close()
+	journal := c.journal
+	c.mu.Unlock()
+	if journal != nil {
+		return journal.Close()
 	}
 	return nil
 }
 
-// openJournalLocked refuses to replace an earlier process's history or ownership.
+// openJournalLocked requires eventMu and mu. It releases mu for filesystem I/O
+// and refuses to replace an earlier process's history or ownership.
 func (c *ConversationService) openJournalLocked() error {
 	if c.journal != nil {
 		return nil
 	}
-	journal, err := openJournal(c.stateDir, *c.config)
+	config := *c.config
+	c.mu.Unlock()
+	journal, err := openJournal(c.stateDir, config)
+	c.mu.Lock()
 	if err != nil {
 		return err
 	}
@@ -97,19 +108,28 @@ func (c *ConversationService) openJournalLocked() error {
 	return nil
 }
 
-// recordLocked serializes durable append and publication with state transitions.
-// The caller holds mu. Subscribers never observe an event before it is synced.
+// interruptLocked fences new work and wakes every pending permission without
+// selecting an option. Cancellation does not prove the runtime has stopped.
+func (c *ConversationService) interruptLocked() {
+	c.state = StateInterrupted
+	c.cancel()
+}
+
+// recordLocked requires eventMu and mu, and returns with both still held.
+// Storage I/O releases mu so status and shutdown admission remain responsive.
+// eventMu prevents replay/live gaps and reordering while a commit is in flight.
 func (c *ConversationService) recordLocked(event Event) error {
 	config := c.config
 	event.OrganizationID, event.WorkspaceID, event.TaskID, event.RunID = config.OrganizationID, config.WorkspaceID, config.TaskID, config.RunID
 	event.SessionID = c.process.SessionID()
-	event.Sequence = c.journal.sequence + 1
-	event.At = time.Now().UTC()
-	if err := c.journal.Append(event); err != nil {
-		c.state = StateInterrupted
+	c.mu.Unlock()
+	committed, err := c.journal.Append(event)
+	c.mu.Lock()
+	if err != nil {
+		c.interruptLocked()
 		return err
 	}
-	c.subscriptions.Publish(event)
+	c.subscriptions.Publish(committed)
 	return nil
 }
 
@@ -121,6 +141,8 @@ func (c *ConversationService) Prompt(commandID, text string) error {
 	}
 	c.turnMu.Lock()
 	defer c.turnMu.Unlock()
+	c.eventMu.Lock()
+	defer c.eventMu.Unlock()
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.closed || c.process == nil || c.state == StateFailed {
@@ -141,6 +163,9 @@ func (c *ConversationService) Prompt(commandID, text string) error {
 	if err := c.openJournalLocked(); err != nil {
 		return err
 	}
+	if c.closed || c.ctx.Err() != nil {
+		return ErrConversation
+	}
 	if previous, exists := c.commands[commandID]; exists {
 		if previous == sha256.Sum256([]byte(text)) {
 			return nil
@@ -153,8 +178,13 @@ func (c *ConversationService) Prompt(commandID, text string) error {
 	if c.activeCommand != "" {
 		return ErrConversationBusy
 	}
-	if err := c.recordLocked(Event{Type: "prompt_accepted", CommandID: commandID, Text: text}); err != nil {
+	if err := c.recordLocked(promptAcceptedEvent(commandID, text)); err != nil {
 		return err
+	}
+	if c.closed || c.ctx.Err() != nil {
+		c.interruptLocked()
+		_ = c.recordLocked(promptResultEvent(commandID, "", context.Canceled))
+		return ErrConversation
 	}
 	c.commands[commandID] = sha256.Sum256([]byte(text))
 	c.activeCommand = commandID
@@ -168,26 +198,26 @@ func (c *ConversationService) runPrompt(runtime RuntimeConversation, commandID, 
 	defer c.work.Done()
 	reason, err := runtime.Prompt(c.ctx, text, Observer{
 		Update: func(update Update) error {
+			c.eventMu.Lock()
+			defer c.eventMu.Unlock()
 			c.mu.Lock()
 			defer c.mu.Unlock()
-			if c.activeCommand != commandID {
+			if c.closed || c.state == StateInterrupted || c.activeCommand != commandID {
 				return ErrConversation
 			}
-			return c.recordLocked(Event{Type: "update", CommandID: commandID, Update: &update})
+			return c.recordLocked(updateEvent(commandID, update))
 		},
 		Permission: func(ctx context.Context, p Permission) (string, error) { return c.waitPermission(ctx, commandID, p) },
 	})
 	c.turnMu.Lock()
 	defer c.turnMu.Unlock()
+	c.eventMu.Lock()
+	defer c.eventMu.Unlock()
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	event := Event{Type: "prompt_completed", CommandID: commandID, StopReason: reason}
+	event := promptResultEvent(commandID, reason, err)
 	if err != nil {
-		event.Type = "prompt_failed"
-		event.Error = "provider prompt failed; outcome may be uncertain"
-		c.state = StateInterrupted
-	} else if c.state != StateInterrupted {
-		c.state = StateReady
+		c.interruptLocked()
 	}
 	for id, p := range c.pending {
 		if p.commandID == commandID {
@@ -195,26 +225,42 @@ func (c *ConversationService) runPrompt(runtime RuntimeConversation, commandID, 
 		}
 	}
 	c.activeCommand = ""
-	_ = c.recordLocked(event)
+	if err := c.recordLocked(event); err == nil && c.state != StateInterrupted {
+		c.state = StateReady
+	}
 }
 
-func (c *ConversationService) waitPermission(ctx context.Context, commandID string, p Permission) (string, error) {
+// registerPermission serializes request persistence with response admission.
+func (c *ConversationService) registerPermission(ctx context.Context, commandID string, p Permission) (string, *pendingPermission, error) {
+	c.eventMu.Lock()
+	defer c.eventMu.Unlock()
 	c.mu.Lock()
+	defer c.mu.Unlock()
 	if c.closed || c.state == StateInterrupted || c.activeCommand != commandID || ctx.Err() != nil {
-		c.mu.Unlock()
-		return "", ErrConversation
+		return "", nil, ErrConversation
 	}
 	c.permissionSequence++
 	id := fmt.Sprintf("permission-%d", c.permissionSequence)
-	pending := &pendingPermission{permission: p, commandID: commandID, response: make(chan string, 1)}
-	if err := c.recordLocked(Event{Type: "permission_requested", CommandID: commandID, RequestID: id, Permission: &p}); err != nil {
-		c.mu.Unlock()
-		return "", err
+	pending := &pendingPermission{permission: p, commandID: commandID, response: make(chan string, 1), ctx: ctx}
+	if err := c.recordLocked(permissionRequestedEvent(commandID, id, p)); err != nil {
+		return "", nil, err
+	}
+	if c.closed || c.ctx.Err() != nil || ctx.Err() != nil {
+		return "", nil, ErrConversation
 	}
 	c.pending[id] = pending
 	c.state = StateWaitingPermission
-	c.mu.Unlock()
+	return id, pending, nil
+}
+
+func (c *ConversationService) waitPermission(ctx context.Context, commandID string, p Permission) (string, error) {
+	id, pending, err := c.registerPermission(ctx, commandID, p)
+	if err != nil {
+		return "", err
+	}
 	defer func() {
+		c.eventMu.Lock()
+		defer c.eventMu.Unlock()
 		c.mu.Lock()
 		delete(c.pending, id)
 		if c.state == StateWaitingPermission && len(c.pending) == 0 {
@@ -233,9 +279,11 @@ func (c *ConversationService) waitPermission(ctx context.Context, commandID stri
 }
 
 func (c *ConversationService) RespondPermission(response PermissionResponse) error {
+	c.eventMu.Lock()
+	defer c.eventMu.Unlock()
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.closed || c.config == nil || c.process == nil {
+	if c.closed || c.state == StateInterrupted || c.config == nil || c.process == nil {
 		return ErrPermission
 	}
 	config := c.config
@@ -243,7 +291,7 @@ func (c *ConversationService) RespondPermission(response PermissionResponse) err
 		return ErrPermission
 	}
 	pending, ok := c.pending[response.RequestID]
-	if !ok || pending.answered {
+	if !ok || pending.answered || pending.ctx.Err() != nil {
 		return ErrPermission
 	}
 	valid := false
@@ -256,8 +304,11 @@ func (c *ConversationService) RespondPermission(response PermissionResponse) err
 		return ErrPermission
 	}
 	// Delivery intent is not evidence that the provider accepted this answer.
-	if err := c.recordLocked(Event{Type: "permission_response", CommandID: pending.commandID, RequestID: response.RequestID, Text: response.OptionID}); err != nil {
+	if err := c.recordLocked(permissionResponseEvent(pending.commandID, response)); err != nil {
 		return err
+	}
+	if c.closed || c.ctx.Err() != nil || pending.ctx.Err() != nil {
+		return ErrPermission
 	}
 	pending.answered = true
 	pending.response <- response.OptionID
@@ -277,7 +328,7 @@ func (c *ConversationService) CancelPrompt(commandID string) error {
 	defer cancel()
 	if err := runtime.Cancel(ctx); err != nil {
 		c.mu.Lock()
-		c.state = StateInterrupted
+		c.interruptLocked()
 		c.mu.Unlock()
 		return ErrCancellation
 	}
@@ -285,6 +336,8 @@ func (c *ConversationService) CancelPrompt(commandID string) error {
 }
 
 func (c *ConversationService) prepareCancellation(commandID string) (RuntimeConversation, error) {
+	c.eventMu.Lock()
+	defer c.eventMu.Unlock()
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.closed || c.process == nil || commandID == "" || c.activeCommand != commandID {
@@ -294,7 +347,7 @@ func (c *ConversationService) prepareCancellation(commandID string) (RuntimeConv
 	if !ok {
 		return nil, ErrConversation
 	}
-	if err := c.recordLocked(Event{Type: "cancel_requested", CommandID: commandID}); err != nil {
+	if err := c.recordLocked(cancelRequestedEvent(commandID)); err != nil {
 		return nil, err
 	}
 	return runtime, nil
@@ -303,6 +356,8 @@ func (c *ConversationService) prepareCancellation(commandID string) (RuntimeConv
 // Subscribe atomically snapshots replay and starts live delivery. Slow subscribers
 // are detached, leaving execution and the private journal unaffected.
 func (c *ConversationService) Subscribe(after uint64) ([]Event, <-chan Event, func(), error) {
+	c.eventMu.Lock()
+	defer c.eventMu.Unlock()
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.closed {

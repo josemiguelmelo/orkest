@@ -36,7 +36,7 @@ func (p *Provider) Launch(ctx context.Context, config agentctl.RunConfig) (agent
 		if errors.As(err, &validation) {
 			return nil, err
 		}
-		return nil, &agentctl.LaunchError{Message: err.Error()}
+		return nil, &agentctl.LaunchError{Message: err.Error(), Cause: err}
 	}
 	return process, nil
 }
@@ -52,7 +52,10 @@ func (p *Provider) launch(ctx context.Context, config agentctl.RunConfig) (agent
 		return nil, errors.New("absolute work and state directories are required")
 	}
 	info, err := os.Stat(p.WorkDir)
-	if err != nil || !info.IsDir() {
+	if err != nil {
+		return nil, runtimeFailure("inspect working directory failed", err)
+	}
+	if !info.IsDir() {
 		return nil, errors.New("working directory must exist")
 	}
 	binary := p.Binary
@@ -61,7 +64,7 @@ func (p *Provider) launch(ctx context.Context, config agentctl.RunConfig) (agent
 	}
 	binary, err = exec.LookPath(binary)
 	if err != nil {
-		return nil, errors.New("opencode executable unavailable")
+		return nil, runtimeFailure("opencode executable unavailable", err)
 	}
 	root := p.storageRoot(config)
 	env, err := p.prepareEnvironment(root, config)
@@ -105,13 +108,13 @@ func (p *Provider) prepareEnvironment(root string, config agentctl.RunConfig) ([
 	for _, item := range []struct{ name, dir string }{{"HOME", "home"}, {"XDG_DATA_HOME", "data"}, {"XDG_CONFIG_HOME", "config"}, {"XDG_STATE_HOME", "state"}, {"XDG_CACHE_HOME", "cache"}} {
 		dir := filepath.Join(root, item.dir)
 		if err := os.MkdirAll(dir, 0o700); err != nil {
-			return nil, errors.New("create runtime storage failed")
+			return nil, runtimeFailure("create runtime storage failed", err)
 		}
 		env = append(env, item.name+"="+dir)
 	}
 	runtimeConfig, err := json.Marshal(runtimeConfiguration{Share: "disabled", Agent: map[string]agentConfiguration{"orkest": {Mode: "primary", Prompt: config.SystemPrompt, Model: config.Model.Provider + "/" + config.Model.ID}}})
 	if err != nil {
-		return nil, err
+		return nil, runtimeFailure("encode runtime configuration failed", err)
 	}
 	env = append(env, "OPENCODE_CONFIG_CONTENT="+string(runtimeConfig), "OPENCODE_DISABLE_PROJECT_CONFIG=true")
 	return env, nil
@@ -122,10 +125,10 @@ func verifyVersion(ctx context.Context, binary string, env []string) error {
 	check.Env = env
 	version, err := check.Output()
 	if err != nil {
-		return errors.New("inspect opencode version failed")
+		return runtimeFailure("inspect opencode version failed", err)
 	}
 	if strings.TrimSpace(string(version)) != Version {
-		return fmt.Errorf("opencode version must be %s but it is %s", Version, strings.TrimSpace(string(version)))
+		return fmt.Errorf("opencode version must be %s", Version)
 	}
 	return nil
 }
@@ -134,9 +137,12 @@ func verifyVersion(ctx context.Context, binary string, env []string) error {
 func reserveRun(root, runID string) error {
 	marker, err := os.OpenFile(filepath.Join(root, fmt.Sprintf("run-%x", sha256.Sum256([]byte(runID)))), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
-		return errors.New("cannot reserve run; existing runs require reconciliation")
+		return runtimeFailure("cannot reserve run; existing runs require reconciliation", err)
 	}
-	return marker.Close()
+	if err := marker.Close(); err != nil {
+		return runtimeFailure("close run reservation failed", err)
+	}
+	return nil
 }
 
 func (p *Provider) startProcess(ctx context.Context, binary string, env []string) (agentctl.Process, error) {
@@ -144,22 +150,22 @@ func (p *Provider) startProcess(ctx context.Context, binary string, env []string
 	cmd.Dir, cmd.Env = p.WorkDir, env
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
-		return nil, errors.New("open opencode input failed")
+		return nil, runtimeFailure("open opencode input failed", err)
 	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		_ = stdin.Close()
-		return nil, errors.New("open opencode output failed")
+		return nil, runtimeFailure("open opencode output failed", err)
 	}
 	// Runtime diagnostics can contain secrets and are never forwarded to ordinary logs.
 	cmd.Stderr = io.Discard
 	if err := cmd.Start(); err != nil {
 		_ = stdin.Close()
 		_ = stdout.Close()
-		return nil, errors.New("start opencode failed")
+		return nil, runtimeFailure("start opencode failed", err)
 	}
 	process := &process{cmd: cmd, stdin: stdin, done: make(chan struct{})}
-	go func() { _ = cmd.Wait(); close(process.done) }()
+	go func() { process.waitErr = cmd.Wait(); close(process.done) }()
 	success := false
 	defer func() {
 		if !success {
@@ -171,7 +177,8 @@ func (p *Provider) startProcess(ctx context.Context, binary string, env []string
 	process.conn, process.client = conn, client
 	conn.SetLogger(slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err := process.initializeSession(ctx, p.WorkDir); err != nil {
-		return nil, err
+		_ = process.Close()
+		return nil, errors.Join(err, process.Err())
 	}
 	// A lost ACP connection invalidates this process; never launch a replacement automatically.
 	go func() {
@@ -189,21 +196,21 @@ func (p *process) initializeSession(ctx context.Context, workDir string) error {
 	conn := p.conn
 	initialized, err := conn.Initialize(ctx, acp.InitializeRequest{ProtocolVersion: 1})
 	if err != nil {
-		return errors.New("initialize opencode ACP failed")
+		return runtimeFailure("initialize opencode ACP failed", err)
 	}
 	if initialized.ProtocolVersion != 1 {
 		return errors.New("unsupported ACP protocol version")
 	}
 	session, err := conn.NewSession(ctx, acp.NewSessionRequest{Cwd: workDir, McpServers: []acp.McpServer{}})
 	if err != nil {
-		return errors.New("create opencode session failed")
+		return runtimeFailure("create opencode session failed", err)
 	}
 	if session.SessionId == "" {
 		return errors.New("opencode returned empty session identity")
 	}
 	_, err = conn.SetSessionMode(ctx, acp.SetSessionModeRequest{SessionId: session.SessionId, ModeId: "orkest"})
 	if err != nil {
-		return errors.New("select configured opencode mode failed")
+		return runtimeFailure("select configured opencode mode failed", err)
 	}
 	p.sessionID = string(session.SessionId)
 	p.client.mu.Lock()
@@ -213,9 +220,11 @@ func (p *process) initializeSession(ctx context.Context, workDir string) error {
 }
 
 type process struct {
-	cmd       *exec.Cmd
-	stdin     io.Closer
-	done      chan struct{}
+	cmd   *exec.Cmd
+	stdin io.Closer
+	done  chan struct{}
+	// waitErr is written before done closes; readers must observe done first.
+	waitErr   error
 	sessionID string
 	once      sync.Once
 	conn      *acp.ClientSideConnection
@@ -224,6 +233,17 @@ type process struct {
 
 func (p *process) SessionID() string     { return p.sessionID }
 func (p *process) Done() <-chan struct{} { return p.done }
+func (p *process) Err() error {
+	select {
+	case <-p.done:
+		if p.waitErr != nil {
+			return runtimeFailure("opencode process exited unsuccessfully", p.waitErr)
+		}
+	default:
+	}
+	return nil
+}
+
 func (p *process) Close() error {
 	p.once.Do(func() {
 		_ = p.stdin.Close()

@@ -41,11 +41,14 @@ func (p *process) Prompt(ctx context.Context, text string, observer agentctl.Obs
 	defer func() { p.client.mu.Lock(); p.client.observer = nil; p.client.mu.Unlock() }()
 	result, err := p.conn.Prompt(ctx, acp.PromptRequest{SessionId: acp.SessionId(p.sessionID), Prompt: []acp.ContentBlock{acp.TextBlock(text)}})
 	if err != nil {
-		return "", errors.New("opencode ACP prompt failed")
+		return "", runtimeFailure("opencode ACP prompt failed", err)
 	}
 	return string(result.StopReason), nil
 }
 
 func (p *process) Cancel(ctx context.Context) error {
-	return p.conn.Cancel(ctx, acp.CancelNotification{SessionId: acp.SessionId(p.sessionID)})
+	if err := p.conn.Cancel(ctx, acp.CancelNotification{SessionId: acp.SessionId(p.sessionID)}); err != nil {
+		return runtimeFailure("cancel opencode prompt failed", err)
+	}
+	return nil
 }

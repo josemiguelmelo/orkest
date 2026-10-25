@@ -25,7 +25,7 @@ var (
 type Event struct {
 	At             time.Time   `json:"at"`
 	Sequence       uint64      `json:"sequence"`
-	Type           string      `json:"type"`
+	Type           EventType   `json:"type"`
 	OrganizationID string      `json:"organizationId"`
 	WorkspaceID    string      `json:"workspaceId"`
 	TaskID         string      `json:"taskId"`

@@ -15,6 +15,10 @@ import (
 func TestMain(m *testing.M) {
 	if os.Getenv("ORKEST_ACP_FIXTURE") == "1" {
 		if os.Args[1] == "--version" {
+			if os.Getenv("ORKEST_ACP_WRONG_VERSION") == "1" {
+				fmt.Println("SECRET")
+				os.Exit(0)
+			}
 			fmt.Println(Version)
 			os.Exit(0)
 		}
@@ -46,6 +50,9 @@ func TestMain(m *testing.M) {
 				}
 				if json.Unmarshal(request.Params, &params) != nil || params.SessionID != "fixture-session" || len(params.Prompt) != 1 {
 					os.Exit(5)
+				}
+				if params.Prompt[0].Text == "crash" {
+					os.Exit(23)
 				}
 				fixtureSend(map[string]any{"jsonrpc": "2.0", "method": "session/update", "params": map[string]any{"sessionId": "fixture-session", "update": map[string]any{"sessionUpdate": "agent_message_chunk", "content": map[string]any{"type": "text", "text": "Hello from fixture"}}}})
 				if params.Prompt[0].Text == "permission" {
