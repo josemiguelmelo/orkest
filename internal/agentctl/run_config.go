@@ -8,16 +8,16 @@ import (
 // RunConfig is the resolved configuration bound to one task execution run.
 // It is separate from reusable agent definitions and process startup options.
 type RunConfig struct {
-	OrganizationID string `json:"organizationId"`
-	WorkspaceID    string `json:"workspaceId"`
-	TaskID         string `json:"taskId"`
-	RunID          string `json:"runId"`
-	Runtime        string `json:"runtime"`
-	Model          Model  `json:"model"`
-	SystemPrompt   string `json:"systemPrompt"`
+	OrganizationID string         `json:"organizationId"`
+	WorkspaceID    string         `json:"workspaceId"`
+	TaskID         string         `json:"taskId"`
+	RunID          string         `json:"runId"`
+	Runtime        string         `json:"runtime"`
+	Model          ModelSelection `json:"model"`
+	SystemPrompt   string         `json:"systemPrompt"`
 }
 
-type Model struct {
+type ModelSelection struct {
 	Provider string `json:"provider"`
 	ID       string `json:"id"`
 }

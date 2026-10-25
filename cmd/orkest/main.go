@@ -2,20 +2,19 @@ package main
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"os"
 	"os/signal"
 	"syscall"
 
-	"github.com/joho/godotenv"
 	"github.com/josemiguelmelo/orkest/internal/app"
+	"github.com/josemiguelmelo/orkest/internal/core/environment"
 )
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, nil))
-	if err := loadEnvironment(".env"); err != nil {
-		logger.Error("agentctl stopped", "error", err)
+	if err := environment.LoadEnvironment(".env"); err != nil {
+		logger.Error("platform stopped", "error", err)
 		os.Exit(1)
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -24,11 +23,4 @@ func main() {
 		logger.Error("platform stopped", "error", err)
 		os.Exit(1)
 	}
-}
-
-func loadEnvironment(path string) error {
-	if err := godotenv.Load(path); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return errors.New("cannot load .env: check file access and dotenv syntax")
-	}
-	return nil
 }

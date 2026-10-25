@@ -69,7 +69,7 @@ func (p delayedLaunchProvider) Launch(context.Context, RunConfig) (Process, erro
 func TestControllerShutdownDuringConversationBinding(t *testing.T) {
 	process := &testProcess{done: make(chan struct{})}
 	provider := delayedLaunchProvider{started: make(chan struct{}), release: make(chan struct{}), process: process}
-	controller := NewRunControllerWithProvider(context.Background(), provider, t.TempDir())
+	controller := NewRunControllerWithRuntimeProvider(context.Background(), provider, t.TempDir())
 	defer func() { _ = controller.Close() }()
 	if err := controller.Configure(runConfig()); err != nil {
 		t.Fatal(err)

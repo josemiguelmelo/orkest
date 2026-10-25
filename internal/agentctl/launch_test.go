@@ -40,7 +40,7 @@ func (p *testProcess) Close() error          { p.once.Do(func() { close(p.done) 
 
 func TestProviderLaunchOwnership(t *testing.T) {
 	p := &testProvider{process: &testProcess{done: make(chan struct{})}}
-	service := NewRunControllerWithProvider(context.Background(), p, "")
+	service := NewRunControllerWithRuntimeProvider(context.Background(), p, "")
 	defer func() { _ = service.Close() }()
 	if err := service.Launch(); !errors.Is(err, ErrNotConfigured) {
 		t.Fatal(err)
@@ -77,7 +77,7 @@ func TestProviderLaunchOwnership(t *testing.T) {
 
 func TestLaunchFailureDoesNotRetry(t *testing.T) {
 	p := &testProvider{err: errors.New("launch failed")}
-	service := NewRunControllerWithProvider(context.Background(), p, "")
+	service := NewRunControllerWithRuntimeProvider(context.Background(), p, "")
 	defer func() { _ = service.Close() }()
 	config := runConfig()
 	config.Runtime = "alternative"
@@ -97,7 +97,7 @@ func TestLaunchFailureDoesNotRetry(t *testing.T) {
 
 func TestUnexpectedProcessExitIsFailed(t *testing.T) {
 	process := &testProcess{done: make(chan struct{}), exitErr: errors.New("runtime exited")}
-	controller := NewRunControllerWithProvider(context.Background(), &testProvider{process: process}, "")
+	controller := NewRunControllerWithRuntimeProvider(context.Background(), &testProvider{process: process}, "")
 	defer func() { _ = controller.Close() }()
 	config := runConfig()
 	config.Runtime = "alternative"

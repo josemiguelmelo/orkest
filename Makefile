@@ -1,8 +1,9 @@
 .DEFAULT_GOAL := help
-.PHONY: help setup dev dev-once dev-agentctl dev-web db-up db-down db-logs auth-up lint-install lint fmt check build test-integration test-recovery
+.PHONY: help setup dev dev-once dev-agentctl dev-web db-up db-down db-logs auth-up lint-install lint fmt sqlc check build test-integration test-postgres test-recovery
 
 GOLANGCI_LINT_VERSION := v2.15.0
 GOLANGCI_LINT := bin/tools/$(GOLANGCI_LINT_VERSION)/golangci-lint
+SQLC_VERSION := v1.31.1
 
 help:
 	@echo "setup             Install frontend dependencies"
@@ -15,8 +16,10 @@ help:
 	@echo "fmt               Format Go code"
 	@echo "lint-install      Install pinned golangci-lint locally (requires curl)"
 	@echo "lint              Run Go linters and formatting checks"
+	@echo "sqlc              Regenerate PostgreSQL query code"
 	@echo "check             Check lint, tests, frontend types, builds"
 	@echo "build             Build both Go binaries and frontend"
+	@echo "test-postgres     Test PostgreSQL repositories (requires DATABASE_URL)"
 
 setup:
 	npm --prefix web ci
@@ -58,6 +61,9 @@ lint: $(GOLANGCI_LINT)
 fmt: $(GOLANGCI_LINT)
 	$(GOLANGCI_LINT) fmt ./...
 
+sqlc:
+	go run github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION) generate
+
 check: lint
 	go test ./...
 	npm --prefix web run typecheck
@@ -70,6 +76,10 @@ build:
 
 test-integration:
 	go test -tags=integration ./tests/integration -count=1
+
+test-postgres:
+	@test -n "$$DATABASE_URL" || (echo "DATABASE_URL is required; start PostgreSQL with make db-up"; exit 1)
+	go test ./internal/postgres -run TestPostgresRepositories -count=1
 
 test-recovery:
 	@echo "$@: not implemented; restoration and continuation are not verified."

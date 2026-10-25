@@ -8,16 +8,19 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/josemiguelmelo/orkest/internal/core/openapi"
+	"github.com/josemiguelmelo/orkest/internal/identity"
+	"github.com/josemiguelmelo/orkest/internal/organization"
+	"github.com/josemiguelmelo/orkest/internal/workspace"
 )
 
 // NewRouter validates the served OpenAPI contract before exposing routes.
-func NewRouter() (*chi.Mux, error) {
+func NewRouter(users *identity.UserRegistrationService, organizations *organization.OrganizationService, workspaces *workspace.WorkspaceService) (*chi.Mux, error) {
 	if _, err := openapi.LoadAndValidateOpenAPIDoc(OpenAPIContract, context.Background()); err != nil {
 		return nil, fmt.Errorf("load platform OpenAPI contract: %w", err)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	auth, err := newOIDCAuth(ctx)
+	auth, err := newOIDCAuth(ctx, users, organizations)
 	if err != nil {
 		return nil, err
 	}
@@ -31,7 +34,13 @@ func NewRouter() (*chi.Mux, error) {
 	router.Get("/auth/login", auth.login)
 	router.Get("/auth/callback", auth.callback)
 	router.Post("/auth/logout", auth.logout)
-	router.Get("/api/me", auth.currentUser)
+	router.Group(func(api chi.Router) {
+		api.Use(auth.middleware)
+		api.Route("/api", func(api chi.Router) {
+			api.Get("/me", auth.currentUser)
+			organizationAPI{organizations: organizations, workspaces: workspaces}.routes(api)
+		})
+	})
 	openapi.Enable(router, "Orkest API", OpenAPIContract)
 	return router, nil
 }

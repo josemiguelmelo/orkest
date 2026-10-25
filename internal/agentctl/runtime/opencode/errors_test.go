@@ -14,8 +14,8 @@ import (
 )
 
 func TestLaunchRetainsCauseWithoutExposingPaths(t *testing.T) {
-	provider := &Provider{Binary: filepath.Join(t.TempDir(), "SECRET"), WorkDir: t.TempDir(), StateDir: t.TempDir()}
-	config := agentctl.RunConfig{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", RunID: "run", Runtime: "opencode", Model: agentctl.Model{Provider: "provider", ID: "model"}, SystemPrompt: "Work"}
+	provider := &OpenCodeProvider{Binary: filepath.Join(t.TempDir(), "SECRET"), WorkDir: t.TempDir(), StateDir: t.TempDir()}
+	config := agentctl.RunConfig{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", RunID: "run", Runtime: "opencode", Model: agentctl.ModelSelection{Provider: "provider", ID: "model"}, SystemPrompt: "Work"}
 	_, err := provider.Launch(context.Background(), config)
 	var launch *agentctl.LaunchError
 	if !errors.As(err, &launch) || !errors.Is(err, os.ErrNotExist) {
@@ -44,8 +44,8 @@ func TestProcessRetainsExitStatus(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	provider := &Provider{Binary: binary, WorkDir: t.TempDir(), StateDir: t.TempDir(), Env: []string{"ORKEST_ACP_FIXTURE=1"}}
-	config := agentctl.RunConfig{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", RunID: "run", Runtime: "opencode", Model: agentctl.Model{Provider: "provider", ID: "model"}, SystemPrompt: "Work"}
+	provider := &OpenCodeProvider{Binary: binary, WorkDir: t.TempDir(), StateDir: t.TempDir(), Env: []string{"ORKEST_ACP_FIXTURE=1"}}
+	config := agentctl.RunConfig{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", RunID: "run", Runtime: "opencode", Model: agentctl.ModelSelection{Provider: "provider", ID: "model"}, SystemPrompt: "Work"}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	process, err := provider.Launch(ctx, config)

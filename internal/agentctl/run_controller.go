@@ -9,10 +9,10 @@ import (
 )
 
 var (
-	ErrConfigurationConflict = errors.New("process is already configured for a run")
-	ErrLaunchConflict        = errors.New("run launch already attempted or service closed")
-	ErrNotConfigured         = errors.New("configure the agent before launching")
-	ErrProviderUnavailable   = errors.New("agent provider unavailable")
+	ErrConfigurationConflict      = errors.New("process is already configured for a run")
+	ErrLaunchConflict             = errors.New("run launch already attempted or service closed")
+	ErrNotConfigured              = errors.New("configure the agent before launching")
+	ErrRuntimeProviderUnavailable = errors.New("agent provider unavailable")
 )
 
 // LaunchError carries a provider-sanitized message suitable for API responses.
@@ -40,7 +40,7 @@ type RunController struct {
 	// before the conversation lock; conversation operations never acquire this lock.
 	mu           sync.RWMutex
 	runConfig    *RunConfig
-	provider     Provider
+	provider     RuntimeProvider
 	ctx          context.Context
 	cancel       context.CancelFunc
 	process      Process
@@ -52,11 +52,11 @@ type RunController struct {
 }
 
 func NewRunController() *RunController {
-	return NewRunControllerWithProvider(context.Background(), nil, "")
+	return NewRunControllerWithRuntimeProvider(context.Background(), nil, "")
 }
 
-// NewRunControllerWithProvider wires a runtime at the application boundary.
-func NewRunControllerWithProvider(ctx context.Context, provider Provider, stateDir string) *RunController {
+// NewRunControllerWithRuntimeProvider wires a runtime at the application boundary.
+func NewRunControllerWithRuntimeProvider(ctx context.Context, provider RuntimeProvider, stateDir string) *RunController {
 	ctx, cancel := context.WithCancel(ctx)
 	return &RunController{
 		ctx:          ctx,
@@ -74,7 +74,7 @@ func (c *RunController) Configure(config RunConfig) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if c.provider != nil && config.Runtime != c.provider.Runtime() {
-		return ErrProviderUnavailable
+		return ErrRuntimeProviderUnavailable
 	}
 	if c.runConfig != nil && *c.runConfig != config {
 		return ErrConfigurationConflict
@@ -119,7 +119,7 @@ func (c *RunController) Launch() error {
 	}
 	if c.provider == nil {
 		c.mu.Unlock()
-		return ErrProviderUnavailable
+		return ErrRuntimeProviderUnavailable
 	}
 	c.attempted = true
 	c.launchState = StateStarting

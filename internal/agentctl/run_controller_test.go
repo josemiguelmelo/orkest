@@ -8,7 +8,7 @@ import (
 )
 
 func runConfig() RunConfig {
-	return RunConfig{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", RunID: "run", Runtime: "opencode", Model: Model{Provider: "provider", ID: "model"}, SystemPrompt: "Work on this task"}
+	return RunConfig{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", RunID: "run", Runtime: "opencode", Model: ModelSelection{Provider: "provider", ID: "model"}, SystemPrompt: "Work on this task"}
 }
 
 func TestConfigurationValidation(t *testing.T) {

@@ -33,7 +33,9 @@ Automatic assignment and automatic movement into in progress are outside the MVP
 
 An organization groups users and multiple workspaces. Each workspace represents an isolated project within the organization. Repositories, tasks, agent definitions, team members, tools, MCP servers, integrations, executor configurations, and workflow configuration belong to a workspace and are isolated from other workspaces, including those in the same organization. Configuration and credentials must not be implicitly shared across projects.
 
-Organization roles are Owner, Admin, and Member. Workspace roles are Admin, Member, and Viewer. Authentication is delegated to Keycloak. Orkest owns organization/workspace membership and application authorization; Keycloak authenticates users. The detailed permission matrix, inheritance of organization privileges, invitations, and identity-to-membership provisioning remain to be specified. A workspace Viewer must not mutate tasks or configurations, start executions, or answer approval requests. The platform must enforce organization and workspace access boundaries on all data and execution operations.
+Organization roles are Owner, Admin, and Member. Workspace roles are Admin, Member, and Viewer. Authentication is delegated to Keycloak. Orkest owns user profiles, organization/workspace membership, and application authorization; Keycloak authenticates users. On first successful login, Orkest creates a user keyed by the verified Keycloak subject and records username and email. The profile is not overwritten by later logins. Users must be organization members before receiving workspace membership.
+
+Organization Owners manage the organization and all memberships. Organization Admins manage organization settings and workspaces and manage memberships, but cannot grant, change, or remove an Owner. Organization Members can read organization details. Owner and Admin access is inherited across every workspace in the organization. Workspace Admins manage workspace settings and memberships; Members may read and edit project resources; Viewers are read-only. The last organization Owner cannot be demoted or removed. Invitations are not part of this first membership API. A workspace Viewer must not mutate tasks or configurations, start executions, or answer approval requests. The platform must enforce organization and workspace access boundaries on all data and execution operations.
 
 ### 3.2 Repository
 
@@ -257,7 +259,7 @@ Event retention, recovery time targets, host-loss guarantees, and overall availa
 
 ### Subsequent decisions
 
-- Keycloak integration details, invitations, identity-to-membership provisioning, and detailed permissions for the confirmed roles.
+- Invitations and external identity-to-membership provisioning beyond first-login user creation.
 - Custom workspace approval policies are deferred. MVP uses OpenCode defaults and forwards runtime approval requests without automatically accepting them.
 - Pinned OpenCode release, default model selection, and validated recovery behavior.
 - Whether workflows are fixed for MVP or configurable per workspace.

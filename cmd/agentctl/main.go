@@ -10,19 +10,20 @@ import (
 
 	"github.com/josemiguelmelo/orkest/internal/agentctl/daemon"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/runtime/opencode"
+	"github.com/josemiguelmelo/orkest/internal/core/environment"
 )
 
 func main() {
 	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
-	if err := loadEnvironment(".env"); err != nil {
+	if err := environment.LoadEnvironment(".env"); err != nil {
 		logger.Error("agentctl stopped", "error", err)
 		os.Exit(1)
 	}
 
-	address := flag.String("listen", environmentDefault("AGENTCTL_LISTEN", "127.0.0.1:8081"), "agentctl HTTP listen address")
-	binary := flag.String("opencode-binary", environmentDefault("AGENTCTL_OPENCODE_BINARY", "opencode"), "pinned OpenCode executable")
-	workDir := flag.String("work-dir", environmentDefault("AGENTCTL_WORK_DIR", ""), "absolute task working directory")
-	stateDir := flag.String("state-dir", environmentDefault("AGENTCTL_STATE_DIR", ""), "absolute durable task state directory")
+	address := flag.String("listen", environment.EnvironmentDefault("AGENTCTL_LISTEN", "127.0.0.1:8081"), "agentctl HTTP listen address")
+	binary := flag.String("opencode-binary", environment.EnvironmentDefault("AGENTCTL_OPENCODE_BINARY", "opencode"), "pinned OpenCode executable")
+	workDir := flag.String("work-dir", environment.EnvironmentDefault("AGENTCTL_WORK_DIR", ""), "absolute task working directory")
+	stateDir := flag.String("state-dir", environment.EnvironmentDefault("AGENTCTL_STATE_DIR", ""), "absolute durable task state directory")
 
 	var env []string
 	flag.Func("env", "environment variable name granted to the provider (repeatable)", func(name string) error {
@@ -34,7 +35,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	if err := daemon.RunAgentctl(ctx, logger, *address, &opencode.Provider{Binary: *binary, WorkDir: *workDir, StateDir: *stateDir, Env: env}, *stateDir); err != nil {
+	if err := daemon.RunAgentctl(ctx, logger, *address, &opencode.OpenCodeProvider{Binary: *binary, WorkDir: *workDir, StateDir: *stateDir, Env: env}, *stateDir); err != nil {
 		logger.Error("agentctl stopped", "error", err)
 		os.Exit(1)
 	}

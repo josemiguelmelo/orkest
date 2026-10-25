@@ -1,8 +1,9 @@
 # Orkest
 
-SDLC agent orchestration. This repository contains a minimal Go HTTP server,
-a standalone OpenCode/ACP `agentctl` service and a React/TypeScript/Vite shell. Product services, authentication,
-database access, and platform-to-agent integration are not implemented.
+SDLC agent orchestration. This repository contains a Go platform API, a standalone
+OpenCode/ACP `agentctl` service, and a React/TypeScript/Vite shell. Organization and
+workspace membership APIs use PostgreSQL; task services and platform-to-agent
+integration are not implemented.
 Read [requirements](docs/requirements.md) and the
 [proposed stack](docs/tech-stack.md) before extending the project.
 
@@ -18,11 +19,13 @@ Dependencies are pinned in `web/package.json` and `web/package-lock.json`.
 5. Run `make dev` for the API at `http://127.0.0.1:8080` with Air auto-reload.
 6. In another terminal, run `make dev-web` for the frontend (Vite prints its URL).
 
-`GET /healthz` reports process liveness only. The API does not connect to the
-database yet. Set `HTTP_ADDR` to override its listen address. The frontend is a
-static shell and does not yet call the API. Visit `http://127.0.0.1:8080/auth/login`
-to sign in. The local Keycloak realm has username `local` and password `local`;
-`GET /api/me` returns the verified identity. The callback sets an HTTP-only
+`GET /healthz` reports process liveness only. The platform connects to PostgreSQL
+and applies pending Goose migrations on startup. Set `HTTP_ADDR` to override its
+listen address. The frontend is a static shell and does not yet call the API.
+Visit `http://127.0.0.1:8080/auth/login` to sign in. The local Keycloak realm has
+username `local` and password `local`; `GET /api/me` returns the internal user
+profile and organization memberships. The API supports organization, workspace,
+and membership management. The callback sets an HTTP-only
 session cookie; API clients can also send the verified Keycloak ID token as a
 bearer token. Local OIDC values are in `.env.example`. These credentials and
 HTTP settings are for local development only.
@@ -52,6 +55,7 @@ launch requests, persistent storage, and verification instructions.
 - `make lint`: run golangci-lint v2.15.0 with the standard linters and gofumpt.
 - `make fmt`: format Go sources with gofumpt, including blank lines between
   multiline functions.
+- `make sqlc`: regenerate PostgreSQL query code with the pinned sqlc version.
 - `make lint-install`: install the pinned linter under `bin/tools/` (requires curl
   and network access). `lint`, `fmt`, and `check` install it automatically if absent.
 - `make build`: create `bin/orkest`, `bin/agentctl`, and `web/dist`.
@@ -59,7 +63,6 @@ launch requests, persistent storage, and verification instructions.
   via `ORKEST_OPENCODE_BINARY`. Makes no model request.
 - `make test-recovery`: explicitly fails; recovery verification is not implemented.
 
-The Go server currently uses `net/http` routing. Add Chi, pgx/sqlc, migrations,
-and feature packages as their first implementations need them. No schema or
-empty feature packages are included. Validate the pinned OpenCode/ACP prototype
-and recovery behavior before building the full UI.
+The platform API uses Chi, pgx, sqlc, and Goose. PostgreSQL schema migrations
+live in `db/migrations`; the startup runner embeds and applies them. Validate the
+pinned OpenCode/ACP prototype and recovery behavior before building the full UI.

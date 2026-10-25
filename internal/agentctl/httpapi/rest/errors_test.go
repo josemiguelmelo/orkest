@@ -31,7 +31,7 @@ func TestServiceErrorsThroughREST(t *testing.T) {
 	}{
 		{"validation", "/agent/configure", "invalid_configuration", "model.id", &agentctl.ValidationError{Field: "model.id"}, 400},
 		{"binding", "/agent/configure", "configuration_conflict", "", agentctl.ErrConfigurationConflict, 409},
-		{"runtime", "/agent/configure", "provider_unavailable", "", agentctl.ErrProviderUnavailable, 503},
+		{"runtime", "/agent/configure", "provider_unavailable", "", agentctl.ErrRuntimeProviderUnavailable, 503},
 		{"not configured", "/agent/launch", "not_configured", "", agentctl.ErrNotConfigured, 409},
 		{"launch conflict", "/agent/launch", "launch_conflict", "", agentctl.ErrLaunchConflict, 409},
 		{"startup secret", "/agent/launch", "launch_failed", "", errors.New("SECRET"), 502},

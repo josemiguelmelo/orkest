@@ -37,7 +37,7 @@ type ConversationService struct {
 	work               sync.WaitGroup
 	stateDir           string
 	journal            *Journal
-	subscriptions      Subscriptions
+	subscriptions      EventSubscriptions
 	commands           map[string][sha256.Size]byte
 	pending            map[string]*pendingPermission
 	activeCommand      string

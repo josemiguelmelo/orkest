@@ -3,7 +3,7 @@ package agentctl
 import "context"
 
 // Provider owns runtime-specific startup. No ACP types cross this boundary.
-type Provider interface {
+type RuntimeProvider interface {
 	Runtime() string
 	Launch(context.Context, RunConfig) (Process, error)
 }
