@@ -1,0 +1,182 @@
+package task
+
+import (
+	"context"
+	"fmt"
+	"strings"
+
+	"github.com/josemiguelmelo/orkest/internal/core/ids"
+	modelerrors "github.com/josemiguelmelo/orkest/internal/core/model/errors"
+)
+
+type Service struct {
+	repository Repository
+	workspaces WorkspaceAccess
+}
+
+func NewService(repository Repository, workspaces WorkspaceAccess) *Service {
+	return &Service{repository: repository, workspaces: workspaces}
+}
+
+func (s *Service) List(ctx context.Context, userID, orgID, workspaceID string) ([]Task, error) {
+	if _, err := s.workspaces.GetWorkspace(ctx, userID, orgID, workspaceID); err != nil {
+		return nil, err
+	}
+	return s.repository.Tasks(ctx, orgID, workspaceID)
+}
+
+func (s *Service) Get(ctx context.Context, userID, orgID, workspaceID, taskID string) (Task, error) {
+	if _, err := s.workspaces.GetWorkspace(ctx, userID, orgID, workspaceID); err != nil {
+		return Task{}, err
+	}
+	return s.repository.Task(ctx, orgID, workspaceID, taskID)
+}
+
+func (s *Service) Create(ctx context.Context, userID, orgID, workspaceID string, input TaskInput) (Task, error) {
+	if err := s.authorize(ctx, userID, orgID, workspaceID); err != nil {
+		return Task{}, err
+	}
+	if err := normalizeTask(&input, true); err != nil {
+		return Task{}, err
+	}
+	id, err := ids.NewUUID()
+	if err != nil {
+		return Task{}, fmt.Errorf("generate task ID: %w", err)
+	}
+	return s.repository.CreateTask(ctx, id, workspaceID, input)
+}
+
+func (s *Service) Update(ctx context.Context, userID, orgID, workspaceID, taskID string, input TaskInput) (Task, error) {
+	if err := s.authorize(ctx, userID, orgID, workspaceID); err != nil {
+		return Task{}, err
+	}
+	if err := normalizeTask(&input, false); err != nil {
+		return Task{}, err
+	}
+	current, err := s.repository.Task(ctx, orgID, workspaceID, taskID)
+	if err != nil {
+		return Task{}, err
+	}
+	if current.Status == "done" && input.Status != "done" {
+		return Task{}, modelerrors.ErrConflict
+	}
+	return s.repository.UpdateTask(ctx, orgID, workspaceID, taskID, input)
+}
+
+func (s *Service) Comments(ctx context.Context, userID, orgID, workspaceID, taskID string) ([]Comment, error) {
+	if _, err := s.workspaces.GetWorkspace(ctx, userID, orgID, workspaceID); err != nil {
+		return nil, err
+	}
+	if _, err := s.repository.Task(ctx, orgID, workspaceID, taskID); err != nil {
+		return nil, err
+	}
+	return s.repository.Comments(ctx, orgID, workspaceID, taskID)
+}
+
+func (s *Service) AddComment(ctx context.Context, userID, orgID, workspaceID, taskID, body string) (Comment, error) {
+	if err := s.authorize(ctx, userID, orgID, workspaceID); err != nil {
+		return Comment{}, err
+	}
+	if _, err := s.repository.Task(ctx, orgID, workspaceID, taskID); err != nil {
+		return Comment{}, err
+	}
+	body = strings.TrimSpace(body)
+	if body == "" || len(body) > 20000 {
+		return Comment{}, modelerrors.ErrInvalid
+	}
+	id, err := ids.NewUUID()
+	if err != nil {
+		return Comment{}, fmt.Errorf("generate comment ID: %w", err)
+	}
+	return s.repository.CreateComment(ctx, id, workspaceID, taskID, userID, body)
+}
+
+func (s *Service) Components(ctx context.Context, userID, orgID, workspaceID string) ([]Component, error) {
+	if _, err := s.workspaces.GetWorkspace(ctx, userID, orgID, workspaceID); err != nil {
+		return nil, err
+	}
+	return s.repository.Components(ctx, orgID, workspaceID)
+}
+
+func (s *Service) CreateComponent(ctx context.Context, userID, orgID, workspaceID string, input ComponentInput) (Component, error) {
+	if err := s.authorize(ctx, userID, orgID, workspaceID); err != nil {
+		return Component{}, err
+	}
+	if err := normalizeComponent(&input); err != nil {
+		return Component{}, err
+	}
+	id, err := ids.NewUUID()
+	if err != nil {
+		return Component{}, fmt.Errorf("generate component ID: %w", err)
+	}
+	return s.repository.CreateComponent(ctx, id, workspaceID, input)
+}
+
+func (s *Service) UpdateComponent(ctx context.Context, userID, orgID, workspaceID, componentID string, input ComponentInput) (Component, error) {
+	if err := s.authorize(ctx, userID, orgID, workspaceID); err != nil {
+		return Component{}, err
+	}
+	if err := normalizeComponent(&input); err != nil {
+		return Component{}, err
+	}
+	return s.repository.UpdateComponent(ctx, orgID, workspaceID, componentID, input)
+}
+
+func (s *Service) authorize(ctx context.Context, userID, orgID, workspaceID string) error {
+	w, err := s.workspaces.GetWorkspace(ctx, userID, orgID, workspaceID)
+	if err != nil {
+		return err
+	}
+	if w.Role == "viewer" {
+		return modelerrors.ErrForbidden
+	}
+	return nil
+}
+
+func normalizeTask(input *TaskInput, creating bool) error {
+	input.Title = strings.TrimSpace(input.Title)
+	input.Description = strings.TrimSpace(input.Description)
+	if input.Title == "" || len(input.Title) > 500 || len(input.Description) > 100000 {
+		return modelerrors.ErrInvalid
+	}
+	if creating && input.Status == "" {
+		input.Status = "todo"
+	}
+	switch input.Status {
+	case "todo", "in_progress", "in_review", "done":
+	default:
+		return modelerrors.ErrInvalid
+	}
+	input.AssigneeAgentID = strings.TrimSpace(input.AssigneeAgentID)
+	input.Labels = normalizeStrings(input.Labels)
+	input.ComponentIDs = normalizeStrings(input.ComponentIDs)
+	return nil
+}
+
+func normalizeComponent(input *ComponentInput) error {
+	input.Identifier = strings.TrimSpace(input.Identifier)
+	input.Name = strings.TrimSpace(input.Name)
+	input.RepositoryID = strings.TrimSpace(input.RepositoryID)
+	input.Description = strings.TrimSpace(input.Description)
+	if input.Identifier == "" || len(input.Identifier) > 100 || input.Name == "" || len(input.Name) > 200 || input.RepositoryID == "" || len(input.Description) > 2000 {
+		return modelerrors.ErrInvalid
+	}
+	return nil
+}
+
+func normalizeStrings(values []string) []string {
+	seen := make(map[string]struct{}, len(values))
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		value = strings.TrimSpace(value)
+		if value == "" {
+			continue
+		}
+		if _, ok := seen[value]; ok {
+			continue
+		}
+		seen[value] = struct{}{}
+		out = append(out, value)
+	}
+	return out
+}

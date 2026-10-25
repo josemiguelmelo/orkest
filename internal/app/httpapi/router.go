@@ -13,11 +13,12 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/identity"
 	"github.com/josemiguelmelo/orkest/internal/orchestration"
 	"github.com/josemiguelmelo/orkest/internal/organization"
+	"github.com/josemiguelmelo/orkest/internal/task"
 	"github.com/josemiguelmelo/orkest/internal/workspace"
 )
 
 // NewRouter validates the served OpenAPI contract before exposing routes.
-func NewRouter(users *identity.UserRegistrationService, organizations *organization.OrganizationService, workspaces *workspace.WorkspaceService, agents *agent.Service, codeRepositories *coderepository.Service, tempLaunches ...*orchestration.LaunchService) (*chi.Mux, error) {
+func NewRouter(users *identity.UserRegistrationService, organizations *organization.OrganizationService, workspaces *workspace.WorkspaceService, agents *agent.Service, codeRepositories *coderepository.Service, tasks *task.Service, tempLaunches ...*orchestration.LaunchService) (*chi.Mux, error) {
 	if _, err := openapi.LoadAndValidateOpenAPIDoc(OpenAPIContract, context.Background()); err != nil {
 		return nil, fmt.Errorf("load platform OpenAPI contract: %w", err)
 	}
@@ -44,6 +45,7 @@ func NewRouter(users *identity.UserRegistrationService, organizations *organizat
 			organizationAPI{organizations: organizations, workspaces: workspaces}.routes(api)
 			agentAPI{agents: agents}.routes(api)
 			codeRepositoryAPI{repositories: codeRepositories}.routes(api)
+			taskAPI{tasks: tasks}.routes(api)
 			if len(tempLaunches) > 0 && tempLaunches[0] != nil {
 				tempAgentLaunchAPI{launches: tempLaunches[0]}.routes(api)
 			}

@@ -45,11 +45,15 @@ Repository configuration must identify the remote repository and the credentials
 
 ### 3.3 Task
 
-A task contains a title, description, workflow status, and comments. It belongs to a workspace and may reference workspace repositories and an assigned team member.
+A task contains a title, description, workflow status, freeform labels, comments, components, and timestamps. It belongs to a workspace and may be assigned to a workspace agent definition. Manual task management initially exposes workspace-scoped APIs; task UI and execution wiring are separate work.
+
+A component is a workspace-scoped entity with a user-supplied identifier unique within the workspace, a name, description, and one associated repository registered in that workspace. Tasks may reference multiple components. Identifiers serve as stable human-readable keys, similar to labels.
+
+Deleting an assigned agent definition clears that task assignment while preserving the task. Task comment authors remain users.
 
 Tasks may be created in Orkest or imported from an integration. Imported tasks retain their source identity and a link to the source. Source-managed fields cannot be edited in Orkest.
 
-Only a user can assign a task to a specific team member or initiate work by moving it into in progress. Agent completion must not automatically initiate another task.
+Users assign tasks to workspace agents. Only a user can initiate work by moving a task into in progress. Linking execution slots/team members to these agents is part of the team and orchestration work. Agent completion must not automatically initiate another task.
 
 For MVP, assume source status does not change. Orkest manages its own workflow status, assignment, execution, and agent chat without updating the source status. Imported title and description remain source-managed. Source comment synchronization remains open.
 
@@ -114,9 +118,9 @@ The executor contract must cover environment creation, startup, connectivity, st
 
 ### 3.10 Workflow
 
-The initial workflow consists of todo → in progress → in review → done. Assignment and movement into in progress require explicit user actions.
+The initial workflow consists of todo → in progress → in review → done. Assignment and movement into in progress require explicit user actions. Workflow stages are fixed for the initial task API. Done tasks cannot be reopened in this initial slice.
 
-Successful agent completion moves the task into review and releases its slot. Starting another work step after review requires an explicit user action in the platform UI and moves the task back into progress. Only users can mark tasks done or reopen them for MVP. Reopening does not itself start execution; work still requires an explicit user start action and an available member slot. The destination status when reopening remains open. A failed or interrupted execution leaves its task in progress with a visible failed/interrupted execution indicator until a user retries or changes its status. Infrastructure recovery may continue the existing interrupted work step according to section 7; ordinary task failure does not trigger an automatic new attempt. A workflow status is distinct from execution health.
+Successful agent completion moves the task into review and releases its slot. Starting another work step after review requires an explicit user action in the platform UI and moves the task back into progress. Only users can mark tasks done. Reopening done tasks is not supported in the initial task API. A failed or interrupted execution leaves its task in progress with a visible failed/interrupted execution indicator until a user retries or changes its status. Infrastructure recovery may continue the existing interrupted work step according to section 7; ordinary task failure does not trigger an automatic new attempt. A workflow status is distinct from execution health.
 
 ### 3.11 Task Run — proposed supporting concept
 
@@ -235,7 +239,7 @@ Event retention, recovery time targets, host-loss guarantees, and overall availa
 - The agent identifies relevant workspace repositories and uses a task-specific branch in each changed repository.
 - Local workflow changes do not update source status.
 - Agents create and update pull requests autonomously; users do not need to perform these actions on the agent’s behalf.
-- Only users can mark tasks done or reopen them, and reopening alone does not launch execution.
+- Only users can mark tasks done. The initial manual task API does not support reopening done tasks; a later workflow decision may define reopen behavior.
 - All project configuration is workspace-scoped; configuration and credentials from another workspace cannot be selected or used implicitly.
 - GitHub Issues import and source updates preserve source identity and avoid duplicate tasks when updates are delivered repeatedly.
 - Source-managed task fields are read-only in Orkest.

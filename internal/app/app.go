@@ -20,6 +20,7 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/orchestration"
 	"github.com/josemiguelmelo/orkest/internal/organization"
 	"github.com/josemiguelmelo/orkest/internal/postgres"
+	"github.com/josemiguelmelo/orkest/internal/task"
 	"github.com/josemiguelmelo/orkest/internal/workspace"
 )
 
@@ -52,6 +53,7 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 	workspaces := workspace.NewWorkspaceService(postgres.NewWorkspacePostgresRepository(database), organizations)
 	agents := agent.NewService(postgres.NewAgentPostgresRepository(database), workspaces)
 	codeRepositories := coderepository.NewService(postgres.NewCodeReposPostgresRepository(database), workspaces, dataRoot, githubprovider.NewGitHubCodeRepositoryProvider())
+	tasks := task.NewService(postgres.NewTaskPostgresRepository(database), workspaces)
 	launchRepo := postgres.NewAgentLaunchPostgresRepository(database)
 	client := orchestration.NewHTTPAgentctlClient(&http.Client{Timeout: 10 * time.Second})
 	executor, executorErr := docker.New(ctx, docker.Config{
@@ -86,9 +88,9 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 		if serviceErr != nil {
 			return serviceErr
 		}
-		router, err = httpapi.NewRouter(users, organizations, workspaces, agents, codeRepositories, launchService)
+		router, err = httpapi.NewRouter(users, organizations, workspaces, agents, codeRepositories, tasks, launchService)
 	} else {
-		router, err = httpapi.NewRouter(users, organizations, workspaces, agents, codeRepositories)
+		router, err = httpapi.NewRouter(users, organizations, workspaces, agents, codeRepositories, tasks)
 	}
 	if err != nil {
 		return err

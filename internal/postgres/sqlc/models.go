@@ -51,6 +51,17 @@ type CodeRepository struct {
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 }
 
+type Component struct {
+	ID           string             `json:"id"`
+	WorkspaceID  string             `json:"workspace_id"`
+	Identifier   string             `json:"identifier"`
+	Name         string             `json:"name"`
+	RepositoryID string             `json:"repository_id"`
+	Description  string             `json:"description"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Organization struct {
 	ID        string             `json:"id"`
 	Name      string             `json:"name"`
@@ -62,6 +73,36 @@ type OrganizationMembership struct {
 	UserID         string             `json:"user_id"`
 	Role           string             `json:"role"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
+type Task struct {
+	ID              string             `json:"id"`
+	WorkspaceID     string             `json:"workspace_id"`
+	Title           string             `json:"title"`
+	Description     string             `json:"description"`
+	Status          string             `json:"status"`
+	Labels          []string           `json:"labels"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	SourceProvider  string             `json:"source_provider"`
+	SourceID        pgtype.Text        `json:"source_id"`
+	SourceUrl       pgtype.Text        `json:"source_url"`
+	AssigneeAgentID pgtype.Text        `json:"assignee_agent_id"`
+}
+
+type TaskComment struct {
+	ID           string             `json:"id"`
+	WorkspaceID  string             `json:"workspace_id"`
+	TaskID       string             `json:"task_id"`
+	AuthorUserID string             `json:"author_user_id"`
+	Body         string             `json:"body"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+}
+
+type TaskComponent struct {
+	WorkspaceID string `json:"workspace_id"`
+	TaskID      string `json:"task_id"`
+	ComponentID string `json:"component_id"`
 }
 
 type User struct {

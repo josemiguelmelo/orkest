@@ -6,8 +6,10 @@ import (
 	"os"
 	"testing"
 
+	"github.com/josemiguelmelo/orkest/internal/agent"
 	"github.com/josemiguelmelo/orkest/internal/core/ids"
 	modelerrors "github.com/josemiguelmelo/orkest/internal/core/model/errors"
+	"github.com/josemiguelmelo/orkest/internal/task"
 )
 
 func TestPostgresRepositories(t *testing.T) {
@@ -129,6 +131,58 @@ func TestPostgresRepositories(t *testing.T) {
 	}
 	if _, err = codeRepositoryRepository.CreateCodeRepository(ctx, "duplicate-repository", workspaceID, "github", codeRepository.URL); !errors.Is(err, modelerrors.ErrConflict) {
 		t.Fatalf("expected duplicate repository conflict, got %v", err)
+	}
+
+	agentID, err := ids.NewUUID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	agentRepository := NewAgentPostgresRepository(database)
+	worker, err := agentRepository.CreateAgent(ctx, agentID, workspaceID, agent.AgentDefinition{Name: "worker", Runtime: agent.RuntimeOpenCode, Provider: "test", Model: "test-model"})
+	if err != nil {
+		t.Fatalf("create agent: %v", err)
+	}
+	taskRepository := NewTaskPostgresRepository(database)
+	componentID, err := ids.NewUUID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	component, err := taskRepository.CreateComponent(ctx, componentID, workspaceID, task.ComponentInput{Identifier: "API", Name: "API service", RepositoryID: codeRepositoryID, Description: "Public endpoints"})
+	if err != nil || component.Identifier != "API" || component.RepositoryID != codeRepositoryID {
+		t.Fatalf("create component: component=%+v err=%v", component, err)
+	}
+	if _, err = taskRepository.CreateComponent(ctx, "duplicate-component", workspaceID, task.ComponentInput{Identifier: "API", Name: "Duplicate", RepositoryID: codeRepositoryID}); !errors.Is(err, modelerrors.ErrConflict) {
+		t.Fatalf("expected duplicate component identifier conflict, got %v", err)
+	}
+	taskID, err := ids.NewUUID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	createdTask, err := taskRepository.CreateTask(ctx, taskID, workspaceID, task.TaskInput{Title: "Add endpoint", Description: "Task body", Status: "todo", AssigneeAgentID: worker.ID, Labels: []string{"api"}, ComponentIDs: []string{componentID}})
+	if err != nil || createdTask.SourceProvider != "manual" || createdTask.AssigneeAgentID != worker.ID || len(createdTask.Components) != 1 || createdTask.Components[0].ID != componentID {
+		t.Fatalf("create task: task=%+v err=%v", createdTask, err)
+	}
+	commentID, err := ids.NewUUID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	comment, err := taskRepository.CreateComment(ctx, commentID, workspaceID, taskID, member.ID, "Starting work")
+	if err != nil || comment.AuthorUserID != member.ID {
+		t.Fatalf("create task comment: comment=%+v err=%v", comment, err)
+	}
+	comments, err := taskRepository.Comments(ctx, org.ID, workspaceID, taskID)
+	if err != nil || len(comments) != 1 || comments[0].Body != "Starting work" {
+		t.Fatalf("list task comments: comments=%+v err=%v", comments, err)
+	}
+	if _, err = taskRepository.Task(ctx, "another-organization", workspaceID, taskID); !errors.Is(err, modelerrors.ErrNotFound) {
+		t.Fatalf("task read crossed organization boundary: %v", err)
+	}
+	if err = agentRepository.DeleteAgent(ctx, org.ID, workspaceID, worker.ID); err != nil {
+		t.Fatalf("delete assigned agent: %v", err)
+	}
+	unassignedTask, err := taskRepository.Task(ctx, org.ID, workspaceID, taskID)
+	if err != nil || unassignedTask.AssigneeAgentID != "" {
+		t.Fatalf("deleted agent assignment was not cleared: task=%+v err=%v", unassignedTask, err)
 	}
 
 	// Exercise generated row mappings and affected-row handling through the repositories.

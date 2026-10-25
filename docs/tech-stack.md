@@ -66,7 +66,7 @@ Agents create and update pull requests through their permitted runtime capabilit
 
 ## Architecture and local development
 
-- **Modular monolith** is the proposed core platform shape. Implemented Go packages cover identity, organization, workspace, app lifecycle, HTTP API scaffolding, launch orchestration, Docker agentctl execution, and standalone agentctl/OpenCode runtime code. Task and integration services are not implemented.
+- **Modular monolith** is the proposed core platform shape. Implemented Go packages cover identity, organization, workspace, manual task and component APIs, app lifecycle, launch orchestration, Docker agentctl execution, and standalone agentctl/OpenCode runtime code. Task persistence uses versioned PostgreSQL migrations and sqlc; GitHub task import and execution wiring remain unimplemented.
 - **Independent `agentctl` process** is implemented as a separate binary and can be packaged into the Docker OpenCode runtime image; a task-start API and platform wiring remain future work.
 - **Go code organization** stays in one root Go module, with logical package areas rather than nested Go modules:
   - `internal/app` owns platform wiring and lifecycle; platform features belong under `internal/` packages such as `identity`, `organization`, `workspace`, `task`, and `orchestration`.
