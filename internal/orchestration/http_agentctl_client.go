@@ -68,6 +68,13 @@ func (c *HTTPAgentctlClient) StartAgent(ctx context.Context, endpoint string) er
 	return c.post(ctx, endpoint, "/agent/launch", struct{}{})
 }
 
+func (c *HTTPAgentctlClient) Prompt(ctx context.Context, endpoint, commandID, prompt string) error {
+	return c.post(ctx, endpoint, "/agent/prompt", struct {
+		CommandID string `json:"commandId"`
+		Text      string `json:"text"`
+	}{CommandID: commandID, Text: prompt})
+}
+
 func (c *HTTPAgentctlClient) post(ctx context.Context, endpoint, path string, payload any) error {
 	body, err := json.Marshal(payload)
 	if err != nil {

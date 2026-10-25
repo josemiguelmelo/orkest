@@ -17,7 +17,27 @@ tags:
     description: Workspace-scoped reusable agent definitions.
   - name: CodeRepositories
     description: Workspace-scoped code repository registration and Git operations.
+  - name: TemporaryExecution
+    description: Temporary authenticated endpoint for manually testing agent launches.
 paths:
+  /api/temp/agent-launch:
+    post:
+      tags: [TemporaryExecution]
+      operationId: temporaryLaunchAgentWithPrompt
+      summary: Start a Docker agent and submit its first prompt (temporary)
+      description: Available only when ORKEST_ENABLE_TEMP_AGENT_LAUNCH=true. Requires authentication. Intended for local manual testing and does not perform task or workspace authorization.
+      security: [{bearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/TempAgentLaunchRequest"}
+      responses:
+        "202": {description: Agent started and prompt accepted}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "502": {description: Agent launch or prompt submission failed}
+        "404": {description: Temporary endpoint is disabled}
   /healthz:
     get:
       tags: [System]
@@ -413,6 +433,29 @@ components:
     BadRequest: {description: Request body or role is invalid}
     Conflict: {description: Operation conflicts with membership invariants}
   schemas:
+    TempAgentLaunchRequest:
+      type: object
+      additionalProperties: false
+      required: [config, commandId, prompt]
+      properties:
+        config:
+          type: object
+          required: [organizationId, workspaceId, taskId, runId, runtime, model, systemPrompt]
+          properties:
+            organizationId: {type: string, minLength: 1}
+            workspaceId: {type: string, minLength: 1}
+            taskId: {type: string, minLength: 1}
+            runId: {type: string, minLength: 1}
+            runtime: {type: string, enum: [opencode]}
+            model:
+              type: object
+              required: [provider, id]
+              properties:
+                provider: {type: string, minLength: 1}
+                id: {type: string, minLength: 1}
+            systemPrompt: {type: string, minLength: 1}
+        commandId: {type: string, minLength: 1}
+        prompt: {type: string, minLength: 1}
     CurrentUser:
       type: object
       required: [user, organizations]

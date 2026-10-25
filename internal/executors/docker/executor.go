@@ -43,6 +43,7 @@ type Config struct {
 	Image         string
 	AgentctlPort  int
 	ContainerUser string
+	ProviderEnv   []string
 }
 
 type Executor struct {
@@ -115,14 +116,21 @@ func (e *Executor) StartAgentctl(ctx context.Context, config agentctl.RunConfig)
 		return orchestration.Process{}, err
 	}
 	port := network.MustParsePort(fmt.Sprintf("%d/tcp", e.config.AgentctlPort))
+	providerEnv := e.providerEnvironment()
+	command := []string{
+		"-listen", fmt.Sprintf("0.0.0.0:%d", e.config.AgentctlPort),
+		"-work-dir", workMountPath,
+		"-state-dir", stateMountPath,
+	}
+	for _, variable := range providerEnv {
+		name, _, _ := strings.Cut(variable, "=")
+		command = append(command, "-env", name)
+	}
 	containerConfig := &container.Config{
-		Image: e.config.Image,
-		User:  e.config.ContainerUser,
-		Cmd: []string{
-			"-listen", fmt.Sprintf("0.0.0.0:%d", e.config.AgentctlPort),
-			"-work-dir", workMountPath,
-			"-state-dir", stateMountPath,
-		},
+		Image:        e.config.Image,
+		User:         e.config.ContainerUser,
+		Env:          providerEnv,
+		Cmd:          command,
 		ExposedPorts: network.PortSet{port: {}},
 		Labels:       labels,
 	}
@@ -181,6 +189,25 @@ func (e *Executor) StartAgentctl(ctx context.Context, config agentctl.RunConfig)
 	}
 	process.Endpoint = endpoint
 	return process, nil
+}
+
+func (e *Executor) providerEnvironment() []string {
+	values := make([]string, 0, len(e.config.ProviderEnv))
+	seen := make(map[string]struct{}, len(e.config.ProviderEnv))
+	for _, name := range e.config.ProviderEnv {
+		name = strings.TrimSpace(name)
+		if name == "" {
+			continue
+		}
+		if _, exists := seen[name]; exists {
+			continue
+		}
+		seen[name] = struct{}{}
+		if value, ok := os.LookupEnv(name); ok {
+			values = append(values, name+"="+value)
+		}
+	}
+	return values
 }
 
 func (e *Executor) Close() error { return e.client.Close() }

@@ -76,6 +76,21 @@ func (s *LaunchService) Start(ctx context.Context, config agentctl.RunConfig) (L
 	return launch, nil
 }
 
+// StartWithPrompt starts a fresh agent session and submits its first prompt.
+func (s *LaunchService) StartWithPrompt(ctx context.Context, config agentctl.RunConfig, commandID, prompt string) (Launch, error) {
+	if strings.TrimSpace(commandID) == "" || strings.TrimSpace(prompt) == "" {
+		return Launch{}, errors.New("command ID and prompt are required")
+	}
+	launch, err := s.Start(ctx, config)
+	if err != nil {
+		return launch, err
+	}
+	if err = s.client.Prompt(ctx, launch.Endpoint, commandID, prompt); err != nil {
+		return launch, fmt.Errorf("submit initial agent prompt: %w", err)
+	}
+	return launch, nil
+}
+
 func validEndpoint(endpoint string) bool {
 	u, err := url.Parse(endpoint)
 	return err == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Host != "" && u.User == nil && u.RawQuery == "" && u.Fragment == ""

@@ -72,6 +72,11 @@ func (c *agentctlFake) StartAgent(context.Context, string) error {
 	return nil
 }
 
+func (c *agentctlFake) Prompt(context.Context, string, string, string) error {
+	c.calls = append(c.calls, "prompt")
+	return nil
+}
+
 func (c *agentctlFake) Connect(ctx context.Context, _ string, _ uint64, onConnected func(), onEvent func(agentctl.Event) error) error {
 	c.calls = append(c.calls, "connect")
 	onConnected()
@@ -184,6 +189,7 @@ type eventClientFake struct {
 func (*eventClientFake) WaitHealthy(context.Context, string) error                   { return nil }
 func (*eventClientFake) Configure(context.Context, string, agentctl.RunConfig) error { return nil }
 func (*eventClientFake) StartAgent(context.Context, string) error                    { return nil }
+func (*eventClientFake) Prompt(context.Context, string, string, string) error        { return nil }
 func (c *eventClientFake) Connect(ctx context.Context, _ string, cursor uint64, onConnected func(), onEvent func(agentctl.Event) error) error {
 	c.cursors <- cursor
 	onConnected()
