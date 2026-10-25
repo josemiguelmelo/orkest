@@ -15,6 +15,8 @@ tags:
     description: Workspaces and workspace memberships.
   - name: Agents
     description: Workspace-scoped reusable agent definitions.
+  - name: CodeRepositories
+    description: Workspace-scoped code repository registration and Git operations.
 paths:
   /healthz:
     get:
@@ -243,6 +245,78 @@ paths:
         "204": {description: Membership removed}
         "403": {$ref: "#/components/responses/Forbidden"}
         "404": {$ref: "#/components/responses/NotFound"}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/code-repositories:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [CodeRepositories]
+      operationId: listCodeRepositories
+      security: [{bearerAuth: []}]
+      responses:
+        "200": {description: Workspace code repositories, content: {application/json: {schema: {type: array, items: {$ref: "#/components/schemas/CodeRepository"}}}}}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+    post:
+      tags: [CodeRepositories]
+      operationId: createCodeRepository
+      security: [{bearerAuth: []}]
+      requestBody: {$ref: "#/components/requestBodies/CodeRepositoryCreate"}
+      responses:
+        "201": {description: Code repository registered, content: {application/json: {schema: {$ref: "#/components/schemas/CodeRepository"}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/code-repositories/{repositoryID}:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+      - {name: repositoryID, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [CodeRepositories]
+      operationId: getCodeRepository
+      security: [{bearerAuth: []}]
+      responses:
+        "200": {description: Registered code repository, content: {application/json: {schema: {$ref: "#/components/schemas/CodeRepository"}}}}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+    delete:
+      tags: [CodeRepositories]
+      operationId: deleteCodeRepository
+      security: [{bearerAuth: []}]
+      responses:
+        "204": {description: Code repository removed}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/code-repositories/{repositoryID}/clone:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+      - {name: repositoryID, in: path, required: true, schema: {type: string}}
+    post:
+      tags: [CodeRepositories]
+      operationId: cloneCodeRepository
+      security: [{bearerAuth: []}]
+      responses:
+        "204": {description: Repository cloned}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/code-repositories/{repositoryID}/sync-main:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+      - {name: repositoryID, in: path, required: true, schema: {type: string}}
+    post:
+      tags: [CodeRepositories]
+      operationId: syncCodeRepositoryMain
+      security: [{bearerAuth: []}]
+      responses:
+        "204": {description: Checkout reset to the latest remote main branch}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
   /api/organizations/{orgID}/workspaces/{workspaceID}/agents:
     parameters:
       - {name: orgID, in: path, required: true, schema: {type: string}}
@@ -327,6 +401,11 @@ components:
               model: {type: string, minLength: 1, maxLength: 200}
               description: {type: string, maxLength: 2000}
               systemPrompt: {type: string, maxLength: 100000}
+    CodeRepositoryCreate:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/CodeRepositoryCreate"}
   responses:
     Unauthorized: {description: Missing or invalid credentials}
     Forbidden: {description: Insufficient role permissions}
@@ -380,6 +459,21 @@ components:
         model: {type: string}
         description: {type: string}
         systemPrompt: {type: string}
+    CodeRepository:
+      type: object
+      required: [id, workspaceId, providerName, url]
+      properties:
+        id: {type: string}
+        workspaceId: {type: string}
+        providerName: {type: string, enum: [github]}
+        url: {type: string, format: uri}
+    CodeRepositoryCreate:
+      type: object
+      required: [providerName, url]
+      additionalProperties: false
+      properties:
+        providerName: {type: string, enum: [github]}
+        url: {type: string, format: uri}
   securitySchemes:
     bearerAuth:
       type: http

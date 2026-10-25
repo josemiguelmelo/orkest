@@ -21,6 +21,14 @@ type Agent struct {
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 }
 
+type CodeRepository struct {
+	ID           string             `json:"id"`
+	WorkspaceID  string             `json:"workspace_id"`
+	ProviderName string             `json:"provider_name"`
+	Url          string             `json:"url"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+}
+
 type Organization struct {
 	ID        string             `json:"id"`
 	Name      string             `json:"name"`
