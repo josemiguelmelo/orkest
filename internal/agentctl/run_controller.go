@@ -15,6 +15,12 @@ var (
 	ErrProviderUnavailable   = errors.New("agent provider unavailable")
 )
 
+// LaunchError carries a provider-sanitized message suitable for API responses.
+// Arbitrary provider errors remain internal and are mapped to a generic response.
+type LaunchError struct{ Message string }
+
+func (e *LaunchError) Error() string { return e.Message }
+
 type Status struct {
 	Configured         bool
 	ExecutionAvailable bool

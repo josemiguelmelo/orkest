@@ -17,9 +17,6 @@ configuration is trusted resolved platform configuration, not an authorization
 API. The caller must authorize organization/workspace access, supply a task-owned
 working directory, and reserve the execution slot before launching it.
 
-See the [Kandev agentctl source comparison](kandev-agentctl-reference.md) for the
-long-lived service architecture and the proposed next platform boundary.
-
 ## Run a prompt
 
 Install the pinned OpenCode binary into the task image or supply its absolute

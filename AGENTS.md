@@ -4,9 +4,9 @@
 
 Orkest orchestrates SDLC agents with isolated environments, human-directed workflows, task chat, approvals, and durable recovery.
 
-Before implementation, read [requirements](docs/requirements.md) (behavior, scope, recovery, open decisions) and [tech stack](docs/tech-stack.md) (proposed baseline, validation milestones). Follow explicit task instructions; otherwise default to the proposed stack. Preserve confirmed/proposed/open distinctions; never silently promote proposals to requirements. Record significant architecture decisions in `docs/decisions/`.
+Before implementation, read [requirements](docs/requirements.md) (behavior, scope, recovery, open decisions) and [tech stack](docs/tech-stack.md) (proposed baseline, validation milestones). Follow explicit task instructions; otherwise default to the proposed stack. Preserve confirmed/proposed/open distinctions; never silently promote proposals to requirements. Record significant architecture decisions in the relevant product or technical documentation.
 
-Minimal Go and React/Vite scaffolding exists with PostgreSQL-only Compose and Makefile commands. Product services and OpenCode/ACP integration are not implemented. Create packages as needed, without empty layers.
+Minimal Go and React/Vite scaffolding exists with PostgreSQL-only Compose and Makefile commands. The standalone `agentctl` OpenCode/ACP launch, REST, WebSocket, and event-journaling prototype exists; platform product services and restart recovery/session continuation remain unimplemented. Create packages as needed, without empty layers.
 
 ## Execution
 
@@ -23,7 +23,7 @@ Minimal Go and React/Vite scaffolding exists with PostgreSQL-only Compose and Ma
 - Feature packages under `internal/`: identity, workspace, task, team, orchestration, integrations, executors, agent runtimes.
 - `internal/httpapi`: thin handlers, routing, middleware, browser events. Services own business rules; consumers own interfaces (e.g. task owns repository interface).
 - `internal/postgres`: persistence adapters; `db/queries`: SQL inputs; `db/migrations`: migrations; `internal/postgres/sqlc`: generated code. Keep generated types out of business interfaces.
-- Introduce `api/openapi.yaml` with the browser API; keep it synchronized.
+- Keep `api/openapi.yaml` synchronized with the browser API and `api/agentctl.openapi.yaml` synchronized with the standalone agentctl API.
 - Hide Docker/OpenCode/GitHub behind contracts; separate shared platform–agentctl messages from platform services.
 - Avoid service registries, DI containers, speculative abstractions, or extra infrastructure without concrete need.
 

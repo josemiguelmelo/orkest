@@ -33,13 +33,19 @@ func (s *Server) stream(w http.ResponseWriter, r *http.Request) {
 		err = nil
 	}
 	if err != nil {
-		protocol.WriteError(w, http.StatusBadRequest, "invalid_cursor", "invalid afterSequence")
+		protocol.WriteValidationError(w, http.StatusBadRequest, "invalid_cursor", &protocol.ValidationError{
+			Field:   "afterSequence",
+			Message: "invalid afterSequence",
+		})
 		return
 	}
 	replay, events, unsubscribe, err := s.controller.Subscribe(after)
 	if err != nil {
 		if errors.Is(err, agentctl.ErrCursor) {
-			protocol.WriteError(w, http.StatusBadRequest, "invalid_cursor", agentctl.ErrCursor.Error())
+			protocol.WriteValidationError(w, http.StatusBadRequest, "invalid_cursor", &protocol.ValidationError{
+				Field:   "afterSequence",
+				Message: agentctl.ErrCursor.Error(),
+			})
 		} else if errors.Is(err, agentctl.ErrConversation) {
 			protocol.WriteError(w, http.StatusConflict, "conversation_unavailable", "conversation unavailable")
 		} else {

@@ -15,6 +15,18 @@ type Error struct {
 	Field   string `json:"field,omitempty"`
 }
 
+// ValidationError is the shared protocol representation of a rejected field.
+type ValidationError struct {
+	Field   string
+	Message string
+}
+
+func (e *ValidationError) Error() string { return e.Message }
+
+func WriteValidationError(w http.ResponseWriter, status int, code string, validation *ValidationError) {
+	WriteJSON(w, status, Error{Code: code, Message: validation.Error(), Field: validation.Field})
+}
+
 func WriteError(w http.ResponseWriter, status int, code, message string) {
 	WriteJSON(w, status, Error{Code: code, Message: message})
 }

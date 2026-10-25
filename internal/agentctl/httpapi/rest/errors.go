@@ -12,7 +12,15 @@ import (
 func writeServiceError(w http.ResponseWriter, err error, status int, code, message string) {
 	var validation *agentctl.ValidationError
 	if errors.As(err, &validation) {
-		protocol.WriteJSON(w, http.StatusBadRequest, protocol.Error{Code: "invalid_configuration", Message: validation.Error(), Field: validation.Field})
+		protocol.WriteValidationError(w, http.StatusBadRequest, "invalid_configuration", &protocol.ValidationError{
+			Field:   validation.Field,
+			Message: validation.Error(),
+		})
+		return
+	}
+	var launchError *agentctl.LaunchError
+	if errors.As(err, &launchError) {
+		protocol.WriteError(w, http.StatusBadGateway, "launch_failed", launchError.Message)
 		return
 	}
 	for _, known := range []struct {

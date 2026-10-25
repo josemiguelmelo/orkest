@@ -98,7 +98,7 @@ do not delete them to force retry. The executor must prevent separate runs from
 sharing the same working tree concurrently. Configuration and live status remain
 memory-only. MCP configuration and restoration/continuation are not implemented.
 The older [prototype notes](agentctl.md) are historical and do not describe the
-current CLI. See [the launch decision](decisions/0004-agent-provider-launch.md).
+current CLI.
 
 ## Send commands through REST
 
@@ -203,7 +203,6 @@ agentctl restart, durable acknowledgement cursors, and process/container continu
 remain unimplemented. Each serialized event is capped at 1 MiB; an oversized event interrupts the
 conversation before publication. Disk journal retention remains unlimited; only
 the in-memory replay window is bounded.
-See [the conversation decision](decisions/0005-agent-provider-conversation.md).
 
 Verify with `make check` and `go test -race ./internal/agentctl/... ./internal/agentruntime/... ./internal/app`.
 The subprocess fixture covers prompts, permissions, cancellation and WebSocket

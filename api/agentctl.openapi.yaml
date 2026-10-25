@@ -108,7 +108,7 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/Error'}
         '502':
-          description: Provider startup failed
+          description: Provider startup failed; message contains a sanitized provider error.
           content:
             application/json:
               schema: {$ref: '#/components/schemas/Error'}

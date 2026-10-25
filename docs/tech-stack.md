@@ -1,84 +1,91 @@
 # Orkest technology stack
 
-Status: Proposed MVP stack based on the project requirements and initial technology discussion. Exact dependency versions must be selected and pinned during implementation.
+Status: Mixed. This document distinguishes implemented technology from the proposed MVP stack. Dependency versions listed for implemented components are pinned; unimplemented choices remain proposals or open decisions.
 
 ## Backend
 
-- **Go** for the core platform and `agentctl`.
-- **Chi on top of `net/http`** for HTTP routing and middleware. This keeps standard Go HTTP compatibility while providing route groups and modular routing.
+- **Go 1.26.2** for the core platform and `agentctl`.
+- **`net/http`** owns both servers. The platform currently routes with the standard library `ServeMux`; the `agentctl` REST and WebSocket APIs use **Chi v5.2.3** on top of `net/http`.
 - **Manual constructor dependency injection** with wiring at the application boundary. Services receive explicit dependencies and do not look them up through a container. No DI framework is needed for the MVP; reconsider Uber Fx if wiring and lifecycle management become cumbersome.
 - **`log/slog`** for structured logging, with credentials redacted.
+- **`godotenv v1.5.1`** loads the optional local `.env` file for `agentctl` configuration.
+- **OpenAPI 3.1 YAML contracts** live in `api/openapi.yaml` (platform) and `api/agentctl.openapi.yaml` (`agentctl`). **kin-openapi v0.133.0** parses and validates each contract at server startup. **swaggest/swgui v1.8.9** serves embedded Swagger UI assets, so the UI does not depend on a CDN.
 
-Go fits the platform's concurrent executions, process supervision, streaming connections, and independently deployed agent bridge. HTTP framework throughput is not expected to be the main performance constraint; optimize based on measurements.
+The Makefile pins **golangci-lint v2.15.0** and enables the **gofumpt** formatter. Go and frontend dependencies are locked with `go.sum` and `web/package-lock.json`.
+
+The platform API is currently a liveness endpoint and OpenAPI/Swagger UI. Product services and platform-to-agent communication are not implemented.
 
 ## Database and background work
 
-- **PostgreSQL** for organizations, memberships, workspaces, tasks, configuration, run history, execution ownership, commands, and platform-side event records.
-- **`pgx` + `sqlc`** for PostgreSQL access using explicit SQL and generated Go types.
-- **Versioned SQL migrations**, with the migration tool selected during implementation.
-- **PostgreSQL-backed background jobs and durable commands** initially. Redis and a separate message broker are not part of the initial stack.
+- **PostgreSQL 18.3** (`postgres:18.3-alpine3.23`) currently runs through Compose for local development. The application does not connect to it yet.
+- **`pgx` + `sqlc`**, versioned migrations, and PostgreSQL-backed jobs/commands remain proposed; none are implemented or pinned. Redis and a separate message broker are not part of the proposed initial stack.
 
-Use transactions and database constraints for atomic member-slot allocation and state transitions. Persist command identities and results so reconnects can reconcile uncertain outcomes before retrying.
+When database access is implemented, use transactions and constraints for atomic member-slot allocation and state transitions. Persist command identities and results so reconnects can reconcile uncertain outcomes before retrying.
 
 ## Frontend
 
-- **React + TypeScript + Vite** for the task board, configuration screens, execution activity, task chat, and approval UI.
-- **HTTP requests** for commands such as starting work, sending messages, and answering approvals.
-- **Server-Sent Events (SSE)** for streaming platform events to the browser, with persisted cursors and replay behavior defined by the application.
+- **React 19.2.0**, **TypeScript 5.9.3**, and **Vite 7.3.7** are pinned in `web/package.json`; the current frontend is a static shell and does not call the API.
+- The documented local toolchain is **Node.js 22.19.0** with npm 11; `package.json` requires Node.js 22.12.0 or later.
+- Browser HTTP commands and **Server-Sent Events (SSE)** with persisted cursors and replay remain proposed. The implemented agentctl activity stream is WebSocket, described below.
 
 ## Authentication and authorization
 
-- **Keycloak through OpenID Connect (OIDC)** for authentication, including configured identity providers and SSO.
+- **Keycloak through OpenID Connect (OIDC)** for authentication, including configured identity providers and SSO; this remains proposed and is not implemented.
 - **Application-owned authorization** for organization/workspace memberships and roles.
 
-Keycloak authenticates users; Orkest enforces access boundaries across APIs, event streams, integrations, artifacts, and execution controls. The detailed role matrix remains to be defined.
+Under the proposed design, Keycloak authenticates users while Orkest enforces access boundaries across APIs, event streams, integrations, artifacts, and execution controls. The detailed role matrix remains to be defined.
 
 ## Agent runtime and execution
 
-- **OpenCode** as the initial runtime, with a pinned release and configurable model provider/model identifier.
-- **ACP over local stdio** between `agentctl` and the OpenCode subprocess.
-- **Go `agentctl` binary** to own the agent process, ACP connection, durable event journal, and pending interactions independently of the core platform lifecycle.
-- **Docker Engine Go SDK** for provisioning and managing isolated task containers behind an executor interface.
-- **Retained Docker volumes or equivalent durable task storage** for repository working trees, runtime sessions, configuration identity, events, and pending interaction metadata.
-- **Authenticated WebSocket** as the proposed platform-to-`agentctl` transport, with stable identities, acknowledgements, replay, and reconnect reconciliation implemented at the application level.
+- **OpenCode v2.1.4** is the pinned runtime in the `agentctl` prototype. Its compatibility with the real executable still requires integration verification.
+- **ACP over local stdio** uses `github.com/coder/acp-go-sdk v0.13.5` between `agentctl` and the OpenCode subprocess.
+- The standalone **Go `agentctl` binary** owns the subprocess and ACP connection. It exposes REST commands and a receive-only activity WebSocket using **`github.com/coder/websocket v1.8.15`**. It journals events and retains task-scoped runtime state.
+- The agentctl HTTP server uses **Chi v5.2.3**; WebSocket upgrades use `coder/websocket`. Stable command reconciliation, restart recovery, session restoration, and continuation are not implemented.
+- **Docker Engine Go SDK** and the executor abstraction remain proposed; there is no task-container provisioning implementation yet.
+- **Retained Docker volumes or equivalent durable task storage** for repository working trees, runtime sessions, configuration identity, events, and pending interaction metadata remain proposed. The current prototype expects durable host directories for its state and OpenCode HOME/XDG data.
+- An **authenticated platform-to-agentctl transport** with stable identities, acknowledgements, replay, and reconnect reconciliation remains proposed and unimplemented.
 
-The Go ACP implementation remains to be selected and validated against the pinned OpenCode release. Validate approvals, session restoration, and interrupted-work continuation before accepting the runtime integration.
+The Go ACP library is selected, but real-runtime protocol compatibility, approvals, session restoration, and interrupted-work continuation are not yet verified.
 
 Core platform shutdown must disconnect from agents without terminating their work. Agent environments retain independent lifecycles. Container/process restart recovery assumes durable task storage remains intact; complete executor-host or disk loss recovery is deferred by the MVP requirements.
 
 ## Tools and integrations
 
-- **HTTP MCP connections** for external agent capabilities; stdio MCP servers are outside the MVP.
-- **Official MCP Go SDK** where the platform implements MCP clients or servers. Whether built-in platform tools use an internal HTTP MCP endpoint remains open.
-- **GitHub Issues** as the first task-provider integration, accessed through a provider-independent integration contract.
+- **HTTP MCP connections** for external agent capabilities; stdio MCP servers are outside the MVP. No MCP client or server implementation exists yet.
+- **Official MCP Go SDK** is proposed where the platform implements MCP clients or servers. Whether built-in platform tools use an internal HTTP MCP endpoint remains open.
+- **GitHub Issues** as the first task-provider integration, accessed through a provider-independent integration contract; no provider implementation exists yet.
 - Separate interfaces for **task providers, executors, and agent runtimes** so provider-specific behavior stays outside core orchestration.
 
 Agents create and update pull requests through their permitted runtime capabilities and configured integrations. Imported issue content remains source-managed, while Orkest owns local workflow and execution state.
 
 ## Architecture and local development
 
-- **Modular monolith** for the core platform, with clear boundaries for identity/access, workspaces, tasks, orchestration, integrations, and execution.
-- **Independent `agentctl` process** inside each execution environment.
-- **Docker Compose** for local development services, including PostgreSQL, Keycloak, and the platform.
+- **Modular monolith** is the proposed core platform shape. Implemented Go packages currently cover app lifecycle, HTTP API scaffolding, and standalone agentctl/OpenCode runtime code; identity, workspace, task, orchestration, and integration services are not implemented.
+- **Independent `agentctl` process** is implemented as a separate binary, but deployment inside executor environments is not.
+- **Docker Compose** currently starts PostgreSQL only. Keycloak and the platform are not Compose services.
 
 Avoid introducing microservices or a distributed workflow engine for the initial implementation. Durable execution state, ownership, event replay, and reconciliation are explicit application responsibilities.
 
-## Initial validation milestone
+## Validation status and next milestones
 
-Before building the full UI, implement a small Go execution prototype that:
+The Go agentctl/OpenCode prototype exists. Unit tests use a subprocess fixture; the real OpenCode handshake has a documented integration target but remains unverified unless run with the pinned executable. Before building the full UI, validate the remaining high-risk behavior:
 
-1. Launches OpenCode in a Docker task environment and exchanges ACP messages.
+1. Launch OpenCode in a Docker task environment and exchange ACP messages.
 2. Completes a user approval round trip.
 3. Keeps the agent running across a core platform restart and replays missed events.
 4. Restores files and the supported agent session after a container/process restart.
 5. Reconciles execution and command identities without duplicate work.
 
-This validates the highest-risk integration and recovery requirements before committing to the complete implementation.
+The recovery and approval scenarios remain acceptance work; a successful subprocess fixture or session reload alone does not prove real runtime continuation.
+
+`make test-integration` runs the real OpenCode handshake when the pinned executable is supplied. `make test-recovery` currently reports that the suite is not implemented.
 
 ## References
 
 - [Project requirements](requirements.md)
 - [Chi](https://github.com/go-chi/chi)
+- [kin-openapi](https://github.com/getkin/kin-openapi)
+- [swaggest/swgui](https://github.com/swaggest/swgui)
 - [pgx](https://github.com/jackc/pgx)
 - [sqlc](https://sqlc.dev/)
 - [Docker Engine SDK](https://docs.docker.com/reference/api/engine/sdk/)

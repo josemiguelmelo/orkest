@@ -30,6 +30,18 @@ type Provider struct {
 func (p *Provider) Runtime() string { return "opencode" }
 
 func (p *Provider) Launch(ctx context.Context, config agentctl.RunConfig) (agentctl.Process, error) {
+	process, err := p.launch(ctx, config)
+	if err != nil {
+		var validation *agentctl.ValidationError
+		if errors.As(err, &validation) {
+			return nil, err
+		}
+		return nil, &agentctl.LaunchError{Message: err.Error()}
+	}
+	return process, nil
+}
+
+func (p *Provider) launch(ctx context.Context, config agentctl.RunConfig) (agentctl.Process, error) {
 	if err := config.Validate(); err != nil {
 		return nil, err
 	}
@@ -93,7 +105,7 @@ func (p *Provider) prepareEnvironment(root string, config agentctl.RunConfig) ([
 	for _, item := range []struct{ name, dir string }{{"HOME", "home"}, {"XDG_DATA_HOME", "data"}, {"XDG_CONFIG_HOME", "config"}, {"XDG_STATE_HOME", "state"}, {"XDG_CACHE_HOME", "cache"}} {
 		dir := filepath.Join(root, item.dir)
 		if err := os.MkdirAll(dir, 0o700); err != nil {
-			return nil, fmt.Errorf("create runtime storage: %w", err)
+			return nil, errors.New("create runtime storage failed")
 		}
 		env = append(env, item.name+"="+dir)
 	}
@@ -132,12 +144,12 @@ func (p *Provider) startProcess(ctx context.Context, binary string, env []string
 	cmd.Dir, cmd.Env = p.WorkDir, env
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
-		return nil, err
+		return nil, errors.New("open opencode input failed")
 	}
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		_ = stdin.Close()
-		return nil, err
+		return nil, errors.New("open opencode output failed")
 	}
 	// Runtime diagnostics can contain secrets and are never forwarded to ordinary logs.
 	cmd.Stderr = io.Discard
