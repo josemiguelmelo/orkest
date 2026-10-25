@@ -22,13 +22,11 @@ type Model struct {
 
 // Validate checks the resolved run configuration without starting execution.
 func (c Configuration) Validate() error {
-	for _, value := range []string{c.OrganizationID, c.WorkspaceID, c.TaskID, c.RunID, c.Model.Provider, c.Model.ID, c.SystemPrompt} {
+	for _, value := range []string{c.OrganizationID, c.WorkspaceID, c.TaskID, c.RunID, c.Runtime, c.Model.Provider, c.Model.ID, c.SystemPrompt} {
 		if strings.TrimSpace(value) == "" {
 			return errors.New("scope, model and systemPrompt are required")
 		}
 	}
-	if c.Runtime != "opencode" {
-		return errors.New("only opencode runtime is supported")
-	}
+
 	return nil
 }

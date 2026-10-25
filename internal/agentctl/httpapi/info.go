@@ -7,6 +7,8 @@ import (
 )
 
 type Info struct {
+	State              string    `json:"state,omitempty"`
+	SessionID          string    `json:"sessionId,omitempty"`
 	Service            string    `json:"service"`
 	APIVersion         string    `json:"apiVersion"`
 	GoVersion          string    `json:"goVersion"`
@@ -19,7 +21,7 @@ type Info struct {
 
 func (s *Server) snapshot() Info {
 	status := s.service.Status()
-	return Info{Service: "agentctl", APIVersion: "v1", GoVersion: runtime.Version(), OS: runtime.GOOS, Arch: runtime.GOARCH, StartedAt: s.startedAt, Configured: status.Configured, ExecutionAvailable: status.ExecutionAvailable}
+	return Info{State: status.State, SessionID: status.SessionID, Service: "agentctl", APIVersion: "v1", GoVersion: runtime.Version(), OS: runtime.GOOS, Arch: runtime.GOARCH, StartedAt: s.startedAt, Configured: status.Configured, ExecutionAvailable: status.ExecutionAvailable}
 }
 
 func (s *Server) info(w http.ResponseWriter, r *http.Request) { writeJSON(w, 200, s.snapshot()) }

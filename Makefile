@@ -1,12 +1,11 @@
 .DEFAULT_GOAL := help
-.PHONY: help setup dev dev-agentctl dev-web db-up db-down db-logs lint-install lint fmt check build test-integration test-recovery
+.PHONY: help setup dev dev-web db-up db-down db-logs lint-install lint fmt check build test-integration test-recovery
 
 GOLANGCI_LINT_VERSION := v2.15.0
 GOLANGCI_LINT := bin/tools/$(GOLANGCI_LINT_VERSION)/golangci-lint
 
 help:
 	@echo "setup             Install frontend dependencies"
-	@echo "dev-agentctl      Run the internal agentctl API"
 	@echo "dev / dev-web     Run backend / frontend (separate terminals)"
 	@echo "db-up / db-down   Start / stop PostgreSQL (retains data)"
 	@echo "db-logs           Follow PostgreSQL logs"
@@ -60,6 +59,9 @@ build:
 	go build -o bin/agentctl ./cmd/agentctl
 	npm --prefix web run build
 
-test-integration test-recovery:
-	@echo "$@: not implemented; no integration or recovery verification exists yet."
+test-integration:
+	go test -tags=integration ./tests/integration -count=1
+
+test-recovery:
+	@echo "$@: not implemented; restoration and continuation are not verified."
 	@exit 1

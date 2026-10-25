@@ -30,6 +30,7 @@ func (s *Server) Handler() http.Handler {
 	mux.Get("/health", s.health)
 	mux.Get("/info", s.info)
 	mux.Post("/agent/configure", s.configure)
+	mux.Post("/agent/launch", s.launch)
 	mux.Get("/agent/stream", s.stream)
 	return mux
 }

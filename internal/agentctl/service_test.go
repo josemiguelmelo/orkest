@@ -31,7 +31,7 @@ func TestConfigurationValidation(t *testing.T) {
 			case "prompt":
 				config.SystemPrompt = "\t"
 			case "runtime":
-				config.Runtime = "other"
+				config.Runtime = ""
 			}
 			service := NewService()
 			if err := service.Configure(config); err == nil {

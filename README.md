@@ -1,9 +1,9 @@
 # Orkest
 
-SDLC agent orchestration. This repository currently contains a minimal Go HTTP
-server, an unimplemented `agentctl` entry point, and a React/TypeScript/Vite shell.
-Product services, authentication, database access, and OpenCode/ACP execution are
-not implemented. Read [requirements](docs/requirements.md) and the
+SDLC agent orchestration. This repository contains a minimal Go HTTP server,
+a standalone OpenCode/ACP `agentctl` service and a React/TypeScript/Vite shell. Product services, authentication,
+database access, and platform-to-agent integration are not implemented.
+Read [requirements](docs/requirements.md) and the
 [proposed stack](docs/tech-stack.md) before extending the project.
 
 ## Local development
@@ -31,6 +31,14 @@ volume keeps PostgreSQL 18 separate from any older `postgres_data` volume; exist
 older databases require an explicit dump/restore or supported upgrade before use. Do not commit
 credentials or remove the volume unless you intend to delete local data.
 
+## Calling an agent
+
+`agentctl` launches pinned OpenCode 2.1.4 over ACP stdio, creates a session,
+selects the configured system prompt and model. Prompt execution, approval
+delivery, and recovery remain unimplemented.
+See [agentctl usage and limitations](docs/agentctl-api.md) for `.env` configuration,
+launch requests, persistent storage, and verification instructions.
+
 ## Verification and builds
 
 - `make check`: Go lint/formatting checks, tests, frontend type checks, and all builds.
@@ -40,8 +48,8 @@ credentials or remove the volume unless you intend to delete local data.
 - `make lint-install`: install the pinned linter under `bin/tools/` (requires curl
   and network access). `lint`, `fmt`, and `check` install it automatically if absent.
 - `make build`: create `bin/orkest`, `bin/agentctl`, and `web/dist`.
-- `make test-integration` and `make test-recovery`: explicitly fail until real
-  suites and prerequisites exist. No recovery behavior is claimed by this scaffold.
+- `make test-integration`: unavailable; the real integration suite is not implemented.
+- `make test-recovery`: explicitly fails; recovery verification is not implemented.
 
 The Go server currently uses `net/http` routing. Add Chi, pgx/sqlc, migrations,
 and feature packages as their first implementations need them. No schema or

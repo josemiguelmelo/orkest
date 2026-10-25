@@ -47,7 +47,7 @@ func TestHTTPContract(t *testing.T) {
 		{"POST", "/agent/configure", `null`, 400},
 		{"POST", "/agent/configure", validConfig + ` {}`, 400},
 		{"POST", "/agent/configure", strings.Replace(validConfig, `"runtime"`, `"unknown"`, 1), 400},
-		{"POST", "/agent/configure", strings.Replace(validConfig, "opencode", "other", 1), 400},
+		{"POST", "/agent/configure", strings.Replace(validConfig, "opencode", "", 1), 400},
 		{"POST", "/agent/configure", validConfig, 200},
 		{"POST", "/agent/configure", validConfig, 200},
 		{"POST", "/agent/configure", strings.Replace(validConfig, `"run"`, `"other-run"`, 1), 409},

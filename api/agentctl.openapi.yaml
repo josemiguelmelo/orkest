@@ -1,0 +1,145 @@
+openapi: 3.1.0
+info:
+  title: Orkest agentctl API
+  version: 0.1.0
+  description: Standalone process-local control API. Explicit provider launch; no prompting or durable replay.
+servers:
+  - url: http://127.0.0.1:8081
+paths:
+  /health:
+    get:
+      operationId: agentctlHealth
+      summary: Process liveness; does not check agent readiness
+      responses:
+        '200':
+          description: Process is running
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: {type: string, const: ok}
+  /info:
+    get:
+      operationId: agentctlInfo
+      summary: Process metadata and execution availability; excludes configuration and credentials
+      responses:
+        '200':
+          description: Runtime information
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Info'}
+  /agent/configure:
+    post:
+      operationId: configureAgent
+      summary: Bind the process to one run without starting execution
+      description: Identical requests are idempotent. Any different configuration conflicts. Configuration is held in memory until process exit.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/Configuration'}
+      responses:
+        '200':
+          description: Configured successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: {type: string, const: configured}
+        '400':
+          description: Unreadable body, invalid JSON, missing values, or unsupported runtime
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '409':
+          description: Already bound to a different configuration
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '415':
+          description: Content-Type must be application/json
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+  /agent/launch:
+    post:
+      operationId: launchAgent
+      summary: Explicitly launch the configured provider and create a session without prompting
+      description: Service-owned startup survives request disconnection. One attempt per process/run; repeated or failed attempts are not retried. Shutdown closes the owned provider.
+      responses:
+        '200':
+          description: Provider session ready
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Info'}
+        '409': {description: Not configured or launch already attempted}
+        '502': {description: Provider startup failed}
+        '503': {description: No provider available}
+  /agent/stream:
+    get:
+      operationId: streamAgent
+      summary: Internal bidirectional WebSocket
+      description: |
+        Requires configuration before upgrading. Default same-origin checks apply.
+        Server first sends {"type":"ready","info":Info}.
+        Text JSON requests {"type":"ping","requestId":"ID"} and
+        {"type":"info","requestId":"ID"} receive pong and info responses,
+        respectively, echoing requestId. Info responses include the info property.
+        Other commands receive {"type":"error","requestId":"ID","error":"unsupported_command"}.
+        Messages have no application-level size limit; extra fields are ignored.
+        Malformed JSON or binary messages close the stream.
+        Disconnect does not reset configuration. No agent events, replay, acknowledgements,
+        prompt execution or approval delivery are implemented. Server shutdown closes streams.
+      responses:
+        '101': {description: WebSocket connection established}
+        '400': {description: Invalid WebSocket upgrade request}
+        '403': {description: WebSocket origin rejected}
+        '409':
+          description: Agent has not been configured
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '426': {description: Unsupported WebSocket version}
+components:
+  schemas:
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: {type: string}
+    Configuration:
+      type: object
+      additionalProperties: true
+      required: [organizationId, workspaceId, taskId, runId, runtime, model, systemPrompt]
+      properties:
+        organizationId: {type: string, pattern: '\S'}
+        workspaceId: {type: string, pattern: '\S'}
+        taskId: {type: string, pattern: '\S'}
+        runId: {type: string, pattern: '\S'}
+        runtime: {type: string, pattern: '\S'}
+        model:
+          type: object
+          additionalProperties: true
+          required: [provider, id]
+          properties:
+            provider: {type: string, pattern: '\S'}
+            id: {type: string, pattern: '\S'}
+        systemPrompt: {type: string, pattern: '\S'}
+    Info:
+      type: object
+      required: [service, apiVersion, goVersion, os, arch, startedAt, configured, executionAvailable]
+      properties:
+        service: {type: string, const: agentctl}
+        apiVersion: {type: string, const: v1}
+        goVersion: {type: string}
+        os: {type: string}
+        arch: {type: string}
+        startedAt: {type: string, format: date-time}
+        configured: {type: boolean}
+        executionAvailable: {type: boolean}
+        state: {type: string, enum: [starting, ready, failed, exited]}
+        sessionId: {type: string}
