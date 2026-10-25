@@ -22,14 +22,14 @@ import (
 
 const Version = "opencode v2.1.4"
 
-type Provider struct {
+type OpenCodeProvider struct {
 	Binary, WorkDir, StateDir string
 	Env                       []string
 }
 
-func (p *Provider) Runtime() string { return "opencode" }
+func (p *OpenCodeProvider) Runtime() string { return "opencode" }
 
-func (p *Provider) Launch(ctx context.Context, config agentctl.RunConfig) (agentctl.Process, error) {
+func (p *OpenCodeProvider) Launch(ctx context.Context, config agentctl.RunConfig) (agentctl.Process, error) {
 	process, err := p.launch(ctx, config)
 	if err != nil {
 		var validation *agentctl.ValidationError
@@ -41,7 +41,7 @@ func (p *Provider) Launch(ctx context.Context, config agentctl.RunConfig) (agent
 	return process, nil
 }
 
-func (p *Provider) launch(ctx context.Context, config agentctl.RunConfig) (agentctl.Process, error) {
+func (p *OpenCodeProvider) launch(ctx context.Context, config agentctl.RunConfig) (agentctl.Process, error) {
 	if err := config.Validate(); err != nil {
 		return nil, err
 	}
@@ -80,7 +80,7 @@ func (p *Provider) launch(ctx context.Context, config agentctl.RunConfig) (agent
 	return p.startProcess(ctx, binary, env)
 }
 
-func (p *Provider) storageRoot(config agentctl.RunConfig) string {
+func (p *OpenCodeProvider) storageRoot(config agentctl.RunConfig) string {
 	scope, _ := json.Marshal([]string{config.OrganizationID, config.WorkspaceID, config.TaskID})
 	return filepath.Join(p.StateDir, fmt.Sprintf("%x", sha256.Sum256(scope)))
 }
@@ -97,7 +97,7 @@ type agentConfiguration struct {
 	Model  string `json:"model"`
 }
 
-func (p *Provider) prepareEnvironment(root string, config agentctl.RunConfig) ([]string, error) {
+func (p *OpenCodeProvider) prepareEnvironment(root string, config agentctl.RunConfig) ([]string, error) {
 	env := append([]string{}, p.Env...)
 	for _, entry := range env {
 		name, _, ok := strings.Cut(entry, "=")
@@ -145,7 +145,7 @@ func reserveRun(root, runID string) error {
 	return nil
 }
 
-func (p *Provider) startProcess(ctx context.Context, binary string, env []string) (agentctl.Process, error) {
+func (p *OpenCodeProvider) startProcess(ctx context.Context, binary string, env []string) (agentctl.Process, error) {
 	cmd := exec.Command(binary, "acp")
 	cmd.Dir, cmd.Env = p.WorkDir, env
 	stdin, err := cmd.StdinPipe()

@@ -12,18 +12,24 @@ import (
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
+	"github.com/josemiguelmelo/orkest/internal/identity"
+	"github.com/josemiguelmelo/orkest/internal/organization"
 	"golang.org/x/oauth2"
 )
 
 const sessionCookie = "orkest_session"
 
 type oidcAuth struct {
-	config   oauth2.Config
-	verifier *oidc.IDTokenVerifier
-	secure   bool
+	config        oauth2.Config
+	verifier      *oidc.IDTokenVerifier
+	secure        bool
+	users         *identity.UserRegistrationService
+	organizations *organization.OrganizationService
 }
 
-func newOIDCAuth(ctx context.Context) (*oidcAuth, error) {
+type userContextKey struct{}
+
+func newOIDCAuth(ctx context.Context, users *identity.UserRegistrationService, organizations *organization.OrganizationService) (*oidcAuth, error) {
 	issuer := envOr("OIDC_ISSUER_URL", "http://localhost:8082/realms/orkest")
 	clientID := envOr("OIDC_CLIENT_ID", "orkest-web")
 	provider, err := oidc.NewProvider(ctx, issuer)
@@ -37,8 +43,8 @@ func newOIDCAuth(ctx context.Context) (*oidcAuth, error) {
 			Endpoint: provider.Endpoint(), RedirectURL: redirectURL,
 			Scopes: []string{oidc.ScopeOpenID, "profile", "email"},
 		},
-		verifier: provider.Verifier(&oidc.Config{ClientID: clientID}),
-		secure:   strings.EqualFold(os.Getenv("OIDC_COOKIE_SECURE"), "true"),
+		verifier: provider.Verifier(&oidc.Config{ClientID: clientID}), users: users, organizations: organizations,
+		secure: strings.EqualFold(os.Getenv("OIDC_COOKIE_SECURE"), "true"),
 	}, nil
 }
 
@@ -83,10 +89,17 @@ func (a *oidcAuth) callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var tokenClaims struct {
-		Nonce string `json:"nonce"`
+		Nonce    string `json:"nonce"`
+		Subject  string `json:"sub"`
+		Email    string `json:"email"`
+		Username string `json:"preferred_username"`
 	}
-	if err := idToken.Claims(&tokenClaims); err != nil || tokenClaims.Nonce != nonce.Value {
+	if err := idToken.Claims(&tokenClaims); err != nil || tokenClaims.Nonce != nonce.Value || tokenClaims.Subject == "" {
 		http.Error(w, "login failed", http.StatusUnauthorized)
+		return
+	}
+	if _, err := a.users.EnsureUserProfile(r.Context(), tokenClaims.Subject, tokenClaims.Username, tokenClaims.Email); err != nil {
+		http.Error(w, "login failed", http.StatusInternalServerError)
 		return
 	}
 	maxAge := int(time.Until(idToken.Expiry).Seconds())
@@ -104,32 +117,61 @@ func (a *oidcAuth) logout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *oidcAuth) currentUser(w http.ResponseWriter, r *http.Request) {
-	raw := ""
-	if header := r.Header.Get("Authorization"); strings.HasPrefix(header, "Bearer ") {
-		raw = strings.TrimPrefix(header, "Bearer ")
-	} else if cookie, err := r.Cookie(sessionCookie); err == nil {
-		raw = cookie.Value
-	}
-	if raw == "" {
+	user, ok := r.Context().Value(userContextKey{}).(identity.User)
+	if !ok {
 		http.Error(w, "authentication required", http.StatusUnauthorized)
 		return
 	}
-	token, err := a.verifier.Verify(r.Context(), raw)
+	organizations, err := a.organizations.ListOrganizations(r.Context(), user.ID)
 	if err != nil {
-		http.Error(w, "invalid token", http.StatusUnauthorized)
-		return
-	}
-	var claims struct {
-		Subject string `json:"sub"`
-		Email   string `json:"email"`
-		Name    string `json:"name"`
-	}
-	if err := token.Claims(&claims); err != nil || claims.Subject == "" {
-		http.Error(w, "invalid token", http.StatusUnauthorized)
+		http.Error(w, "could not load user", http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(map[string]string{"sub": claims.Subject, "email": claims.Email, "name": claims.Name})
+	_ = json.NewEncoder(w).Encode(struct {
+		User          identity.User               `json:"user"`
+		Organizations []organization.Organization `json:"organizations"`
+	}{user, organizations})
+}
+
+func (a *oidcAuth) middleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		raw := ""
+		if header := r.Header.Get("Authorization"); strings.HasPrefix(header, "Bearer ") {
+			raw = strings.TrimPrefix(header, "Bearer ")
+		} else if cookie, err := r.Cookie(sessionCookie); err == nil {
+			raw = cookie.Value
+		}
+		if raw == "" {
+			writeError(w, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+		token, err := a.verifier.Verify(r.Context(), raw)
+		if err != nil {
+			writeError(w, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+		var claims struct {
+			Subject  string `json:"sub"`
+			Email    string `json:"email"`
+			Username string `json:"preferred_username"`
+		}
+		if err := token.Claims(&claims); err != nil || claims.Subject == "" {
+			writeError(w, http.StatusUnauthorized, "unauthorized")
+			return
+		}
+		user, err := a.users.EnsureUserProfile(r.Context(), claims.Subject, claims.Username, claims.Email)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "internal_error")
+			return
+		}
+		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), userContextKey{}, user)))
+	})
+}
+
+func currentUserID(r *http.Request) string {
+	user, _ := r.Context().Value(userContextKey{}).(identity.User)
+	return user.ID
 }
 
 func randomState() (string, error) {

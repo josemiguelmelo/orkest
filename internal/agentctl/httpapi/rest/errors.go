@@ -31,7 +31,7 @@ func writeServiceError(w http.ResponseWriter, err error, status int, code, messa
 		{agentctl.ErrConfigurationConflict, http.StatusConflict, "configuration_conflict"},
 		{agentctl.ErrNotConfigured, http.StatusConflict, "not_configured"},
 		{agentctl.ErrLaunchConflict, http.StatusConflict, "launch_conflict"},
-		{agentctl.ErrProviderUnavailable, http.StatusServiceUnavailable, "provider_unavailable"},
+		{agentctl.ErrRuntimeProviderUnavailable, http.StatusServiceUnavailable, "provider_unavailable"},
 		{agentctl.ErrCommand, http.StatusBadRequest, "invalid_command"},
 		{agentctl.ErrPermission, http.StatusConflict, "invalid_permission"},
 		{agentctl.ErrConversationBusy, http.StatusConflict, "conversation_busy"},

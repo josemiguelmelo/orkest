@@ -18,10 +18,10 @@ func TestOpenCodeHandshake(t *testing.T) {
 	if binary == "" {
 		t.Fatal("set ORKEST_OPENCODE_BINARY to the pinned OpenCode executable")
 	}
-	provider := &opencode.Provider{Binary: binary, WorkDir: t.TempDir(), StateDir: t.TempDir(), Env: []string{"PATH=" + os.Getenv("PATH")}}
+	provider := &opencode.OpenCodeProvider{Binary: binary, WorkDir: t.TempDir(), StateDir: t.TempDir(), Env: []string{"PATH=" + os.Getenv("PATH")}}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	process, err := provider.Launch(ctx, agentctl.RunConfig{OrganizationID: "integration-org", WorkspaceID: "integration-workspace", TaskID: "integration-task", RunID: "integration-run", Runtime: "opencode", Model: agentctl.Model{Provider: "anthropic", ID: "claude-sonnet-4-5"}, SystemPrompt: "You are a test agent."})
+	process, err := provider.Launch(ctx, agentctl.RunConfig{OrganizationID: "integration-org", WorkspaceID: "integration-workspace", TaskID: "integration-task", RunID: "integration-run", Runtime: "opencode", Model: agentctl.ModelSelection{Provider: "anthropic", ID: "claude-sonnet-4-5"}, SystemPrompt: "You are a test agent."})
 	if err != nil {
 		t.Fatal(err)
 	}

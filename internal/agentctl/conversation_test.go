@@ -38,7 +38,7 @@ func (p chatProvider) Launch(context.Context, RunConfig) (Process, error) { retu
 func TestJournalBeforeDeliveryAndSlowSubscriber(t *testing.T) {
 	stateDir := t.TempDir()
 	process := &chatProcess{testProcess: testProcess{done: make(chan struct{})}, calls: make(chan struct{}, 1), release: make(chan struct{})}
-	service := NewRunControllerWithProvider(context.Background(), chatProvider{process}, stateDir)
+	service := NewRunControllerWithRuntimeProvider(context.Background(), chatProvider{process}, stateDir)
 	defer func() { _ = service.Close() }()
 	if err := service.Configure(runConfig()); err != nil {
 		t.Fatal(err)
@@ -114,7 +114,7 @@ func indexNewline(data []byte) int {
 
 func TestJournalFailurePreventsProviderPrompt(t *testing.T) {
 	process := &chatProcess{testProcess: testProcess{done: make(chan struct{})}, calls: make(chan struct{}, 1), release: make(chan struct{})}
-	service := NewRunControllerWithProvider(context.Background(), chatProvider{process}, t.TempDir())
+	service := NewRunControllerWithRuntimeProvider(context.Background(), chatProvider{process}, t.TempDir())
 	defer func() { _ = service.Close() }()
 	if err := service.Configure(runConfig()); err != nil {
 		t.Fatal(err)

@@ -8,19 +8,21 @@ Status: Mixed. This document distinguishes implemented technology from the propo
 - **`net/http`** owns both servers. The platform currently routes with the standard library `ServeMux`; the `agentctl` REST and WebSocket APIs use **Chi v5.2.3** on top of `net/http`.
 - **Manual constructor dependency injection** with wiring at the application boundary. Services receive explicit dependencies and do not look them up through a container. No DI framework is needed for the MVP; reconsider Uber Fx if wiring and lifecycle management become cumbersome.
 - **`log/slog`** for structured logging, with credentials redacted.
-- **`godotenv v1.5.1`** loads the optional local `.env` file for `agentctl` configuration.
+- **`godotenv v1.5.1`** loads the optional local `.env` file through shared helpers in `internal/core/environment`; both command entry points use them.
 - **OpenAPI 3.1 YAML contracts** live inside their API packages: `internal/app/httpapi/openapi.yaml` (platform/orchestrator) and `internal/agentctl/httpapi/openapi.yaml` (`agentctl`). The shared core OpenAPI package validates and serves each contract at server startup. **kin-openapi v0.133.0** parses and validates the contracts; **swaggest/swgui v1.8.9** serves embedded Swagger UI assets, so the UI does not depend on a CDN.
 
 The Makefile pins **golangci-lint v2.15.0** and enables the **gofumpt** formatter. Go and frontend dependencies are locked with `go.sum` and `web/package-lock.json`.
 
-The platform API is currently a liveness endpoint and OpenAPI/Swagger UI. Product services and platform-to-agent communication are not implemented.
+The platform API includes authentication, internal user registration, organization/workspace CRUD, and membership management. These features use separate identity, organization, and workspace domain packages with independent PostgreSQL repository implementations. Task services and platform-to-agent communication are not implemented.
 
 ## Database and background work
 
-- **PostgreSQL 18.3** (`postgres:18.3-alpine3.23`) currently runs through Compose for local development. The application does not connect to it yet.
-- **`pgx` + `sqlc`**, versioned migrations, and PostgreSQL-backed jobs/commands remain proposed; none are implemented or pinned. Redis and a separate message broker are not part of the proposed initial stack.
+- **PostgreSQL 18.3** (`postgres:18.3-alpine3.23`) runs through Compose for local development and backs the platform's identity, organization, and workspace repositories.
+- **`pgx v5.11.0`**, **Goose v3.29.0**, **sqlc v1.31.1**, and versioned SQL migrations back internal users, organizations, workspaces, and memberships. `PostgresDatabase.Initialize` accepts either `DATABASE_URL` or the complete `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USERNAME`, `POSTGRES_PASSWORD`, and `POSTGRES_DB` set; the URL takes precedence. It owns the shared pool and migration lifecycle and retains non-secret connection details. `UserPostgresRepository`, `OrganizationPostgresRepository`, and `WorkspacePostgresRepository` implement their corresponding domain-owned repository contracts. All static repository queries live in domain-specific files under `db/queries` and execute through sqlc-generated pgx methods. Repositories map generated rows into domain types and own explicit transaction orchestration using `Queries.WithTx`; membership changes retain their row locks and authorization checks. Direct pgx query execution is reserved for concrete needs not served by generated static queries, such as bulk copy or dynamic SQL. Redis and a separate message broker are not part of the proposed initial stack.
 
-When database access is implemented, use transactions and constraints for atomic member-slot allocation and state transitions. Persist command identities and results so reconnects can reconcile uncertain outcomes before retrying.
+The first Goose migration safely replays the schema created by the initial custom runner. A follow-up migration removes only that runner's `schema_migrations` tracking table after Goose records the schema version; application tables and data are retained.
+
+For task and run persistence, use transactions and constraints for atomic member-slot allocation and state transitions. Persist command identities and results so reconnects can reconcile uncertain outcomes before retrying.
 
 ## Frontend
 
@@ -30,10 +32,10 @@ When database access is implemented, use transactions and constraints for atomic
 
 ## Authentication and authorization
 
-- **Keycloak through OpenID Connect (OIDC)** for authentication, including configured identity providers and SSO; this remains proposed and is not implemented.
-- **Application-owned authorization** for organization/workspace memberships and roles.
+- **Keycloak through OpenID Connect (OIDC)** authenticates browser sessions and bearer tokens, including configured identity providers and SSO.
+- **Application-owned authorization** for organization/workspace memberships and roles. First login creates an internal profile keyed by the verified subject; later logins do not overwrite its username/email. Owner/Admin organization roles inherit workspace access, and workspace roles are enforced by the platform API.
 
-Under the proposed design, Keycloak authenticates users while Orkest enforces access boundaries across APIs, event streams, integrations, artifacts, and execution controls. The detailed role matrix remains to be defined.
+Keycloak authenticates users while Orkest enforces access boundaries. Organization and workspace API authorization is implemented; event streams, integrations, artifacts, and execution controls must apply the same membership checks as those features are added.
 
 ## Agent runtime and execution
 
@@ -64,12 +66,13 @@ Agents create and update pull requests through their permitted runtime capabilit
 
 ## Architecture and local development
 
-- **Modular monolith** is the proposed core platform shape. Implemented Go packages currently cover app lifecycle, HTTP API scaffolding, and standalone agentctl/OpenCode runtime code; identity, workspace, task, orchestration, and integration services are not implemented.
+- **Modular monolith** is the proposed core platform shape. Implemented Go packages cover identity, organization, workspace, app lifecycle, HTTP API scaffolding, and standalone agentctl/OpenCode runtime code. Task, orchestration, and integration services are not implemented.
 - **Independent `agentctl` process** is implemented as a separate binary, but deployment inside executor environments is not.
 - **Go code organization** stays in one root Go module, with logical package areas rather than nested Go modules:
-  - `internal/app` owns platform wiring and lifecycle; platform features belong under `internal/` packages such as `identity`, `workspace`, `task`, and `orchestration`.
+  - `internal/app` owns platform wiring and lifecycle; platform features belong under `internal/` packages such as `identity`, `organization`, `workspace`, `task`, and `orchestration`.
   - `internal/agentctl` owns agentctl run state, provider contracts, transport APIs, daemon lifecycle (`internal/agentctl/daemon`), and runtime adapters (`internal/agentctl/runtime`). It runs independently of platform lifecycle.
-  - `internal/core` holds only concrete code shared by platform and agentctl, currently graceful HTTP server lifecycle (`internal/core/httpserver`).
+  - `internal/core` holds only concrete code shared by platform and agentctl, including environment loading (`internal/core/environment`), graceful HTTP server lifecycle (`internal/core/httpserver`), and OpenAPI serving/validation (`internal/core/openapi`).
+  - `internal/postgres` owns the shared PostgreSQL database lifecycle and separate per-domain adapters; repository interfaces remain in their domain packages.
   - `cmd/orkest` and `cmd/agentctl` remain thin executable wiring; platform HTTP lives in `internal/app/httpapi` and agentctl HTTP lives in `internal/agentctl/httpapi`. `internal/core/openapi` owns shared serving and validation code.
 - **Docker Compose** currently starts PostgreSQL only. Keycloak and the platform are not Compose services.
 
@@ -87,7 +90,7 @@ The Go agentctl/OpenCode prototype exists. Unit tests use a subprocess fixture; 
 
 The recovery and approval scenarios remain acceptance work; a successful subprocess fixture or session reload alone does not prove real runtime continuation.
 
-`make test-integration` runs the real OpenCode handshake when the pinned executable is supplied. `make test-recovery` currently reports that the suite is not implemented.
+`make test-integration` runs the real OpenCode handshake when the pinned executable is supplied. `make test-postgres` runs domain repository integration tests using either PostgreSQL configuration form (start local PostgreSQL with `make db-up`). `make test-recovery` currently reports that the suite is not implemented.
 
 ## References
 

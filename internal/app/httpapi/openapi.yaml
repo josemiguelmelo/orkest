@@ -9,6 +9,10 @@ tags:
     description: Sign in and sign out through the configured OpenID Connect provider.
   - name: Users
     description: Operations for the authenticated user.
+  - name: Organizations
+    description: Organizations and organization memberships.
+  - name: Workspaces
+    description: Workspaces and workspace memberships.
 paths:
   /healthz:
     get:
@@ -64,19 +68,237 @@ paths:
         - bearerAuth: []
       responses:
         "200":
-          description: Authenticated identity
+          description: Internal user profile and organization memberships
           content:
             application/json:
               schema:
-                type: object
-                required: [sub, email, name]
-                properties:
-                  sub: {type: string}
-                  email: {type: string}
-                  name: {type: string}
+                $ref: "#/components/schemas/CurrentUser"
         "401":
           description: Missing or invalid access token
+  /api/organizations:
+    get:
+      tags: [Organizations]
+      operationId: listOrganizations
+      security: [{bearerAuth: []}]
+      responses:
+        "200": {description: Organizations the user belongs to, content: {application/json: {schema: {type: array, items: {$ref: "#/components/schemas/Organization"}}}}}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+    post:
+      tags: [Organizations]
+      operationId: createOrganization
+      security: [{bearerAuth: []}]
+      requestBody: {$ref: "#/components/requestBodies/NamedResource"}
+      responses:
+        "201": {description: Organization created; creator is Owner, content: {application/json: {schema: {$ref: "#/components/schemas/Organization"}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+  /api/organizations/{orgID}:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [Organizations]
+      operationId: getOrganization
+      security: [{bearerAuth: []}]
+      responses:
+        "200": {description: Organization, content: {application/json: {schema: {$ref: "#/components/schemas/Organization"}}}}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "404": {$ref: "#/components/responses/NotFound"}
+    patch:
+      tags: [Organizations]
+      operationId: updateOrganization
+      security: [{bearerAuth: []}]
+      requestBody: {$ref: "#/components/requestBodies/NamedResource"}
+      responses:
+        "200": {description: Updated organization, content: {application/json: {schema: {$ref: "#/components/schemas/Organization"}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+    delete:
+      tags: [Organizations]
+      operationId: deleteOrganization
+      security: [{bearerAuth: []}]
+      responses:
+        "204": {description: Organization deleted}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+    # Membership changes are limited to users registered on a prior login.
+  /api/organizations/{orgID}/members:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [Organizations]
+      operationId: listOrganizationMembers
+      security: [{bearerAuth: []}]
+      responses:
+        "200": {description: Organization members, content: {application/json: {schema: {type: array, items: {$ref: "#/components/schemas/Membership"}}}}}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+  /api/organizations/{orgID}/members/{userID}:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: userID, in: path, required: true, schema: {type: string}}
+    put:
+      tags: [Organizations]
+      operationId: setOrganizationMember
+      security: [{bearerAuth: []}]
+      requestBody: {$ref: "#/components/requestBodies/OrganizationRole"}
+      responses:
+        "200": {description: Membership updated}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
+    delete:
+      tags: [Organizations]
+      operationId: removeOrganizationMember
+      security: [{bearerAuth: []}]
+      responses:
+        "204": {description: Membership removed}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
+  /api/organizations/{orgID}/workspaces:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [Workspaces]
+      operationId: listWorkspaces
+      security: [{bearerAuth: []}]
+      responses:
+        "200": {description: Workspaces accessible to the user, content: {application/json: {schema: {type: array, items: {$ref: "#/components/schemas/Workspace"}}}}}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+    post:
+      tags: [Workspaces]
+      operationId: createWorkspace
+      security: [{bearerAuth: []}]
+      requestBody: {$ref: "#/components/requestBodies/NamedResource"}
+      responses:
+        "201": {description: Workspace created, content: {application/json: {schema: {$ref: "#/components/schemas/Workspace"}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+  /api/organizations/{orgID}/workspaces/{workspaceID}:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [Workspaces]
+      operationId: getWorkspace
+      security: [{bearerAuth: []}]
+      responses:
+        "200": {description: Workspace, content: {application/json: {schema: {$ref: "#/components/schemas/Workspace"}}}}
+        "404": {$ref: "#/components/responses/NotFound"}
+    patch:
+      tags: [Workspaces]
+      operationId: updateWorkspace
+      security: [{bearerAuth: []}]
+      requestBody: {$ref: "#/components/requestBodies/NamedResource"}
+      responses:
+        "200": {description: Updated workspace, content: {application/json: {schema: {$ref: "#/components/schemas/Workspace"}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+    delete:
+      tags: [Workspaces]
+      operationId: deleteWorkspace
+      security: [{bearerAuth: []}]
+      responses:
+        "204": {description: Workspace deleted}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/members:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [Workspaces]
+      operationId: listWorkspaceMembers
+      security: [{bearerAuth: []}]
+      responses:
+        "200": {description: Workspace members, content: {application/json: {schema: {type: array, items: {$ref: "#/components/schemas/Membership"}}}}}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/members/{userID}:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+      - {name: userID, in: path, required: true, schema: {type: string}}
+    put:
+      tags: [Workspaces]
+      operationId: setWorkspaceMember
+      security: [{bearerAuth: []}]
+      requestBody: {$ref: "#/components/requestBodies/WorkspaceRole"}
+      responses:
+        "200": {description: Membership updated}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+    delete:
+      tags: [Workspaces]
+      operationId: removeWorkspaceMember
+      security: [{bearerAuth: []}]
+      responses:
+        "204": {description: Membership removed}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
 components:
+  requestBodies:
+    NamedResource:
+      required: true
+      content:
+        application/json:
+          schema: {type: object, required: [name], properties: {name: {type: string, minLength: 1, maxLength: 200}}}
+    OrganizationRole:
+      required: true
+      content:
+        application/json:
+          schema: {type: object, required: [role], properties: {role: {type: string, enum: [owner, admin, member]}}}
+    WorkspaceRole:
+      required: true
+      content:
+        application/json:
+          schema: {type: object, required: [role], properties: {role: {type: string, enum: [admin, member, viewer]}}}
+  responses:
+    Unauthorized: {description: Missing or invalid credentials}
+    Forbidden: {description: Insufficient role permissions}
+    NotFound: {description: Resource is absent or inaccessible}
+    BadRequest: {description: Request body or role is invalid}
+    Conflict: {description: Operation conflicts with membership invariants}
+  schemas:
+    CurrentUser:
+      type: object
+      required: [user, organizations]
+      properties:
+        user: {$ref: "#/components/schemas/User"}
+        organizations: {type: array, items: {$ref: "#/components/schemas/Organization"}}
+    User:
+      type: object
+      required: [id, username, email]
+      properties:
+        id: {type: string}
+        username: {type: string}
+        email: {type: string}
+    Organization:
+      type: object
+      required: [id, name]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        role: {type: string, enum: [owner, admin, member]}
+    Workspace:
+      type: object
+      required: [id, organizationId, name]
+      properties:
+        id: {type: string}
+        organizationId: {type: string}
+        name: {type: string}
+        role: {type: string, enum: [owner, admin, member, viewer]}
+    Membership:
+      type: object
+      required: [user, role]
+      properties:
+        user: {$ref: "#/components/schemas/User"}
+        role: {type: string, enum: [owner, admin, member, viewer]}
   securitySchemes:
     bearerAuth:
       type: http
