@@ -14,16 +14,22 @@ Dependencies are pinned in `web/package.json` and `web/package-lock.json`.
 1. Copy `.env.example` to `.env` and set `POSTGRES_PASSWORD` to a local password.
 2. Run `make setup` to install frontend dependencies.
 3. Run `make db-up` to start PostgreSQL and wait for its health check.
-4. Run `make dev` for the API at `http://127.0.0.1:8080`.
-5. In another terminal, run `make dev-web` for the frontend (Vite prints its URL).
+4. Run `make auth-up` to start Keycloak locally.
+5. Run `make dev` for the API at `http://127.0.0.1:8080` with Air auto-reload.
+6. In another terminal, run `make dev-web` for the frontend (Vite prints its URL).
 
 `GET /healthz` reports process liveness only. The API does not connect to the
 database yet. Set `HTTP_ADDR` to override its listen address. The frontend is a
-static shell and does not yet call the API.
+static shell and does not yet call the API. Visit `http://127.0.0.1:8080/auth/login`
+to sign in. The local Keycloak realm has username `local` and password `local`;
+`GET /api/me` returns the verified identity. The callback sets an HTTP-only
+session cookie; API clients can also send the verified Keycloak ID token as a
+bearer token. Local OIDC values are in `.env.example`. These credentials and
+HTTP settings are for local development only.
 
 PostgreSQL listens on localhost, port 5432 (override `POSTGRES_PORT` in `.env`).
-Database and user are both `orkest`; the password comes from `.env`. Compose is
-limited to PostgreSQL for now. Data persists in the `postgres18_data` named volume
+Database and user are both `orkest`; the password comes from `.env`. Compose runs
+PostgreSQL and Keycloak. Data persists in named volumes
 at PostgreSQL 18's `/var/lib/postgresql` mount. `make db-down` retains the volume.
 Postgres initialization variables apply only when the volume is first created;
 changing `.env` does not change existing database credentials. The version-specific

@@ -1,0 +1,13 @@
+root = "."
+tmp_dir = "tmp"
+env_files = [".env"]
+
+[build]
+cmd = "go build -o ./tmp/orkest ./cmd/orkest"
+entrypoint = ["./tmp/orkest"]
+include_ext = ["go", "yaml"]
+exclude_dir = [".git", "bin", "docs", "tmp", "web", "tests"]
+exclude_regex = ["_test\\.go$"]
+exclude_unchanged = true
+stop_on_error = true
+delay = 300
