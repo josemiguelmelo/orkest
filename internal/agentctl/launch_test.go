@@ -6,6 +6,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+
+	coreruntime "github.com/josemiguelmelo/orkest/internal/core/runtime"
 )
 
 type testProvider struct {
@@ -14,7 +16,7 @@ type testProvider struct {
 	process *testProcess
 }
 
-func (p *testProvider) Runtime() string { return "alternative" }
+func (p *testProvider) Runtime() coreruntime.Runtime { return coreruntime.OpenCode }
 func (p *testProvider) Launch(context.Context, RunConfig) (Process, error) {
 	p.calls.Add(1)
 	return p.process, p.err
@@ -46,7 +48,7 @@ func TestProviderLaunchOwnership(t *testing.T) {
 		t.Fatal(err)
 	}
 	config := runConfig()
-	config.Runtime = "alternative"
+	config.Runtime = coreruntime.OpenCode
 	if err := service.Configure(config); err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +82,7 @@ func TestLaunchFailureDoesNotRetry(t *testing.T) {
 	service := NewRunControllerWithRuntimeProvider(context.Background(), p, "")
 	defer func() { _ = service.Close() }()
 	config := runConfig()
-	config.Runtime = "alternative"
+	config.Runtime = coreruntime.OpenCode
 	if err := service.Configure(config); err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +102,7 @@ func TestUnexpectedProcessExitIsFailed(t *testing.T) {
 	controller := NewRunControllerWithRuntimeProvider(context.Background(), &testProvider{process: process}, "")
 	defer func() { _ = controller.Close() }()
 	config := runConfig()
-	config.Runtime = "alternative"
+	config.Runtime = coreruntime.OpenCode
 	if err := controller.Configure(config); err != nil {
 		t.Fatal(err)
 	}

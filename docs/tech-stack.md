@@ -13,7 +13,7 @@ Status: Mixed. This document distinguishes implemented technology from the propo
 
 The Makefile pins **golangci-lint v2.15.0** and enables the **gofumpt** formatter. Go and frontend dependencies are locked with `go.sum` and `web/package-lock.json`.
 
-The platform API includes authentication, internal user registration, organization/workspace CRUD, and membership management. These features use separate identity, organization, and workspace domain packages with independent PostgreSQL repository implementations. Task services and platform-to-agent communication are not implemented.
+The platform API includes authentication, internal user registration, organization/workspace CRUD, membership management, and workspace-scoped agent definition CRUD. These features use separate identity, organization, workspace, and agent domain packages with independent PostgreSQL repository implementations. Platform agent definitions and agentctl run configuration share the runtime enum in `internal/core/runtime`; currently OpenCode is the only available runtime. Model provider/model identifiers remain separate, and platform runtime launchers are not implemented.
 
 ## Database and background work
 

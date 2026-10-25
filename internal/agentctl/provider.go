@@ -2,9 +2,11 @@ package agentctl
 
 import "context"
 
+import coreruntime "github.com/josemiguelmelo/orkest/internal/core/runtime"
+
 // Provider owns runtime-specific startup. No ACP types cross this boundary.
 type RuntimeProvider interface {
-	Runtime() string
+	Runtime() coreruntime.Runtime
 	Launch(context.Context, RunConfig) (Process, error)
 }
 

@@ -345,7 +345,7 @@ components:
         workspaceId: { type: string, pattern: '\S' }
         taskId: { type: string, pattern: '\S' }
         runId: { type: string, pattern: '\S' }
-        runtime: { type: string, pattern: '\S' }
+        runtime: { type: string, enum: [opencode] }
         model:
           type: object
           additionalProperties: true

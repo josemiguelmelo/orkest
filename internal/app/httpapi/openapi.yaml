@@ -13,6 +13,8 @@ tags:
     description: Organizations and organization memberships.
   - name: Workspaces
     description: Workspaces and workspace memberships.
+  - name: Agents
+    description: Workspace-scoped reusable agent definitions.
 paths:
   /healthz:
     get:
@@ -241,6 +243,59 @@ paths:
         "204": {description: Membership removed}
         "403": {$ref: "#/components/responses/Forbidden"}
         "404": {$ref: "#/components/responses/NotFound"}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/agents:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [Agents]
+      operationId: listAgents
+      security: [{bearerAuth: []}]
+      responses:
+        "200": {description: Workspace agents, content: {application/json: {schema: {type: array, items: {$ref: "#/components/schemas/Agent"}}}}}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+    post:
+      tags: [Agents]
+      operationId: createAgent
+      security: [{bearerAuth: []}]
+      requestBody: {$ref: "#/components/requestBodies/AgentDefinition"}
+      responses:
+        "201": {description: Agent created, content: {application/json: {schema: {$ref: "#/components/schemas/Agent"}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/agents/{agentID}:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+      - {name: agentID, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [Agents]
+      operationId: getAgent
+      security: [{bearerAuth: []}]
+      responses:
+        "200": {description: Agent definition, content: {application/json: {schema: {$ref: "#/components/schemas/Agent"}}}}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+    put:
+      tags: [Agents]
+      operationId: updateAgent
+      security: [{bearerAuth: []}]
+      requestBody: {$ref: "#/components/requestBodies/AgentDefinition"}
+      responses:
+        "200": {description: Agent updated, content: {application/json: {schema: {$ref: "#/components/schemas/Agent"}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+    delete:
+      tags: [Agents]
+      operationId: deleteAgent
+      security: [{bearerAuth: []}]
+      responses:
+        "204": {description: Agent deleted}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
 components:
   requestBodies:
     NamedResource:
@@ -258,6 +313,20 @@ components:
       content:
         application/json:
           schema: {type: object, required: [role], properties: {role: {type: string, enum: [admin, member, viewer]}}}
+    AgentDefinition:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [name, runtime, provider, model, description, systemPrompt]
+            properties:
+              name: {type: string, minLength: 1, maxLength: 200}
+              runtime: {type: string, enum: [opencode]}
+              provider: {type: string, minLength: 1, maxLength: 200}
+              model: {type: string, minLength: 1, maxLength: 200}
+              description: {type: string, maxLength: 2000}
+              systemPrompt: {type: string, maxLength: 100000}
   responses:
     Unauthorized: {description: Missing or invalid credentials}
     Forbidden: {description: Insufficient role permissions}
@@ -299,6 +368,18 @@ components:
       properties:
         user: {$ref: "#/components/schemas/User"}
         role: {type: string, enum: [owner, admin, member, viewer]}
+    Agent:
+      type: object
+      required: [id, workspaceId, name, runtime, provider, model, description, systemPrompt]
+      properties:
+        id: {type: string}
+        workspaceId: {type: string}
+        name: {type: string}
+        runtime: {type: string, enum: [opencode]}
+        provider: {type: string}
+        model: {type: string}
+        description: {type: string}
+        systemPrompt: {type: string}
   securitySchemes:
     bearerAuth:
       type: http

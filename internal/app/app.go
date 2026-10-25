@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/josemiguelmelo/orkest/internal/agent"
 	"github.com/josemiguelmelo/orkest/internal/app/httpapi"
 	"github.com/josemiguelmelo/orkest/internal/core/httpserver"
 	"github.com/josemiguelmelo/orkest/internal/identity"
@@ -30,7 +31,8 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 	users := identity.NewUserRegistrationService(postgres.NewUserPostgresRepository(database))
 	organizations := organization.NewOrganizationService(postgres.NewOrganizationPostgresRepository(database))
 	workspaces := workspace.NewWorkspaceService(postgres.NewWorkspacePostgresRepository(database), organizations)
-	router, err := httpapi.NewRouter(users, organizations, workspaces)
+	agents := agent.NewService(postgres.NewAgentPostgresRepository(database), workspaces)
+	router, err := httpapi.NewRouter(users, organizations, workspaces, agents)
 	if err != nil {
 		return err
 	}
