@@ -21,6 +21,28 @@ type Agent struct {
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 }
 
+type AgentLaunch struct {
+	RunID          string             `json:"run_id"`
+	OrganizationID string             `json:"organization_id"`
+	WorkspaceID    string             `json:"workspace_id"`
+	TaskID         string             `json:"task_id"`
+	Status         string             `json:"status"`
+	ProcessID      string             `json:"process_id"`
+	Endpoint       string             `json:"endpoint"`
+	FailureStage   string             `json:"failure_stage"`
+	FailureReason  string             `json:"failure_reason"`
+	LastSequence   int64              `json:"last_sequence"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
+type AgentLaunchEvent struct {
+	RunID     string             `json:"run_id"`
+	Sequence  int64              `json:"sequence"`
+	Event     []byte             `json:"event"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
 type CodeRepository struct {
 	ID           string             `json:"id"`
 	WorkspaceID  string             `json:"workspace_id"`

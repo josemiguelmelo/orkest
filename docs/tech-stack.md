@@ -13,7 +13,7 @@ Status: Mixed. This document distinguishes implemented technology from the propo
 
 The Makefile pins **golangci-lint v2.15.0** and enables the **gofumpt** formatter. Go and frontend dependencies are locked with `go.sum` and `web/package-lock.json`.
 
-The platform API includes authentication, internal user registration, organization/workspace CRUD, membership management, workspace-scoped agent definition CRUD, and workspace-scoped code repository registration. These features use separate identity, organization, workspace, agent, and code repository domain packages with independent PostgreSQL repository implementations. The application stores durable workspace files below `ORKEST_DATA_DIR/<organizationID>/<workspaceID>/`; code checkouts are stored at `git/<providerName>/<repositoryID>` below that path. The data root defaults to `./data` and should be mounted to persistent disk in deployed environments. The code repository provider contract currently has a GitHub implementation for public HTTPS repositories. Clone and sync derive their destination from the workspace and repository records; sync fetches remote `main` and hard-resets the checkout, discarding local changes. Authenticated/private repository access and other providers are not implemented. Platform agent definitions and agentctl run configuration share the runtime enum in `internal/core/runtime`; currently OpenCode is the only available runtime. Model provider/model identifiers remain separate, and platform runtime launchers are not implemented.
+The platform API includes authentication, internal user registration, organization/workspace CRUD, membership management, workspace-scoped agent definition CRUD, and workspace-scoped code repository registration. These features use separate identity, organization, workspace, agent, and code repository domain packages with independent PostgreSQL repository implementations. The application stores durable workspace files below `ORKEST_DATA_DIR/<organizationID>/<workspaceID>/`; code checkouts are stored at `git/<providerName>/<repositoryID>` below that path. The data root defaults to `./data` and should be mounted to persistent disk in deployed environments. The code repository provider contract currently has a GitHub implementation for public HTTPS repositories. Clone and sync derive their destination from the workspace and repository records; sync fetches remote `main` and hard-resets the checkout, discarding local changes. Authenticated/private repository access and other providers are not implemented. Platform agent definitions and agentctl run configuration share the runtime enum in `internal/core/runtime`; currently OpenCode is the only available runtime. Model provider/model identifiers remain separate. `internal/orchestration` now defines the executor-facing agentctl launcher, persists launch lifecycle and ordered events, configures/starts agentctl through its HTTP API, and maintains a replayable WebSocket connection. A concrete executor and task/run start flow are not yet wired into the platform.
 
 ## Database and background work
 
@@ -42,10 +42,10 @@ Keycloak authenticates users while Orkest enforces access boundaries. Organizati
 - **OpenCode v2.1.4** is the pinned runtime in the `agentctl` prototype. Its compatibility with the real executable still requires integration verification.
 - **ACP over local stdio** uses `github.com/coder/acp-go-sdk v0.13.5` between `agentctl` and the OpenCode subprocess.
 - The standalone **Go `agentctl` binary** owns the subprocess and ACP connection. It exposes REST commands and a receive-only activity WebSocket using **`github.com/coder/websocket v1.8.15`**. It journals events and retains task-scoped runtime state.
-- The agentctl HTTP server uses **Chi v5.2.3**; WebSocket upgrades use `coder/websocket`. Stable command reconciliation, restart recovery, session restoration, and continuation are not implemented.
-- **Docker Engine Go SDK** and the executor abstraction remain proposed; there is no task-container provisioning implementation yet.
-- **Retained Docker volumes or equivalent durable task storage** for repository working trees, runtime sessions, configuration identity, events, and pending interaction metadata remain proposed. The current prototype expects durable host directories for its state and OpenCode HOME/XDG data.
-- An **authenticated platform-to-agentctl transport** with stable identities, acknowledgements, replay, and reconnect reconciliation remains proposed and unimplemented.
+- The agentctl HTTP server uses **Chi v5.2.3**; WebSocket upgrades use `coder/websocket`. Platform startup reconciles persisted launches, closes confirmed-ended or unconfigured processes, and reconnects healthy endpoints to replay events from the stored sequence. Stable command reconciliation, agentctl restart recovery, session restoration, and continuation are not implemented.
+- The first **Docker Engine executor** is implemented in `internal/executors/docker` with the pinned Moby Go client v0.6.2. It starts agentctl containers with task-scoped durable host bind mounts and loopback-only dynamic port publication, then gracefully stops and removes containers after terminal prompt events. It targets a local Engine; permanent task/run API wiring and repository preparation are not implemented.
+- Docker image build targets create a shared agentctl base image and an OpenCode 2.1.4 runtime image. The mounted work and agentctl state directories persist on the Docker host. Container restart recovery and OpenCode session continuation are not implemented.
+- An **authenticated platform-to-agentctl transport** remains proposed and unimplemented. The current local transport uses persisted run identities and event cursors for platform restart reconnect and replay, without transport authentication or explicit acknowledgements.
 
 The Go ACP library is selected, but real-runtime protocol compatibility, approvals, session restoration, and interrupted-work continuation are not yet verified.
 
@@ -66,8 +66,8 @@ Agents create and update pull requests through their permitted runtime capabilit
 
 ## Architecture and local development
 
-- **Modular monolith** is the proposed core platform shape. Implemented Go packages cover identity, organization, workspace, app lifecycle, HTTP API scaffolding, and standalone agentctl/OpenCode runtime code. Task, orchestration, and integration services are not implemented.
-- **Independent `agentctl` process** is implemented as a separate binary, but deployment inside executor environments is not.
+- **Modular monolith** is the proposed core platform shape. Implemented Go packages cover identity, organization, workspace, app lifecycle, HTTP API scaffolding, launch orchestration, Docker agentctl execution, and standalone agentctl/OpenCode runtime code. Task and integration services are not implemented.
+- **Independent `agentctl` process** is implemented as a separate binary and can be packaged into the Docker OpenCode runtime image; a task-start API and platform wiring remain future work.
 - **Go code organization** stays in one root Go module, with logical package areas rather than nested Go modules:
   - `internal/app` owns platform wiring and lifecycle; platform features belong under `internal/` packages such as `identity`, `organization`, `workspace`, `task`, and `orchestration`.
   - `internal/agentctl` owns agentctl run state, provider contracts, transport APIs, daemon lifecycle (`internal/agentctl/daemon`), and runtime adapters (`internal/agentctl/runtime`). It runs independently of platform lifecycle.
@@ -82,7 +82,7 @@ Avoid introducing microservices or a distributed workflow engine for the initial
 
 The Go agentctl/OpenCode prototype exists. Unit tests use a subprocess fixture; the real OpenCode handshake has a documented integration target but remains unverified unless run with the pinned executable. Before building the full UI, validate the remaining high-risk behavior:
 
-1. Launch OpenCode in a Docker task environment and exchange ACP messages.
+1. Run `make test-docker` to verify agentctl starts in the Docker OpenCode image; validate OpenCode ACP interaction and subsequent recovery scenarios separately.
 2. Completes a user approval round trip.
 3. Keeps the agent running across a core platform restart and replays missed events.
 4. Restores files and the supported agent session after a container/process restart.
