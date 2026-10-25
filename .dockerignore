@@ -1,0 +1,11 @@
+.git
+.env
+.env.*
+!.env.example
+data
+bin
+.tmp
+tmp
+web/node_modules
+web/dist
+*.tsbuildinfo

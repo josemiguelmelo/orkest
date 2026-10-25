@@ -46,10 +46,10 @@ func (s *LaunchService) Start(ctx context.Context, config agentctl.RunConfig) (L
 		return launch, fmt.Errorf("%s failed: %w", stage, cause)
 	}
 	process, err := s.launcher.LaunchAgentctl(ctx, config)
+	launch.ProcessID, launch.Endpoint = strings.TrimSpace(process.ID), strings.TrimSpace(process.Endpoint)
 	if err != nil {
 		return fail("process_start", err)
 	}
-	launch.ProcessID, launch.Endpoint = strings.TrimSpace(process.ID), strings.TrimSpace(process.Endpoint)
 	if launch.ProcessID == "" || !validEndpoint(launch.Endpoint) {
 		return fail("process_start", errors.New("executor returned invalid process identity or endpoint"))
 	}
