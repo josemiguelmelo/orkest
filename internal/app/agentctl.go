@@ -25,7 +25,7 @@ func RunAgentctl(ctx context.Context, logger *slog.Logger, address string) error
 	if err != nil {
 		return fmt.Errorf("listen agentctl: %w", err)
 	}
-	server := &http.Server{Handler: api.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, IdleTimeout: 60 * time.Second, MaxHeaderBytes: 16 << 10}
+	server := &http.Server{Handler: api.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, IdleTimeout: 60 * time.Second}
 	result := make(chan error, 1)
 	go func() { result <- server.Serve(listener) }()
 	logger.Info("agentctl listening", "address", listener.Addr().String())
