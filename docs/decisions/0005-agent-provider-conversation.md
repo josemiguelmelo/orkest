@@ -1,9 +1,12 @@
 # Provider conversation and reconnect replay
 
 Status: Accepted for the local communication increment. Process/container recovery
-and platform authorization remain unimplemented.
+and platform authorization remain unimplemented. Memory retention and locking details
+are superseded by [decision 0006](0006-agentctl-composition-and-limits.md).
+The WebSocket command protocol is superseded by
+[decision 0007](0007-agentctl-rest-and-websocket.md).
 
-A provider process may implement agentctl's Conversation capability. It accepts
+A provider process may implement agentctl's RuntimeConversation capability. It accepts
 plain text prompts, emits typed text/tool updates, requests typed permission
 choices, returns a stop reason, and supports cancellation. ACP types and JSON-RPC
 identities remain inside the OpenCode adapter. Filesystem and terminal client

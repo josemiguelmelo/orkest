@@ -17,9 +17,9 @@ import (
 func RunAgentctl(ctx context.Context, logger *slog.Logger, address string, provider agentctl.Provider, stateDir string) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	service := agentctl.NewServiceWithProvider(ctx, provider, stateDir)
-	defer func() { _ = service.Close() }()
-	api, err := httpapi.NewServer(ctx, service)
+	controller := agentctl.NewRunControllerWithProvider(ctx, provider, stateDir)
+	defer func() { _ = controller.Close() }()
+	api, err := httpapi.NewServer(ctx, controller)
 	if err != nil {
 		return err
 	}

@@ -5,7 +5,7 @@ import "context"
 // Provider owns runtime-specific startup. No ACP types cross this boundary.
 type Provider interface {
 	Runtime() string
-	Launch(context.Context, Configuration) (Process, error)
+	Launch(context.Context, RunConfig) (Process, error)
 }
 
 // Process is owned by agentctl, never by an HTTP request or stream.
@@ -15,8 +15,8 @@ type Process interface {
 	Close() error
 }
 
-// Conversation is an optional process capability. ACP details remain in adapters.
-type Conversation interface {
+// RuntimeConversation is an optional process capability. ACP details remain in adapters.
+type RuntimeConversation interface {
 	Prompt(context.Context, string, Observer) (string, error)
 	Cancel(context.Context) error
 }

@@ -29,7 +29,7 @@ type Provider struct {
 
 func (p *Provider) Runtime() string { return "opencode" }
 
-func (p *Provider) Launch(ctx context.Context, config agentctl.Configuration) (agentctl.Process, error) {
+func (p *Provider) Launch(ctx context.Context, config agentctl.RunConfig) (agentctl.Process, error) {
 	if err := config.Validate(); err != nil {
 		return nil, err
 	}
@@ -51,8 +51,38 @@ func (p *Provider) Launch(ctx context.Context, config agentctl.Configuration) (a
 	if err != nil {
 		return nil, errors.New("opencode executable unavailable")
 	}
+	root := p.storageRoot(config)
+	env, err := p.prepareEnvironment(root, config)
+	if err != nil {
+		return nil, err
+	}
+	if err := verifyVersion(ctx, binary, env); err != nil {
+		return nil, err
+	}
+	if err := reserveRun(root, config.RunID); err != nil {
+		return nil, err
+	}
+	return p.startProcess(ctx, binary, env)
+}
+
+func (p *Provider) storageRoot(config agentctl.RunConfig) string {
 	scope, _ := json.Marshal([]string{config.OrganizationID, config.WorkspaceID, config.TaskID})
-	root := filepath.Join(p.StateDir, fmt.Sprintf("%x", sha256.Sum256(scope)))
+	return filepath.Join(p.StateDir, fmt.Sprintf("%x", sha256.Sum256(scope)))
+}
+
+type runtimeConfiguration struct {
+	Autoupdate bool                          `json:"autoupdate"`
+	Share      string                        `json:"share"`
+	Agent      map[string]agentConfiguration `json:"agent"`
+}
+
+type agentConfiguration struct {
+	Mode   string `json:"mode"`
+	Prompt string `json:"prompt"`
+	Model  string `json:"model"`
+}
+
+func (p *Provider) prepareEnvironment(root string, config agentctl.RunConfig) ([]string, error) {
 	env := append([]string{}, p.Env...)
 	for _, entry := range env {
 		name, _, ok := strings.Cut(entry, "=")
@@ -67,28 +97,37 @@ func (p *Provider) Launch(ctx context.Context, config agentctl.Configuration) (a
 		}
 		env = append(env, item.name+"="+dir)
 	}
-	runtimeConfig, err := json.Marshal(map[string]any{"autoupdate": false, "share": "disabled", "agent": map[string]any{"orkest": map[string]any{"mode": "primary", "prompt": config.SystemPrompt, "model": config.Model.Provider + "/" + config.Model.ID}}})
+	runtimeConfig, err := json.Marshal(runtimeConfiguration{Share: "disabled", Agent: map[string]agentConfiguration{"orkest": {Mode: "primary", Prompt: config.SystemPrompt, Model: config.Model.Provider + "/" + config.Model.ID}}})
 	if err != nil {
 		return nil, err
 	}
 	env = append(env, "OPENCODE_CONFIG_CONTENT="+string(runtimeConfig), "OPENCODE_DISABLE_PROJECT_CONFIG=true")
+	return env, nil
+}
+
+func verifyVersion(ctx context.Context, binary string, env []string) error {
 	check := exec.CommandContext(ctx, binary, "--version")
 	check.Env = env
 	version, err := check.Output()
 	if err != nil {
-		return nil, errors.New("inspect opencode version failed")
+		return errors.New("inspect opencode version failed")
 	}
 	if strings.TrimSpace(string(version)) != Version {
-		return nil, fmt.Errorf("opencode version must be %s but it is %s", Version, strings.TrimSpace(string(version)))
+		return fmt.Errorf("opencode version must be %s but it is %s", Version, strings.TrimSpace(string(version)))
 	}
-	// A retained marker fences restart attempts; absence of a heartbeat is not ownership evidence.
-	marker, err := os.OpenFile(filepath.Join(root, fmt.Sprintf("run-%x", sha256.Sum256([]byte(config.RunID)))), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	return nil
+}
+
+// A retained marker fences restart attempts; absence of a heartbeat is not ownership evidence.
+func reserveRun(root, runID string) error {
+	marker, err := os.OpenFile(filepath.Join(root, fmt.Sprintf("run-%x", sha256.Sum256([]byte(runID)))), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
-		return nil, errors.New("cannot reserve run; existing runs require reconciliation")
+		return errors.New("cannot reserve run; existing runs require reconciliation")
 	}
-	if err := marker.Close(); err != nil {
-		return nil, err
-	}
+	return marker.Close()
+}
+
+func (p *Provider) startProcess(ctx context.Context, binary string, env []string) (agentctl.Process, error) {
 	cmd := exec.Command(binary, "acp")
 	cmd.Dir, cmd.Env = p.WorkDir, env
 	stdin, err := cmd.StdinPipe()
@@ -119,28 +158,9 @@ func (p *Provider) Launch(ctx context.Context, config agentctl.Configuration) (a
 	conn := acp.NewClientSideConnection(client, stdin, stdout)
 	process.conn, process.client = conn, client
 	conn.SetLogger(slog.New(slog.NewTextHandler(io.Discard, nil)))
-	initialized, err := conn.Initialize(ctx, acp.InitializeRequest{ProtocolVersion: 1})
-	if err != nil {
-		return nil, errors.New("initialize opencode ACP failed")
+	if err := process.initializeSession(ctx, p.WorkDir); err != nil {
+		return nil, err
 	}
-	if initialized.ProtocolVersion != 1 {
-		return nil, errors.New("unsupported ACP protocol version")
-	}
-	session, err := conn.NewSession(ctx, acp.NewSessionRequest{Cwd: p.WorkDir, McpServers: []acp.McpServer{}})
-	if err != nil {
-		return nil, errors.New("create opencode session failed")
-	}
-	if session.SessionId == "" {
-		return nil, errors.New("opencode returned empty session identity")
-	}
-	_, err = conn.SetSessionMode(ctx, acp.SetSessionModeRequest{SessionId: session.SessionId, ModeId: "orkest"})
-	if err != nil {
-		return nil, errors.New("select configured opencode mode failed")
-	}
-	process.sessionID = string(session.SessionId)
-	client.mu.Lock()
-	client.sessionID = process.sessionID
-	client.mu.Unlock()
 	// A lost ACP connection invalidates this process; never launch a replacement automatically.
 	go func() {
 		select {
@@ -151,6 +171,33 @@ func (p *Provider) Launch(ctx context.Context, config agentctl.Configuration) (a
 	}()
 	success = true
 	return process, nil
+}
+
+func (p *process) initializeSession(ctx context.Context, workDir string) error {
+	conn := p.conn
+	initialized, err := conn.Initialize(ctx, acp.InitializeRequest{ProtocolVersion: 1})
+	if err != nil {
+		return errors.New("initialize opencode ACP failed")
+	}
+	if initialized.ProtocolVersion != 1 {
+		return errors.New("unsupported ACP protocol version")
+	}
+	session, err := conn.NewSession(ctx, acp.NewSessionRequest{Cwd: workDir, McpServers: []acp.McpServer{}})
+	if err != nil {
+		return errors.New("create opencode session failed")
+	}
+	if session.SessionId == "" {
+		return errors.New("opencode returned empty session identity")
+	}
+	_, err = conn.SetSessionMode(ctx, acp.SetSessionModeRequest{SessionId: session.SessionId, ModeId: "orkest"})
+	if err != nil {
+		return errors.New("select configured opencode mode failed")
+	}
+	p.sessionID = string(session.SessionId)
+	p.client.mu.Lock()
+	p.client.sessionID = p.sessionID
+	p.client.mu.Unlock()
+	return nil
 }
 
 type process struct {

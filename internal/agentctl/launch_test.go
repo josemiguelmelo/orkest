@@ -15,7 +15,7 @@ type testProvider struct {
 }
 
 func (p *testProvider) Runtime() string { return "alternative" }
-func (p *testProvider) Launch(context.Context, Configuration) (Process, error) {
+func (p *testProvider) Launch(context.Context, RunConfig) (Process, error) {
 	p.calls.Add(1)
 	return p.process, p.err
 }
@@ -31,12 +31,12 @@ func (p *testProcess) Close() error          { p.once.Do(func() { close(p.done) 
 
 func TestProviderLaunchOwnership(t *testing.T) {
 	p := &testProvider{process: &testProcess{done: make(chan struct{})}}
-	service := NewServiceWithProvider(context.Background(), p, "")
+	service := NewRunControllerWithProvider(context.Background(), p, "")
 	defer func() { _ = service.Close() }()
 	if err := service.Launch(); !errors.Is(err, ErrNotConfigured) {
 		t.Fatal(err)
 	}
-	config := configuration()
+	config := runConfig()
 	config.Runtime = "alternative"
 	if err := service.Configure(config); err != nil {
 		t.Fatal(err)
@@ -68,9 +68,9 @@ func TestProviderLaunchOwnership(t *testing.T) {
 
 func TestLaunchFailureDoesNotRetry(t *testing.T) {
 	p := &testProvider{err: errors.New("launch failed")}
-	service := NewServiceWithProvider(context.Background(), p, "")
+	service := NewRunControllerWithProvider(context.Background(), p, "")
 	defer func() { _ = service.Close() }()
-	config := configuration()
+	config := runConfig()
 	config.Runtime = "alternative"
 	if err := service.Configure(config); err != nil {
 		t.Fatal(err)

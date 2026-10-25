@@ -31,15 +31,15 @@ func (p *chatProcess) Cancel(context.Context) error { return nil }
 
 type chatProvider struct{ process *chatProcess }
 
-func (p chatProvider) Runtime() string                                        { return "opencode" }
-func (p chatProvider) Launch(context.Context, Configuration) (Process, error) { return p.process, nil }
+func (p chatProvider) Runtime() string                                    { return "opencode" }
+func (p chatProvider) Launch(context.Context, RunConfig) (Process, error) { return p.process, nil }
 
 func TestJournalBeforeDeliveryAndSlowSubscriber(t *testing.T) {
 	stateDir := t.TempDir()
 	process := &chatProcess{testProcess: testProcess{done: make(chan struct{})}, calls: make(chan struct{}, 1), release: make(chan struct{})}
-	service := NewServiceWithProvider(context.Background(), chatProvider{process}, stateDir)
+	service := NewRunControllerWithProvider(context.Background(), chatProvider{process}, stateDir)
 	defer func() { _ = service.Close() }()
-	if err := service.Configure(configuration()); err != nil {
+	if err := service.Configure(runConfig()); err != nil {
 		t.Fatal(err)
 	}
 	if err := service.Launch(); err != nil {
@@ -85,13 +85,13 @@ func TestJournalBeforeDeliveryAndSlowSubscriber(t *testing.T) {
 		t.Fatal("journal is not private")
 	}
 	// Fill the bounded queue without consuming it. Execution never waits on a subscriber.
-	service.mu.Lock()
+	service.conversation.mu.Lock()
 	for range 100 {
-		if err := service.recordLocked(Event{Type: "update"}); err != nil {
+		if err := service.conversation.recordLocked(Event{Type: "update"}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	service.mu.Unlock()
+	service.conversation.mu.Unlock()
 	for range events {
 	}
 	close(process.release)
@@ -108,23 +108,23 @@ func indexNewline(data []byte) int {
 
 func TestJournalFailurePreventsProviderPrompt(t *testing.T) {
 	process := &chatProcess{testProcess: testProcess{done: make(chan struct{})}, calls: make(chan struct{}, 1), release: make(chan struct{})}
-	service := NewServiceWithProvider(context.Background(), chatProvider{process}, t.TempDir())
+	service := NewRunControllerWithProvider(context.Background(), chatProvider{process}, t.TempDir())
 	defer func() { _ = service.Close() }()
-	if err := service.Configure(configuration()); err != nil {
+	if err := service.Configure(runConfig()); err != nil {
 		t.Fatal(err)
 	}
 	if err := service.Launch(); err != nil {
 		t.Fatal(err)
 	}
-	service.mu.Lock()
-	err := service.openJournalLocked()
-	service.mu.Unlock()
+	service.conversation.mu.Lock()
+	err := service.conversation.openJournalLocked()
+	service.conversation.mu.Unlock()
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := service.conversation.journal.Close(); err != nil {
-		t.Fatal(err)
-	}
+	original := service.conversation.journal.file
+	service.conversation.journal.file = failingFile{}
+	defer func() { _ = original.Close() }()
 	if err := service.Prompt("command", "hello"); err == nil {
 		t.Fatal("prompt accepted with broken journal")
 	}

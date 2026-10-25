@@ -1,17 +1,17 @@
-package httpapi
+package rest
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/josemiguelmelo/orkest/internal/agentctl"
 )
 
 func TestLaunchRequiresConfiguration(t *testing.T) {
-	service := agentctl.NewService()
-	api, err := NewServer(context.Background(), service)
+	service := agentctl.NewRunController()
+	api, err := NewServer(service, time.Now().UTC())
 	if err != nil {
 		t.Fatal(err)
 	}

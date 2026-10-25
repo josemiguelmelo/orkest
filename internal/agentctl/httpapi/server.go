@@ -1,36 +1,40 @@
+// Package httpapi composes the independent REST and WebSocket transport modules.
 package httpapi
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/josemiguelmelo/orkest/internal/agentctl"
+	"github.com/josemiguelmelo/orkest/internal/agentctl/httpapi/rest"
+	"github.com/josemiguelmelo/orkest/internal/agentctl/httpapi/websocket"
 )
 
-// Server exposes the service through HTTP and WebSocket transports.
-// Its context owns connections, independently of future agent execution.
 type Server struct {
-	ctx       context.Context
-	startedAt time.Time
-	service   *agentctl.Service
+	rest      *rest.Server
+	websocket *websocket.Server
 }
 
-func NewServer(ctx context.Context, service *agentctl.Service) (*Server, error) {
-	if service == nil {
-		return nil, errors.New("agentctl service is required")
+// NewServer binds both transports to the same controller and startup timestamp.
+// The context owns stream connections, independently of accepted execution.
+func NewServer(ctx context.Context, controller *agentctl.RunController) (*Server, error) {
+	startedAt := time.Now().UTC()
+	restServer, err := rest.NewServer(controller, startedAt)
+	if err != nil {
+		return nil, err
 	}
-	return &Server{ctx: ctx, service: service, startedAt: time.Now().UTC()}, nil
+	streamServer, err := websocket.NewServer(ctx, controller, startedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &Server{rest: restServer, websocket: streamServer}, nil
 }
 
 func (s *Server) Handler() http.Handler {
-	mux := chi.NewRouter()
-	mux.Get("/health", s.health)
-	mux.Get("/info", s.info)
-	mux.Post("/agent/configure", s.configure)
-	mux.Post("/agent/launch", s.launch)
-	mux.Get("/agent/stream", s.stream)
-	return mux
+	router := chi.NewRouter()
+	s.rest.RegisterRoutes(router)
+	s.websocket.RegisterRoutes(router)
+	return router
 }

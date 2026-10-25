@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: Orkest agentctl API
   version: 0.1.0
-  description: Standalone process-local control API. Provider launch and conversation with private event journaling and reconnect replay. Process restart recovery is not implemented.
+  description: Standalone process-local control API. REST commands and status; receive-only WebSocket activity with private journaling and reconnect replay. JSON command failures include Error; malformed JSON and content-type failures include error text only. Process restart recovery is not implemented.
 servers:
   - url: http://127.0.0.1:8081
 paths:
@@ -39,7 +39,7 @@ paths:
         required: true
         content:
           application/json:
-            schema: {$ref: '#/components/schemas/Configuration'}
+            schema: {$ref: '#/components/schemas/RunConfig'}
       responses:
         '200':
           description: Configured successfully
@@ -60,6 +60,8 @@ paths:
           content:
             application/json:
               schema: {$ref: '#/components/schemas/Error'}
+        '413':
+          description: Request body exceeds 1 MiB
         '415':
           description: Content-Type must be application/json
           content:
@@ -79,45 +81,161 @@ paths:
         '409': {description: Not configured or launch already attempted}
         '502': {description: Provider startup failed}
         '503': {description: No provider available}
+  /agent/prompt:
+    post:
+      operationId: promptAgent
+      summary: Accept an explicit prompt independently of stream connections
+      description: One active prompt per process. Same commandId and text is idempotent while available; changed text is rejected. At most 4096 identities and 256 KiB of UTF-8 text per prompt. Acceptance is durable before execution; it is not completion. Events can arrive before the HTTP response.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PromptRequest'}
+      responses:
+        '202':
+          description: Prompt accepted, or identical prior command already accepted
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CommandResponse'}
+        '400':
+          description: Invalid command identity/text or conflicting reuse of identity
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '409':
+          description: Conversation unavailable/busy/interrupted or command limit reached
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '413':
+          description: Request body exceeds 1 MiB
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '415':
+          description: Content-Type must be application/json
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '503':
+          description: Conversation storage unavailable; reconciliation required
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+  /agent/cancel:
+    post:
+      operationId: cancelAgentPrompt
+      summary: Request cancellation of the active command
+      description: Delivery acknowledgement is not proof of completion. Observe a terminal event before treating execution as ended. Failed delivery leaves the conversation interrupted.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CancelRequest'}
+      responses:
+        '202':
+          description: Cancellation delivery requested
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CommandResponse'}
+        '400':
+          description: Missing, stale, or mismatched command identity
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '409':
+          description: Conversation unavailable
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '413':
+          description: Request body exceeds 1 MiB
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '415':
+          description: Content-Type must be application/json
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '502':
+          description: Cancellation delivery failed; outcome uncertain
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '503':
+          description: Conversation storage unavailable
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+  /agent/permissions/respond:
+    post:
+      operationId: respondAgentPermission
+      summary: Record an explicit response to a pending permission
+      description: Binds the offered option to task/run/session/request identities. Duplicate, stale, and unoffered answers are rejected. A recorded response is delivery intent, not proof the runtime accepted it. No automatic approval.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/PermissionResponse'}
+      responses:
+        '200':
+          description: Permission response recorded
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/CommandResponse'}
+        '400':
+          description: Invalid JSON
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '409':
+          description: Invalid, stale, duplicate, or unoffered permission response
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '413':
+          description: Request body exceeds 1 MiB
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '415':
+          description: Content-Type must be application/json
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
+        '503':
+          description: Conversation storage unavailable
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Error'}
   /agent/stream:
     get:
       operationId: streamAgent
-      summary: Internal bidirectional WebSocket
+      summary: Receive-only WebSocket for readiness and ordered activity
       description: |
         Requires configuration before upgrading. Default same-origin checks apply.
-        Server first sends {"type":"ready","info":Info}.
-        Text JSON requests {"type":"ping","requestId":"ID"} and
-        {"type":"info","requestId":"ID"} receive pong and info responses,
-        respectively, echoing requestId. Info responses include the info property.
-        A prompt {"type":"prompt","requestId":"COMMAND_ID","text":"TEXT"} receives
-        {"type":"accepted","requestId":"COMMAND_ID"}. Same ID/text is idempotent;
-        changed text or concurrent prompts fail. Only one prompt runs at a time.
-        Activity arrives as {"type":"event","event":ConversationEvent}; events may
-        arrive before command acknowledgements. Permission requests require an explicit
-        permission_response with task/run/session/request identities and an offered optionId.
-        A recorded answer receives type permission_response_recorded. No automatic approval.
-        {"type":"cancel","requestId":"ID","commandId":"COMMAND_ID"} receives type
-        cancel_requested; wait for the terminal prompt event to establish completion.
-        Invalid commands return type error with requestId and a sanitized error.
-        Unknown commands receive error unsupported_command.
-        Messages have no application-level size limit; extra fields are ignored.
-        Malformed JSON or binary messages close the stream.
+        Server first sends {"type":"ready","info":Info}, followed by
+        {"type":"event","event":ConversationEvent} replay and live frames.
+        Commands use the REST endpoints, never this stream. All client application
+        messages close the connection with status 1008. Protocol ping/pong and close
+        frames remain supported. Read current status through GET /info.
         Disconnect leaves execution and pending permissions running. afterSequence selects
-        events after the last processed sequence, followed by live events. Omit for full replay.
-        Invalid or future cursors return 400. Slow subscribers are detached without stopping work.
-        Private journal records are synced before streaming. Replay/command deduplication work
-        within this agentctl process; restoration after agentctl restart is not implemented.
-        Server shutdown closes streams and agentctl shutdown closes its owned provider.
+        events after the last processed sequence. Replay retains at most 4096 events and
+        8 MiB of serialized JSON. Omit the cursor only while sequence zero is retained.
+        Invalid, expired, or future cursors return 400 with errorCode invalid_cursor.
+        Slow subscribers are detached without stopping work. Events are synced to private
+        storage before streaming. Process restart recovery is not implemented.
+        Server shutdown closes streams; agentctl shutdown closes its owned provider.
       parameters:
         - in: query
           name: afterSequence
           schema: {type: integer, minimum: 0, default: 0}
           description: Last processed event sequence; the client owns this cursor.
-      x-websocket-client-message: {$ref: '#/components/schemas/ClientMessage'}
       x-websocket-server-message: {$ref: '#/components/schemas/ServerMessage'}
       responses:
         '101': {description: WebSocket connection established}
-        '400': {description: Invalid WebSocket upgrade request}
+        '400': {description: Invalid upgrade request or invalid/expired replay cursor}
         '403': {description: WebSocket origin rejected}
         '409':
           description: Agent has not been configured
@@ -132,7 +250,10 @@ components:
       required: [error]
       properties:
         error: {type: string}
-    Configuration:
+        errorCode:
+          type: string
+          enum: [invalid_command, invalid_permission, conversation_unavailable, command_limit, cancellation_failed, storage_unavailable, invalid_cursor]
+    RunConfig:
       type: object
       additionalProperties: true
       required: [organizationId, workspaceId, taskId, runId, runtime, model, systemPrompt]
@@ -152,7 +273,7 @@ components:
         systemPrompt: {type: string, pattern: '\S'}
     Info:
       type: object
-      required: [service, apiVersion, goVersion, os, arch, startedAt, configured, executionAvailable]
+      required: [service, apiVersion, goVersion, os, arch, startedAt, configured, executionAvailable, processAlive]
       properties:
         service: {type: string, const: agentctl}
         apiVersion: {type: string, const: v1}
@@ -163,33 +284,35 @@ components:
         configured: {type: boolean}
         executionAvailable: {type: boolean}
         state: {type: string, enum: [starting, ready, running, waiting_for_permission, failed, interrupted, exited]}
+        processAlive:
+          type: boolean
+          description: Provider process liveness, independent of execution state. Interrupted/failed states survive process exit.
         sessionId: {type: string}
 
-    ClientMessage:
-      oneOf:
-        - type: object
-          required: [type]
-          properties:
-            type: {enum: [ping, info]}
-            requestId: {type: string}
-        - type: object
-          required: [type, requestId, text]
-          properties:
-            type: {const: prompt}
-            requestId: {type: string, minLength: 1, maxLength: 200, pattern: '\S'}
-            text: {type: string, pattern: '\S'}
-        - type: object
-          required: [type, commandId]
-          properties:
-            type: {const: cancel}
-            requestId: {type: string}
-            commandId: {type: string}
-        - type: object
-          required: [type, permission]
-          properties:
-            type: {const: permission_response}
-            requestId: {type: string}
-            permission: {$ref: '#/components/schemas/PermissionResponse'}
+    PromptRequest:
+      type: object
+      required: [commandId, text]
+      properties:
+        commandId:
+          type: string
+          pattern: '\S'
+          description: Stable identity, at most 200 UTF-8 bytes.
+        text:
+          type: string
+          pattern: '\S'
+          description: At most 262144 UTF-8 bytes.
+    CancelRequest:
+      type: object
+      required: [commandId]
+      properties:
+        commandId: {type: string}
+    CommandResponse:
+      type: object
+      required: [status]
+      properties:
+        status: {enum: [accepted, cancel_requested, permission_response_recorded]}
+        commandId: {type: string}
+        requestId: {type: string, description: Permission request identity for a recorded response}
     PermissionResponse:
       type: object
       required: [taskId, runId, sessionId, requestId, optionId]
@@ -246,8 +369,6 @@ components:
       type: object
       required: [type]
       properties:
-        type: {enum: [ready, pong, info, accepted, cancel_requested, permission_response_recorded, event, error]}
-        requestId: {type: string}
+        type: {enum: [ready, event]}
         info: {$ref: '#/components/schemas/Info'}
         event: {$ref: '#/components/schemas/ConversationEvent'}
-        error: {type: string}

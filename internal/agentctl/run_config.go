@@ -5,7 +5,9 @@ import (
 	"strings"
 )
 
-type Configuration struct {
+// RunConfig is the resolved configuration bound to one task execution run.
+// It is separate from reusable agent definitions and process startup options.
+type RunConfig struct {
 	OrganizationID string `json:"organizationId"`
 	WorkspaceID    string `json:"workspaceId"`
 	TaskID         string `json:"taskId"`
@@ -21,7 +23,7 @@ type Model struct {
 }
 
 // Validate checks the resolved run configuration without starting execution.
-func (c Configuration) Validate() error {
+func (c RunConfig) Validate() error {
 	for _, value := range []string{c.OrganizationID, c.WorkspaceID, c.TaskID, c.RunID, c.Runtime, c.Model.Provider, c.Model.ID, c.SystemPrompt} {
 		if strings.TrimSpace(value) == "" {
 			return errors.New("scope, model and systemPrompt are required")

@@ -44,29 +44,37 @@ Configure with `POST /agent/configure`, Content-Type `application/json`:
 }
 ```
 
-Configuration starts no work and invokes no runtime. All values above are required.
-Extra fields are ignored; configuration bodies have no application-level size limit. Identical configuration can be
+The `RunConfig` model binds one execution run to its resolved scope, runtime, model,
+and system prompt. Configuring it starts no work and invokes no runtime. All values above are required.
+Extra fields are ignored; JSON bodies are limited to 1 MiB. Identical configuration can be
 submitted again; changes return 409. Each process serves one run. Configuration
 is memory-only and must be resubmitted after restart. No credentials are accepted
 in this contract, and info responses never echo configuration.
 
-Connect to `ws://127.0.0.1:8081/agent/stream` after configuration. The first JSON message is `{"type":"ready","info":{...}}`.
-Send `{"type":"ping","requestId":"1"}` for a `pong`, or
-`{"type":"info","requestId":"2"}` for an `info` response with an `info` object.
-Responses echo requestId. Unknown commands return `type: error` and
-`error: unsupported_command`. Prompt, cancellation and permission commands are
-described below.
-Messages have no application-level size limit, and extra fields are ignored.
-Malformed JSON and binary messages close the stream. Default WebSocket origin
-checks apply. Reconnecting sends a fresh readiness snapshot and replays events; disconnecting
-does not clear configuration or stop an active prompt. SIGINT/SIGTERM closes the server and its WebSockets.
+REST endpoints own commands and status; the WebSocket owns event delivery:
+
+| Transport | Endpoint | Purpose |
+| --- | --- | --- |
+| REST GET | `/health`, `/info` | Liveness and current runtime status |
+| REST POST | `/agent/configure`, `/agent/launch` | Bind and explicitly launch a run |
+| REST POST | `/agent/prompt` | Accept a prompt with a stable `commandId` |
+| REST POST | `/agent/cancel` | Request cancellation of that command |
+| REST POST | `/agent/permissions/respond` | Answer a specific pending permission |
+| WebSocket GET | `/agent/stream` | Readiness, ordered replay, and live activity |
+
+Commands do not require a WebSocket connection. HTTP JSON bodies are limited to
+1 MiB (413 when exceeded); prompt text is limited to 256 KiB of UTF-8 bytes.
+HTTP/WebSocket disconnection does not stop an accepted prompt. SIGINT/SIGTERM closes
+the server, streams, and owned provider.
 
 The [OpenAPI contract](../api/agentctl.openapi.yaml) is separate from the browser
 API because this service has its own lifecycle and internal execution boundary.
 `/info` reports Go/OS/architecture, startup time, configuration state, provider
-availability, launch/conversation state (`starting`, `ready`, `running`,
+availability, provider process liveness (`processAlive`), launch/conversation state (`starting`, `ready`, `running`,
 `waiting_for_permission`, `failed`, `interrupted`, `exited`) and session ID.
 Availability means a provider is wired, not that installation/credentials passed checks.
+Failed/interrupted states remain visible after process exit; `processAlive` reports
+liveness independently.
 
 After configuration, explicitly send `POST /agent/launch` (no body). Success returns
 200 with an info snapshot after ACP initialization, session creation and mode
@@ -92,18 +100,24 @@ memory-only. MCP configuration and restoration/continuation are not implemented.
 The older [prototype notes](agentctl.md) are historical and do not describe the
 current CLI. See [the launch decision](decisions/0004-agent-provider-launch.md).
 
-## Communicate over WebSocket
+## Send commands through REST
 
-After configuring and launching, connect a WebSocket client to
-`ws://127.0.0.1:8081/agent/stream`. Send a prompt:
+After configuring and launching, send `POST /agent/prompt` with Content-Type
+`application/json`:
 
 ```json
-{"type":"prompt","requestId":"prompt-1","text":"Summarize this repository without editing files."}
+{"commandId":"prompt-1","text":"Summarize this repository without editing files."}
 ```
 
-The server returns `{"type":"accepted","requestId":"prompt-1"}` and emits
-`{"type":"event","event":{...}}` frames. Activity may arrive before the command
-acknowledgement. Each event includes `sequence`, `at`, organization/workspace/task/run
+The server returns HTTP 202 with `{"status":"accepted","commandId":"prompt-1"}`.
+This acknowledges durable acceptance, not completion. Activity can arrive on an
+already-connected WebSocket before the HTTP response.
+
+Connect to `ws://127.0.0.1:8081/agent/stream` to receive
+`{"type":"ready","info":{...}}`, followed by `{"type":"event","event":{...}}`.
+The stream accepts no application messages; sending one closes it with status 1008.
+Use protocol ping/pong for connection checks and `GET /info` for current status.
+Each event includes `sequence`, `at`, organization/workspace/task/run
 and session identities, and `commandId`. Event types are:
 
 - `prompt_accepted`: the persisted user text.
@@ -116,34 +130,48 @@ and session identities, and `commandId`. Event types are:
 - `prompt_completed`: `stopReason` from the provider, e.g. `end_turn` or `cancelled`.
 - `prompt_failed`: a sanitized error; the conversation becomes interrupted.
 
-Answer a permission using the exact identities and option ID from the event:
+Answer a permission with `POST /agent/permissions/respond`, using the exact identities
+and option ID from the event:
 
 ```json
-{"type":"permission_response","requestId":"answer-1","permission":{"taskId":"task-1","runId":"run-1","sessionId":"SESSION_FROM_EVENT","requestId":"permission-1","optionId":"OPTION_FROM_EVENT"}}
+{"taskId":"task-1","runId":"run-1","sessionId":"SESSION_FROM_EVENT","requestId":"permission-1","optionId":"OPTION_FROM_EVENT"}
 ```
 
-A recorded answer returns `type: permission_response_recorded`; invalid, duplicate,
-stale or unoffered answers return `type: error`. A disconnected user leaves the
+A recorded answer returns HTTP 200 with `status: permission_response_recorded` and
+the permission `requestId`. Invalid, duplicate, stale or unoffered answers return 409. A disconnected user leaves the
 request pending. Nothing is automatically approved.
 
-Cancel the active prompt explicitly:
+Cancel the active prompt with `POST /agent/cancel`:
 
 ```json
-{"type":"cancel","requestId":"cancel-1","commandId":"prompt-1"}
+{"commandId":"prompt-1"}
 ```
 
-The acknowledgement is `type: cancel_requested`. Wait for the terminal prompt event;
+The acknowledgement is HTTP 202 with `status: cancel_requested` and the `commandId`. Wait for the terminal prompt event;
 a cancellation acknowledgement alone does not release execution ownership.
 
-Only one prompt runs at a time. Repeating a prompt requestId with identical text
+Only one prompt runs at a time. Repeating a prompt commandId with identical text
 returns accepted without running it again; changing its text returns an error.
-Use a new requestId for a new explicit turn. Ordinary failures never auto-retry.
+Use a new commandId for a new explicit turn. At most 4096 distinct prompt identities
+are accepted per process; reaching the cap rejects new identities with `command_limit`.
+Existing identities remain deduplicated using SHA-256 prompt hashes. Ordinary failures never auto-retry.
+REST command errors include sanitized `error` text and stable `errorCode` values:
+`invalid_command`, `invalid_permission`, `conversation_unavailable`, `command_limit`,
+`cancellation_failed`, and `storage_unavailable`. Clients should branch on the code.
+Invalid command identities/text return 400; unavailable/busy/interrupted conversations,
+command capacity, and invalid permissions return 409. Cancellation delivery failures
+return 502 and storage failures return 503. Invalid JSON returns 400; unsupported
+Content-Type returns 415.
 This internal API does not enforce platform workflow rules or member slot allocation;
 the platform remains responsible for authorizing each explicit turn.
 
 Reconnect with `?afterSequence=LAST_PROCESSED_SEQUENCE` to replay later events,
 then receive live updates. Omit the cursor to replay all events in this process.
-A cursor beyond the current journal returns HTTP 400. Slow subscribers are closed
+Replay retains at most 4096 events and 8 MiB of serialized JSON. A cursor beyond
+the current journal or older than this window returns HTTP 400 with
+`errorCode: invalid_cursor`; it never silently omits activity. Omitting the cursor
+works only while the full history fits in that window. Older events remain on disk;
+there is no disk-history API yet. Slow subscribers are closed
 and can reconnect; they cannot block the provider. This replay works across client
 or platform disconnects while agentctl stays alive.
 
@@ -152,7 +180,9 @@ streaming. Keep these files with task storage; they contain sensitive task conte
 An existing journal refuses a fresh prompt after restart rather than silently
 replace history. Journal/session restoration, command reconciliation after an
 agentctl restart, durable acknowledgement cursors, and process/container continuation
-remain unimplemented. Histories are also retained in memory without compaction.
+remain unimplemented. Each serialized event is capped at 1 MiB; an oversized event interrupts the
+conversation before publication. Disk journal retention remains unlimited; only
+the in-memory replay window is bounded.
 See [the conversation decision](decisions/0005-agent-provider-conversation.md).
 
 Verify with `make check` and `go test -race ./internal/agentctl/... ./internal/agentruntime/... ./internal/app`.
@@ -160,3 +190,15 @@ The subprocess fixture covers prompts, permissions, cancellation and WebSocket
 reconnects. Run `ORKEST_OPENCODE_BINARY=/absolute/path/to/opencode make test-integration`
 for a real handshake without model calls. Real model execution/permissions and
 requirements §7.3 recovery need separate validation.
+
+The earlier bidirectional WebSocket command protocol is removed: move prompt
+`requestId` to REST `commandId`, remove command `type` fields, and send permission
+identity fields directly in the REST request body. Command acknowledgements are
+HTTP responses; readiness and activity remain WebSocket frames.
+
+Implementation modules live in `internal/agentctl/httpapi/rest` (commands/status)
+and `internal/agentctl/httpapi/websocket` (event delivery). The parent `httpapi`
+package composes their routes; `httpapi/protocol` holds shared wire representations.
+Both transports use the same `RunController` and startup timestamp. The controller
+composes a `ConversationService` for prompts, permissions, journaling, and
+subscriptions; process launch and shutdown remain with the controller.

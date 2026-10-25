@@ -10,7 +10,7 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/agentctl"
 )
 
-func conversationService(t *testing.T) *agentctl.Service {
+func conversationService(t *testing.T) *agentctl.RunController {
 	t.Helper()
 	binary, err := os.Executable()
 	if err != nil {
@@ -18,9 +18,9 @@ func conversationService(t *testing.T) *agentctl.Service {
 	}
 	state := t.TempDir()
 	provider := &Provider{Binary: binary, WorkDir: t.TempDir(), StateDir: state, Env: []string{"ORKEST_ACP_FIXTURE=1"}}
-	service := agentctl.NewServiceWithProvider(context.Background(), provider, state)
+	service := agentctl.NewRunControllerWithProvider(context.Background(), provider, state)
 	t.Cleanup(func() { _ = service.Close() })
-	config := agentctl.Configuration{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", RunID: "run", Runtime: "opencode", Model: agentctl.Model{Provider: "provider", ID: "model"}, SystemPrompt: "Work"}
+	config := agentctl.RunConfig{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", RunID: "run", Runtime: "opencode", Model: agentctl.Model{Provider: "provider", ID: "model"}, SystemPrompt: "Work"}
 	if err := service.Configure(config); err != nil {
 		t.Fatal(err)
 	}
@@ -60,11 +60,30 @@ func TestConversationPermissionReplayAndIdempotency(t *testing.T) {
 		t.Fatal(err)
 	}
 	accepted := nextEvent(t, events, "prompt_accepted")
-	update := nextEvent(t, events, "update")
+	// ACP requests and notifications are dispatched independently. Both must
+	// arrive, but their relative order is not guaranteed.
+	var update, permission agentctl.Event
+	deadline := time.NewTimer(5 * time.Second)
+	defer deadline.Stop()
+	for update.Type == "" || permission.Type == "" {
+		select {
+		case event, ok := <-events:
+			if !ok {
+				t.Fatal("subscription closed")
+			}
+			switch event.Type {
+			case "update":
+				update = event
+			case "permission_requested":
+				permission = event
+			}
+		case <-deadline.C:
+			t.Fatal("missing update or permission request")
+		}
+	}
 	if update.Update.Text != "Hello from fixture" {
 		t.Fatalf("missing streamed text: %+v", update)
 	}
-	permission := nextEvent(t, events, "permission_requested")
 	if permission.Permission.ToolCallID != "tool-1" || len(permission.Permission.Options) != 2 {
 		t.Fatal("permission details missing")
 	}
@@ -93,7 +112,7 @@ func TestConversationPermissionReplayAndIdempotency(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer stop()
-	if len(replay) != 2 || replay[1].Type != "permission_requested" {
+	if len(replay) != 2 || (replay[0].Type != "permission_requested" && replay[1].Type != "permission_requested") {
 		t.Fatal("pending permission not replayed")
 	}
 	if err := service.RespondPermission(agentctl.PermissionResponse{TaskID: "task", RunID: "run", SessionID: permission.SessionID, RequestID: permission.RequestID, OptionID: "reject"}); err != nil {

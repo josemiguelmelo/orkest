@@ -1,7 +1,10 @@
 package opencode
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
@@ -43,9 +46,10 @@ func TestWebSocketConversationReconnect(t *testing.T) {
 	}
 	conn := connect(address)
 	defer func() { _ = conn.CloseNow() }()
-	if err := wsjson.Write(ctx, conn, map[string]string{"type": "prompt", "requestId": "ws-command", "text": "permission"}); err != nil {
-		t.Fatal(err)
-	}
+	postCommand(t, ctx, server.URL+"/agent/prompt", map[string]string{"commandId": "rest-command", "text": "permission"}, http.StatusAccepted)
+	// An identical REST retry is accepted without creating another prompt.
+	postCommand(t, ctx, server.URL+"/agent/prompt", map[string]string{"commandId": "rest-command", "text": "permission"}, http.StatusAccepted)
+	postCommand(t, ctx, server.URL+"/agent/prompt", map[string]string{"commandId": "rest-command", "text": "changed"}, http.StatusBadRequest)
 	var permission agentctl.Event
 	for permission.Type != "permission_requested" {
 		var frame struct {
@@ -58,7 +62,7 @@ func TestWebSocketConversationReconnect(t *testing.T) {
 		permission = frame.Event
 	}
 	_ = conn.CloseNow()
-	// Reconnect and replay the pending request, then answer it through the stream.
+	// Reconnect and replay the pending request, then answer it through REST.
 	conn = connect(address + "?afterSequence=0")
 	for {
 		var frame struct {
@@ -72,26 +76,116 @@ func TestWebSocketConversationReconnect(t *testing.T) {
 		}
 	}
 	response := agentctl.PermissionResponse{TaskID: "task", RunID: "run", SessionID: permission.SessionID, RequestID: permission.RequestID, OptionID: "allow"}
-	if err := wsjson.Write(ctx, conn, map[string]any{"type": "permission_response", "requestId": "answer-1", "permission": response}); err != nil {
-		t.Fatal(err)
-	}
-	completed, ack := false, false
-	for !completed || !ack {
+	postCommand(t, ctx, server.URL+"/agent/permissions/respond", response, http.StatusOK)
+	for {
 		var frame struct {
-			Type  string         `json:"type"`
 			Event agentctl.Event `json:"event"`
 		}
 		if err := wsjson.Read(ctx, conn, &frame); err != nil {
 			t.Fatal(err)
 		}
-		if frame.Type == "permission_response_recorded" {
-			ack = true
-		}
 		if frame.Event.Type == "prompt_completed" {
-			completed = true
+			break
 		}
 	}
+	postCommand(t, ctx, server.URL+"/agent/permissions/respond", response, http.StatusConflict)
 	if service.Status().State != "ready" {
 		t.Fatal("prompt did not complete")
+	}
+}
+
+func postCommand(t *testing.T, ctx context.Context, url string, body any, status int) {
+	t.Helper()
+	data, err := json.Marshal(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(data))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.Header.Set("Content-Type", "application/json")
+	response, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode != status {
+		t.Fatalf("%s: got %d, want %d", url, response.StatusCode, status)
+	}
+	if status == http.StatusAccepted || status == http.StatusOK {
+		var acknowledgement struct {
+			Status    string `json:"status"`
+			CommandID string `json:"commandId"`
+			RequestID string `json:"requestId"`
+		}
+		if err := json.NewDecoder(response.Body).Decode(&acknowledgement); err != nil {
+			t.Fatal(err)
+		}
+		expected := "accepted"
+		if strings.HasSuffix(url, "/cancel") {
+			expected = "cancel_requested"
+		}
+		if strings.HasSuffix(url, "/permissions/respond") {
+			expected = "permission_response_recorded"
+		}
+		var submitted map[string]any
+		if err := json.Unmarshal(data, &submitted); err != nil {
+			t.Fatal(err)
+		}
+		if acknowledgement.Status != expected {
+			t.Fatalf("unexpected acknowledgement: %+v", acknowledgement)
+		}
+		if id, ok := submitted["commandId"]; ok && acknowledgement.CommandID != id {
+			t.Fatal("command identity missing from acknowledgement")
+		}
+		if id, ok := submitted["requestId"]; ok && acknowledgement.RequestID != id {
+			t.Fatal("permission identity missing from acknowledgement")
+		}
+	}
+}
+
+func TestRESTPromptAndCancelWithoutWebSocket(t *testing.T) {
+	service := conversationService(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	api, err := httpapi.NewServer(ctx, service)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(api.Handler())
+	defer server.Close()
+	_, events, stop, err := service.Subscribe(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stop()
+	postCommand(t, ctx, server.URL+"/agent/prompt", map[string]string{"commandId": "rest-only", "text": "wait"}, http.StatusAccepted)
+	nextEvent(t, events, "update")
+	postCommand(t, ctx, server.URL+"/agent/cancel", map[string]string{"commandId": "wrong"}, http.StatusBadRequest)
+	postCommand(t, ctx, server.URL+"/agent/cancel", map[string]string{"commandId": "rest-only"}, http.StatusAccepted)
+	completed := nextEvent(t, events, "prompt_completed")
+	if completed.StopReason != "cancelled" {
+		t.Fatalf("unexpected result: %+v", completed)
+	}
+	// A later WebSocket observes the durable REST command history.
+	conn, _, err := websocket.Dial(ctx, "ws"+strings.TrimPrefix(server.URL, "http")+"/agent/stream", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = conn.CloseNow() }()
+	for {
+		var frame struct {
+			Event agentctl.Event `json:"event"`
+		}
+		if err := wsjson.Read(ctx, conn, &frame); err != nil {
+			t.Fatal(err)
+		}
+		if frame.Event.Type == "prompt_completed" {
+			if frame.Event.CommandID != "rest-only" {
+				t.Fatal("wrong command replayed")
+			}
+			break
+		}
 	}
 }

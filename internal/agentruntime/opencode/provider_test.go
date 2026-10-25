@@ -87,7 +87,7 @@ func TestLaunchACPAndFenceDuplicate(t *testing.T) {
 		t.Fatal(err)
 	}
 	provider := &Provider{Binary: binary, WorkDir: t.TempDir(), StateDir: t.TempDir(), Env: []string{"ORKEST_ACP_FIXTURE=1"}}
-	config := agentctl.Configuration{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", RunID: "run", Runtime: "opencode", Model: agentctl.Model{Provider: "provider", ID: "model"}, SystemPrompt: "Work"}
+	config := agentctl.RunConfig{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", RunID: "run", Runtime: "opencode", Model: agentctl.Model{Provider: "provider", ID: "model"}, SystemPrompt: "Work"}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	process, err := provider.Launch(ctx, config)

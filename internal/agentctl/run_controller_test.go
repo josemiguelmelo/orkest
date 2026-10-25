@@ -7,14 +7,14 @@ import (
 	"testing"
 )
 
-func configuration() Configuration {
-	return Configuration{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", RunID: "run", Runtime: "opencode", Model: Model{Provider: "provider", ID: "model"}, SystemPrompt: "Work on this task"}
+func runConfig() RunConfig {
+	return RunConfig{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", RunID: "run", Runtime: "opencode", Model: Model{Provider: "provider", ID: "model"}, SystemPrompt: "Work on this task"}
 }
 
 func TestConfigurationValidation(t *testing.T) {
 	for _, field := range []string{"organization", "workspace", "task", "run", "provider", "model", "prompt", "runtime"} {
 		t.Run(field, func(t *testing.T) {
-			config := configuration()
+			config := runConfig()
 			switch field {
 			case "organization":
 				config.OrganizationID = " "
@@ -33,7 +33,7 @@ func TestConfigurationValidation(t *testing.T) {
 			case "runtime":
 				config.Runtime = ""
 			}
-			service := NewService()
+			service := NewRunController()
 			if err := service.Configure(config); err == nil {
 				t.Fatal("accepted invalid configuration")
 			}
@@ -45,11 +45,11 @@ func TestConfigurationValidation(t *testing.T) {
 }
 
 func TestRunBinding(t *testing.T) {
-	service := NewService()
+	service := NewRunController()
 	if service.Status().Configured {
 		t.Fatal("new service is configured")
 	}
-	config := configuration()
+	config := runConfig()
 	for range 2 {
 		if err := service.Configure(config); err != nil {
 			t.Fatal(err)
@@ -59,7 +59,7 @@ func TestRunBinding(t *testing.T) {
 	if err := service.Configure(config); !errors.Is(err, ErrConfigurationConflict) {
 		t.Fatalf("expected conflict, got %v", err)
 	}
-	if err := service.Configure(configuration()); err != nil {
+	if err := service.Configure(runConfig()); err != nil {
 		t.Fatalf("conflict changed binding: %v", err)
 	}
 	if status := service.Status(); !status.Configured || status.ExecutionAvailable {
@@ -68,12 +68,12 @@ func TestRunBinding(t *testing.T) {
 }
 
 func TestConcurrentConfiguration(t *testing.T) {
-	service := NewService()
+	service := NewRunController()
 	var wg sync.WaitGroup
 	results := make(chan error, 20)
 	for i := range 20 {
 		wg.Go(func() {
-			config := configuration()
+			config := runConfig()
 			config.RunID = fmt.Sprintf("run-%d", i)
 			results <- service.Configure(config)
 			_ = service.Status()

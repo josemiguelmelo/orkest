@@ -34,8 +34,8 @@ credentials or remove the volume unless you intend to delete local data.
 ## Calling an agent
 
 `agentctl` launches pinned OpenCode 2.1.4 over ACP stdio, creates a session,
-selects the configured system prompt and model, and accepts prompts over its
-WebSocket with streamed responses, permission choices and cancellation.
+selects the configured system prompt and model, and accepts prompts, permission choices, and cancellation over REST, with responses
+streamed over a receive-only WebSocket.
 Reconnect replay is available while agentctl stays alive; restart recovery is unimplemented.
 See [agentctl usage and limitations](docs/agentctl-api.md) for `.env` configuration,
 launch requests, persistent storage, and verification instructions.

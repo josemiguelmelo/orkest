@@ -1,4 +1,4 @@
-package httpapi
+package protocol
 
 import (
 	"errors"
@@ -24,6 +24,7 @@ func TestReadJSON(t *testing.T) {
 		{"invalid JSON", "application/json", `{`, false, 400},
 		{"wrong field type", "application/json", `{"name":123}`, false, 400},
 		{"multiple values", "application/json", `{} {}`, false, 400},
+		{"oversized body", "application/json", strings.Repeat("x", maxMessageBytes+1), false, 413},
 		{"unreadable body", "application/json", "", true, 400},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -36,7 +37,7 @@ func TestReadJSON(t *testing.T) {
 			var destination struct {
 				Name string `json:"name"`
 			}
-			ok := readJSON(w, r, &destination)
+			ok := ReadJSON(w, r, &destination)
 			if ok != (tc.status == 200) || w.Code != tc.status {
 				t.Fatalf("got success=%v status=%d, want status=%d", ok, w.Code, tc.status)
 			}
@@ -52,7 +53,7 @@ func TestReadJSON(t *testing.T) {
 	r := httptest.NewRequest("POST", "/values", strings.NewReader(`[1,2,3]`))
 	r.Header.Set("Content-Type", "application/json")
 	var values []int
-	if !readJSON(httptest.NewRecorder(), r, &values) || len(values) != 3 {
+	if !ReadJSON(httptest.NewRecorder(), r, &values) || len(values) != 3 {
 		t.Fatalf("could not decode slice: %v", values)
 	}
 }
