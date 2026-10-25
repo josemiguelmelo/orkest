@@ -17,6 +17,8 @@ tags:
     description: Workspace-scoped reusable agent definitions.
   - name: CodeRepositories
     description: Workspace-scoped code repository registration and Git operations.
+  - name: Tasks
+    description: Workspace-scoped manual tasks, comments, and components.
   - name: TemporaryExecution
     description: Temporary authenticated endpoint for manually testing agent launches.
 paths:
@@ -390,6 +392,99 @@ paths:
         "204": {description: Agent deleted}
         "403": {$ref: "#/components/responses/Forbidden"}
         "404": {$ref: "#/components/responses/NotFound"}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/tasks:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [Tasks]
+      operationId: listTasks
+      security: [{bearerAuth: []}]
+      responses:
+        "200": {description: Workspace tasks, content: {application/json: {schema: {type: array, items: {$ref: "#/components/schemas/Task"}}}}}
+    post:
+      tags: [Tasks]
+      operationId: createTask
+      security: [{bearerAuth: []}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/TaskInput"}}}}
+      responses:
+        "201": {description: Created task, content: {application/json: {schema: {$ref: "#/components/schemas/Task"}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/tasks/{taskID}:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+      - {name: taskID, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [Tasks]
+      operationId: getTask
+      security: [{bearerAuth: []}]
+      responses:
+        "200": {description: Task, content: {application/json: {schema: {$ref: "#/components/schemas/Task"}}}}
+        "404": {$ref: "#/components/responses/NotFound"}
+    put:
+      tags: [Tasks]
+      operationId: updateTask
+      security: [{bearerAuth: []}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/TaskInput"}}}}
+      responses:
+        "200": {description: Updated task, content: {application/json: {schema: {$ref: "#/components/schemas/Task"}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "409": {$ref: "#/components/responses/Conflict"}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/tasks/{taskID}/comments:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+      - {name: taskID, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [Tasks]
+      operationId: listTaskComments
+      security: [{bearerAuth: []}]
+      responses:
+        "200": {description: Task comments, content: {application/json: {schema: {type: array, items: {$ref: "#/components/schemas/TaskComment"}}}}}
+    post:
+      tags: [Tasks]
+      operationId: createTaskComment
+      security: [{bearerAuth: []}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [body], properties: {body: {type: string}}}}}}
+      responses:
+        "201": {description: Created comment, content: {application/json: {schema: {$ref: "#/components/schemas/TaskComment"}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/components:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [Tasks]
+      operationId: listComponents
+      security: [{bearerAuth: []}]
+      responses:
+        "200": {description: Workspace components, content: {application/json: {schema: {type: array, items: {$ref: "#/components/schemas/Component"}}}}}
+    post:
+      tags: [Tasks]
+      operationId: createComponent
+      security: [{bearerAuth: []}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/ComponentInput"}}}}
+      responses:
+        "201": {description: Created component, content: {application/json: {schema: {$ref: "#/components/schemas/Component"}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "409": {$ref: "#/components/responses/Conflict"}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/components/{componentID}:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+      - {name: componentID, in: path, required: true, schema: {type: string}}
+    put:
+      tags: [Tasks]
+      operationId: updateComponent
+      security: [{bearerAuth: []}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/ComponentInput"}}}}
+      responses:
+        "200": {description: Updated component, content: {application/json: {schema: {$ref: "#/components/schemas/Component"}}}}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
 components:
   requestBodies:
     NamedResource:
@@ -490,6 +585,63 @@ components:
       properties:
         user: {$ref: "#/components/schemas/User"}
         role: {type: string, enum: [owner, admin, member, viewer]}
+    TaskInput:
+      type: object
+      required: [title]
+      properties:
+        title: {type: string, minLength: 1, maxLength: 500}
+        description: {type: string}
+        status: {type: string, enum: [todo, in_progress, in_review, done]}
+        assigneeAgentId: {type: string}
+        labels: {type: array, items: {type: string}}
+        componentIds: {type: array, items: {type: string}}
+    Task:
+      type: object
+      required: [id, workspaceId, title, description, sourceProvider, status, labels, components, createdAt, updatedAt]
+      properties:
+        id: {type: string}
+        workspaceId: {type: string}
+        title: {type: string}
+        description: {type: string}
+        sourceProvider: {type: string}
+        sourceId: {type: string}
+        sourceUrl: {type: string, format: uri}
+        status: {type: string, enum: [todo, in_progress, in_review, done]}
+        assigneeAgentId: {type: string}
+        labels: {type: array, items: {type: string}}
+        components: {type: array, items: {$ref: "#/components/schemas/Component"}}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+    TaskComment:
+      type: object
+      required: [id, workspaceId, taskId, authorUserId, body, createdAt]
+      properties:
+        id: {type: string}
+        workspaceId: {type: string}
+        taskId: {type: string}
+        authorUserId: {type: string}
+        body: {type: string}
+        createdAt: {type: string, format: date-time}
+    ComponentInput:
+      type: object
+      required: [identifier, name, repositoryId]
+      properties:
+        identifier: {type: string, minLength: 1, maxLength: 100}
+        name: {type: string, minLength: 1, maxLength: 200}
+        repositoryId: {type: string}
+        description: {type: string, maxLength: 2000}
+    Component:
+      type: object
+      required: [id, workspaceId, identifier, name, repositoryId, description, createdAt, updatedAt]
+      properties:
+        id: {type: string}
+        workspaceId: {type: string}
+        identifier: {type: string}
+        name: {type: string}
+        repositoryId: {type: string}
+        description: {type: string}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
     Agent:
       type: object
       required: [id, workspaceId, name, runtime, provider, model, description, systemPrompt]
