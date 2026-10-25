@@ -3,9 +3,12 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/url"
 	"os"
+	"strings"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/josemiguelmelo/orkest/db/migrations"
@@ -27,24 +30,41 @@ type PostgresConnectionInfo struct {
 
 // Initialize configures the connection pool, verifies connectivity, and applies migrations.
 func Initialize(ctx context.Context) (*PostgresDatabase, error) {
-	dsn := os.Getenv("DATABASE_URL")
-	if dsn == "" && os.Getenv("POSTGRES_PASSWORD") != "" {
-		port := os.Getenv("POSTGRES_PORT")
-		if port == "" {
-			port = "5432"
-		}
-		dsn = (&url.URL{
-			Scheme:   "postgres",
-			User:     url.UserPassword("orkest", os.Getenv("POSTGRES_PASSWORD")),
-			Host:     "127.0.0.1:" + port,
-			Path:     "/orkest",
-			RawQuery: "sslmode=disable",
-		}).String()
-	}
-	if dsn == "" {
-		return nil, fmt.Errorf("DATABASE_URL or POSTGRES_PASSWORD must be configured")
+	dsn, err := connectionStringFromEnvironment()
+	if err != nil {
+		return nil, err
 	}
 	return initialize(ctx, dsn)
+}
+
+func connectionStringFromEnvironment() (string, error) {
+	if dsn := strings.TrimSpace(os.Getenv("DATABASE_URL")); dsn != "" {
+		return dsn, nil
+	}
+
+	values := map[string]string{
+		"POSTGRES_HOST":     os.Getenv("POSTGRES_HOST"),
+		"POSTGRES_PORT":     os.Getenv("POSTGRES_PORT"),
+		"POSTGRES_USERNAME": os.Getenv("POSTGRES_USERNAME"),
+		"POSTGRES_PASSWORD": os.Getenv("POSTGRES_PASSWORD"),
+		"POSTGRES_DB":       os.Getenv("POSTGRES_DB"),
+	}
+	missing := make([]string, 0, len(values))
+	for _, name := range []string{"POSTGRES_HOST", "POSTGRES_PORT", "POSTGRES_USERNAME", "POSTGRES_PASSWORD", "POSTGRES_DB"} {
+		if values[name] == "" || (name != "POSTGRES_PASSWORD" && strings.TrimSpace(values[name]) == "") {
+			missing = append(missing, name)
+		}
+	}
+	if len(missing) > 0 {
+		return "", fmt.Errorf("configure PostgreSQL with DATABASE_URL or all of POSTGRES_HOST, POSTGRES_PORT, POSTGRES_USERNAME, POSTGRES_PASSWORD, POSTGRES_DB (missing: %s)", strings.Join(missing, ", "))
+	}
+
+	return (&url.URL{
+		Scheme: "postgres",
+		User:   url.UserPassword(strings.TrimSpace(values["POSTGRES_USERNAME"]), values["POSTGRES_PASSWORD"]),
+		Host:   net.JoinHostPort(strings.TrimSpace(values["POSTGRES_HOST"]), strings.TrimSpace(values["POSTGRES_PORT"])),
+		Path:   "/" + strings.TrimSpace(values["POSTGRES_DB"]),
+	}).String(), nil
 }
 
 func initialize(ctx context.Context, dsn string) (*PostgresDatabase, error) {
@@ -60,16 +80,19 @@ func initialize(ctx context.Context, dsn string) (*PostgresDatabase, error) {
 		pool.Close()
 		return nil, err
 	}
-	connectionConfig := pool.Config().ConnConfig
 	return &PostgresDatabase{
-		pool: pool,
-		ConnectionInfo: PostgresConnectionInfo{
-			Host:     connectionConfig.Host,
-			Port:     connectionConfig.Port,
-			Database: connectionConfig.Database,
-			User:     connectionConfig.User,
-		},
+		pool:           pool,
+		ConnectionInfo: connectionInfo(pool.Config().ConnConfig),
 	}, nil
+}
+
+func connectionInfo(config *pgx.ConnConfig) PostgresConnectionInfo {
+	return PostgresConnectionInfo{
+		Host:     config.Host,
+		Port:     config.Port,
+		Database: config.Database,
+		User:     config.User,
+	}
 }
 
 func (database *PostgresDatabase) Close() {

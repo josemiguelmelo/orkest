@@ -12,7 +12,7 @@ Read [requirements](docs/requirements.md) and the
 Prerequisites: Go 1.26.2, Node.js 22.19.0 (npm 11), Docker Engine with Compose v2.
 Dependencies are pinned in `web/package.json` and `web/package-lock.json`.
 
-1. Copy `.env.example` to `.env` and set `POSTGRES_PASSWORD` to a local password.
+1. Copy `.env.example` to `.env` and set `POSTGRES_PASSWORD` to a local password. The app accepts either `DATABASE_URL` or all five `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USERNAME`, `POSTGRES_PASSWORD`, and `POSTGRES_DB` values; `DATABASE_URL` takes precedence.
 2. Run `make setup` to install frontend dependencies.
 3. Run `make db-up` to start PostgreSQL and wait for its health check.
 4. Run `make auth-up` to start Keycloak locally.
@@ -30,8 +30,10 @@ session cookie; API clients can also send the verified Keycloak ID token as a
 bearer token. Local OIDC values are in `.env.example`. These credentials and
 HTTP settings are for local development only.
 
-PostgreSQL listens on localhost, port 5432 (override `POSTGRES_PORT` in `.env`).
-Database and user are both `orkest`; the password comes from `.env`. Compose runs
+The sample `.env` configures PostgreSQL at `127.0.0.1:5432`; the component-variable
+form requires all five values and does not add runtime defaults.
+The database and username come from `POSTGRES_DB` and `POSTGRES_USERNAME`; the password
+comes from `.env`. Set `DATABASE_URL` instead to use a complete PostgreSQL connection URL. Compose runs
 PostgreSQL and Keycloak. Data persists in named volumes
 at PostgreSQL 18's `/var/lib/postgresql` mount. `make db-down` retains the volume.
 Postgres initialization variables apply only when the volume is first created;

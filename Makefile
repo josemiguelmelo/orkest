@@ -19,7 +19,7 @@ help:
 	@echo "sqlc              Regenerate PostgreSQL query code"
 	@echo "check             Check lint, tests, frontend types, builds"
 	@echo "build             Build both Go binaries and frontend"
-	@echo "test-postgres     Test PostgreSQL repositories (requires DATABASE_URL)"
+	@echo "test-postgres     Test PostgreSQL repositories (requires DATABASE_URL or all POSTGRES_* settings)"
 
 setup:
 	npm --prefix web ci
@@ -78,7 +78,7 @@ test-integration:
 	go test -tags=integration ./tests/integration -count=1
 
 test-postgres:
-	@test -n "$$DATABASE_URL" || (echo "DATABASE_URL is required; start PostgreSQL with make db-up"; exit 1)
+	@{ test -n "$$DATABASE_URL" || { test -n "$$POSTGRES_HOST" && test -n "$$POSTGRES_PORT" && test -n "$$POSTGRES_USERNAME" && test -n "$$POSTGRES_PASSWORD" && test -n "$$POSTGRES_DB"; }; } || (echo "Set DATABASE_URL or all POSTGRES_HOST, POSTGRES_PORT, POSTGRES_USERNAME, POSTGRES_PASSWORD, and POSTGRES_DB values; start PostgreSQL with make db-up"; exit 1)
 	go test ./internal/postgres -run TestPostgresRepositories -count=1
 
 test-recovery:

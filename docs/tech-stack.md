@@ -18,7 +18,7 @@ The platform API includes authentication, internal user registration, organizati
 ## Database and background work
 
 - **PostgreSQL 18.3** (`postgres:18.3-alpine3.23`) runs through Compose for local development and backs the platform's identity, organization, and workspace repositories.
-- **`pgx v5.11.0`**, **Goose v3.29.0**, **sqlc v1.31.1**, and versioned SQL migrations back internal users, organizations, workspaces, and memberships. `PostgresDatabase` owns the shared pool and migration lifecycle. `UserPostgresRepository`, `OrganizationPostgresRepository`, and `WorkspacePostgresRepository` implement their corresponding domain-owned repository contracts. All static repository queries live in domain-specific files under `db/queries` and execute through sqlc-generated pgx methods. Repositories map generated rows into domain types and own explicit transaction orchestration using `Queries.WithTx`; membership changes retain their row locks and authorization checks. Direct pgx query execution is reserved for concrete needs not served by generated static queries, such as bulk copy or dynamic SQL. Redis and a separate message broker are not part of the proposed initial stack.
+- **`pgx v5.11.0`**, **Goose v3.29.0**, **sqlc v1.31.1**, and versioned SQL migrations back internal users, organizations, workspaces, and memberships. `PostgresDatabase.Initialize` accepts either `DATABASE_URL` or the complete `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USERNAME`, `POSTGRES_PASSWORD`, and `POSTGRES_DB` set; the URL takes precedence. It owns the shared pool and migration lifecycle and retains non-secret connection details. `UserPostgresRepository`, `OrganizationPostgresRepository`, and `WorkspacePostgresRepository` implement their corresponding domain-owned repository contracts. All static repository queries live in domain-specific files under `db/queries` and execute through sqlc-generated pgx methods. Repositories map generated rows into domain types and own explicit transaction orchestration using `Queries.WithTx`; membership changes retain their row locks and authorization checks. Direct pgx query execution is reserved for concrete needs not served by generated static queries, such as bulk copy or dynamic SQL. Redis and a separate message broker are not part of the proposed initial stack.
 
 The first Goose migration safely replays the schema created by the initial custom runner. A follow-up migration removes only that runner's `schema_migrations` tracking table after Goose records the schema version; application tables and data are retained.
 
@@ -90,7 +90,7 @@ The Go agentctl/OpenCode prototype exists. Unit tests use a subprocess fixture; 
 
 The recovery and approval scenarios remain acceptance work; a successful subprocess fixture or session reload alone does not prove real runtime continuation.
 
-`make test-integration` runs the real OpenCode handshake when the pinned executable is supplied. `make test-postgres` runs domain repository integration tests against `DATABASE_URL` (start local PostgreSQL with `make db-up`). `make test-recovery` currently reports that the suite is not implemented.
+`make test-integration` runs the real OpenCode handshake when the pinned executable is supplied. `make test-postgres` runs domain repository integration tests using either PostgreSQL configuration form (start local PostgreSQL with `make db-up`). `make test-recovery` currently reports that the suite is not implemented.
 
 ## References
 

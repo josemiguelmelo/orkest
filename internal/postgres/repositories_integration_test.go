@@ -11,9 +11,12 @@ import (
 )
 
 func TestPostgresRepositories(t *testing.T) {
-	dsn := os.Getenv("DATABASE_URL")
-	if dsn == "" {
-		t.Skip("DATABASE_URL is required for PostgreSQL repository integration tests")
+	dsn, err := connectionStringFromEnvironment()
+	if err != nil {
+		if os.Getenv("DATABASE_URL") == "" && os.Getenv("POSTGRES_HOST") == "" && os.Getenv("POSTGRES_PORT") == "" && os.Getenv("POSTGRES_USERNAME") == "" && os.Getenv("POSTGRES_PASSWORD") == "" && os.Getenv("POSTGRES_DB") == "" {
+			t.Skip("PostgreSQL connection settings are required for repository integration tests")
+		}
+		t.Fatal(err)
 	}
 	ctx := context.Background()
 	database, err := initialize(ctx, dsn)
