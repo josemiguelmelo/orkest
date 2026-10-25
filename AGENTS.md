@@ -4,9 +4,9 @@
 
 Orkest orchestrates SDLC agents with isolated environments, human-directed workflows, task chat, approvals, and durable recovery.
 
-Before implementation, read [requirements](docs/requirements.md) (behavior, scope, recovery, open decisions) and [tech stack](docs/tech-stack.md) (proposed baseline, validation milestones). Follow explicit task instructions; otherwise default to the proposed stack. Preserve confirmed/proposed/open distinctions; never silently promote proposals to requirements. Record significant architecture decisions in `docs/decisions/`.
+Before implementation, read [requirements](docs/requirements.md) (behavior, scope, recovery, open decisions) and [tech stack](docs/tech-stack.md) (proposed baseline, validation milestones). Follow explicit task instructions; otherwise default to the proposed stack. Preserve confirmed/proposed/open distinctions; never silently promote proposals to requirements. Record significant architecture decisions in the relevant product or technical documentation.
 
-Minimal Go and React/Vite scaffolding exists with PostgreSQL-only Compose and Makefile commands. Product services and OpenCode/ACP integration are not implemented. Create packages as needed, without empty layers.
+Minimal Go and React/Vite scaffolding exists with PostgreSQL-only Compose and Makefile commands. The standalone `agentctl` OpenCode/ACP launch, REST, WebSocket, and event-journaling prototype exists; platform product services and restart recovery/session continuation remain unimplemented. Create packages as needed, without empty layers.
 
 ## Execution
 
@@ -21,9 +21,9 @@ Minimal Go and React/Vite scaffolding exists with PostgreSQL-only Compose and Ma
 - Go; Chi/`net/http`; PostgreSQL/`pgx`/`sqlc`; manual constructor injection; `log/slog`. React/TypeScript/Vite frontend. Keycloak/OIDC authenticates; Orkest authorizes.
 - One root Go module; entry points `cmd/orkest`, `cmd/agentctl`; frontend `web/`. Small `main.go`; wiring/lifecycle in `internal/app`.
 - Feature packages under `internal/`: identity, workspace, task, team, orchestration, integrations, executors, agent runtimes.
-- `internal/httpapi`: thin handlers, routing, middleware, browser events. Services own business rules; consumers own interfaces (e.g. task owns repository interface).
+- `internal/app/httpapi` and `internal/agentctl/httpapi`: thin handlers and routing for their respective APIs. Services own business rules; consumers own interfaces (e.g. task owns repository interface).
 - `internal/postgres`: persistence adapters; `db/queries`: SQL inputs; `db/migrations`: migrations; `internal/postgres/sqlc`: generated code. Keep generated types out of business interfaces.
-- Introduce `api/openapi.yaml` with the browser API; keep it synchronized.
+- Keep `internal/app/httpapi/openapi.yaml` synchronized with the platform/orchestrator API and `internal/agentctl/httpapi/openapi.yaml` synchronized with the standalone agentctl API. Shared OpenAPI serving and validation belongs in `internal/core/openapi`.
 - Hide Docker/OpenCode/GitHub behind contracts; separate shared platform–agentctl messages from platform services.
 - Avoid service registries, DI containers, speculative abstractions, or extra infrastructure without concrete need.
 
@@ -54,8 +54,11 @@ Minimal Go and React/Vite scaffolding exists with PostgreSQL-only Compose and Ma
 - Pin dependencies/runtime versions; commit lockfiles. Regenerate `sqlc` from SQL, never hand-edit generated code. Version schema migrations; document destructive operational effects.
 - Unit tests beside code; cross-component tests in `tests/integration`. Test observable behavior. Prioritize real PostgreSQL slot/concurrency tests, authorization boundaries, integration idempotency, and requirements §7.3 recovery/approvals. Use race detection for concurrency changes.
 - First validate the OpenCode/ACP execution/recovery prototype, before the full UI.
+- Before completing Go code or lint configuration changes, run `make lint` and fix findings. Use `make fmt` to apply formatting fixes. `make check` includes `make lint`, so a successful full check satisfies this requirement. Report any blocker that prevents lint from running; never claim an unrun check passed.
 - Establish documented local/CI commands as tooling arrives:
-  - `make check`: formatting, static analysis, unit tests, frontend type checks, builds.
+  - `make lint`: pinned golangci-lint standard linters and gofumpt formatting checks.
+  - `make fmt`: apply gofumpt formatting, including blank lines between multiline functions.
+  - `make check`: lint, unit tests, frontend type checks, builds.
   - `make test-integration`: integrations with documented prerequisites.
   - `make test-recovery`: restart, replay, approvals, duplicate prevention.
 - `make check` exists. Integration and recovery targets currently fail explicitly because their suites are not implemented. Never mark unavailable/skipped checks as passed.

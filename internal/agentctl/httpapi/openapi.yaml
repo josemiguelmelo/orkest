@@ -1,0 +1,505 @@
+openapi: 3.1.0
+info:
+  title: Orkest agentctl API
+  version: 0.1.0
+  description: Standalone process-local control API. REST commands and status; receive-only WebSocket activity with private journaling and reconnect replay. Application failures, including request decoding and pre-upgrade validation, use Error. Router and WebSocket library rejections retain their native responses. Process restart recovery is not implemented.
+servers:
+  - url: /
+paths:
+  /health:
+    get:
+      operationId: agentctlHealth
+      summary: Process liveness; does not check agent readiness
+      responses:
+        "200":
+          description: Process is running
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: { type: string, enum: [ok] }
+  /info:
+    get:
+      operationId: agentctlInfo
+      summary: Process metadata and execution availability; excludes configuration and credentials
+      responses:
+        "200":
+          description: Runtime information
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Info" }
+  /agent/configure:
+    post:
+      operationId: configureAgent
+      summary: Bind the process to one run without starting execution
+      description: Identical requests are idempotent. Any different configuration conflicts. Configuration is held in memory until process exit.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RunConfig" }
+      responses:
+        "200":
+          description: Configured successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status]
+                properties:
+                  status: { type: string, enum: [configured] }
+        "400":
+          description: Unreadable body, invalid JSON, or missing values
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: Already bound to a different configuration
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "413":
+          description: Request body exceeds 1 MiB
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "503":
+          description: Runtime does not match the wired provider
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "415":
+          description: Content-Type must be application/json
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "500":
+          description: Unexpected service failure; internal details are not exposed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /agent/launch:
+    post:
+      operationId: launchAgent
+      summary: Explicitly launch the configured provider and create a session without prompting
+      description: Service-owned startup survives request disconnection. One attempt per process/run; repeated or failed attempts are not retried. Shutdown closes the owned provider.
+      responses:
+        "200":
+          description: Provider session ready
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Info" }
+        "409":
+          description: Not configured or launch already attempted
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "502":
+          description: Provider startup failed; message contains a sanitized provider error.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "503":
+          description: No provider available
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /agent/prompt:
+    post:
+      operationId: promptAgent
+      summary: Accept an explicit prompt independently of stream connections
+      description: One active prompt per process. Same commandId and text is idempotent while available; changed text is rejected. At most 4096 identities and 256 KiB of UTF-8 text per prompt. Acceptance is durable before execution; it is not completion. Events can arrive before the HTTP response.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PromptRequest" }
+      responses:
+        "202":
+          description: Prompt accepted, or identical prior command already accepted
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CommandResponse" }
+        "400":
+          description: Invalid command identity/text or conflicting reuse of identity
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: Conversation unavailable/busy/interrupted or command limit reached
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "413":
+          description: Request body exceeds 1 MiB
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "415":
+          description: Content-Type must be application/json
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "503":
+          description: Conversation storage unavailable; reconciliation required
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "500":
+          description: Unexpected service failure; internal details are not exposed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /agent/cancel:
+    post:
+      operationId: cancelAgentPrompt
+      summary: Request cancellation of the active command
+      description: Delivery acknowledgement is not proof of completion. Observe a terminal event before treating execution as ended. Failed delivery leaves the conversation interrupted.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/CancelRequest" }
+      responses:
+        "202":
+          description: Cancellation delivery requested
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CommandResponse" }
+        "400":
+          description: Missing, stale, or mismatched command identity
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: Conversation unavailable
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "413":
+          description: Request body exceeds 1 MiB
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "415":
+          description: Content-Type must be application/json
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "502":
+          description: Cancellation delivery failed; outcome uncertain
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "503":
+          description: Conversation storage unavailable
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "500":
+          description: Unexpected service failure; internal details are not exposed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /agent/permissions/respond:
+    post:
+      operationId: respondAgentPermission
+      summary: Record an explicit response to a pending permission
+      description: Binds the offered option to task/run/session/request identities. Duplicate, stale, and unoffered answers are rejected. A recorded response is delivery intent, not proof the runtime accepted it. No automatic approval.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/PermissionResponse" }
+      responses:
+        "200":
+          description: Permission response recorded
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/CommandResponse" }
+        "400":
+          description: Invalid JSON
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "409":
+          description: Invalid, stale, duplicate, or unoffered permission response
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "413":
+          description: Request body exceeds 1 MiB
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "415":
+          description: Content-Type must be application/json
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "503":
+          description: Conversation storage unavailable
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "500":
+          description: Unexpected service failure; internal details are not exposed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+  /agent/stream:
+    get:
+      operationId: streamAgent
+      summary: Receive-only WebSocket for readiness and ordered activity
+      description: |
+        Requires configuration before upgrading. Default same-origin checks apply.
+        Server first sends {"type":"ready","info":Info}, followed by
+        {"type":"event","event":ConversationEvent} replay and live frames.
+        Commands use the REST endpoints, never this stream. All client application
+        messages close the connection with status 1008. Protocol ping/pong and close
+        frames remain supported. Read current status through GET /info.
+        Disconnect leaves execution and pending permissions running. afterSequence selects
+        events after the last processed sequence. Replay retains at most 4096 events.
+        Omit the cursor only while sequence zero is retained. Event size is not capped.
+        Invalid, expired, or future cursors return 400 with errorCode invalid_cursor.
+        Slow subscribers are detached without stopping work. Events are synced to private
+        storage before streaming. Process restart recovery is not implemented.
+        Server shutdown closes streams; agentctl shutdown closes its owned provider.
+      parameters:
+        - in: query
+          name: afterSequence
+          schema: { type: integer, minimum: 0, default: 0 }
+          description: Last processed event sequence; the client owns this cursor.
+      x-websocket-server-message: { $ref: "#/components/schemas/ServerMessage" }
+      responses:
+        "101": { description: WebSocket connection established }
+        "400":
+          description: Invalid upgrade request or invalid/expired replay cursor. Cursor errors use Error; upgrade failures use the WebSocket library response.
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "403": { description: WebSocket origin rejected }
+        "409":
+          description: Agent has not been configured or conversation unavailable
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+        "426": { description: Unsupported WebSocket version }
+        "500":
+          description: Unexpected service failure; internal details are not exposed
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+components:
+  schemas:
+    Error:
+      type: object
+      required: [errorCode, error]
+      properties:
+        error: { type: string }
+        errorCode:
+          type: string
+          enum:
+            [
+              invalid_configuration,
+              configuration_conflict,
+              not_configured,
+              launch_conflict,
+              provider_unavailable,
+              launch_failed,
+              invalid_command,
+              invalid_permission,
+              conversation_unavailable,
+              conversation_busy,
+              conversation_interrupted,
+              command_limit,
+              cancellation_failed,
+              storage_unavailable,
+              invalid_cursor,
+              invalid_json,
+              unreadable_body,
+              body_too_large,
+              unsupported_media_type,
+              internal_error,
+            ]
+        field:
+          type: string
+          description: Missing configuration field name; never includes the supplied value.
+    RunConfig:
+      type: object
+      additionalProperties: true
+      required:
+        [
+          organizationId,
+          workspaceId,
+          taskId,
+          runId,
+          runtime,
+          model,
+          systemPrompt,
+        ]
+      properties:
+        organizationId: { type: string, pattern: '\S' }
+        workspaceId: { type: string, pattern: '\S' }
+        taskId: { type: string, pattern: '\S' }
+        runId: { type: string, pattern: '\S' }
+        runtime: { type: string, pattern: '\S' }
+        model:
+          type: object
+          additionalProperties: true
+          required: [provider, id]
+          properties:
+            provider: { type: string, pattern: '\S' }
+            id: { type: string, pattern: '\S' }
+        systemPrompt: { type: string, pattern: '\S' }
+    Info:
+      type: object
+      required:
+        [
+          service,
+          apiVersion,
+          goVersion,
+          os,
+          arch,
+          startedAt,
+          configured,
+          executionAvailable,
+          processAlive,
+        ]
+      properties:
+        service: { type: string, enum: [agentctl] }
+        apiVersion: { type: string, enum: [v1] }
+        goVersion: { type: string }
+        os: { type: string }
+        arch: { type: string }
+        startedAt: { type: string, format: date-time }
+        configured: { type: boolean }
+        executionAvailable: { type: boolean }
+        state:
+          {
+            type: string,
+            enum:
+              [
+                starting,
+                ready,
+                running,
+                waiting_for_permission,
+                failed,
+                interrupted,
+                exited,
+              ],
+          }
+        processAlive:
+          type: boolean
+          description: Provider process liveness, independent of execution state. Interrupted/failed states survive process exit.
+        sessionId: { type: string }
+
+    PromptRequest:
+      type: object
+      required: [commandId, text]
+      properties:
+        commandId:
+          type: string
+          pattern: '\S'
+          description: Stable identity, at most 200 UTF-8 bytes.
+        text:
+          type: string
+          pattern: '\S'
+          description: At most 262144 UTF-8 bytes.
+    CancelRequest:
+      type: object
+      required: [commandId]
+      properties:
+        commandId: { type: string }
+    CommandResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          { enum: [accepted, cancel_requested, permission_response_recorded] }
+        commandId: { type: string }
+        requestId:
+          {
+            type: string,
+            description: Permission request identity for a recorded response,
+          }
+    PermissionResponse:
+      type: object
+      required: [taskId, runId, sessionId, requestId, optionId]
+      properties:
+        taskId: { type: string }
+        runId: { type: string }
+        sessionId: { type: string }
+        requestId: { type: string }
+        optionId: { type: string }
+    Permission:
+      type: object
+      required: [toolCallId, title, options]
+      properties:
+        toolCallId: { type: string }
+        title: { type: string }
+        options:
+          type: array
+          items:
+            type: object
+            required: [id, name, kind]
+            properties:
+              id: { type: string }
+              name: { type: string }
+              kind: { type: string }
+    ConversationEvent:
+      type: object
+      required:
+        [
+          sequence,
+          at,
+          type,
+          organizationId,
+          workspaceId,
+          taskId,
+          runId,
+          sessionId,
+        ]
+      properties:
+        sequence: { type: integer, minimum: 1 }
+        at: { type: string, format: date-time }
+        type:
+          enum:
+            [
+              prompt_accepted,
+              update,
+              permission_requested,
+              permission_response,
+              cancel_requested,
+              prompt_completed,
+              prompt_failed,
+            ]
+        organizationId: { type: string }
+        workspaceId: { type: string }
+        taskId: { type: string }
+        runId: { type: string }
+        sessionId: { type: string }
+        commandId: { type: string }
+        requestId: { type: string }
+        text: { type: string }
+        stopReason: { type: string }
+        error: { type: string }
+        permission: { $ref: "#/components/schemas/Permission" }
+        update:
+          type: object
+          required: [kind]
+          properties:
+            kind: { enum: [text, tool_call, tool_call_update] }
+            text: { type: string }
+            toolCallId: { type: string }
+            title: { type: string }
+            status: { type: string }
+    ServerMessage:
+      type: object
+      required: [type]
+      properties:
+        type: { enum: [ready, event] }
+        info: { $ref: "#/components/schemas/Info" }
+        event: { $ref: "#/components/schemas/ConversationEvent" }
