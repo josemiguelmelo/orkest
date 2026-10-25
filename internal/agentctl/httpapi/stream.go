@@ -10,6 +10,13 @@ import (
 	"github.com/coder/websocket/wsjson"
 )
 
+type message struct {
+	Type      string `json:"type"`
+	RequestID string `json:"requestId,omitempty"`
+	Info      *Info  `json:"info,omitempty"`
+	Error     string `json:"error,omitempty"`
+}
+
 func (s *Server) stream(w http.ResponseWriter, r *http.Request) {
 	if !s.snapshot().Configured {
 		writeError(w, 409, "configure the agent before connecting")
