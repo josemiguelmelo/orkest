@@ -115,7 +115,9 @@ func (p *Provider) Launch(ctx context.Context, config agentctl.Configuration) (a
 			_ = process.Close()
 		}
 	}()
-	conn := acp.NewClientSideConnection(launchClient{}, stdin, stdout)
+	client := &runtimeClient{}
+	conn := acp.NewClientSideConnection(client, stdin, stdout)
+	process.conn, process.client = conn, client
 	conn.SetLogger(slog.New(slog.NewTextHandler(io.Discard, nil)))
 	initialized, err := conn.Initialize(ctx, acp.InitializeRequest{ProtocolVersion: 1})
 	if err != nil {
@@ -136,6 +138,9 @@ func (p *Provider) Launch(ctx context.Context, config agentctl.Configuration) (a
 		return nil, errors.New("select configured opencode mode failed")
 	}
 	process.sessionID = string(session.SessionId)
+	client.mu.Lock()
+	client.sessionID = process.sessionID
+	client.mu.Unlock()
 	// A lost ACP connection invalidates this process; never launch a replacement automatically.
 	go func() {
 		select {
@@ -154,6 +159,8 @@ type process struct {
 	done      chan struct{}
 	sessionID string
 	once      sync.Once
+	conn      *acp.ClientSideConnection
+	client    *runtimeClient
 }
 
 func (p *process) SessionID() string     { return p.sessionID }

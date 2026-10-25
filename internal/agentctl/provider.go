@@ -14,3 +14,34 @@ type Process interface {
 	Done() <-chan struct{}
 	Close() error
 }
+
+// Conversation is an optional process capability. ACP details remain in adapters.
+type Conversation interface {
+	Prompt(context.Context, string, Observer) (string, error)
+	Cancel(context.Context) error
+}
+
+type Update struct {
+	Kind       string `json:"kind"`
+	Text       string `json:"text,omitempty"`
+	ToolCallID string `json:"toolCallId,omitempty"`
+	Title      string `json:"title,omitempty"`
+	Status     string `json:"status,omitempty"`
+}
+
+type PermissionOption struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+	Kind string `json:"kind"`
+}
+
+type Permission struct {
+	ToolCallID string             `json:"toolCallId"`
+	Title      string             `json:"title"`
+	Options    []PermissionOption `json:"options"`
+}
+
+type Observer struct {
+	Update     func(Update) error
+	Permission func(context.Context, Permission) (string, error)
+}

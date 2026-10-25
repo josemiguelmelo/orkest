@@ -28,14 +28,16 @@ type Service struct {
 	closed        bool
 	state         string
 	launches      sync.WaitGroup
+	stateDir      string
+	conversation  conversationState
 }
 
 func NewService() *Service { return &Service{} }
 
 // NewServiceWithProvider wires a runtime at the application boundary.
-func NewServiceWithProvider(ctx context.Context, provider Provider) *Service {
+func NewServiceWithProvider(ctx context.Context, provider Provider, stateDir string) *Service {
 	ctx, cancel := context.WithCancel(ctx)
-	return &Service{ctx: ctx, cancel: cancel, provider: provider}
+	return &Service{ctx: ctx, cancel: cancel, provider: provider, stateDir: stateDir}
 }
 
 // Configure accepts identical resubmissions and atomically rejects changed bindings.

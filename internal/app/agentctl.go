@@ -14,10 +14,10 @@ import (
 )
 
 // RunAgentctl owns a standalone control server, independent of the platform.
-func RunAgentctl(ctx context.Context, logger *slog.Logger, address string, provider agentctl.Provider) error {
+func RunAgentctl(ctx context.Context, logger *slog.Logger, address string, provider agentctl.Provider, stateDir string) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
-	service := agentctl.NewServiceWithProvider(ctx, provider)
+	service := agentctl.NewServiceWithProvider(ctx, provider, stateDir)
 	defer func() { _ = service.Close() }()
 	api, err := httpapi.NewServer(ctx, service)
 	if err != nil {

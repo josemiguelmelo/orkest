@@ -31,7 +31,7 @@ func (p *testProcess) Close() error          { p.once.Do(func() { close(p.done) 
 
 func TestProviderLaunchOwnership(t *testing.T) {
 	p := &testProvider{process: &testProcess{done: make(chan struct{})}}
-	service := NewServiceWithProvider(context.Background(), p)
+	service := NewServiceWithProvider(context.Background(), p, "")
 	defer func() { _ = service.Close() }()
 	if err := service.Launch(); !errors.Is(err, ErrNotConfigured) {
 		t.Fatal(err)
@@ -68,7 +68,7 @@ func TestProviderLaunchOwnership(t *testing.T) {
 
 func TestLaunchFailureDoesNotRetry(t *testing.T) {
 	p := &testProvider{err: errors.New("launch failed")}
-	service := NewServiceWithProvider(context.Background(), p)
+	service := NewServiceWithProvider(context.Background(), p, "")
 	defer func() { _ = service.Close() }()
 	config := configuration()
 	config.Runtime = "alternative"

@@ -34,8 +34,9 @@ credentials or remove the volume unless you intend to delete local data.
 ## Calling an agent
 
 `agentctl` launches pinned OpenCode 2.1.4 over ACP stdio, creates a session,
-selects the configured system prompt and model. Prompt execution, approval
-delivery, and recovery remain unimplemented.
+selects the configured system prompt and model, and accepts prompts over its
+WebSocket with streamed responses, permission choices and cancellation.
+Reconnect replay is available while agentctl stays alive; restart recovery is unimplemented.
 See [agentctl usage and limitations](docs/agentctl-api.md) for `.env` configuration,
 launch requests, persistent storage, and verification instructions.
 
@@ -48,7 +49,8 @@ launch requests, persistent storage, and verification instructions.
 - `make lint-install`: install the pinned linter under `bin/tools/` (requires curl
   and network access). `lint`, `fmt`, and `check` install it automatically if absent.
 - `make build`: create `bin/orkest`, `bin/agentctl`, and `web/dist`.
-- `make test-integration`: unavailable; the real integration suite is not implemented.
+- `make test-integration`: real OpenCode handshake; requires the pinned executable
+  via `ORKEST_OPENCODE_BINARY`. Makes no model request.
 - `make test-recovery`: explicitly fails; recovery verification is not implemented.
 
 The Go server currently uses `net/http` routing. Add Chi, pgx/sqlc, migrations,

@@ -39,7 +39,7 @@ func main() {
 	flag.Parse()
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
-	if err := app.RunAgentctl(ctx, logger, *address, &opencode.Provider{Binary: *binary, WorkDir: *workDir, StateDir: *stateDir, Env: env}); err != nil {
+	if err := app.RunAgentctl(ctx, logger, *address, &opencode.Provider{Binary: *binary, WorkDir: *workDir, StateDir: *stateDir, Env: env}, *stateDir); err != nil {
 		logger.Error("agentctl stopped", "error", err)
 		os.Exit(1)
 	}

@@ -55,12 +55,25 @@ func (s *Service) Close() error {
 	if s.cancel != nil {
 		s.cancel()
 	}
+	process := s.process
 	s.mu.Unlock()
+	if process != nil {
+		_ = process.Close()
+	}
 	s.launches.Wait()
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.process != nil {
-		return s.process.Close()
+	if s.process != nil && process == nil {
+		_ = s.process.Close()
+	}
+	for ch := range s.conversation.subscribers {
+		close(ch)
+		delete(s.conversation.subscribers, ch)
+	}
+	if s.conversation.journal != nil {
+		journal := s.conversation.journal
+		s.conversation.journal = nil
+		return journal.Close()
 	}
 	return nil
 }

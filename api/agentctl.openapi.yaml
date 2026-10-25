@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: Orkest agentctl API
   version: 0.1.0
-  description: Standalone process-local control API. Explicit provider launch; no prompting or durable replay.
+  description: Standalone process-local control API. Provider launch and conversation with private event journaling and reconnect replay. Process restart recovery is not implemented.
 servers:
   - url: http://127.0.0.1:8081
 paths:
@@ -89,11 +89,32 @@ paths:
         Text JSON requests {"type":"ping","requestId":"ID"} and
         {"type":"info","requestId":"ID"} receive pong and info responses,
         respectively, echoing requestId. Info responses include the info property.
-        Other commands receive {"type":"error","requestId":"ID","error":"unsupported_command"}.
+        A prompt {"type":"prompt","requestId":"COMMAND_ID","text":"TEXT"} receives
+        {"type":"accepted","requestId":"COMMAND_ID"}. Same ID/text is idempotent;
+        changed text or concurrent prompts fail. Only one prompt runs at a time.
+        Activity arrives as {"type":"event","event":ConversationEvent}; events may
+        arrive before command acknowledgements. Permission requests require an explicit
+        permission_response with task/run/session/request identities and an offered optionId.
+        A recorded answer receives type permission_response_recorded. No automatic approval.
+        {"type":"cancel","requestId":"ID","commandId":"COMMAND_ID"} receives type
+        cancel_requested; wait for the terminal prompt event to establish completion.
+        Invalid commands return type error with requestId and a sanitized error.
+        Unknown commands receive error unsupported_command.
         Messages have no application-level size limit; extra fields are ignored.
         Malformed JSON or binary messages close the stream.
-        Disconnect does not reset configuration. No agent events, replay, acknowledgements,
-        prompt execution or approval delivery are implemented. Server shutdown closes streams.
+        Disconnect leaves execution and pending permissions running. afterSequence selects
+        events after the last processed sequence, followed by live events. Omit for full replay.
+        Invalid or future cursors return 400. Slow subscribers are detached without stopping work.
+        Private journal records are synced before streaming. Replay/command deduplication work
+        within this agentctl process; restoration after agentctl restart is not implemented.
+        Server shutdown closes streams and agentctl shutdown closes its owned provider.
+      parameters:
+        - in: query
+          name: afterSequence
+          schema: {type: integer, minimum: 0, default: 0}
+          description: Last processed event sequence; the client owns this cursor.
+      x-websocket-client-message: {$ref: '#/components/schemas/ClientMessage'}
+      x-websocket-server-message: {$ref: '#/components/schemas/ServerMessage'}
       responses:
         '101': {description: WebSocket connection established}
         '400': {description: Invalid WebSocket upgrade request}
@@ -141,5 +162,92 @@ components:
         startedAt: {type: string, format: date-time}
         configured: {type: boolean}
         executionAvailable: {type: boolean}
-        state: {type: string, enum: [starting, ready, failed, exited]}
+        state: {type: string, enum: [starting, ready, running, waiting_for_permission, failed, interrupted, exited]}
         sessionId: {type: string}
+
+    ClientMessage:
+      oneOf:
+        - type: object
+          required: [type]
+          properties:
+            type: {enum: [ping, info]}
+            requestId: {type: string}
+        - type: object
+          required: [type, requestId, text]
+          properties:
+            type: {const: prompt}
+            requestId: {type: string, minLength: 1, maxLength: 200, pattern: '\S'}
+            text: {type: string, pattern: '\S'}
+        - type: object
+          required: [type, commandId]
+          properties:
+            type: {const: cancel}
+            requestId: {type: string}
+            commandId: {type: string}
+        - type: object
+          required: [type, permission]
+          properties:
+            type: {const: permission_response}
+            requestId: {type: string}
+            permission: {$ref: '#/components/schemas/PermissionResponse'}
+    PermissionResponse:
+      type: object
+      required: [taskId, runId, sessionId, requestId, optionId]
+      properties:
+        taskId: {type: string}
+        runId: {type: string}
+        sessionId: {type: string}
+        requestId: {type: string}
+        optionId: {type: string}
+    Permission:
+      type: object
+      required: [toolCallId, title, options]
+      properties:
+        toolCallId: {type: string}
+        title: {type: string}
+        options:
+          type: array
+          items:
+            type: object
+            required: [id, name, kind]
+            properties:
+              id: {type: string}
+              name: {type: string}
+              kind: {type: string}
+    ConversationEvent:
+      type: object
+      required: [sequence, at, type, organizationId, workspaceId, taskId, runId, sessionId]
+      properties:
+        sequence: {type: integer, minimum: 1}
+        at: {type: string, format: date-time}
+        type:
+          enum: [prompt_accepted, update, permission_requested, permission_response, cancel_requested, prompt_completed, prompt_failed]
+        organizationId: {type: string}
+        workspaceId: {type: string}
+        taskId: {type: string}
+        runId: {type: string}
+        sessionId: {type: string}
+        commandId: {type: string}
+        requestId: {type: string}
+        text: {type: string}
+        stopReason: {type: string}
+        error: {type: string}
+        permission: {$ref: '#/components/schemas/Permission'}
+        update:
+          type: object
+          required: [kind]
+          properties:
+            kind: {enum: [text, tool_call, tool_call_update]}
+            text: {type: string}
+            toolCallId: {type: string}
+            title: {type: string}
+            status: {type: string}
+    ServerMessage:
+      type: object
+      required: [type]
+      properties:
+        type: {enum: [ready, pong, info, accepted, cancel_requested, permission_response_recorded, event, error]}
+        requestId: {type: string}
+        info: {$ref: '#/components/schemas/Info'}
+        event: {$ref: '#/components/schemas/ConversationEvent'}
+        error: {type: string}

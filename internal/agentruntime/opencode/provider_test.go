@@ -18,6 +18,7 @@ func TestMain(m *testing.M) {
 			fmt.Println(Version)
 			os.Exit(0)
 		}
+		var activePrompt any
 		scanner := bufio.NewScanner(os.Stdin)
 		for scanner.Scan() {
 			var request struct {
@@ -36,6 +37,38 @@ func TestMain(m *testing.M) {
 				result = map[string]any{"sessionId": "fixture-session"}
 			case "session/set_mode":
 				result = map[string]any{}
+			case "session/prompt":
+				var params struct {
+					SessionID string `json:"sessionId"`
+					Prompt    []struct {
+						Text string `json:"text"`
+					} `json:"prompt"`
+				}
+				if json.Unmarshal(request.Params, &params) != nil || params.SessionID != "fixture-session" || len(params.Prompt) != 1 {
+					os.Exit(5)
+				}
+				fixtureSend(map[string]any{"jsonrpc": "2.0", "method": "session/update", "params": map[string]any{"sessionId": "fixture-session", "update": map[string]any{"sessionUpdate": "agent_message_chunk", "content": map[string]any{"type": "text", "text": "Hello from fixture"}}}})
+				if params.Prompt[0].Text == "permission" {
+					activePrompt = request.ID
+					fixtureSend(map[string]any{"jsonrpc": "2.0", "id": "fixture-permission", "method": "session/request_permission", "params": map[string]any{"sessionId": "fixture-session", "toolCall": map[string]any{"toolCallId": "tool-1", "title": "Edit file"}, "options": []any{map[string]any{"optionId": "allow", "name": "Allow once", "kind": "allow_once"}, map[string]any{"optionId": "reject", "name": "Reject", "kind": "reject_once"}}}})
+					continue
+				}
+				if params.Prompt[0].Text == "wait" {
+					activePrompt = request.ID
+					continue
+				}
+				result = map[string]any{"stopReason": "end_turn"}
+			case "":
+				if request.ID != "fixture-permission" {
+					os.Exit(6)
+				}
+				fixtureSend(map[string]any{"jsonrpc": "2.0", "id": activePrompt, "result": map[string]any{"stopReason": "end_turn"}})
+				activePrompt = nil
+				continue
+			case "session/cancel":
+				fixtureSend(map[string]any{"jsonrpc": "2.0", "id": activePrompt, "result": map[string]any{"stopReason": "cancelled"}})
+				activePrompt = nil
+				continue
 			default:
 				os.Exit(3)
 			}
@@ -75,5 +108,11 @@ func TestLaunchACPAndFenceDuplicate(t *testing.T) {
 	case <-process.Done():
 	case <-ctx.Done():
 		t.Fatal("process did not exit")
+	}
+}
+
+func fixtureSend(value any) {
+	if json.NewEncoder(os.Stdout).Encode(value) != nil {
+		os.Exit(7)
 	}
 }
