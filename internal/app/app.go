@@ -2,10 +2,8 @@ package app
 
 import (
 	"context"
-	"errors"
 	"log/slog"
 	"net/http"
-	"net/url"
 	"os"
 	"time"
 
@@ -24,27 +22,14 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 		addr = "127.0.0.1:8080"
 	}
 
-	dsn := os.Getenv("DATABASE_URL")
-	if dsn == "" && os.Getenv("POSTGRES_PASSWORD") != "" {
-		dsn = (&url.URL{
-			Scheme:   "postgres",
-			User:     url.UserPassword("orkest", os.Getenv("POSTGRES_PASSWORD")),
-			Host:     "127.0.0.1:5432",
-			Path:     "/orkest",
-			RawQuery: "sslmode=disable",
-		}).String()
-	}
-	if dsn == "" {
-		return errors.New("DATABASE_URL or POSTGRES_PASSWORD must be configured")
-	}
-	store, err := postgres.Open(ctx, dsn)
+	database, err := postgres.Initialize(ctx)
 	if err != nil {
 		return err
 	}
-	defer store.Close()
-	users := identity.NewUserRegistrationService(postgres.NewUserPostgresRepository(store))
-	organizations := organization.NewOrganizationService(postgres.NewOrganizationPostgresRepository(store))
-	workspaces := workspace.NewWorkspaceService(postgres.NewWorkspacePostgresRepository(store), organizations)
+	defer database.Close()
+	users := identity.NewUserRegistrationService(postgres.NewUserPostgresRepository(database))
+	organizations := organization.NewOrganizationService(postgres.NewOrganizationPostgresRepository(database))
+	workspaces := workspace.NewWorkspaceService(postgres.NewWorkspacePostgresRepository(database), organizations)
 	router, err := httpapi.NewRouter(users, organizations, workspaces)
 	if err != nil {
 		return err

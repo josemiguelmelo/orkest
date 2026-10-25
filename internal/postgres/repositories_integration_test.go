@@ -16,7 +16,7 @@ func TestPostgresRepositories(t *testing.T) {
 		t.Skip("DATABASE_URL is required for PostgreSQL repository integration tests")
 	}
 	ctx := context.Background()
-	database, err := Open(ctx, dsn)
+	database, err := initialize(ctx, dsn)
 	if err != nil {
 		t.Fatalf("open PostgreSQL database: %v", err)
 	}
