@@ -24,9 +24,20 @@ func (JiraServerProvider) Provider() taskintegration.TaskIntegrationSourceProvid
 	return taskintegration.TaskIntegrationSourceProviderJiraServer
 }
 
+func (JiraServerProvider) ParseProjectURL(raw string) error {
+	u, err := url.ParseRequestURI(strings.TrimSpace(raw))
+	if err != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || u.RawQuery != "" || u.Fragment != "" {
+		return fmt.Errorf("invalid Jira Server project URL")
+	}
+	return nil
+}
+
 func (p JiraServerProvider) Validate(ctx context.Context, c taskintegration.TaskIntegrationConfig, token string) error {
 	if c.BaseURL == "" || token == "" {
 		return fmt.Errorf("jira URL and personal access token are required")
+	}
+	if err := p.ParseProjectURL(c.BaseURL); err != nil {
+		return err
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.BaseURL+"/rest/api/2/myself", nil)
 	if err != nil {

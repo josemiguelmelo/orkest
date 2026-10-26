@@ -13,7 +13,7 @@ type ProjectTarget struct {
 	Number    int
 }
 
-func ParseProjectURL(raw string) (ProjectTarget, error) {
+func parseProjectURL(raw string) (ProjectTarget, error) {
 	u, err := url.ParseRequestURI(strings.TrimSpace(raw))
 	if err != nil || u.Scheme != "https" || !strings.EqualFold(u.Host, "github.com") || u.RawQuery != "" || u.Fragment != "" {
 		return ProjectTarget{}, fmt.Errorf("invalid GitHub Cloud project URL")

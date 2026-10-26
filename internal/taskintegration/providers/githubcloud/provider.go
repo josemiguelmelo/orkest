@@ -27,6 +27,13 @@ func (GitHubCloudProvider) Provider() taskintegration.TaskIntegrationSourceProvi
 	return taskintegration.TaskIntegrationSourceProviderGitHubCloud
 }
 
+func (GitHubCloudProvider) ParseProjectURL(raw string) error {
+	if _, err := parseProjectURL(raw); err != nil {
+		return &taskintegration.ConfigurationError{Code: "github_project_url_invalid"}
+	}
+	return nil
+}
+
 type projectPage struct {
 	ID    string `json:"id"`
 	Items struct {
@@ -76,9 +83,12 @@ func (p GitHubCloudProvider) Validate(ctx context.Context, config taskintegratio
 	if strings.TrimSpace(token) == "" {
 		return fmt.Errorf("GitHub token is required")
 	}
-	target, err := ParseProjectURL(config.ProjectURL)
+	if err := p.ParseProjectURL(config.ProjectURL); err != nil {
+		return err
+	}
+	target, err := parseProjectURL(config.ProjectURL)
 	if err != nil {
-		return &taskintegration.ConfigurationError{Code: "github_project_url_invalid"}
+		return err
 	}
 	page, err := p.fetchPage(ctx, target, token, "")
 	if err != nil {
@@ -91,7 +101,7 @@ func (p GitHubCloudProvider) Validate(ctx context.Context, config taskintegratio
 }
 
 func (p GitHubCloudProvider) Discover(ctx context.Context, config taskintegration.TaskIntegrationConfig, token string, filters []string) ([]taskintegration.DiscoveredTask, error) {
-	target, err := ParseProjectURL(config.ProjectURL)
+	target, err := parseProjectURL(config.ProjectURL)
 	if err != nil {
 		return nil, err
 	}
