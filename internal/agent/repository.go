@@ -19,3 +19,7 @@ type WorkspaceAccess interface {
 type MCPServerAccess interface {
 	Exists(context.Context, string, string, []string) (bool, error)
 }
+
+type SkillAccess interface {
+	ValidateAgentSkills(context.Context, string, string, []string) error
+}

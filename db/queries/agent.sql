@@ -23,3 +23,12 @@ RETURNING a.id, a.workspace_id, a.name, a.runtime, a.provider, a.model, a.descri
 -- name: DeleteAgent :execrows
 DELETE FROM agents a USING workspaces w
 WHERE w.organization_id = $1 AND a.workspace_id = w.id AND a.workspace_id = $2 AND a.id = $3;
+
+-- name: ListAgentSkillIDs :many
+SELECT skill_id FROM agent_skills WHERE workspace_id = $1 AND agent_id = $2 ORDER BY skill_id;
+
+-- name: DeleteAgentSkills :exec
+DELETE FROM agent_skills WHERE workspace_id = $1 AND agent_id = $2;
+
+-- name: InsertAgentSkill :exec
+INSERT INTO agent_skills(workspace_id, agent_id, skill_id) VALUES($1, $2, $3);

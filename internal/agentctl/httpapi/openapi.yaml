@@ -361,6 +361,15 @@ components:
           properties:
             provider: { type: string, pattern: '\S' }
             id: { type: string, pattern: '\S' }
+        skills:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            required: [id, skillMD]
+            properties:
+              id: { type: string, pattern: '^[a-z0-9]+(-[a-z0-9]+)*$' }
+              skillMD: { type: string, pattern: '\S' }
     Info:
       type: object
       required:

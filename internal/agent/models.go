@@ -21,4 +21,5 @@ type AgentDefinition struct {
 	Description  string   `json:"description"`
 	SystemPrompt string   `json:"systemPrompt"`
 	MCPServerIDs []string `json:"mcpServerIds"`
+	SkillIDs     []string `json:"skillIds"`
 }

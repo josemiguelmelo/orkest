@@ -3,6 +3,7 @@ package agentctl
 import (
 	"fmt"
 	"net/url"
+	"regexp"
 	"strings"
 
 	coreruntime "github.com/josemiguelmelo/orkest/internal/core/runtime"
@@ -19,6 +20,7 @@ type RunConfig struct {
 	Agent          AgentDefinition     `json:"agent"`
 	Model          ModelSelection      `json:"model"`
 	MCPServers     []MCPServer         `json:"mcpServers,omitempty"`
+	Skills         []Skill             `json:"skills,omitempty"`
 }
 
 // AgentDefinition is the portable Markdown instruction set selected for a run.
@@ -41,6 +43,14 @@ type MCPServer struct {
 	URL     string            `json:"url"`
 	Headers map[string]string `json:"headers,omitempty"`
 }
+
+// Skill is an immutable run snapshot of one selected SKILL.md definition.
+type Skill struct {
+	ID      string `json:"id"`
+	SkillMD string `json:"skillMD"`
+}
+
+var skillIDPattern = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 
 // ValidationError identifies a missing field without retaining its value.
 type ValidationError struct{ Field string }
@@ -77,6 +87,13 @@ func (c RunConfig) Validate() error {
 				return &ValidationError{Field: "mcpServers.headers"}
 			}
 		}
+	}
+	seenSkills := make(map[string]bool, len(c.Skills))
+	for _, value := range c.Skills {
+		if !skillIDPattern.MatchString(value.ID) || strings.TrimSpace(value.SkillMD) == "" || seenSkills[value.ID] {
+			return &ValidationError{Field: "skills"}
+		}
+		seenSkills[value.ID] = true
 	}
 
 	return nil

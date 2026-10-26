@@ -28,6 +28,20 @@ func (q *Queries) DeleteAgent(ctx context.Context, arg DeleteAgentParams) (int64
 	return result.RowsAffected(), nil
 }
 
+const deleteAgentSkills = `-- name: DeleteAgentSkills :exec
+DELETE FROM agent_skills WHERE workspace_id = $1 AND agent_id = $2
+`
+
+type DeleteAgentSkillsParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	AgentID     string `json:"agent_id"`
+}
+
+func (q *Queries) DeleteAgentSkills(ctx context.Context, arg DeleteAgentSkillsParams) error {
+	_, err := q.db.Exec(ctx, deleteAgentSkills, arg.WorkspaceID, arg.AgentID)
+	return err
+}
+
 const getAgent = `-- name: GetAgent :one
 SELECT a.id, a.workspace_id, a.name, a.runtime, a.provider, a.model, a.description, a.system_prompt
 FROM agents a JOIN workspaces w ON w.id = a.workspace_id
@@ -118,6 +132,50 @@ func (q *Queries) InsertAgent(ctx context.Context, arg InsertAgentParams) (Inser
 		&i.SystemPrompt,
 	)
 	return i, err
+}
+
+const insertAgentSkill = `-- name: InsertAgentSkill :exec
+INSERT INTO agent_skills(workspace_id, agent_id, skill_id) VALUES($1, $2, $3)
+`
+
+type InsertAgentSkillParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	AgentID     string `json:"agent_id"`
+	SkillID     string `json:"skill_id"`
+}
+
+func (q *Queries) InsertAgentSkill(ctx context.Context, arg InsertAgentSkillParams) error {
+	_, err := q.db.Exec(ctx, insertAgentSkill, arg.WorkspaceID, arg.AgentID, arg.SkillID)
+	return err
+}
+
+const listAgentSkillIDs = `-- name: ListAgentSkillIDs :many
+SELECT skill_id FROM agent_skills WHERE workspace_id = $1 AND agent_id = $2 ORDER BY skill_id
+`
+
+type ListAgentSkillIDsParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	AgentID     string `json:"agent_id"`
+}
+
+func (q *Queries) ListAgentSkillIDs(ctx context.Context, arg ListAgentSkillIDsParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, listAgentSkillIDs, arg.WorkspaceID, arg.AgentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var skill_id string
+		if err := rows.Scan(&skill_id); err != nil {
+			return nil, err
+		}
+		items = append(items, skill_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listAgents = `-- name: ListAgents :many

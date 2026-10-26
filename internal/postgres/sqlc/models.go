@@ -43,6 +43,18 @@ type AgentLaunchEvent struct {
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
+type AgentMcpServer struct {
+	WorkspaceID string `json:"workspace_id"`
+	AgentID     string `json:"agent_id"`
+	McpServerID string `json:"mcp_server_id"`
+}
+
+type AgentSkill struct {
+	WorkspaceID string `json:"workspace_id"`
+	AgentID     string `json:"agent_id"`
+	SkillID     string `json:"skill_id"`
+}
+
 type CodeRepository struct {
 	ID           string             `json:"id"`
 	WorkspaceID  string             `json:"workspace_id"`
@@ -62,6 +74,16 @@ type Component struct {
 	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
 }
 
+type McpServer struct {
+	ID               string             `json:"id"`
+	WorkspaceID      string             `json:"workspace_id"`
+	Name             string             `json:"name"`
+	Url              string             `json:"url"`
+	EncryptedHeaders string             `json:"encrypted_headers"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+}
+
 type Organization struct {
 	ID        string             `json:"id"`
 	Name      string             `json:"name"`
@@ -73,6 +95,16 @@ type OrganizationMembership struct {
 	UserID         string             `json:"user_id"`
 	Role           string             `json:"role"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
+type Skill struct {
+	ID             string             `json:"id"`
+	Scope          string             `json:"scope"`
+	OrganizationID pgtype.Text        `json:"organization_id"`
+	WorkspaceID    pgtype.Text        `json:"workspace_id"`
+	SkillMd        string             `json:"skill_md"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Task struct {
@@ -128,6 +160,7 @@ type User struct {
 	Username        string             `json:"username"`
 	Email           string             `json:"email"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	PlatformAdmin   bool               `json:"platform_admin"`
 }
 
 type Workspace struct {

@@ -14,13 +14,14 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/mcpserver"
 	"github.com/josemiguelmelo/orkest/internal/orchestration"
 	"github.com/josemiguelmelo/orkest/internal/organization"
+	"github.com/josemiguelmelo/orkest/internal/skill"
 	"github.com/josemiguelmelo/orkest/internal/task"
 	"github.com/josemiguelmelo/orkest/internal/taskintegration"
 	"github.com/josemiguelmelo/orkest/internal/workspace"
 )
 
 // NewRouter validates the served OpenAPI contract before exposing routes.
-func NewRouter(users *identity.UserRegistrationService, organizations *organization.OrganizationService, workspaces *workspace.WorkspaceService, agents *agent.Service, codeRepositories *coderepository.Service, tasks *task.Service, integrations *taskintegration.TaskIntegrationService, mcpServers *mcpserver.MCPServerService, tempLaunches ...*orchestration.LaunchService) (*chi.Mux, error) {
+func NewRouter(users *identity.UserRegistrationService, organizations *organization.OrganizationService, workspaces *workspace.WorkspaceService, agents *agent.Service, codeRepositories *coderepository.Service, tasks *task.Service, integrations *taskintegration.TaskIntegrationService, mcpServers *mcpserver.MCPServerService, skillCatalog *skill.CatalogService, tempLaunches ...*orchestration.LaunchService) (*chi.Mux, error) {
 	if _, err := openapi.LoadAndValidateOpenAPIDoc(OpenAPIContract, context.Background()); err != nil {
 		return nil, fmt.Errorf("load platform OpenAPI contract: %w", err)
 	}
@@ -46,6 +47,11 @@ func NewRouter(users *identity.UserRegistrationService, organizations *organizat
 			api.Get("/me", auth.currentUser)
 			organizationAPI{organizations: organizations, workspaces: workspaces}.routes(api)
 			agentAPI{agents: agents}.routes(api)
+			if skillCatalog != nil {
+				skillAPI{service: skillCatalog, scope: skill.ScopeGlobal}.routes(api, "/skills")
+				skillAPI{service: skillCatalog, scope: skill.ScopeOrganization}.routes(api, "/organizations/{orgID}/skills")
+				skillAPI{service: skillCatalog, scope: skill.ScopeWorkspace}.routes(api, "/organizations/{orgID}/workspaces/{workspaceID}/skills")
+			}
 			if mcpServers != nil {
 				mcpServerAPI{service: mcpServers}.routes(api)
 			}
