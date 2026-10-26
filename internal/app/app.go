@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/josemiguelmelo/orkest/internal/agent"
@@ -21,6 +22,9 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/organization"
 	"github.com/josemiguelmelo/orkest/internal/postgres"
 	"github.com/josemiguelmelo/orkest/internal/task"
+	"github.com/josemiguelmelo/orkest/internal/taskintegration"
+	githubcloud "github.com/josemiguelmelo/orkest/internal/taskintegration/providers/githubcloud"
+	jiraserver "github.com/josemiguelmelo/orkest/internal/taskintegration/providers/jiraserver"
 	"github.com/josemiguelmelo/orkest/internal/workspace"
 )
 
@@ -90,18 +94,35 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 		return err
 	}
 	tasks := task.NewService(postgres.NewTaskPostgresRepository(database), workspaces, dispatcher)
+	var secretBox *taskintegration.SecretBox
+	if key := os.Getenv("ORKEST_INTEGRATION_ENCRYPTION_KEY"); key != "" {
+		secretBox, err = taskintegration.NewSecretBox(key)
+		if err != nil {
+			return err
+		}
+	}
+	integrations := taskintegration.NewTaskIntegrationService(postgres.NewPostgresTaskIntegrationRepository(database), secretBox, workspaces, organizations, postgres.NewPostgresImportedTaskRepository(database), githubcloud.NewGitHubCloudProvider(), jiraserver.NewJiraServerProvider())
+	runnerCtx, stopRunner := context.WithCancel(ctx)
+	var runnerWG sync.WaitGroup
+	runnerWG.Add(1)
+	go func() { defer runnerWG.Done(); integrations.Run(runnerCtx) }()
 	var router http.Handler
 	if strings.EqualFold(os.Getenv("ORKEST_ENABLE_TEMP_AGENT_LAUNCH"), "true") {
-		router, err = httpapi.NewRouter(users, organizations, workspaces, agents, codeRepositories, tasks, launchService)
+		router, err = httpapi.NewRouter(users, organizations, workspaces, agents, codeRepositories, tasks, integrations, launchService)
 	} else {
-		router, err = httpapi.NewRouter(users, organizations, workspaces, agents, codeRepositories, tasks)
+		router, err = httpapi.NewRouter(users, organizations, workspaces, agents, codeRepositories, tasks, integrations)
 	}
 	if err != nil {
+		stopRunner()
+		runnerWG.Wait()
 		return err
 	}
 
 	server := &http.Server{Addr: addr, Handler: router, ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
-	return httpserver.Run(ctx, logger, "platform", server)
+	serverErr := httpserver.Run(ctx, logger, "platform", server)
+	stopRunner()
+	runnerWG.Wait()
+	return serverErr
 }
 
 func splitEnvironmentNames(value string) []string {

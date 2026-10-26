@@ -17,6 +17,8 @@ tags:
     description: Workspace-scoped reusable agent definitions.
   - name: CodeRepositories
     description: Workspace-scoped code repository registration and Git operations.
+  - name: TaskIntegrations
+    description: Workspace-scoped external task source integrations.
   - name: Tasks
     description: Workspace-scoped manual tasks, comments, and components.
   - name: TemporaryExecution
@@ -339,6 +341,89 @@ paths:
         "400": {$ref: "#/components/responses/BadRequest"}
         "403": {$ref: "#/components/responses/Forbidden"}
         "404": {$ref: "#/components/responses/NotFound"}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/task-integrations:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [TaskIntegrations]
+      operationId: listTaskIntegrations
+      security: [{bearerAuth: []}]
+      responses:
+        "200": {description: Configured task integrations, content: {application/json: {schema: {type: array, items: {$ref: "#/components/schemas/TaskIntegration"}}}}}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+    post:
+      tags: [TaskIntegrations]
+      operationId: createTaskIntegration
+      security: [{bearerAuth: []}]
+      requestBody: {$ref: "#/components/requestBodies/TaskIntegration"}
+      responses:
+        "201": {description: Integration configured, content: {application/json: {schema: {$ref: "#/components/schemas/TaskIntegration"}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "502": {description: Provider connectivity or credential validation failed}
+        "503": {description: Integration credential encryption is not configured}
+  /api/task-integration-providers:
+    get:
+      tags: [TaskIntegrations]
+      operationId: listTaskIntegrationProviders
+      security: [{bearerAuth: []}]
+      responses:
+        "200": {description: Available providers and their config schemas, content: {application/json: {schema: {type: array, items: {$ref: "#/components/schemas/TaskIntegrationProvider"}}}}}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/task-integrations/validate:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+    post:
+      tags: [TaskIntegrations]
+      operationId: validateTaskIntegration
+      security: [{bearerAuth: []}]
+      requestBody: {$ref: "#/components/requestBodies/TaskIntegration"}
+      responses:
+        "200": {description: Connectivity validated}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "502": {description: Provider connectivity or credential validation failed}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/task-integrations/{integrationID}:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+      - {name: integrationID, in: path, required: true, schema: {type: string}}
+    put:
+      tags: [TaskIntegrations]
+      operationId: updateTaskIntegration
+      security: [{bearerAuth: []}]
+      requestBody: {$ref: "#/components/requestBodies/TaskIntegration"}
+      responses:
+        "200": {description: Integration updated, content: {application/json: {schema: {$ref: "#/components/schemas/TaskIntegration"}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "502": {description: Provider connectivity or credential validation failed}
+        "503": {description: Integration credential encryption is not configured}
+    delete:
+      tags: [TaskIntegrations]
+      operationId: deleteTaskIntegration
+      security: [{bearerAuth: []}]
+      responses:
+        "204": {description: Integration deleted}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/task-integrations/{integrationID}/sync:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+      - {name: integrationID, in: path, required: true, schema: {type: string}}
+    post:
+      tags: [TaskIntegrations]
+      operationId: syncTaskIntegrationNow
+      security: [{bearerAuth: []}]
+      responses:
+        "204": {description: Synchronization completed}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
   /api/organizations/{orgID}/workspaces/{workspaceID}/agents:
     parameters:
       - {name: orgID, in: path, required: true, schema: {type: string}}
@@ -523,6 +608,11 @@ components:
       content:
         application/json:
           schema: {$ref: "#/components/schemas/CodeRepositoryCreate"}
+    TaskIntegration:
+      required: true
+      content:
+        application/json:
+          schema: {$ref: "#/components/schemas/TaskIntegrationInput"}
   responses:
     Unauthorized: {description: Missing or invalid credentials}
     Forbidden: {description: Insufficient role permissions}
@@ -678,6 +768,46 @@ components:
       properties:
         providerName: {type: string, enum: [github]}
         url: {type: string, format: uri}
+    TaskIntegrationInput:
+      type: object
+      required: [provider, name, config]
+      properties:
+        provider: {type: string}
+        name: {type: string, minLength: 1, maxLength: 200}
+        enabled: {type: boolean}
+        config: {$ref: "#/components/schemas/TaskIntegrationConfig"}
+        labels: {type: array, items: {type: string}}
+        interval: {type: string, example: 5m}
+        credential: {type: string, writeOnly: true}
+    TaskIntegration:
+      type: object
+      required: [id, workspaceId, provider, name, enabled, config, labels, interval, createdAt, updatedAt]
+      properties:
+        id: {type: string}
+        workspaceId: {type: string}
+        provider: {type: string}
+        name: {type: string}
+        enabled: {type: boolean}
+        config: {$ref: "#/components/schemas/TaskIntegrationConfig"}
+        labels: {type: array, items: {type: string}}
+        interval: {type: string}
+        lastSynced: {type: string, format: date-time}
+        lastError: {type: string}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+    TaskIntegrationConfig:
+      type: object
+      description: Provider-defined config. Retrieve allowed fields and constraints from GET /api/task-integration-providers.
+      additionalProperties: true
+    TaskIntegrationProvider:
+      type: object
+      required: [provider, configSchema]
+      properties:
+        provider: {type: string}
+        configSchema:
+          type: object
+          description: JSON Schema that validates the provider-specific TaskIntegrationInput config.
+          additionalProperties: true
   securitySchemes:
     bearerAuth:
       type: http

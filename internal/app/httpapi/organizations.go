@@ -10,6 +10,7 @@ import (
 	modelerrors "github.com/josemiguelmelo/orkest/internal/core/model/errors"
 	"github.com/josemiguelmelo/orkest/internal/organization"
 	"github.com/josemiguelmelo/orkest/internal/task"
+	"github.com/josemiguelmelo/orkest/internal/taskintegration"
 	"github.com/josemiguelmelo/orkest/internal/workspace"
 )
 
@@ -167,7 +168,18 @@ func respond(w http.ResponseWriter, value any, err error, success int) {
 	if err != nil {
 		status, code := http.StatusInternalServerError, "internal_error"
 		var dispatchError *task.DispatchError
+		var integrationValidationError *taskintegration.ValidationError
+		var integrationConfigurationError *taskintegration.ConfigurationError
 		switch {
+		case errors.Is(err, taskintegration.ErrEncryptionKeyUnavailable):
+			status, code = http.StatusServiceUnavailable, "integration_encryption_not_configured"
+		case errors.As(err, &integrationValidationError):
+			status, code = http.StatusBadGateway, integrationValidationError.Code
+			if code == "" {
+				code = "integration_validation_failed"
+			}
+		case errors.As(err, &integrationConfigurationError):
+			status, code = http.StatusBadRequest, integrationConfigurationError.Code
 		case errors.As(err, &dispatchError):
 			status, code = http.StatusBadGateway, "agent_dispatch_failed"
 		case errors.Is(err, modelerrors.ErrInvalid):
