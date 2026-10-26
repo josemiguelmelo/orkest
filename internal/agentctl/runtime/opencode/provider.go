@@ -104,7 +104,10 @@ type runtimeMCP struct {
 	Headers map[string]string `json:"headers,omitempty"`
 }
 
-var agentNamePattern = regexp.MustCompile(`[^a-z0-9-]+`)
+var (
+	agentNamePattern = regexp.MustCompile(`[^a-z0-9-]+`)
+	skillIDPattern   = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
+)
 
 func (p *OpenCodeProvider) prepareEnvironment(root string, config agentctl.RunConfig) ([]string, error) {
 	env := append([]string{}, p.Env...)
@@ -125,6 +128,9 @@ func (p *OpenCodeProvider) prepareEnvironment(root string, config agentctl.RunCo
 	if err := materializeAgent(filepath.Join(root, configDir, "opencode", "agents"), config); err != nil {
 		return nil, err
 	}
+	if err := materializeSkills(filepath.Join(root, configDir, "opencode", "skills"), config.Skills); err != nil {
+		return nil, err
+	}
 	mcpConfig, err := buildMCPConfiguration(config.MCPServers)
 	if err != nil {
 		return nil, err
@@ -136,6 +142,22 @@ func (p *OpenCodeProvider) prepareEnvironment(root string, config agentctl.RunCo
 	}
 	env = append(env, "OPENCODE_CONFIG_CONTENT="+string(runtimeConfig), "OPENCODE_DISABLE_PROJECT_CONFIG=true")
 	return env, nil
+}
+
+func materializeSkills(directory string, skills []agentctl.Skill) error {
+	for _, value := range skills {
+		if !skillIDPattern.MatchString(value.ID) {
+			return errors.New("invalid skill ID")
+		}
+		skillDirectory := filepath.Join(directory, value.ID)
+		if err := os.MkdirAll(skillDirectory, 0o700); err != nil {
+			return runtimeFailure("create skill configuration directory failed", err)
+		}
+		if err := os.WriteFile(filepath.Join(skillDirectory, "SKILL.md"), []byte(value.SkillMD+"\n"), 0o600); err != nil {
+			return runtimeFailure("write skill configuration failed", err)
+		}
+	}
+	return nil
 }
 
 func buildMCPConfiguration(servers []agentctl.MCPServer) (*runtimeMCPConfig, error) {

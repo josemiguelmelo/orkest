@@ -9,6 +9,17 @@ import (
 	"context"
 )
 
+const isPlatformAdmin = `-- name: IsPlatformAdmin :one
+SELECT platform_admin FROM users WHERE id = $1
+`
+
+func (q *Queries) IsPlatformAdmin(ctx context.Context, id string) (bool, error) {
+	row := q.db.QueryRow(ctx, isPlatformAdmin, id)
+	var platform_admin bool
+	err := row.Scan(&platform_admin)
+	return platform_admin, err
+}
+
 const registerUser = `-- name: RegisterUser :one
 INSERT INTO users (id, keycloak_subject, username, email)
 VALUES ($1, $2, $3, $4)

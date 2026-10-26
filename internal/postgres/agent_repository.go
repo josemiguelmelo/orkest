@@ -34,6 +34,10 @@ func (r *AgentPostgresRepository) Agents(ctx context.Context, orgID, workspaceID
 		if err != nil {
 			return nil, err
 		}
+		value.SkillIDs, err = r.skillIDs(ctx, row.WorkspaceID, row.ID)
+		if err != nil {
+			return nil, err
+		}
 		out = append(out, value)
 	}
 	return out, nil
@@ -41,11 +45,14 @@ func (r *AgentPostgresRepository) Agents(ctx context.Context, orgID, workspaceID
 
 func (r *AgentPostgresRepository) Agent(ctx context.Context, orgID, workspaceID, id string) (agent.Agent, error) {
 	row, err := r.queries.GetAgent(ctx, sqlc.GetAgentParams{OrganizationID: orgID, WorkspaceID: workspaceID, ID: id})
-	a := agent.Agent{ID: row.ID, WorkspaceID: row.WorkspaceID, AgentDefinition: agent.AgentDefinition{Name: row.Name, Runtime: agent.Runtime(row.Runtime), Provider: row.Provider, Model: row.Model, Description: row.Description, SystemPrompt: row.SystemPrompt}}
 	if err != nil {
 		return agent.Agent{}, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
 	}
+	a := agent.Agent{ID: row.ID, WorkspaceID: row.WorkspaceID, AgentDefinition: agent.AgentDefinition{Name: row.Name, Runtime: agent.Runtime(row.Runtime), Provider: row.Provider, Model: row.Model, Description: row.Description, SystemPrompt: row.SystemPrompt}}
 	a.MCPServerIDs, err = r.mcpServerIDs(ctx, id)
+	if err == nil {
+		a.SkillIDs, err = r.skillIDs(ctx, workspaceID, id)
+	}
 	return a, err
 }
 
@@ -61,10 +68,14 @@ func (r *AgentPostgresRepository) CreateAgent(ctx context.Context, id, workspace
 		err = replaceAgentMCPServers(ctx, tx, workspaceID, id, definition.MCPServerIDs)
 	}
 	if err == nil {
+		err = replaceAgentSkills(ctx, queries, workspaceID, id, definition.SkillIDs)
+	}
+	if err == nil {
 		err = tx.Commit(ctx)
 	}
 	a := agent.Agent{ID: row.ID, WorkspaceID: row.WorkspaceID, AgentDefinition: agent.AgentDefinition{Name: row.Name, Runtime: agent.Runtime(row.Runtime), Provider: row.Provider, Model: row.Model, Description: row.Description, SystemPrompt: row.SystemPrompt}}
 	a.MCPServerIDs = definition.MCPServerIDs
+	a.SkillIDs = definition.SkillIDs
 	return a, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
 }
 
@@ -80,11 +91,25 @@ func (r *AgentPostgresRepository) UpdateAgent(ctx context.Context, orgID, worksp
 		err = replaceAgentMCPServers(ctx, tx, workspaceID, id, definition.MCPServerIDs)
 	}
 	if err == nil {
+		err = replaceAgentSkills(ctx, queries, workspaceID, id, definition.SkillIDs)
+	}
+	if err == nil {
 		err = tx.Commit(ctx)
 	}
 	a := agent.Agent{ID: row.ID, WorkspaceID: row.WorkspaceID, AgentDefinition: agent.AgentDefinition{Name: row.Name, Runtime: agent.Runtime(row.Runtime), Provider: row.Provider, Model: row.Model, Description: row.Description, SystemPrompt: row.SystemPrompt}}
 	a.MCPServerIDs = definition.MCPServerIDs
+	a.SkillIDs = definition.SkillIDs
 	return a, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
+}
+
+func (r *AgentPostgresRepository) skillIDs(ctx context.Context, workspaceID, agentID string) ([]string, error) {
+	rows, err := r.queries.ListAgentSkillIDs(ctx, sqlc.ListAgentSkillIDsParams{WorkspaceID: workspaceID, AgentID: agentID})
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]string, 0, len(rows))
+	ids = append(ids, rows...)
+	return ids, nil
 }
 
 func (r *AgentPostgresRepository) DeleteAgent(ctx context.Context, orgID, workspaceID, id string) error {
@@ -119,6 +144,18 @@ func replaceAgentMCPServers(ctx context.Context, tx pgx.Tx, workspaceID, agentID
 	for _, id := range ids {
 		if _, err := tx.Exec(ctx, `INSERT INTO agent_mcp_servers(workspace_id,agent_id,mcp_server_id) VALUES($1,$2,$3)`, workspaceID, agentID, id); err != nil {
 			return fmt.Errorf("save agent MCP server selection: %w", err)
+		}
+	}
+	return nil
+}
+
+func replaceAgentSkills(ctx context.Context, queries *sqlc.Queries, workspaceID, agentID string, ids []string) error {
+	if err := queries.DeleteAgentSkills(ctx, sqlc.DeleteAgentSkillsParams{WorkspaceID: workspaceID, AgentID: agentID}); err != nil {
+		return err
+	}
+	for _, id := range ids {
+		if err := queries.InsertAgentSkill(ctx, sqlc.InsertAgentSkillParams{WorkspaceID: workspaceID, AgentID: agentID, SkillID: id}); err != nil {
+			return fmt.Errorf("save agent skill selection: %w", err)
 		}
 	}
 	return nil

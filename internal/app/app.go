@@ -22,6 +22,7 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/orchestration"
 	"github.com/josemiguelmelo/orkest/internal/organization"
 	"github.com/josemiguelmelo/orkest/internal/postgres"
+	"github.com/josemiguelmelo/orkest/internal/skill"
 	"github.com/josemiguelmelo/orkest/internal/task"
 	"github.com/josemiguelmelo/orkest/internal/taskintegration"
 	githubcloud "github.com/josemiguelmelo/orkest/internal/taskintegration/providers/githubcloud"
@@ -56,6 +57,7 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 	users := identity.NewUserRegistrationService(postgres.NewUserPostgresRepository(database))
 	organizations := organization.NewOrganizationService(postgres.NewOrganizationPostgresRepository(database))
 	workspaces := workspace.NewWorkspaceService(postgres.NewWorkspacePostgresRepository(database), organizations)
+	skillCatalog := skill.NewCatalogService(postgres.NewSkillCatalogPostgresRepository(database), organizations, workspaces, users)
 	var secretBox *taskintegration.SecretBox
 	if key := os.Getenv("ORKEST_INTEGRATION_ENCRYPTION_KEY"); key != "" {
 		secretBox, err = taskintegration.NewSecretBox(key)
@@ -64,7 +66,7 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 		}
 	}
 	mcpServerService := mcpserver.NewMCPServerService(postgres.NewMCPServerPostgresRepository(database), secretBox, workspaces)
-	agents := agent.NewService(postgres.NewAgentPostgresRepository(database), workspaces, mcpServerService)
+	agents := agent.NewService(postgres.NewAgentPostgresRepository(database), workspaces, mcpServerService, skillCatalog)
 	codeRepositories := coderepository.NewService(postgres.NewCodeReposPostgresRepository(database), workspaces, dataRoot, githubprovider.NewGitHubCodeRepositoryProvider())
 	launchRepo := postgres.NewAgentLaunchPostgresRepository(database)
 	client := orchestration.NewHTTPAgentctlClient(&http.Client{Timeout: 10 * time.Second})
@@ -102,6 +104,7 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	dispatcher.SetSkillResolver(skillCatalog)
 	tasks := task.NewService(postgres.NewTaskPostgresRepository(database), workspaces, dispatcher)
 	integrations := taskintegration.NewTaskIntegrationService(postgres.NewPostgresTaskIntegrationRepository(database), secretBox, workspaces, organizations, postgres.NewPostgresImportedTaskRepository(database), githubcloud.NewGitHubCloudProvider(), jiraserver.NewJiraServerProvider())
 	runnerCtx, stopRunner := context.WithCancel(ctx)
@@ -110,9 +113,9 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 	go func() { defer runnerWG.Done(); integrations.Run(runnerCtx) }()
 	var router http.Handler
 	if strings.EqualFold(os.Getenv("ORKEST_ENABLE_TEMP_AGENT_LAUNCH"), "true") {
-		router, err = httpapi.NewRouter(users, organizations, workspaces, agents, codeRepositories, tasks, integrations, mcpServerService, launchService)
+		router, err = httpapi.NewRouter(users, organizations, workspaces, agents, codeRepositories, tasks, integrations, mcpServerService, skillCatalog, launchService)
 	} else {
-		router, err = httpapi.NewRouter(users, organizations, workspaces, agents, codeRepositories, tasks, integrations, mcpServerService)
+		router, err = httpapi.NewRouter(users, organizations, workspaces, agents, codeRepositories, tasks, integrations, mcpServerService, skillCatalog)
 	}
 	if err != nil {
 		stopRunner()

@@ -130,6 +130,12 @@ It preserves timestamps, execution state, events, logs, approval requests, and r
 
 The platform should snapshot effective configuration for each run so later edits to an agent definition do not change the historical record.
 
+### 3.12 Agent Skill
+
+An agent skill is a reusable `SKILL.md` instruction document in the Agent Skills format. Skills have global scope (shared across organizations and workspaces), organization scope, or workspace scope. Users can read skills within their visibility scope; platform admins manage global skills, organization owners/admins manage organization skills, and workspace admins plus inherited organization owners/admins manage workspace skills. These roles can create, update, and delete skills. Global platform-admin status is application-managed on the user record and is provisioned by deployment operators.
+
+Agent definitions select skills by their globally unique lowercase skill ID. The API and run configuration use `skillMD` for the primary Markdown file. At task start, the platform resolves only skills visible in that workspace and snapshots `skillMD` into the run configuration. OpenCode receives the selected `SKILL.md` files under its project skill directory, where its native skill tool can discover and load them. V1 does not support companion files; the catalog can later extend from `skillMD` to the full directory structure without changing the meaning of this field.
+
 ## 4. Execution and communication
 
 Proposed communication structure:
@@ -229,6 +235,7 @@ Event retention, recovery time targets, host-loss guarantees, and overall availa
 - A failed/interrupted execution is visible while its task remains in progress; a normal task failure does not automatically start another attempt.
 - OpenCode executes through agentctl with configurable model selection, HTTP MCP connections, and task-specific approvals.
 - Built-in platform tools expose only authorized workspace task and repository information; no custom tool catalog is required.
+- The skill catalog is separate from the deferred custom tool catalog. Skill IDs are globally unique to prevent collisions across scopes. Skill frontmatter requires a matching `name`, a non-empty `description`, and a Markdown instruction body.
 - A user can register repositories, create an agent definition, and add two team members using that definition.
 - Both members can execute separate tasks concurrently; one member cannot execute two tasks concurrently.
 - Assignment alone does not start execution. An explicit user transition into in progress initiates execution when prerequisites are satisfied.

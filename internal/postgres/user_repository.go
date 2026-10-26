@@ -27,3 +27,7 @@ func (s *UserPostgresRepository) RegisterUser(ctx context.Context, subject, user
 	row, err := s.queries.RegisterUser(ctx, sqlc.RegisterUserParams{ID: id, KeycloakSubject: subject, Username: username, Email: email})
 	return identity.User{ID: row.ID, Username: row.Username, Email: row.Email}, err
 }
+
+func (s *UserPostgresRepository) IsPlatformAdmin(ctx context.Context, userID string) (bool, error) {
+	return s.queries.IsPlatformAdmin(ctx, userID)
+}

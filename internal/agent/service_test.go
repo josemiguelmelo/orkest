@@ -46,7 +46,7 @@ func validDefinition() AgentDefinition {
 }
 
 func TestCreateRejectsMCPServerOutsideWorkspace(t *testing.T) {
-	service := NewService(&repositoryStub{}, workspaceStub{role: "member"}, mcpAccessStub{valid: false})
+	service := NewService(&repositoryStub{}, workspaceStub{role: "member"}, mcpAccessStub{valid: false}, nil)
 	definition := validDefinition()
 	definition.MCPServerIDs = []string{"server-from-another-workspace"}
 	if _, err := service.Create(context.Background(), "user", "org", "workspace", definition); err != modelerrors.ErrInvalid {
@@ -57,7 +57,7 @@ func TestCreateRejectsMCPServerOutsideWorkspace(t *testing.T) {
 func TestUpdatePreservesMCPSelectionWhenFieldOmitted(t *testing.T) {
 	repository := &repositoryStub{value: Agent{ID: "agent", WorkspaceID: "workspace", AgentDefinition: validDefinition()}}
 	repository.value.MCPServerIDs = []string{"selected-server"}
-	service := NewService(repository, workspaceStub{role: "member"}, mcpAccessStub{valid: true})
+	service := NewService(repository, workspaceStub{role: "member"}, mcpAccessStub{valid: true}, nil)
 	updated, err := service.Update(context.Background(), "user", "org", "workspace", "agent", validDefinition())
 	if err != nil {
 		t.Fatal(err)

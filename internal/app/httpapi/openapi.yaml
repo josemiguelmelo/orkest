@@ -15,6 +15,8 @@ tags:
     description: Workspaces and workspace memberships.
   - name: Agents
     description: Workspace-scoped reusable agent definitions.
+  - name: Skills
+    description: Global, organization, and workspace Agent Skills catalog.
   - name: MCPServers
     description: Workspace-scoped HTTP MCP server connections.
   - name: CodeRepositories
@@ -619,6 +621,105 @@ paths:
         "200": {description: Updated component, content: {application/json: {schema: {$ref: "#/components/schemas/Component"}}}}
         "404": {$ref: "#/components/responses/NotFound"}
         "409": {$ref: "#/components/responses/Conflict"}
+  /api/skills:
+    get:
+      tags: [Skills]
+      operationId: listGlobalSkills
+      security: [{bearerAuth: []}]
+      responses: {"200": {description: Global skills, content: {application/json: {schema: {$ref: "#/components/schemas/Skills"}}}}}
+    post:
+      tags: [Skills]
+      operationId: createGlobalSkill
+      security: [{bearerAuth: []}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/SkillInput"}}}}
+      responses: {"201": {description: Created skill, content: {application/json: {schema: {$ref: "#/components/schemas/Skill"}}}}, "403": {$ref: "#/components/responses/Forbidden"}}
+  /api/skills/{skillID}:
+    parameters: [{name: skillID, in: path, required: true, schema: {type: string}}]
+    get:
+      tags: [Skills]
+      operationId: getGlobalSkill
+      security: [{bearerAuth: []}]
+      responses: {"200": {description: Skill, content: {application/json: {schema: {$ref: "#/components/schemas/Skill"}}}}, "404": {$ref: "#/components/responses/NotFound"}}
+    put:
+      tags: [Skills]
+      operationId: updateGlobalSkill
+      security: [{bearerAuth: []}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/SkillInput"}}}}
+      responses: {"200": {description: Updated skill, content: {application/json: {schema: {$ref: "#/components/schemas/Skill"}}}}, "403": {$ref: "#/components/responses/Forbidden"}}
+    delete:
+      tags: [Skills]
+      operationId: deleteGlobalSkill
+      security: [{bearerAuth: []}]
+      responses: {"204": {description: Deleted skill}, "403": {$ref: "#/components/responses/Forbidden"}}
+  /api/organizations/{orgID}/skills:
+    parameters: [{name: orgID, in: path, required: true, schema: {type: string}}]
+    get:
+      tags: [Skills]
+      operationId: listOrganizationSkills
+      security: [{bearerAuth: []}]
+      responses: {"200": {description: Organization skills, content: {application/json: {schema: {$ref: "#/components/schemas/Skills"}}}}}
+    post:
+      tags: [Skills]
+      operationId: createOrganizationSkill
+      security: [{bearerAuth: []}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/SkillInput"}}}}
+      responses: {"201": {description: Created skill, content: {application/json: {schema: {$ref: "#/components/schemas/Skill"}}}}, "403": {$ref: "#/components/responses/Forbidden"}}
+  /api/organizations/{orgID}/skills/{skillID}:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: skillID, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [Skills]
+      operationId: getOrganizationSkill
+      security: [{bearerAuth: []}]
+      responses: {"200": {description: Skill, content: {application/json: {schema: {$ref: "#/components/schemas/Skill"}}}}, "404": {$ref: "#/components/responses/NotFound"}}
+    put:
+      tags: [Skills]
+      operationId: updateOrganizationSkill
+      security: [{bearerAuth: []}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/SkillInput"}}}}
+      responses: {"200": {description: Updated skill, content: {application/json: {schema: {$ref: "#/components/schemas/Skill"}}}}, "403": {$ref: "#/components/responses/Forbidden"}}
+    delete:
+      tags: [Skills]
+      operationId: deleteOrganizationSkill
+      security: [{bearerAuth: []}]
+      responses: {"204": {description: Deleted skill}, "403": {$ref: "#/components/responses/Forbidden"}}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/skills:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [Skills]
+      operationId: listWorkspaceSkills
+      security: [{bearerAuth: []}]
+      responses: {"200": {description: Skills visible in workspace, content: {application/json: {schema: {$ref: "#/components/schemas/Skills"}}}}}
+    post:
+      tags: [Skills]
+      operationId: createWorkspaceSkill
+      security: [{bearerAuth: []}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/SkillInput"}}}}
+      responses: {"201": {description: Created skill, content: {application/json: {schema: {$ref: "#/components/schemas/Skill"}}}}, "403": {$ref: "#/components/responses/Forbidden"}}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/skills/{skillID}:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+      - {name: skillID, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [Skills]
+      operationId: getWorkspaceSkill
+      security: [{bearerAuth: []}]
+      responses: {"200": {description: Skill, content: {application/json: {schema: {$ref: "#/components/schemas/Skill"}}}}, "404": {$ref: "#/components/responses/NotFound"}}
+    put:
+      tags: [Skills]
+      operationId: updateWorkspaceSkill
+      security: [{bearerAuth: []}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/SkillInput"}}}}
+      responses: {"200": {description: Updated skill, content: {application/json: {schema: {$ref: "#/components/schemas/Skill"}}}}, "403": {$ref: "#/components/responses/Forbidden"}}
+    delete:
+      tags: [Skills]
+      operationId: deleteWorkspaceSkill
+      security: [{bearerAuth: []}]
+      responses: {"204": {description: Deleted skill}, "403": {$ref: "#/components/responses/Forbidden"}}
 components:
   requestBodies:
     NamedResource:
@@ -651,6 +752,7 @@ components:
               description: {type: string, maxLength: 2000}
               systemPrompt: {type: string, maxLength: 100000}
               mcpServerIds: {type: array, uniqueItems: true, items: {type: string}}
+              skillIds: {type: array, uniqueItems: true, items: {type: string}}
     MCPServerInput:
       required: true
       content:
@@ -680,6 +782,25 @@ components:
     BadRequest: {description: Request body or role is invalid}
     Conflict: {description: Operation conflicts with membership invariants}
   schemas:
+    SkillInput:
+      type: object
+      required: [skillMD]
+      properties:
+        skillMD: {type: string, minLength: 1, maxLength: 100000, description: Complete SKILL.md including required frontmatter}
+    Skill:
+      type: object
+      required: [id, scope, skillMD, createdAt, updatedAt]
+      properties:
+        id: {type: string}
+        scope: {type: string, enum: [global, organization, workspace]}
+        organizationId: {type: string}
+        workspaceId: {type: string}
+        skillMD: {type: string}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+    Skills:
+      type: array
+      items: {$ref: "#/components/schemas/Skill"}
     TempAgentLaunchRequest:
       type: object
       additionalProperties: false
@@ -803,7 +924,7 @@ components:
         updatedAt: {type: string, format: date-time}
     Agent:
       type: object
-      required: [id, workspaceId, name, runtime, provider, model, description, systemPrompt, mcpServerIds]
+      required: [id, workspaceId, name, runtime, provider, model, description, systemPrompt, mcpServerIds, skillIds]
       properties:
         id: {type: string}
         workspaceId: {type: string}
@@ -814,6 +935,7 @@ components:
         description: {type: string}
         systemPrompt: {type: string}
         mcpServerIds: {type: array, items: {type: string}}
+        skillIds: {type: array, items: {type: string}}
     MCPServer:
       type: object
       required: [id, workspaceId, name, url, hasHeaders]

@@ -11,6 +11,7 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/agentctl"
 	"github.com/josemiguelmelo/orkest/internal/core/ids"
 	"github.com/josemiguelmelo/orkest/internal/mcpserver"
+	"github.com/josemiguelmelo/orkest/internal/skill"
 	"github.com/josemiguelmelo/orkest/internal/task"
 )
 
@@ -25,6 +26,16 @@ type TaskDispatcher struct {
 	mcpServers interface {
 		Resolve(context.Context, string, []string) ([]mcpserver.RuntimeServer, error)
 	}
+	skillResolver interface {
+		ResolveForAgent(context.Context, string, string, []string) ([]skill.Skill, error)
+	}
+}
+
+func (d *TaskDispatcher) SetSkillResolver(resolver interface {
+	ResolveForAgent(context.Context, string, string, []string) ([]skill.Skill, error)
+},
+) {
+	d.skillResolver = resolver
 }
 
 func NewTaskDispatcher(agents taskAgentGetter, launches *LaunchService, mcpServers ...interface {
@@ -76,6 +87,21 @@ func (d *TaskDispatcher) StartTask(ctx context.Context, userID, organizationID s
 			Instructions: systemPrompt,
 		},
 		Model: agentctl.ModelSelection{Provider: definition.Provider, ID: definition.Model},
+	}
+	if len(definition.SkillIDs) > 0 {
+		if d.skillResolver == nil {
+			return errors.New("agent skill resolver is unavailable")
+		}
+		resolved, resolveErr := d.skillResolver.ResolveForAgent(ctx, organizationID, value.WorkspaceID, definition.SkillIDs)
+		if resolveErr != nil {
+			return fmt.Errorf("resolve agent skills: %w", resolveErr)
+		}
+		for _, item := range resolved {
+			config.Skills = append(config.Skills, agentctl.Skill{ID: item.ID, SkillMD: item.SkillMD})
+		}
+		if len(config.Skills) != len(definition.SkillIDs) {
+			return errors.New("one or more selected agent skills are unavailable")
+		}
 	}
 	if len(definition.MCPServerIDs) > 0 {
 		if d.mcpServers == nil {
