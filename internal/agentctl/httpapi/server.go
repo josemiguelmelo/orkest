@@ -4,6 +4,7 @@ package httpapi
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/agentctl"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/httpapi/rest"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/httpapi/websocket"
+	"github.com/josemiguelmelo/orkest/internal/core/httplog"
 	"github.com/josemiguelmelo/orkest/internal/core/openapi"
 )
 
@@ -40,8 +42,13 @@ func NewServer(ctx context.Context, controller *agentctl.RunController) (*Server
 	return &Server{rest: restServer, websocket: streamServer}, nil
 }
 
-func (s *Server) Handler() http.Handler {
+func (s *Server) Handler(loggers ...*slog.Logger) http.Handler {
 	router := chi.NewRouter()
+	var logger *slog.Logger
+	if len(loggers) > 0 {
+		logger = loggers[0]
+	}
+	router.Use(httplog.Middleware(logger))
 	s.rest.RegisterRoutes(router)
 	s.websocket.RegisterRoutes(router)
 	openapi.Enable(router, "Orkest agentctl API", OpenAPIContract)

@@ -24,6 +24,6 @@ func RunAgentctl(ctx context.Context, logger *slog.Logger, address string, provi
 		return err
 	}
 
-	server := &http.Server{Addr: address, Handler: api.Handler(), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, IdleTimeout: 60 * time.Second}
+	server := &http.Server{Addr: address, Handler: api.Handler(logger), ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, IdleTimeout: 60 * time.Second}
 	return httpserver.Run(ctx, logger, "agentctl", server)
 }

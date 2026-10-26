@@ -15,6 +15,7 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/app/httpapi"
 	"github.com/josemiguelmelo/orkest/internal/coderepository"
 	githubprovider "github.com/josemiguelmelo/orkest/internal/coderepository/providers/github"
+	"github.com/josemiguelmelo/orkest/internal/core/httplog"
 	"github.com/josemiguelmelo/orkest/internal/core/httpserver"
 	"github.com/josemiguelmelo/orkest/internal/executors/docker"
 	"github.com/josemiguelmelo/orkest/internal/identity"
@@ -69,7 +70,7 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 	agents := agent.NewService(postgres.NewAgentPostgresRepository(database), workspaces, mcpServerService, skillCatalog)
 	codeRepositories := coderepository.NewService(postgres.NewCodeReposPostgresRepository(database), workspaces, dataRoot, githubprovider.NewGitHubCodeRepositoryProvider())
 	launchRepo := postgres.NewAgentLaunchPostgresRepository(database)
-	client := orchestration.NewHTTPAgentctlClient(&http.Client{Timeout: 10 * time.Second})
+	client := orchestration.NewHTTPAgentctlClient(httplog.PropagatingHTTPClient(&http.Client{Timeout: 10 * time.Second}))
 	executor, executorErr := docker.New(ctx, docker.Config{
 		DataRoot:    filepath.Join(dataRoot, "agent-executions"),
 		ProviderEnv: splitEnvironmentNames(os.Getenv("ORKEST_AGENT_PROVIDER_ENV")),
@@ -123,7 +124,7 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 		return err
 	}
 
-	server := &http.Server{Addr: addr, Handler: router, ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
+	server := &http.Server{Addr: addr, Handler: httplog.Middleware(logger)(router), ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
 	serverErr := httpserver.Run(ctx, logger, "platform", server)
 	stopRunner()
 	runnerWG.Wait()

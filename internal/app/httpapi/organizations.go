@@ -4,9 +4,11 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/josemiguelmelo/orkest/internal/core/httplog"
 	modelerrors "github.com/josemiguelmelo/orkest/internal/core/model/errors"
 	"github.com/josemiguelmelo/orkest/internal/organization"
 	"github.com/josemiguelmelo/orkest/internal/task"
@@ -190,6 +192,13 @@ func respond(w http.ResponseWriter, value any, err error, success int) {
 			status, code = http.StatusNotFound, "not_found"
 		case errors.Is(err, modelerrors.ErrConflict):
 			status, code = http.StatusConflict, "conflict"
+		}
+		if status >= http.StatusInternalServerError {
+			logger := httplog.LoggerFromWriter(w)
+			if logger == nil {
+				logger = slog.Default()
+			}
+			logger.Error("http handler failed", "error", err, "error_code", code)
 		}
 		writeError(w, status, code)
 		return
