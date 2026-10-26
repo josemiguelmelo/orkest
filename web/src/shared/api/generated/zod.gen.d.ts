@@ -28,28 +28,6 @@ export declare const zSkills: z.ZodArray<z.ZodObject<{
     createdAt: z.ZodISODateTime;
     updatedAt: z.ZodISODateTime;
 }, z.core.$strip>>;
-export declare const zTempAgentLaunchRequest: z.ZodObject<{
-    config: z.ZodObject<{
-        organizationId: z.ZodString;
-        workspaceId: z.ZodString;
-        taskId: z.ZodString;
-        runId: z.ZodString;
-        runtime: z.ZodEnum<{
-            opencode: "opencode";
-        }>;
-        model: z.ZodObject<{
-            provider: z.ZodString;
-            id: z.ZodString;
-        }, z.core.$strip>;
-        agent: z.ZodObject<{
-            name: z.ZodString;
-            description: z.ZodString;
-            instructions: z.ZodString;
-        }, z.core.$strip>;
-    }, z.core.$strip>;
-    commandId: z.ZodString;
-    prompt: z.ZodString;
-}, z.core.$strip>;
 export declare const zUser: z.ZodObject<{
     id: z.ZodString;
     username: z.ZodString;
@@ -329,28 +307,6 @@ export declare const zTaskIntegration2: z.ZodObject<{
     labels: z.ZodOptional<z.ZodArray<z.ZodString>>;
     interval: z.ZodOptional<z.ZodString>;
     credential: z.ZodOptional<z.ZodString>;
-}, z.core.$strip>;
-export declare const zTemporaryLaunchAgentWithPromptBody: z.ZodObject<{
-    config: z.ZodObject<{
-        organizationId: z.ZodString;
-        workspaceId: z.ZodString;
-        taskId: z.ZodString;
-        runId: z.ZodString;
-        runtime: z.ZodEnum<{
-            opencode: "opencode";
-        }>;
-        model: z.ZodObject<{
-            provider: z.ZodString;
-            id: z.ZodString;
-        }, z.core.$strip>;
-        agent: z.ZodObject<{
-            name: z.ZodString;
-            description: z.ZodString;
-            instructions: z.ZodString;
-        }, z.core.$strip>;
-    }, z.core.$strip>;
-    commandId: z.ZodString;
-    prompt: z.ZodString;
 }, z.core.$strip>;
 /**
  * HTTP process is running

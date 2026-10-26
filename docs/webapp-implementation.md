@@ -2,7 +2,7 @@
 
 ## Implemented behavior
 
-The compact workbench covers organizations, workspaces and memberships; tasks, comments and components; agent definitions; global/organization/workspace skills; public GitHub repository registration, clone and reset-to-main; task integrations; HTTP MCP connections; and task run activity, chat, approval responses, and cancellation. All screens use the authenticated platform API. The standalone agentctl API and temporary launch API are not exposed.
+The compact workbench covers organizations, workspaces and memberships; tasks, comments and components; agent definitions; global/organization/workspace skills; public GitHub repository registration, clone and reset-to-main; task integrations; HTTP MCP connections; and task run activity, chat, approval responses, and cancellation. All screens use the authenticated platform API. The standalone agentctl API is not exposed.
 
 Users can create tasks in todo, assign agents, and explicitly start work. Task detail shows durable launch history and ordered runtime activity, polls for new activity, and supports chat, permission responses, and cancellation while a run is active. Agent chat remains separate from user comments. The run API checks task and workspace access, rejects viewer mutations, and does not expose executor endpoints or process identities. The platform currently closes the agent process when a prompt completes, so further chat is only available during that active work step. Team member slot allocation and supported session continuation are not implemented; the UI does not claim either capability. Done tasks cannot reopen. Imported title, description and labels stay source-managed.
 

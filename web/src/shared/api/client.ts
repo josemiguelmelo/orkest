@@ -29,6 +29,9 @@ const messages: Record<string, string> = {
     'The GitHub project is unavailable with these credentials.',
   agent_dispatch_failed:
     'The task changed to in progress, but agent dispatch failed. Refresh to see its current state.',
+  run_not_found: 'This run is no longer available. Refresh the task to load its current run history.',
+  run_activity_unavailable:
+    'Agent activity could not be loaded right now. Try again in a moment.',
 };
 const errorSchema = z.object({ error: z.string() });
 client.setConfig({ baseUrl: window.location.origin, credentials: 'same-origin' });
