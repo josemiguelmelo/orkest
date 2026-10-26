@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -23,7 +22,7 @@ import (
 )
 
 // NewRouter validates the served OpenAPI contract before exposing routes.
-func NewRouter(users *identity.UserRegistrationService, organizations *organization.OrganizationService, workspaces *workspace.WorkspaceService, agents *agent.Service, codeRepositories *coderepository.Service, tasks *task.Service, integrations *taskintegration.TaskIntegrationService, mcpServers *mcpserver.MCPServerService, skillCatalog *skill.CatalogService, tempLaunches ...*orchestration.LaunchService) (*chi.Mux, error) {
+func NewRouter(users *identity.UserRegistrationService, organizations *organization.OrganizationService, workspaces *workspace.WorkspaceService, agents *agent.Service, codeRepositories *coderepository.Service, tasks *task.Service, integrations *taskintegration.TaskIntegrationService, mcpServers *mcpserver.MCPServerService, skillCatalog *skill.CatalogService, launches *orchestration.LaunchService) (*chi.Mux, error) {
 	if _, err := openapi.LoadAndValidateOpenAPIDoc(OpenAPIContract, context.Background()); err != nil {
 		return nil, fmt.Errorf("load platform OpenAPI contract: %w", err)
 	}
@@ -59,11 +58,8 @@ func NewRouter(users *identity.UserRegistrationService, organizations *organizat
 			}
 			codeRepositoryAPI{repositories: codeRepositories}.routes(api)
 			taskAPI{tasks: tasks}.routes(api)
-			if len(tempLaunches) > 0 && tempLaunches[0] != nil {
-				taskRunAPI{tasks: tasks, launches: tempLaunches[0]}.routes(api)
-				if strings.EqualFold(os.Getenv("ORKEST_ENABLE_TEMP_AGENT_LAUNCH"), "true") {
-					tempAgentLaunchAPI{launches: tempLaunches[0]}.routes(api)
-				}
+			if launches != nil {
+				taskRunAPI{tasks: tasks, launches: launches}.routes(api)
 			}
 			if integrations != nil {
 				taskIntegrationAPI{service: integrations}.routes(api)

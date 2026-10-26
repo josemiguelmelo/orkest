@@ -17,26 +17,6 @@ export type Skill = {
     updatedAt: string;
 };
 export type Skills = Array<Skill>;
-export type TempAgentLaunchRequest = {
-    config: {
-        organizationId: string;
-        workspaceId: string;
-        taskId: string;
-        runId: string;
-        runtime: 'opencode';
-        model: {
-            provider: string;
-            id: string;
-        };
-        agent: {
-            name: string;
-            description: string;
-            instructions: string;
-        };
-    };
-    commandId: string;
-    prompt: string;
-};
 export type CurrentUser = {
     user: User;
     organizations: Array<Organization>;
@@ -241,37 +221,6 @@ export type McpServerInput = {
 };
 export type CodeRepositoryCreate2 = CodeRepositoryCreate;
 export type TaskIntegration2 = TaskIntegrationInputWritable;
-export type TemporaryLaunchAgentWithPromptData = {
-    body: TempAgentLaunchRequest;
-    path?: never;
-    query?: never;
-    url: '/api/temp/agent-launch';
-};
-export type TemporaryLaunchAgentWithPromptErrors = {
-    /**
-     * Request body or role is invalid
-     */
-    400: Error;
-    /**
-     * Missing or invalid credentials
-     */
-    401: Error;
-    /**
-     * Temporary endpoint is disabled
-     */
-    404: unknown;
-    /**
-     * Agent launch or prompt submission failed
-     */
-    502: unknown;
-};
-export type TemporaryLaunchAgentWithPromptError = TemporaryLaunchAgentWithPromptErrors[keyof TemporaryLaunchAgentWithPromptErrors];
-export type TemporaryLaunchAgentWithPromptResponses = {
-    /**
-     * Agent started and prompt accepted
-     */
-    202: unknown;
-};
 export type GetHealthData = {
     body?: never;
     path?: never;

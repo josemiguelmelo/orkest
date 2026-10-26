@@ -17,26 +17,6 @@ export const zSkill = z.object({
     updatedAt: z.iso.datetime()
 });
 export const zSkills = z.array(zSkill);
-export const zTempAgentLaunchRequest = z.object({
-    config: z.object({
-        organizationId: z.string().min(1),
-        workspaceId: z.string().min(1),
-        taskId: z.string().min(1),
-        runId: z.string().min(1),
-        runtime: z.enum(['opencode']),
-        model: z.object({
-            provider: z.string().min(1),
-            id: z.string().min(1)
-        }),
-        agent: z.object({
-            name: z.string().min(1),
-            description: z.string(),
-            instructions: z.string().min(1)
-        })
-    }),
-    commandId: z.string().min(1),
-    prompt: z.string().min(1)
-});
 export const zUser = z.object({
     id: z.string(),
     username: z.string(),
@@ -259,7 +239,6 @@ export const zMcpServerInput = z.object({
 });
 export const zCodeRepositoryCreate2 = zCodeRepositoryCreate;
 export const zTaskIntegration2 = zTaskIntegrationInputWritable;
-export const zTemporaryLaunchAgentWithPromptBody = zTempAgentLaunchRequest;
 /**
  * HTTP process is running
  */
