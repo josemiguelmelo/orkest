@@ -12,8 +12,10 @@ interface. Provider-independent API behavior is documented in
 - `-state-dir` must be an absolute directory on durable storage. Retain it with
   the working tree for the run.
 - Runtime and model in `RunConfig` must be `opencode` and the requested provider
-  and model identifier. The system prompt and model are applied to the `orkest`
-  primary mode.
+  and model identifier. The selected agent definition is written as a Markdown
+  agent file under the isolated `XDG_CONFIG_HOME/opencode/agents` directory.
+  Its name selects the ACP primary mode and its instructions become the system
+  prompt. The materialized file remains in durable runtime state for the run.
 
 The provider starts `opencode acp` and connects over local stdio using ACP v1.
 It initializes a new session in the configured working directory. OpenCode's

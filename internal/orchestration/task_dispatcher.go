@@ -59,8 +59,12 @@ func (d *TaskDispatcher) StartTask(ctx context.Context, userID, organizationID s
 		TaskID:         value.ID,
 		RunID:          runID,
 		Runtime:        definition.Runtime,
-		Model:          agentctl.ModelSelection{Provider: definition.Provider, ID: definition.Model},
-		SystemPrompt:   systemPrompt,
+		Agent: agentctl.AgentDefinition{
+			Name:         definition.Name,
+			Description:  definition.Description,
+			Instructions: systemPrompt,
+		},
+		Model: agentctl.ModelSelection{Provider: definition.Provider, ID: definition.Model},
 	}
 	prompt, err := taskPrompt(value)
 	if err != nil {

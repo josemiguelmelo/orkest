@@ -47,7 +47,11 @@ Request body:
     "runId": "manual-test-1",
     "runtime": "opencode",
     "model": {"provider": "YOUR_PROVIDER", "id": "YOUR_MODEL"},
-    "systemPrompt": "Help test this agent."
+    "agent": {
+      "name": "Test agent",
+      "description": "Helps test this agent.",
+      "instructions": "Help test this agent."
+    }
   },
   "commandId": "prompt-1",
   "prompt": "Summarize the workspace."

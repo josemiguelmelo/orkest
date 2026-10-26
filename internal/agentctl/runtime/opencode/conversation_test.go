@@ -20,7 +20,7 @@ func conversationService(t *testing.T) *agentctl.RunController {
 	provider := &OpenCodeProvider{Binary: binary, WorkDir: t.TempDir(), StateDir: state, Env: []string{"ORKEST_ACP_FIXTURE=1"}}
 	service := agentctl.NewRunControllerWithRuntimeProvider(context.Background(), provider, state)
 	t.Cleanup(func() { _ = service.Close() })
-	config := agentctl.RunConfig{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", RunID: "run", Runtime: "opencode", Model: agentctl.ModelSelection{Provider: "provider", ID: "model"}, SystemPrompt: "Work"}
+	config := agentctl.RunConfig{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", RunID: "run", Runtime: "opencode", Model: agentctl.ModelSelection{Provider: "provider", ID: "model"}, Agent: agentctl.AgentDefinition{Name: "Work", Description: "Work", Instructions: "Work"}}
 	if err := service.Configure(config); err != nil {
 		t.Fatal(err)
 	}

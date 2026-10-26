@@ -3,9 +3,12 @@ package opencode
 import (
 	"bufio"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -40,6 +43,12 @@ func TestMain(m *testing.M) {
 			case "session/new":
 				result = map[string]any{"sessionId": "fixture-session"}
 			case "session/set_mode":
+				var params struct {
+					ModeID string `json:"modeId"`
+				}
+				if json.Unmarshal(request.Params, &params) != nil || params.ModeID != "work" {
+					os.Exit(8)
+				}
 				result = map[string]any{}
 			case "session/prompt":
 				var params struct {
@@ -94,7 +103,7 @@ func TestLaunchACPAndFenceDuplicate(t *testing.T) {
 		t.Fatal(err)
 	}
 	provider := &OpenCodeProvider{Binary: binary, WorkDir: t.TempDir(), StateDir: t.TempDir(), Env: []string{"ORKEST_ACP_FIXTURE=1"}}
-	config := agentctl.RunConfig{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", RunID: "run", Runtime: "opencode", Model: agentctl.ModelSelection{Provider: "provider", ID: "model"}, SystemPrompt: "Work"}
+	config := agentctl.RunConfig{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", RunID: "run", Runtime: "opencode", Model: agentctl.ModelSelection{Provider: "provider", ID: "model"}, Agent: agentctl.AgentDefinition{Name: "Work", Description: "Work", Instructions: "Work"}}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	process, err := provider.Launch(ctx, config)
@@ -104,6 +113,21 @@ func TestLaunchACPAndFenceDuplicate(t *testing.T) {
 	defer func() { _ = process.Close() }()
 	if process.SessionID() != "fixture-session" {
 		t.Fatal("missing session")
+	}
+	configDir := "config-" + fmt.Sprintf("%x", sha256.Sum256([]byte(config.RunID)))
+	materialized := filepath.Join(provider.storageRoot(config), configDir, "opencode", "agents", "work.md")
+	contents, err := os.ReadFile(materialized)
+	if err != nil {
+		t.Fatalf("read materialized agent: %v", err)
+	}
+	for _, expected := range []string{"description: \"Work\"", "mode: primary", "model: \"provider/model\"", "Work"} {
+		if !strings.Contains(string(contents), expected) {
+			t.Fatalf("materialized agent does not contain %q: %s", expected, contents)
+		}
+	}
+	info, err := os.Stat(materialized)
+	if err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("agent file permissions are not private: %v", err)
 	}
 	if _, err := provider.Launch(ctx, config); err == nil {
 		t.Fatal("duplicate run launched")

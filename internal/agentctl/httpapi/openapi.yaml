@@ -337,8 +337,8 @@ components:
           taskId,
           runId,
           runtime,
+          agent,
           model,
-          systemPrompt,
         ]
       properties:
         organizationId: { type: string, pattern: '\S' }
@@ -346,6 +346,14 @@ components:
         taskId: { type: string, pattern: '\S' }
         runId: { type: string, pattern: '\S' }
         runtime: { type: string, enum: [opencode] }
+        agent:
+          type: object
+          additionalProperties: false
+          required: [name, description, instructions]
+          properties:
+            name: { type: string, pattern: '\S' }
+            description: { type: string }
+            instructions: { type: string, pattern: '\S' }
         model:
           type: object
           additionalProperties: true
@@ -353,7 +361,6 @@ components:
           properties:
             provider: { type: string, pattern: '\S' }
             id: { type: string, pattern: '\S' }
-        systemPrompt: { type: string, pattern: '\S' }
     Info:
       type: object
       required:

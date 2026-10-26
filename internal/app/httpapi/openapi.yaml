@@ -537,7 +537,7 @@ components:
       properties:
         config:
           type: object
-          required: [organizationId, workspaceId, taskId, runId, runtime, model, systemPrompt]
+          required: [organizationId, workspaceId, taskId, runId, runtime, model, agent]
           properties:
             organizationId: {type: string, minLength: 1}
             workspaceId: {type: string, minLength: 1}
@@ -550,7 +550,14 @@ components:
               properties:
                 provider: {type: string, minLength: 1}
                 id: {type: string, minLength: 1}
-            systemPrompt: {type: string, minLength: 1}
+            agent:
+              type: object
+              additionalProperties: false
+              required: [name, description, instructions]
+              properties:
+                name: {type: string, minLength: 1}
+                description: {type: string}
+                instructions: {type: string, minLength: 1}
         commandId: {type: string, minLength: 1}
         prompt: {type: string, minLength: 1}
     CurrentUser:

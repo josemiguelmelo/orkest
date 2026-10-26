@@ -12,7 +12,7 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/agentctl/httpapi/protocol"
 )
 
-const validConfig = `{"organizationId":"org","workspaceId":"workspace","taskId":"task","runId":"run","runtime":"opencode","model":{"provider":"provider","id":"model"},"systemPrompt":"Work on this task"}`
+const validConfig = `{"organizationId":"org","workspaceId":"workspace","taskId":"task","runId":"run","runtime":"opencode","model":{"provider":"provider","id":"model"},"agent":{"name":"Work","description":"Work","instructions":"Work on this task"}}`
 
 func setup(t *testing.T) *Server {
 	t.Helper()

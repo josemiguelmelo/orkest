@@ -221,7 +221,7 @@ func TestNewWithClientRejectsInvalidSettings(t *testing.T) {
 }
 
 func runConfig() agentctl.RunConfig {
-	return agentctl.RunConfig{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", RunID: "run", Runtime: "opencode", Model: agentctl.ModelSelection{Provider: "provider", ID: "model"}, SystemPrompt: "work"}
+	return agentctl.RunConfig{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", RunID: "run", Runtime: "opencode", Model: agentctl.ModelSelection{Provider: "provider", ID: "model"}, Agent: agentctl.AgentDefinition{Name: "Work", Description: "Work", Instructions: "work"}}
 }
 
 type fakeEngine struct {
