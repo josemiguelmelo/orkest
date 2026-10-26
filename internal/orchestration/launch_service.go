@@ -18,6 +18,8 @@ type LaunchService struct {
 	communication AgentCommunication
 }
 
+var ErrTaskRunNotFound = errors.New("task run not found")
+
 func NewLaunchService(repo LaunchRepository, launcher AgentLauncher, client AgentctlClient, communication AgentCommunication) (*LaunchService, error) {
 	if repo == nil || launcher == nil || client == nil || communication == nil {
 		return nil, errors.New("launch dependencies are required")
@@ -116,7 +118,7 @@ func (s *LaunchService) TaskEvents(ctx context.Context, orgID, workspaceID, task
 		}
 	}
 	if !found {
-		return nil, errors.New("task run not found")
+		return nil, ErrTaskRunNotFound
 	}
 	return reader.ListTaskLaunchEvents(ctx, runID, after)
 }

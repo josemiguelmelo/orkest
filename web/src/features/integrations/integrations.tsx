@@ -115,8 +115,10 @@ function IntegrationCard({ item, onEdit }: { item: TaskIntegration; onEdit: () =
         Last synchronized: {item.lastSynced ? date(item.lastSynced) : 'Never'}
       </p>
       {item.lastError && (
-        <div className="notice error">
-          Synchronization failed. Check the source configuration and credentials.
+        <div className="notice error" role="status">
+          <strong>Last synchronization failed.</strong>
+          <p>{item.lastError}</p>
+          <p className="muted">Correct the source configuration if needed, then sync again.</p>
         </div>
       )}
       {permissions.workspaceAdmin && (
@@ -141,7 +143,7 @@ function IntegrationCard({ item, onEdit }: { item: TaskIntegration; onEdit: () =
             }}
           >
             <RefreshCw size={12} />
-            Sync now
+            {item.lastError ? 'Retry sync' : 'Sync now'}
           </Button>
           <ConfirmButton
             title="Delete integration?"

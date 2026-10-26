@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"strings"
@@ -68,7 +69,11 @@ func (a taskRunAPI) events(w http.ResponseWriter, r *http.Request) {
 	}
 	events, err := a.launches.TaskEvents(r.Context(), orgID, workspaceID, taskID, chi.URLParam(r, "runID"), after)
 	if err != nil {
-		writeError(w, http.StatusNotFound, "run_not_found")
+		if errors.Is(err, orchestration.ErrTaskRunNotFound) {
+			writeError(w, http.StatusNotFound, "run_not_found")
+			return
+		}
+		writeError(w, http.StatusServiceUnavailable, "run_activity_unavailable")
 		return
 	}
 	respond(w, events, nil, http.StatusOK)
