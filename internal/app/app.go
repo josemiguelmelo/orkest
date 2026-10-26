@@ -18,6 +18,7 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/core/httpserver"
 	"github.com/josemiguelmelo/orkest/internal/executors/docker"
 	"github.com/josemiguelmelo/orkest/internal/identity"
+	"github.com/josemiguelmelo/orkest/internal/mcpserver"
 	"github.com/josemiguelmelo/orkest/internal/orchestration"
 	"github.com/josemiguelmelo/orkest/internal/organization"
 	"github.com/josemiguelmelo/orkest/internal/postgres"
@@ -55,7 +56,15 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 	users := identity.NewUserRegistrationService(postgres.NewUserPostgresRepository(database))
 	organizations := organization.NewOrganizationService(postgres.NewOrganizationPostgresRepository(database))
 	workspaces := workspace.NewWorkspaceService(postgres.NewWorkspacePostgresRepository(database), organizations)
-	agents := agent.NewService(postgres.NewAgentPostgresRepository(database), workspaces)
+	var secretBox *taskintegration.SecretBox
+	if key := os.Getenv("ORKEST_INTEGRATION_ENCRYPTION_KEY"); key != "" {
+		secretBox, err = taskintegration.NewSecretBox(key)
+		if err != nil {
+			return err
+		}
+	}
+	mcpServerService := mcpserver.NewMCPServerService(postgres.NewMCPServerPostgresRepository(database), secretBox, workspaces)
+	agents := agent.NewService(postgres.NewAgentPostgresRepository(database), workspaces, mcpServerService)
 	codeRepositories := coderepository.NewService(postgres.NewCodeReposPostgresRepository(database), workspaces, dataRoot, githubprovider.NewGitHubCodeRepositoryProvider())
 	launchRepo := postgres.NewAgentLaunchPostgresRepository(database)
 	client := orchestration.NewHTTPAgentctlClient(&http.Client{Timeout: 10 * time.Second})
@@ -89,18 +98,11 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	dispatcher, err := orchestration.NewTaskDispatcher(agents, launchService)
+	dispatcher, err := orchestration.NewTaskDispatcher(agents, launchService, mcpServerService)
 	if err != nil {
 		return err
 	}
 	tasks := task.NewService(postgres.NewTaskPostgresRepository(database), workspaces, dispatcher)
-	var secretBox *taskintegration.SecretBox
-	if key := os.Getenv("ORKEST_INTEGRATION_ENCRYPTION_KEY"); key != "" {
-		secretBox, err = taskintegration.NewSecretBox(key)
-		if err != nil {
-			return err
-		}
-	}
 	integrations := taskintegration.NewTaskIntegrationService(postgres.NewPostgresTaskIntegrationRepository(database), secretBox, workspaces, organizations, postgres.NewPostgresImportedTaskRepository(database), githubcloud.NewGitHubCloudProvider(), jiraserver.NewJiraServerProvider())
 	runnerCtx, stopRunner := context.WithCancel(ctx)
 	var runnerWG sync.WaitGroup
@@ -108,9 +110,9 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 	go func() { defer runnerWG.Done(); integrations.Run(runnerCtx) }()
 	var router http.Handler
 	if strings.EqualFold(os.Getenv("ORKEST_ENABLE_TEMP_AGENT_LAUNCH"), "true") {
-		router, err = httpapi.NewRouter(users, organizations, workspaces, agents, codeRepositories, tasks, integrations, launchService)
+		router, err = httpapi.NewRouter(users, organizations, workspaces, agents, codeRepositories, tasks, integrations, mcpServerService, launchService)
 	} else {
-		router, err = httpapi.NewRouter(users, organizations, workspaces, agents, codeRepositories, tasks, integrations)
+		router, err = httpapi.NewRouter(users, organizations, workspaces, agents, codeRepositories, tasks, integrations, mcpServerService)
 	}
 	if err != nil {
 		stopRunner()

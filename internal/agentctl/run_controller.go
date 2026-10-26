@@ -4,6 +4,7 @@ package agentctl
 import (
 	"context"
 	"errors"
+	"reflect"
 	"sync"
 	"time"
 )
@@ -76,7 +77,7 @@ func (c *RunController) Configure(config RunConfig) error {
 	if c.provider != nil && config.Runtime != c.provider.Runtime() {
 		return ErrRuntimeProviderUnavailable
 	}
-	if c.runConfig != nil && *c.runConfig != config {
+	if c.runConfig != nil && !reflect.DeepEqual(*c.runConfig, config) {
 		return ErrConfigurationConflict
 	}
 	c.runConfig = &config
