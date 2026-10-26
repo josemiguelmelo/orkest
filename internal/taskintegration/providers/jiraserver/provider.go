@@ -82,21 +82,7 @@ func (p JiraServerProvider) Validate(ctx context.Context, raw json.RawMessage, t
 	if token == "" {
 		return fmt.Errorf("jira URL and personal access token are required")
 	}
-	c.BaseURL = strings.TrimRight(strings.TrimSpace(c.BaseURL), "/")
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.BaseURL+"/rest/api/2/myself", nil)
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := p.client().Do(req)
-	if err != nil {
-		return fmt.Errorf("connect to Jira")
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("jira returned status %d", resp.StatusCode)
-	}
-	return nil
+	return p.validateConnection(ctx, strings.TrimRight(strings.TrimSpace(c.BaseURL), "/"), token)
 }
 
 func (p JiraServerProvider) Discover(ctx context.Context, raw json.RawMessage, token string, labels []string) ([]taskintegration.DiscoveredTask, error) {
@@ -124,47 +110,9 @@ func (p JiraServerProvider) Discover(ctx context.Context, raw json.RawMessage, t
 	out := []taskintegration.DiscoveredTask{}
 	start := 0
 	for {
-		endpoint := c.BaseURL + "/rest/api/2/search"
-		u, _ := url.Parse(endpoint)
-		query := u.Query()
-		query.Set("jql", jql)
-		query.Set("startAt", fmt.Sprint(start))
-		query.Set("maxResults", "100")
-		query.Set("fields", "summary,description,labels,status")
-		u.RawQuery = query.Encode()
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+		result, err := p.searchIssues(ctx, c.BaseURL, jql, start, token)
 		if err != nil {
 			return nil, err
-		}
-		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := p.client().Do(req)
-		if err != nil {
-			return nil, fmt.Errorf("discover Jira issues")
-		}
-		var result struct {
-			StartAt int `json:"startAt"`
-			Total   int `json:"total"`
-			Issues  []struct {
-				Key    string `json:"key"`
-				Fields struct {
-					Summary     string   `json:"summary"`
-					Description any      `json:"description"`
-					Labels      []string `json:"labels"`
-					Status      struct {
-						StatusCategory struct {
-							Key string `json:"key"`
-						} `json:"statusCategory"`
-					} `json:"status"`
-				} `json:"fields"`
-			} `json:"issues"`
-		}
-		decodeErr := json.NewDecoder(resp.Body).Decode(&result)
-		_ = resp.Body.Close()
-		if decodeErr != nil {
-			return nil, decodeErr
-		}
-		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-			return nil, fmt.Errorf("jira returned status %d", resp.StatusCode)
 		}
 		for _, issue := range result.Issues {
 			description, _ := issue.Fields.Description.(string)
@@ -176,11 +124,4 @@ func (p JiraServerProvider) Discover(ctx context.Context, raw json.RawMessage, t
 		}
 	}
 	return out, nil
-}
-
-func (p JiraServerProvider) client() *http.Client {
-	if p.Client != nil {
-		return p.Client
-	}
-	return http.DefaultClient
 }
