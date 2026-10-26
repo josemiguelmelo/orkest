@@ -15,6 +15,8 @@ tags:
     description: Workspaces and workspace memberships.
   - name: Agents
     description: Workspace-scoped reusable agent definitions.
+  - name: MCPServers
+    description: Workspace-scoped HTTP MCP server connections.
   - name: CodeRepositories
     description: Workspace-scoped code repository registration and Git operations.
   - name: TaskIntegrations
@@ -424,6 +426,51 @@ paths:
         "204": {description: Synchronization completed}
         "403": {$ref: "#/components/responses/Forbidden"}
         "404": {$ref: "#/components/responses/NotFound"}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/mcp-servers:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [MCPServers]
+      operationId: listMCPServers
+      security: [{bearerAuth: []}]
+      responses:
+        "200": {description: Workspace MCP servers, content: {application/json: {schema: {type: array, items: {$ref: "#/components/schemas/MCPServer"}}}}}
+        "403": {$ref: "#/components/responses/Forbidden"}
+    post:
+      tags: [MCPServers]
+      operationId: createMCPServer
+      security: [{bearerAuth: []}]
+      requestBody: {$ref: "#/components/requestBodies/MCPServerInput"}
+      responses:
+        "201": {description: MCP server created, content: {application/json: {schema: {$ref: "#/components/schemas/MCPServer"}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "503": {description: MCP credential encryption is not configured}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/mcp-servers/{serverID}:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+      - {name: serverID, in: path, required: true, schema: {type: string}}
+    put:
+      tags: [MCPServers]
+      operationId: updateMCPServer
+      security: [{bearerAuth: []}]
+      requestBody: {$ref: "#/components/requestBodies/MCPServerInput"}
+      responses:
+        "200": {description: MCP server updated; omitted headers preserve existing credentials, content: {application/json: {schema: {$ref: "#/components/schemas/MCPServer"}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "503": {description: MCP credential encryption is not configured}
+    delete:
+      tags: [MCPServers]
+      operationId: deleteMCPServer
+      security: [{bearerAuth: []}]
+      responses:
+        "204": {description: MCP server deleted and removed from agent selections}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
   /api/organizations/{orgID}/workspaces/{workspaceID}/agents:
     parameters:
       - {name: orgID, in: path, required: true, schema: {type: string}}
@@ -603,6 +650,19 @@ components:
               model: {type: string, minLength: 1, maxLength: 200}
               description: {type: string, maxLength: 2000}
               systemPrompt: {type: string, maxLength: 100000}
+              mcpServerIds: {type: array, uniqueItems: true, items: {type: string}}
+    MCPServerInput:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [name, url]
+            additionalProperties: false
+            properties:
+              name: {type: string, minLength: 1, maxLength: 200}
+              url: {type: string, format: uri}
+              headers: {type: object, additionalProperties: {type: string}, writeOnly: true}
     CodeRepositoryCreate:
       required: true
       content:
@@ -743,7 +803,7 @@ components:
         updatedAt: {type: string, format: date-time}
     Agent:
       type: object
-      required: [id, workspaceId, name, runtime, provider, model, description, systemPrompt]
+      required: [id, workspaceId, name, runtime, provider, model, description, systemPrompt, mcpServerIds]
       properties:
         id: {type: string}
         workspaceId: {type: string}
@@ -753,6 +813,16 @@ components:
         model: {type: string}
         description: {type: string}
         systemPrompt: {type: string}
+        mcpServerIds: {type: array, items: {type: string}}
+    MCPServer:
+      type: object
+      required: [id, workspaceId, name, url, hasHeaders]
+      properties:
+        id: {type: string}
+        workspaceId: {type: string}
+        name: {type: string}
+        url: {type: string, format: uri}
+        hasHeaders: {type: boolean}
     CodeRepository:
       type: object
       required: [id, workspaceId, providerName, url]

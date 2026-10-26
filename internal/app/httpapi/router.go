@@ -11,6 +11,7 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/coderepository"
 	"github.com/josemiguelmelo/orkest/internal/core/openapi"
 	"github.com/josemiguelmelo/orkest/internal/identity"
+	"github.com/josemiguelmelo/orkest/internal/mcpserver"
 	"github.com/josemiguelmelo/orkest/internal/orchestration"
 	"github.com/josemiguelmelo/orkest/internal/organization"
 	"github.com/josemiguelmelo/orkest/internal/task"
@@ -19,7 +20,7 @@ import (
 )
 
 // NewRouter validates the served OpenAPI contract before exposing routes.
-func NewRouter(users *identity.UserRegistrationService, organizations *organization.OrganizationService, workspaces *workspace.WorkspaceService, agents *agent.Service, codeRepositories *coderepository.Service, tasks *task.Service, integrations *taskintegration.TaskIntegrationService, tempLaunches ...*orchestration.LaunchService) (*chi.Mux, error) {
+func NewRouter(users *identity.UserRegistrationService, organizations *organization.OrganizationService, workspaces *workspace.WorkspaceService, agents *agent.Service, codeRepositories *coderepository.Service, tasks *task.Service, integrations *taskintegration.TaskIntegrationService, mcpServers *mcpserver.MCPServerService, tempLaunches ...*orchestration.LaunchService) (*chi.Mux, error) {
 	if _, err := openapi.LoadAndValidateOpenAPIDoc(OpenAPIContract, context.Background()); err != nil {
 		return nil, fmt.Errorf("load platform OpenAPI contract: %w", err)
 	}
@@ -45,6 +46,9 @@ func NewRouter(users *identity.UserRegistrationService, organizations *organizat
 			api.Get("/me", auth.currentUser)
 			organizationAPI{organizations: organizations, workspaces: workspaces}.routes(api)
 			agentAPI{agents: agents}.routes(api)
+			if mcpServers != nil {
+				mcpServerAPI{service: mcpServers}.routes(api)
+			}
 			codeRepositoryAPI{repositories: codeRepositories}.routes(api)
 			taskAPI{tasks: tasks}.routes(api)
 			if integrations != nil {

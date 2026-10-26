@@ -83,9 +83,9 @@ The exposure mechanism for internal tools remains an implementation decision; an
 
 ### 3.6 MCP Server
 
-An MCP server configuration represents an HTTP connection to capabilities provided by an external server, such as GitHub or Jira. Agent definitions select their MCP connections.
+An MCP server configuration represents a workspace-scoped HTTP connection to capabilities provided by an external server, such as GitHub or Jira. MVP supports OpenCode's remote Streamable HTTP transport; stdio servers and OAuth setup are outside MVP scope. Agent definitions select zero or more MCP servers registered in the same workspace.
 
-Configuration must support connection details and required authentication. Secrets must not be exposed in task content, chat, or ordinary logs. Exact HTTP transport support and credential distribution remain implementation decisions.
+Configuration includes a display name, absolute HTTP(S) endpoint URL, and optional custom request headers. Header values are encrypted at rest using the integration encryption key, write-only in APIs, and omitted from ordinary logs. Updates that omit headers preserve stored values; an explicitly supplied empty header map clears them. At launch, only the selected servers and decrypted headers are passed to agentctl and configured in that run's OpenCode runtime. Server deletion removes its agent selections. MCP server changes affect future runs; already-running processes keep their startup configuration.
 
 ### 3.7 Agent Definition
 

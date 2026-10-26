@@ -12,10 +12,15 @@ import (
 type Service struct {
 	repository Repository
 	workspaces WorkspaceAccess
+	mcpServers MCPServerAccess
 }
 
-func NewService(repository Repository, workspaces WorkspaceAccess) *Service {
-	return &Service{repository: repository, workspaces: workspaces}
+func NewService(repository Repository, workspaces WorkspaceAccess, mcpServers ...MCPServerAccess) *Service {
+	service := &Service{repository: repository, workspaces: workspaces}
+	if len(mcpServers) > 0 {
+		service.mcpServers = mcpServers[0]
+	}
+	return service
 }
 
 func (s *Service) List(ctx context.Context, userID, orgID, workspaceID string) ([]Agent, error) {
@@ -39,6 +44,9 @@ func (s *Service) Create(ctx context.Context, userID, orgID, workspaceID string,
 	if err := validate(&definition); err != nil {
 		return Agent{}, err
 	}
+	if err := s.validateMCPServers(ctx, orgID, workspaceID, definition.MCPServerIDs); err != nil {
+		return Agent{}, err
+	}
 	id, err := ids.NewUUID()
 	if err != nil {
 		return Agent{}, fmt.Errorf("generate agent ID: %w", err)
@@ -50,10 +58,37 @@ func (s *Service) Update(ctx context.Context, userID, orgID, workspaceID, agentI
 	if err := s.authorize(ctx, userID, orgID, workspaceID); err != nil {
 		return Agent{}, err
 	}
+	if definition.MCPServerIDs == nil {
+		current, err := s.repository.Agent(ctx, orgID, workspaceID, agentID)
+		if err != nil {
+			return Agent{}, err
+		}
+		definition.MCPServerIDs = current.MCPServerIDs
+	}
 	if err := validate(&definition); err != nil {
 		return Agent{}, err
 	}
+	if err := s.validateMCPServers(ctx, orgID, workspaceID, definition.MCPServerIDs); err != nil {
+		return Agent{}, err
+	}
 	return s.repository.UpdateAgent(ctx, orgID, workspaceID, agentID, definition)
+}
+
+func (s *Service) validateMCPServers(ctx context.Context, orgID, workspaceID string, ids []string) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	if s.mcpServers == nil {
+		return modelerrors.ErrInvalid
+	}
+	ok, err := s.mcpServers.Exists(ctx, orgID, workspaceID, ids)
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return modelerrors.ErrInvalid
+	}
+	return nil
 }
 
 func (s *Service) Delete(ctx context.Context, userID, orgID, workspaceID, agentID string) error {
@@ -75,10 +110,22 @@ func (s *Service) authorize(ctx context.Context, userID, orgID, workspaceID stri
 }
 
 func validate(definition *AgentDefinition) error {
+	if definition.MCPServerIDs == nil {
+		definition.MCPServerIDs = []string{}
+	}
 	definition.Name = strings.TrimSpace(definition.Name)
 	definition.Provider = strings.TrimSpace(definition.Provider)
 	definition.Model = strings.TrimSpace(definition.Model)
 	definition.Description = strings.TrimSpace(definition.Description)
+	seen := make(map[string]bool, len(definition.MCPServerIDs))
+	for i, id := range definition.MCPServerIDs {
+		id = strings.TrimSpace(id)
+		if id == "" || seen[id] {
+			return modelerrors.ErrInvalid
+		}
+		seen[id] = true
+		definition.MCPServerIDs[i] = id
+	}
 	if definition.Name == "" || len(definition.Name) > 200 || definition.Provider == "" || len(definition.Provider) > 200 || definition.Model == "" || len(definition.Model) > 200 || len(definition.Description) > 2000 || len(definition.SystemPrompt) > 100000 || !definition.Runtime.Available() {
 		return modelerrors.ErrInvalid
 	}

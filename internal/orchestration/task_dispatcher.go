@@ -10,6 +10,7 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/agent"
 	"github.com/josemiguelmelo/orkest/internal/agentctl"
 	"github.com/josemiguelmelo/orkest/internal/core/ids"
+	"github.com/josemiguelmelo/orkest/internal/mcpserver"
 	"github.com/josemiguelmelo/orkest/internal/task"
 )
 
@@ -19,15 +20,25 @@ type taskAgentGetter interface {
 
 // TaskDispatcher resolves an assigned agent definition and starts its task run.
 type TaskDispatcher struct {
-	agents   taskAgentGetter
-	launches *LaunchService
+	agents     taskAgentGetter
+	launches   *LaunchService
+	mcpServers interface {
+		Resolve(context.Context, string, []string) ([]mcpserver.RuntimeServer, error)
+	}
 }
 
-func NewTaskDispatcher(agents taskAgentGetter, launches *LaunchService) (*TaskDispatcher, error) {
+func NewTaskDispatcher(agents taskAgentGetter, launches *LaunchService, mcpServers ...interface {
+	Resolve(context.Context, string, []string) ([]mcpserver.RuntimeServer, error)
+},
+) (*TaskDispatcher, error) {
 	if agents == nil || launches == nil {
 		return nil, errors.New("task dispatch dependencies are required")
 	}
-	return &TaskDispatcher{agents: agents, launches: launches}, nil
+	dispatcher := &TaskDispatcher{agents: agents, launches: launches}
+	if len(mcpServers) > 0 {
+		dispatcher.mcpServers = mcpServers[0]
+	}
+	return dispatcher, nil
 }
 
 func (d *TaskDispatcher) StartTask(ctx context.Context, userID, organizationID string, value task.Task) error {
@@ -65,6 +76,18 @@ func (d *TaskDispatcher) StartTask(ctx context.Context, userID, organizationID s
 			Instructions: systemPrompt,
 		},
 		Model: agentctl.ModelSelection{Provider: definition.Provider, ID: definition.Model},
+	}
+	if len(definition.MCPServerIDs) > 0 {
+		if d.mcpServers == nil {
+			return errors.New("agent MCP server resolver is unavailable")
+		}
+		servers, resolveErr := d.mcpServers.Resolve(ctx, value.WorkspaceID, definition.MCPServerIDs)
+		if resolveErr != nil {
+			return fmt.Errorf("resolve agent MCP servers: %w", resolveErr)
+		}
+		for _, server := range servers {
+			config.MCPServers = append(config.MCPServers, agentctl.MCPServer{ID: server.ID, Name: server.Name, URL: server.URL, Headers: server.Headers})
+		}
 	}
 	prompt, err := taskPrompt(value)
 	if err != nil {

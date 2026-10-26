@@ -15,3 +15,7 @@ type Repository interface {
 type WorkspaceAccess interface {
 	GetWorkspace(context.Context, string, string, string) (workspace.Workspace, error)
 }
+
+type MCPServerAccess interface {
+	Exists(context.Context, string, string, []string) (bool, error)
+}

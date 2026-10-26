@@ -2,6 +2,7 @@ package agentctl
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 
 	coreruntime "github.com/josemiguelmelo/orkest/internal/core/runtime"
@@ -17,6 +18,7 @@ type RunConfig struct {
 	Runtime        coreruntime.Runtime `json:"runtime"`
 	Agent          AgentDefinition     `json:"agent"`
 	Model          ModelSelection      `json:"model"`
+	MCPServers     []MCPServer         `json:"mcpServers,omitempty"`
 }
 
 // AgentDefinition is the portable Markdown instruction set selected for a run.
@@ -30,6 +32,14 @@ type AgentDefinition struct {
 type ModelSelection struct {
 	Provider string `json:"provider"`
 	ID       string `json:"id"`
+}
+
+// MCPServer is an HTTP MCP endpoint resolved for this run. Headers are sensitive.
+type MCPServer struct {
+	ID      string            `json:"id"`
+	Name    string            `json:"name"`
+	URL     string            `json:"url"`
+	Headers map[string]string `json:"headers,omitempty"`
 }
 
 // ValidationError identifies a missing field without retaining its value.
@@ -56,6 +66,17 @@ func (c RunConfig) Validate() error {
 	}
 	if !c.Runtime.Available() {
 		return &ValidationError{Field: "runtime"}
+	}
+	for _, server := range c.MCPServers {
+		parsed, err := url.Parse(server.URL)
+		if strings.TrimSpace(server.ID) == "" || strings.TrimSpace(server.Name) == "" || err != nil || parsed == nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" || parsed.User != nil {
+			return &ValidationError{Field: "mcpServers"}
+		}
+		for name, value := range server.Headers {
+			if strings.TrimSpace(name) == "" || strings.ContainsAny(name+value, "\r\n") {
+				return &ValidationError{Field: "mcpServers.headers"}
+			}
+		}
 	}
 
 	return nil

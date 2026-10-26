@@ -57,7 +57,7 @@ Core platform shutdown must disconnect from agents without terminating their wor
 
 ## Tools and integrations
 
-- **HTTP MCP connections** for external agent capabilities; stdio MCP servers are outside the MVP. No MCP client or server implementation exists yet.
+- **HTTP MCP connections** for external agent capabilities; workspace configuration is passed to the OpenCode runtime, which owns MCP client connections. Stdio MCP servers are outside the MVP.
 - **Official MCP Go SDK** is proposed where the platform implements MCP clients or servers. Whether built-in platform tools use an internal HTTP MCP endpoint remains open.
 - **GitHub Cloud Projects v2 and Jira Server** are task providers behind the `internal/taskintegration` contract. Provider-owned typed config schemas are exposed by the provider catalog API; validated provider configs are stored as JSONB. Credentials are AES-GCM encrypted using a deployment-managed 32-byte hex `ORKEST_INTEGRATION_ENCRYPTION_KEY`, and a platform lifecycle runner polls enabled sources using their configured interval (five-minute default). GitHub Cloud sources use a project board URL and GraphQL; GitHub documents classic PATs with `read:project` or GitHub App installation tokens for querying Projects. Jira sources use configured project keys. API responses exclude credentials.
 - Separate interfaces for **task providers, executors, and agent runtimes** so provider-specific behavior stays outside core orchestration.

@@ -88,8 +88,20 @@ func (p *OpenCodeProvider) storageRoot(config agentctl.RunConfig) string {
 }
 
 type runtimeConfiguration struct {
-	Autoupdate bool   `json:"autoupdate"`
-	Share      string `json:"share"`
+	Autoupdate bool              `json:"autoupdate"`
+	Share      string            `json:"share"`
+	MCP        *runtimeMCPConfig `json:"mcp,omitempty"`
+}
+
+type runtimeMCPConfig struct {
+	Servers map[string]runtimeMCP `json:"servers"`
+}
+
+type runtimeMCP struct {
+	Type    string            `json:"type"`
+	URL     string            `json:"url"`
+	OAuth   *bool             `json:"oauth,omitempty"`
+	Headers map[string]string `json:"headers,omitempty"`
 }
 
 var agentNamePattern = regexp.MustCompile(`[^a-z0-9-]+`)
@@ -113,12 +125,33 @@ func (p *OpenCodeProvider) prepareEnvironment(root string, config agentctl.RunCo
 	if err := materializeAgent(filepath.Join(root, configDir, "opencode", "agents"), config); err != nil {
 		return nil, err
 	}
-	runtimeConfig, err := json.Marshal(runtimeConfiguration{Share: "disabled"})
+	mcpConfig, err := buildMCPConfiguration(config.MCPServers)
+	if err != nil {
+		return nil, err
+	}
+	runtimeSettings := runtimeConfiguration{Share: "disabled", MCP: mcpConfig}
+	runtimeConfig, err := json.Marshal(runtimeSettings)
 	if err != nil {
 		return nil, runtimeFailure("encode runtime configuration failed", err)
 	}
 	env = append(env, "OPENCODE_CONFIG_CONTENT="+string(runtimeConfig), "OPENCODE_DISABLE_PROJECT_CONFIG=true")
 	return env, nil
+}
+
+func buildMCPConfiguration(servers []agentctl.MCPServer) (*runtimeMCPConfig, error) {
+	if len(servers) == 0 {
+		return nil, nil
+	}
+	configured := make(map[string]runtimeMCP, len(servers))
+	noOAuth := false
+	for _, server := range servers {
+		name := agentID(server.Name) + "-" + agentID(server.ID)
+		if _, exists := configured[name]; exists {
+			return nil, errors.New("duplicate MCP server name")
+		}
+		configured[name] = runtimeMCP{Type: "remote", URL: server.URL, OAuth: &noOAuth, Headers: server.Headers}
+	}
+	return &runtimeMCPConfig{Servers: configured}, nil
 }
 
 func materializeAgent(directory string, config agentctl.RunConfig) error {
