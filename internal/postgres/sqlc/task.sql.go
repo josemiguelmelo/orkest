@@ -516,3 +516,67 @@ func (q *Queries) UpdateTask(ctx context.Context, arg UpdateTaskParams) (UpdateT
 	)
 	return i, err
 }
+
+const updateTaskIfStatus = `-- name: UpdateTaskIfStatus :one
+UPDATE tasks t SET title = $5, description = $6, status = $7, assignee_agent_id = NULLIF($8, ''), labels = $9, updated_at = now()
+FROM workspaces w
+WHERE w.organization_id = $1 AND t.workspace_id = w.id AND t.workspace_id = $2 AND t.id = $3 AND t.status = $4
+RETURNING t.id, t.workspace_id, t.title, t.description, t.source_provider, COALESCE(t.source_id, '') AS source_id, COALESCE(t.source_url, '') AS source_url, t.status, COALESCE(t.assignee_agent_id, '') AS assignee_agent_id, t.labels, t.created_at, t.updated_at
+`
+
+type UpdateTaskIfStatusParams struct {
+	OrganizationID string      `json:"organization_id"`
+	WorkspaceID    string      `json:"workspace_id"`
+	ID             string      `json:"id"`
+	Status         string      `json:"status"`
+	Title          string      `json:"title"`
+	Description    string      `json:"description"`
+	Status_2       string      `json:"status_2"`
+	Column8        interface{} `json:"column_8"`
+	Labels         []string    `json:"labels"`
+}
+
+type UpdateTaskIfStatusRow struct {
+	ID              string             `json:"id"`
+	WorkspaceID     string             `json:"workspace_id"`
+	Title           string             `json:"title"`
+	Description     string             `json:"description"`
+	SourceProvider  string             `json:"source_provider"`
+	SourceID        string             `json:"source_id"`
+	SourceUrl       string             `json:"source_url"`
+	Status          string             `json:"status"`
+	AssigneeAgentID string             `json:"assignee_agent_id"`
+	Labels          []string           `json:"labels"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) UpdateTaskIfStatus(ctx context.Context, arg UpdateTaskIfStatusParams) (UpdateTaskIfStatusRow, error) {
+	row := q.db.QueryRow(ctx, updateTaskIfStatus,
+		arg.OrganizationID,
+		arg.WorkspaceID,
+		arg.ID,
+		arg.Status,
+		arg.Title,
+		arg.Description,
+		arg.Status_2,
+		arg.Column8,
+		arg.Labels,
+	)
+	var i UpdateTaskIfStatusRow
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.Title,
+		&i.Description,
+		&i.SourceProvider,
+		&i.SourceID,
+		&i.SourceUrl,
+		&i.Status,
+		&i.AssigneeAgentID,
+		&i.Labels,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}

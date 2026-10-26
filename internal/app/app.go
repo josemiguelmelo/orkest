@@ -53,7 +53,6 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 	workspaces := workspace.NewWorkspaceService(postgres.NewWorkspacePostgresRepository(database), organizations)
 	agents := agent.NewService(postgres.NewAgentPostgresRepository(database), workspaces)
 	codeRepositories := coderepository.NewService(postgres.NewCodeReposPostgresRepository(database), workspaces, dataRoot, githubprovider.NewGitHubCodeRepositoryProvider())
-	tasks := task.NewService(postgres.NewTaskPostgresRepository(database), workspaces)
 	launchRepo := postgres.NewAgentLaunchPostgresRepository(database)
 	client := orchestration.NewHTTPAgentctlClient(&http.Client{Timeout: 10 * time.Second})
 	executor, executorErr := docker.New(ctx, docker.Config{
@@ -78,16 +77,21 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 	if err = communication.ReconnectRecorded(); err != nil {
 		return err
 	}
+	launcher, err := orchestration.NewAgentLauncher(executor)
+	if err != nil {
+		return err
+	}
+	launchService, err := orchestration.NewLaunchService(launchRepo, launcher, client, communication)
+	if err != nil {
+		return err
+	}
+	dispatcher, err := orchestration.NewTaskDispatcher(agents, launchService)
+	if err != nil {
+		return err
+	}
+	tasks := task.NewService(postgres.NewTaskPostgresRepository(database), workspaces, dispatcher)
 	var router http.Handler
 	if strings.EqualFold(os.Getenv("ORKEST_ENABLE_TEMP_AGENT_LAUNCH"), "true") {
-		launcher, launcherErr := orchestration.NewAgentLauncher(executor)
-		if launcherErr != nil {
-			return launcherErr
-		}
-		launchService, serviceErr := orchestration.NewLaunchService(launchRepo, launcher, client, communication)
-		if serviceErr != nil {
-			return serviceErr
-		}
 		router, err = httpapi.NewRouter(users, organizations, workspaces, agents, codeRepositories, tasks, launchService)
 	} else {
 		router, err = httpapi.NewRouter(users, organizations, workspaces, agents, codeRepositories, tasks)

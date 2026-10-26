@@ -426,6 +426,7 @@ paths:
     put:
       tags: [Tasks]
       operationId: updateTask
+      description: Moving an assigned task from todo to in_progress starts its assigned agent with the task title, description, labels, and component details. A dispatch failure leaves the task in_progress and returns 502.
       security: [{bearerAuth: []}]
       requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/TaskInput"}}}}
       responses:
@@ -433,6 +434,7 @@ paths:
         "400": {$ref: "#/components/responses/BadRequest"}
         "403": {$ref: "#/components/responses/Forbidden"}
         "409": {$ref: "#/components/responses/Conflict"}
+        "502": {description: Task was moved to in_progress but agent dispatch failed}
   /api/organizations/{orgID}/workspaces/{workspaceID}/tasks/{taskID}/comments:
     parameters:
       - {name: orgID, in: path, required: true, schema: {type: string}}

@@ -11,6 +11,7 @@ type Repository interface {
 	Task(context.Context, string, string, string) (Task, error)
 	CreateTask(context.Context, string, string, TaskInput) (Task, error)
 	UpdateTask(context.Context, string, string, string, TaskInput) (Task, error)
+	UpdateTaskIfStatus(context.Context, string, string, string, string, TaskInput) (Task, error)
 	Comments(context.Context, string, string, string) ([]Comment, error)
 	CreateComment(context.Context, string, string, string, string, string) (Comment, error)
 	Components(context.Context, string, string) ([]Component, error)

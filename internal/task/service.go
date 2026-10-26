@@ -2,6 +2,7 @@ package task
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -12,10 +13,24 @@ import (
 type Service struct {
 	repository Repository
 	workspaces WorkspaceAccess
+	dispatcher TaskDispatcher
 }
 
-func NewService(repository Repository, workspaces WorkspaceAccess) *Service {
-	return &Service{repository: repository, workspaces: workspaces}
+type TaskDispatcher interface {
+	StartTask(context.Context, string, string, Task) error
+}
+
+type DispatchError struct{ Cause error }
+
+func (e *DispatchError) Error() string { return e.Cause.Error() }
+func (e *DispatchError) Unwrap() error { return e.Cause }
+
+func NewService(repository Repository, workspaces WorkspaceAccess, dispatchers ...TaskDispatcher) *Service {
+	service := &Service{repository: repository, workspaces: workspaces}
+	if len(dispatchers) > 0 {
+		service.dispatcher = dispatchers[0]
+	}
+	return service
 }
 
 func (s *Service) List(ctx context.Context, userID, orgID, workspaceID string) ([]Task, error) {
@@ -60,7 +75,28 @@ func (s *Service) Update(ctx context.Context, userID, orgID, workspaceID, taskID
 	if current.Status == "done" && input.Status != "done" {
 		return Task{}, modelerrors.ErrConflict
 	}
-	return s.repository.UpdateTask(ctx, orgID, workspaceID, taskID, input)
+	starting := current.Status == "todo" && input.Status == "in_progress"
+	if starting && strings.TrimSpace(input.AssigneeAgentID) == "" {
+		return Task{}, modelerrors.ErrConflict
+	}
+	if starting && s.dispatcher == nil {
+		return Task{}, errors.New("task execution dispatcher is not configured")
+	}
+	var updated Task
+	if starting {
+		updated, err = s.repository.UpdateTaskIfStatus(ctx, orgID, workspaceID, taskID, "todo", input)
+	} else {
+		updated, err = s.repository.UpdateTask(ctx, orgID, workspaceID, taskID, input)
+	}
+	if err != nil {
+		return Task{}, err
+	}
+	if starting && s.dispatcher != nil {
+		if err = s.dispatcher.StartTask(ctx, userID, orgID, updated); err != nil {
+			return updated, &DispatchError{Cause: fmt.Errorf("task moved to in_progress but agent dispatch failed: %w", err)}
+		}
+	}
+	return updated, nil
 }
 
 func (s *Service) Comments(ctx context.Context, userID, orgID, workspaceID, taskID string) ([]Comment, error) {

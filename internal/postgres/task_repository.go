@@ -74,14 +74,34 @@ func (r *TaskPostgresRepository) CreateTask(ctx context.Context, id, workspaceID
 }
 
 func (r *TaskPostgresRepository) UpdateTask(ctx context.Context, orgID, workspaceID, id string, in task.TaskInput) (task.Task, error) {
+	return r.updateTask(ctx, orgID, workspaceID, id, in, "")
+}
+
+func (r *TaskPostgresRepository) UpdateTaskIfStatus(ctx context.Context, orgID, workspaceID, id, expectedStatus string, in task.TaskInput) (task.Task, error) {
+	return r.updateTask(ctx, orgID, workspaceID, id, in, expectedStatus)
+}
+
+func (r *TaskPostgresRepository) updateTask(ctx context.Context, orgID, workspaceID, id string, in task.TaskInput, expectedStatus string) (task.Task, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return task.Task{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := r.queries.WithTx(tx)
-	row, err := q.UpdateTask(ctx, sqlc.UpdateTaskParams{OrganizationID: orgID, WorkspaceID: workspaceID, ID: id, Title: in.Title, Description: in.Description, Status: in.Status, Column7: in.AssigneeAgentID, Labels: in.Labels})
+	var updated task.Task
+	if expectedStatus == "" {
+		var row sqlc.UpdateTaskRow
+		row, err = q.UpdateTask(ctx, sqlc.UpdateTaskParams{OrganizationID: orgID, WorkspaceID: workspaceID, ID: id, Title: in.Title, Description: in.Description, Status: in.Status, Column7: in.AssigneeAgentID, Labels: in.Labels})
+		updated = taskFrom(row.ID, row.WorkspaceID, row.Title, row.Description, row.SourceProvider, row.SourceID, row.SourceUrl, row.Status, row.AssigneeAgentID, row.Labels, row.CreatedAt.Time, row.UpdatedAt.Time)
+	} else {
+		var row sqlc.UpdateTaskIfStatusRow
+		row, err = q.UpdateTaskIfStatus(ctx, sqlc.UpdateTaskIfStatusParams{OrganizationID: orgID, WorkspaceID: workspaceID, ID: id, Status: expectedStatus, Title: in.Title, Description: in.Description, Status_2: in.Status, Column8: in.AssigneeAgentID, Labels: in.Labels})
+		updated = taskFrom(row.ID, row.WorkspaceID, row.Title, row.Description, row.SourceProvider, row.SourceID, row.SourceUrl, row.Status, row.AssigneeAgentID, row.Labels, row.CreatedAt.Time, row.UpdatedAt.Time)
+	}
 	if err != nil {
+		if expectedStatus != "" {
+			return task.Task{}, mapError(err, modelerrors.ErrConflict, modelerrors.ErrConflict)
+		}
 		return task.Task{}, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
 	}
 	if err = q.DeleteTaskComponents(ctx, sqlc.DeleteTaskComponentsParams{WorkspaceID: workspaceID, TaskID: id}); err != nil {
@@ -95,9 +115,8 @@ func (r *TaskPostgresRepository) UpdateTask(ctx context.Context, orgID, workspac
 	if err = tx.Commit(ctx); err != nil {
 		return task.Task{}, err
 	}
-	t := taskFrom(row.ID, row.WorkspaceID, row.Title, row.Description, row.SourceProvider, row.SourceID, row.SourceUrl, row.Status, row.AssigneeAgentID, row.Labels, row.CreatedAt.Time, row.UpdatedAt.Time)
-	t.Components, err = r.componentLinks(ctx, workspaceID, id)
-	return t, err
+	updated.Components, err = r.componentLinks(ctx, workspaceID, id)
+	return updated, err
 }
 
 func (r *TaskPostgresRepository) Comments(ctx context.Context, orgID, workspaceID, taskID string) ([]task.Comment, error) {
