@@ -97,6 +97,20 @@ export const zTaskComment = z.object({
     body: z.string().max(20000),
     createdAt: z.iso.datetime()
 });
+export const zTaskRun = z.object({
+    runId: z.string(),
+    taskId: z.string(),
+    status: z.string(),
+    failureStage: z.string().optional(),
+    failureReason: z.string().optional(),
+    lastSequence: z.int().gte(0),
+    updatedAt: z.iso.datetime()
+});
+export const zTaskRunEvent = z.object({
+    runId: z.string(),
+    sequence: z.int().gte(1),
+    payload: z.record(z.string(), z.unknown())
+});
 export const zComponentInput = z.object({
     identifier: z.string().min(1).max(100),
     name: z.string().min(1).max(200),
@@ -610,6 +624,64 @@ export const zUpdateTaskPath = z.object({
  * Updated task
  */
 export const zUpdateTaskResponse = zTask;
+export const zListTaskRunsPath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string(),
+    taskID: z.string()
+});
+/**
+ * Task run history
+ */
+export const zListTaskRunsResponse = z.array(zTaskRun);
+export const zListTaskRunEventsPath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string(),
+    taskID: z.string(),
+    runID: z.string()
+});
+export const zListTaskRunEventsQuery = z.object({
+    afterSequence: z.int().gte(0).optional()
+});
+/**
+ * Ordered run activity
+ */
+export const zListTaskRunEventsResponse = z.array(zTaskRunEvent);
+export const zSendTaskRunPromptBody = z.object({
+    commandId: z.string().min(1).max(200),
+    text: z.string().min(1).max(262144)
+});
+export const zSendTaskRunPromptPath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string(),
+    taskID: z.string(),
+    runID: z.string()
+});
+/**
+ * Prompt accepted
+ */
+export const zSendTaskRunPromptResponse = z.object({
+    commandId: z.string()
+});
+export const zCancelTaskRunPromptBody = z.object({
+    commandId: z.string().min(1)
+});
+export const zCancelTaskRunPromptPath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string(),
+    taskID: z.string(),
+    runID: z.string()
+});
+export const zRespondTaskRunPermissionBody = z.object({
+    requestId: z.string(),
+    sessionId: z.string(),
+    optionId: z.string()
+});
+export const zRespondTaskRunPermissionPath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string(),
+    taskID: z.string(),
+    runID: z.string()
+});
 export const zListTaskCommentsPath = z.object({
     orgID: z.string(),
     workspaceID: z.string(),

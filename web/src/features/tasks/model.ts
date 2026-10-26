@@ -18,8 +18,6 @@ export const taskFormSchema = z.object({
 export type TaskFormValues = z.infer<typeof taskFormSchema>;
 export function taskInput(values: TaskFormValues, current?: Task): TaskInput {
   if (!current && values.status !== 'todo') throw new Error('New tasks must start in todo.');
-  if (current && values.status === 'in_progress' && current.status !== 'in_progress')
-    throw new Error('Execution controls are not yet available in the webapp.');
   if (current?.status === 'done' && values.status !== 'done')
     throw new Error('Done tasks cannot be reopened.');
   return {

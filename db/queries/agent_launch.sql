@@ -25,6 +25,18 @@ WHERE launch.status IN (
 )
 ORDER BY launch.created_at;
 
+-- name: ListTaskAgentLaunches :many
+SELECT run_id, organization_id, workspace_id, task_id, status, endpoint, failure_stage,
+       failure_reason, last_sequence, created_at, updated_at
+FROM agent_launches
+WHERE organization_id = $1 AND workspace_id = $2 AND task_id = $3
+ORDER BY created_at DESC;
+
+-- name: ListTaskAgentLaunchEvents :many
+SELECT event, sequence FROM agent_launch_events
+WHERE run_id = $1 AND sequence > $2
+ORDER BY sequence;
+
 -- name: SaveTerminalAgentLaunchEvent :exec
 WITH inserted AS (
     INSERT INTO agent_launch_events (run_id, sequence, event)

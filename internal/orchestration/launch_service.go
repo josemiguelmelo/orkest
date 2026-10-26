@@ -91,6 +91,114 @@ func (s *LaunchService) StartWithPrompt(ctx context.Context, config agentctl.Run
 	return launch, nil
 }
 
+func (s *LaunchService) TaskLaunches(ctx context.Context, orgID, workspaceID, taskID string) ([]Launch, error) {
+	reader, ok := s.repo.(TaskLaunchReader)
+	if !ok {
+		return nil, errors.New("task launch history is unavailable")
+	}
+	return reader.ListTaskLaunches(ctx, orgID, workspaceID, taskID)
+}
+
+func (s *LaunchService) TaskEvents(ctx context.Context, orgID, workspaceID, taskID, runID string, after uint64) ([]Event, error) {
+	reader, ok := s.repo.(TaskLaunchReader)
+	if !ok {
+		return nil, errors.New("task activity history is unavailable")
+	}
+	launches, err := reader.ListTaskLaunches(ctx, orgID, workspaceID, taskID)
+	if err != nil {
+		return nil, err
+	}
+	found := false
+	for _, launch := range launches {
+		if launch.RunID == runID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return nil, errors.New("task run not found")
+	}
+	return reader.ListTaskLaunchEvents(ctx, runID, after)
+}
+
+func (s *LaunchService) SendTaskPrompt(ctx context.Context, orgID, workspaceID, taskID, runID, commandID, prompt string) error {
+	launch, err := s.taskLaunch(ctx, orgID, workspaceID, taskID, runID)
+	if err != nil {
+		return err
+	}
+	if launch.Status != LaunchReady {
+		return errors.New("task run is not active")
+	}
+	client, ok := s.client.(InteractiveAgentctlClient)
+	if !ok {
+		return errors.New("agent interaction is unavailable")
+	}
+	return client.Prompt(ctx, launch.Endpoint, commandID, prompt)
+}
+
+func (s *LaunchService) CancelTaskPrompt(ctx context.Context, orgID, workspaceID, taskID, runID, commandID string) error {
+	launch, err := s.taskLaunch(ctx, orgID, workspaceID, taskID, runID)
+	if err != nil {
+		return err
+	}
+	client, ok := s.client.(InteractiveAgentctlClient)
+	if !ok {
+		return errors.New("agent interaction is unavailable")
+	}
+	return client.CancelPrompt(ctx, launch.Endpoint, commandID)
+}
+
+func (s *LaunchService) RespondTaskPermission(ctx context.Context, orgID, workspaceID, taskID, runID string, response agentctl.PermissionResponse) error {
+	launch, err := s.taskLaunch(ctx, orgID, workspaceID, taskID, runID)
+	if err != nil {
+		return err
+	}
+	events, err := s.TaskEvents(ctx, orgID, workspaceID, taskID, runID, 0)
+	if err != nil {
+		return err
+	}
+	valid := false
+	for _, event := range events {
+		if event.Payload.Type == agentctl.EventPermissionRequested && event.Payload.RequestID == response.RequestID && event.Payload.SessionID == response.SessionID {
+			if event.Payload.Permission != nil {
+				for _, option := range event.Payload.Permission.Options {
+					if option.ID == response.OptionID {
+						valid = true
+					}
+				}
+			}
+		}
+		if event.Payload.Type == agentctl.EventPermissionResponse && event.Payload.RequestID == response.RequestID {
+			valid = false
+		}
+	}
+	if !valid {
+		return errors.New("permission request is no longer pending")
+	}
+	client, ok := s.client.(InteractiveAgentctlClient)
+	if !ok {
+		return errors.New("agent interaction is unavailable")
+	}
+	return client.RespondPermission(ctx, launch.Endpoint, response)
+}
+
+func (s *LaunchService) taskLaunch(ctx context.Context, orgID, workspaceID, taskID, runID string) (Launch, error) {
+	reader, ok := s.repo.(TaskLaunchReader)
+	if !ok {
+		return Launch{}, errors.New("task launch history is unavailable")
+	}
+	launches, err := reader.ListTaskLaunches(ctx, orgID, workspaceID, taskID)
+	if err != nil {
+		return Launch{}, err
+	}
+	for _, launch := range launches {
+		if launch.RunID == runID {
+			return launch, nil
+		}
+	}
+	return Launch{}, errors.New("task run not found")
+}
+
 func validEndpoint(endpoint string) bool {
 	u, err := url.Parse(endpoint)
 	return err == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Host != "" && u.User == nil && u.RawQuery == "" && u.Fragment == ""

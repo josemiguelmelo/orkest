@@ -96,6 +96,22 @@ export type TaskComment = {
     body: string;
     createdAt: string;
 };
+export type TaskRun = {
+    runId: string;
+    taskId: string;
+    status: string;
+    failureStage?: string;
+    failureReason?: string;
+    lastSequence: number;
+    updatedAt: string;
+};
+export type TaskRunEvent = {
+    runId: string;
+    sequence: number;
+    payload: {
+        [key: string]: unknown;
+    };
+};
 export type ComponentInput = {
     identifier: string;
     name: string;
@@ -1929,6 +1945,213 @@ export type UpdateTaskResponses = {
     200: Task;
 };
 export type UpdateTaskResponse = UpdateTaskResponses[keyof UpdateTaskResponses];
+export type ListTaskRunsData = {
+    body?: never;
+    path: {
+        orgID: string;
+        workspaceID: string;
+        taskID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/tasks/{taskID}/runs';
+};
+export type ListTaskRunsErrors = {
+    /**
+     * Missing or invalid credentials
+     */
+    401: Error;
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+    /**
+     * Resource is absent or inaccessible
+     */
+    404: Error;
+    /**
+     * Run history unavailable
+     */
+    503: Error;
+};
+export type ListTaskRunsError = ListTaskRunsErrors[keyof ListTaskRunsErrors];
+export type ListTaskRunsResponses = {
+    /**
+     * Task run history
+     */
+    200: Array<TaskRun>;
+};
+export type ListTaskRunsResponse = ListTaskRunsResponses[keyof ListTaskRunsResponses];
+export type ListTaskRunEventsData = {
+    body?: never;
+    path: {
+        orgID: string;
+        workspaceID: string;
+        taskID: string;
+        runID: string;
+    };
+    query?: {
+        afterSequence?: number;
+    };
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/tasks/{taskID}/runs/{runID}/events';
+};
+export type ListTaskRunEventsErrors = {
+    /**
+     * Request body or role is invalid
+     */
+    400: Error;
+    /**
+     * Missing or invalid credentials
+     */
+    401: Error;
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+    /**
+     * Resource is absent or inaccessible
+     */
+    404: Error;
+};
+export type ListTaskRunEventsError = ListTaskRunEventsErrors[keyof ListTaskRunEventsErrors];
+export type ListTaskRunEventsResponses = {
+    /**
+     * Ordered run activity
+     */
+    200: Array<TaskRunEvent>;
+};
+export type ListTaskRunEventsResponse = ListTaskRunEventsResponses[keyof ListTaskRunEventsResponses];
+export type SendTaskRunPromptData = {
+    body: {
+        commandId: string;
+        text: string;
+    };
+    path: {
+        orgID: string;
+        workspaceID: string;
+        taskID: string;
+        runID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/tasks/{taskID}/runs/{runID}/prompts';
+};
+export type SendTaskRunPromptErrors = {
+    /**
+     * Request body or role is invalid
+     */
+    400: Error;
+    /**
+     * Missing or invalid credentials
+     */
+    401: Error;
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+    /**
+     * Resource is absent or inaccessible
+     */
+    404: Error;
+    /**
+     * Operation conflicts with membership invariants
+     */
+    409: Error;
+};
+export type SendTaskRunPromptError = SendTaskRunPromptErrors[keyof SendTaskRunPromptErrors];
+export type SendTaskRunPromptResponses = {
+    /**
+     * Prompt accepted
+     */
+    202: {
+        commandId: string;
+    };
+};
+export type SendTaskRunPromptResponse = SendTaskRunPromptResponses[keyof SendTaskRunPromptResponses];
+export type CancelTaskRunPromptData = {
+    body: {
+        commandId: string;
+    };
+    path: {
+        orgID: string;
+        workspaceID: string;
+        taskID: string;
+        runID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/tasks/{taskID}/runs/{runID}/cancel';
+};
+export type CancelTaskRunPromptErrors = {
+    /**
+     * Request body or role is invalid
+     */
+    400: Error;
+    /**
+     * Missing or invalid credentials
+     */
+    401: Error;
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+    /**
+     * Resource is absent or inaccessible
+     */
+    404: Error;
+    /**
+     * Operation conflicts with membership invariants
+     */
+    409: Error;
+};
+export type CancelTaskRunPromptError = CancelTaskRunPromptErrors[keyof CancelTaskRunPromptErrors];
+export type CancelTaskRunPromptResponses = {
+    /**
+     * Cancellation accepted
+     */
+    202: unknown;
+};
+export type RespondTaskRunPermissionData = {
+    body: {
+        requestId: string;
+        sessionId: string;
+        optionId: string;
+    };
+    path: {
+        orgID: string;
+        workspaceID: string;
+        taskID: string;
+        runID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/tasks/{taskID}/runs/{runID}/permissions/respond';
+};
+export type RespondTaskRunPermissionErrors = {
+    /**
+     * Request body or role is invalid
+     */
+    400: Error;
+    /**
+     * Missing or invalid credentials
+     */
+    401: Error;
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+    /**
+     * Resource is absent or inaccessible
+     */
+    404: Error;
+    /**
+     * Operation conflicts with membership invariants
+     */
+    409: Error;
+};
+export type RespondTaskRunPermissionError = RespondTaskRunPermissionErrors[keyof RespondTaskRunPermissionErrors];
+export type RespondTaskRunPermissionResponses = {
+    /**
+     * Permission response accepted
+     */
+    202: unknown;
+};
 export type ListTaskCommentsData = {
     body?: never;
     path: {

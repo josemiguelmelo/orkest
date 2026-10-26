@@ -105,6 +105,16 @@ func (c *HTTPAgentctlClient) Prompt(ctx context.Context, endpoint, commandID, pr
 	}{CommandID: commandID, Text: prompt})
 }
 
+func (c *HTTPAgentctlClient) CancelPrompt(ctx context.Context, endpoint, commandID string) error {
+	return c.post(ctx, endpoint, "/agent/cancel", struct {
+		CommandID string `json:"commandId"`
+	}{CommandID: commandID})
+}
+
+func (c *HTTPAgentctlClient) RespondPermission(ctx context.Context, endpoint string, response agentctl.PermissionResponse) error {
+	return c.post(ctx, endpoint, "/agent/permissions/respond", response)
+}
+
 func (c *HTTPAgentctlClient) post(ctx context.Context, endpoint, path string, payload any) error {
 	body, err := json.Marshal(payload)
 	if err != nil {

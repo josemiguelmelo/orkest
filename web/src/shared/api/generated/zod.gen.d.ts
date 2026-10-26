@@ -126,6 +126,20 @@ export declare const zTaskComment: z.ZodObject<{
     body: z.ZodString;
     createdAt: z.ZodISODateTime;
 }, z.core.$strip>;
+export declare const zTaskRun: z.ZodObject<{
+    runId: z.ZodString;
+    taskId: z.ZodString;
+    status: z.ZodString;
+    failureStage: z.ZodOptional<z.ZodString>;
+    failureReason: z.ZodOptional<z.ZodString>;
+    lastSequence: z.ZodInt;
+    updatedAt: z.ZodISODateTime;
+}, z.core.$strip>;
+export declare const zTaskRunEvent: z.ZodObject<{
+    runId: z.ZodString;
+    sequence: z.ZodInt;
+    payload: z.ZodRecord<z.ZodString, z.ZodUnknown>;
+}, z.core.$strip>;
 export declare const zComponentInput: z.ZodObject<{
     identifier: z.ZodString;
     name: z.ZodString;
@@ -1169,6 +1183,76 @@ export declare const zUpdateTaskResponse: z.ZodObject<{
     }, z.core.$strip>>;
     createdAt: z.ZodISODateTime;
     updatedAt: z.ZodISODateTime;
+}, z.core.$strip>;
+export declare const zListTaskRunsPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+    taskID: z.ZodString;
+}, z.core.$strip>;
+/**
+ * Task run history
+ */
+export declare const zListTaskRunsResponse: z.ZodArray<z.ZodObject<{
+    runId: z.ZodString;
+    taskId: z.ZodString;
+    status: z.ZodString;
+    failureStage: z.ZodOptional<z.ZodString>;
+    failureReason: z.ZodOptional<z.ZodString>;
+    lastSequence: z.ZodInt;
+    updatedAt: z.ZodISODateTime;
+}, z.core.$strip>>;
+export declare const zListTaskRunEventsPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+    taskID: z.ZodString;
+    runID: z.ZodString;
+}, z.core.$strip>;
+export declare const zListTaskRunEventsQuery: z.ZodObject<{
+    afterSequence: z.ZodOptional<z.ZodInt>;
+}, z.core.$strip>;
+/**
+ * Ordered run activity
+ */
+export declare const zListTaskRunEventsResponse: z.ZodArray<z.ZodObject<{
+    runId: z.ZodString;
+    sequence: z.ZodInt;
+    payload: z.ZodRecord<z.ZodString, z.ZodUnknown>;
+}, z.core.$strip>>;
+export declare const zSendTaskRunPromptBody: z.ZodObject<{
+    commandId: z.ZodString;
+    text: z.ZodString;
+}, z.core.$strip>;
+export declare const zSendTaskRunPromptPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+    taskID: z.ZodString;
+    runID: z.ZodString;
+}, z.core.$strip>;
+/**
+ * Prompt accepted
+ */
+export declare const zSendTaskRunPromptResponse: z.ZodObject<{
+    commandId: z.ZodString;
+}, z.core.$strip>;
+export declare const zCancelTaskRunPromptBody: z.ZodObject<{
+    commandId: z.ZodString;
+}, z.core.$strip>;
+export declare const zCancelTaskRunPromptPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+    taskID: z.ZodString;
+    runID: z.ZodString;
+}, z.core.$strip>;
+export declare const zRespondTaskRunPermissionBody: z.ZodObject<{
+    requestId: z.ZodString;
+    sessionId: z.ZodString;
+    optionId: z.ZodString;
+}, z.core.$strip>;
+export declare const zRespondTaskRunPermissionPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+    taskID: z.ZodString;
+    runID: z.ZodString;
 }, z.core.$strip>;
 export declare const zListTaskCommentsPath: z.ZodObject<{
     orgID: z.ZodString;

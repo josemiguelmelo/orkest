@@ -58,6 +58,21 @@ export const commentsQuery = (s: WorkspaceScope, taskID: string) =>
     queryFn: ({ signal }) =>
       data(sdk.listTaskComments({ ...command, path: { ...path(s), taskID }, signal })),
   });
+export const taskRunsQuery = (s: WorkspaceScope, taskID: string) =>
+  queryOptions({
+    queryKey: [...keys.workspace(s), 'tasks', taskID, 'runs'],
+    queryFn: ({ signal }) =>
+      data(sdk.listTaskRuns({ ...command, path: { ...path(s), taskID }, signal })),
+    refetchInterval: 2000,
+  });
+export const taskRunEventsQuery = (s: WorkspaceScope, taskID: string, runID: string) =>
+  queryOptions({
+    queryKey: [...keys.workspace(s), 'tasks', taskID, 'runs', runID, 'events'],
+    queryFn: ({ signal }) =>
+      data(sdk.listTaskRunEvents({ ...command, path: { ...path(s), taskID, runID }, signal })),
+    enabled: !!runID,
+    refetchInterval: 1500,
+  });
 export const agentsQuery = (s: WorkspaceScope) =>
   queryOptions({
     queryKey: [...keys.workspace(s), 'agents'],

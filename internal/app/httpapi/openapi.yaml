@@ -840,6 +840,80 @@ paths:
           $ref: "#/components/responses/NotFound"
         "500":
           $ref: "#/components/responses/InternalServerError"
+  /api/organizations/{orgID}/workspaces/{workspaceID}/tasks/{taskID}/runs:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+      - {name: taskID, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [Tasks]
+      operationId: listTaskRuns
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      responses:
+        "200": {description: Task run history, content: {application/json: {schema: {type: array, items: {$ref: "#/components/schemas/TaskRun"}}}}}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "503": {description: Run history unavailable, content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/tasks/{taskID}/runs/{runID}/events:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+      - {name: taskID, in: path, required: true, schema: {type: string}}
+      - {name: runID, in: path, required: true, schema: {type: string}}
+      - {name: afterSequence, in: query, required: false, schema: {type: integer, minimum: 0}}
+    get:
+      tags: [Tasks]
+      operationId: listTaskRunEvents
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      responses:
+        "200": {description: Ordered run activity, content: {application/json: {schema: {type: array, items: {$ref: "#/components/schemas/TaskRunEvent"}}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/tasks/{taskID}/runs/{runID}/prompts:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+      - {name: taskID, in: path, required: true, schema: {type: string}}
+      - {name: runID, in: path, required: true, schema: {type: string}}
+    post:
+      tags: [Tasks]
+      operationId: sendTaskRunPrompt
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [commandId, text], properties: {commandId: {type: string, minLength: 1, maxLength: 200}, text: {type: string, minLength: 1, maxLength: 262144}}}}}}
+      responses:
+        "202": {description: Prompt accepted, content: {application/json: {schema: {type: object, required: [commandId], properties: {commandId: {type: string}}}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/tasks/{taskID}/runs/{runID}/cancel:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+      - {name: taskID, in: path, required: true, schema: {type: string}}
+      - {name: runID, in: path, required: true, schema: {type: string}}
+    post:
+      tags: [Tasks]
+      operationId: cancelTaskRunPrompt
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [commandId], properties: {commandId: {type: string, minLength: 1}}}}}}
+      responses: {"202": {description: Cancellation accepted}, "400": {$ref: "#/components/responses/BadRequest"}, "401": {$ref: "#/components/responses/Unauthorized"}, "403": {$ref: "#/components/responses/Forbidden"}, "404": {$ref: "#/components/responses/NotFound"}, "409": {$ref: "#/components/responses/Conflict"}}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/tasks/{taskID}/runs/{runID}/permissions/respond:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+      - {name: taskID, in: path, required: true, schema: {type: string}}
+      - {name: runID, in: path, required: true, schema: {type: string}}
+    post:
+      tags: [Tasks]
+      operationId: respondTaskRunPermission
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [requestId, sessionId, optionId], properties: {requestId: {type: string}, sessionId: {type: string}, optionId: {type: string}}}}}}
+      responses: {"202": {description: Permission response accepted}, "400": {$ref: "#/components/responses/BadRequest"}, "401": {$ref: "#/components/responses/Unauthorized"}, "403": {$ref: "#/components/responses/Forbidden"}, "404": {$ref: "#/components/responses/NotFound"}, "409": {$ref: "#/components/responses/Conflict"}}
   /api/organizations/{orgID}/workspaces/{workspaceID}/tasks/{taskID}/comments:
     parameters:
       - {name: orgID, in: path, required: true, schema: {type: string}}
@@ -1229,6 +1303,24 @@ components:
         authorUserId: {type: string}
         body: {type: string, maxLength: 20000}
         createdAt: {type: string, format: date-time}
+    TaskRun:
+      type: object
+      required: [runId, taskId, status, lastSequence, updatedAt]
+      properties:
+        runId: {type: string}
+        taskId: {type: string}
+        status: {type: string}
+        failureStage: {type: string}
+        failureReason: {type: string}
+        lastSequence: {type: integer, minimum: 0}
+        updatedAt: {type: string, format: date-time}
+    TaskRunEvent:
+      type: object
+      required: [runId, sequence, payload]
+      properties:
+        runId: {type: string}
+        sequence: {type: integer, minimum: 1}
+        payload: {type: object, additionalProperties: true}
     ComponentInput:
       type: object
       required: [identifier, name, repositoryId]

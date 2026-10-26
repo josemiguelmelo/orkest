@@ -101,6 +101,102 @@ func (q *Queries) ListReconnectableAgentLaunches(ctx context.Context) ([]ListRec
 	return items, nil
 }
 
+const listTaskAgentLaunchEvents = `-- name: ListTaskAgentLaunchEvents :many
+SELECT event, sequence FROM agent_launch_events
+WHERE run_id = $1 AND sequence > $2
+ORDER BY sequence
+`
+
+type ListTaskAgentLaunchEventsParams struct {
+	RunID    string `json:"run_id"`
+	Sequence int64  `json:"sequence"`
+}
+
+type ListTaskAgentLaunchEventsRow struct {
+	Event    []byte `json:"event"`
+	Sequence int64  `json:"sequence"`
+}
+
+func (q *Queries) ListTaskAgentLaunchEvents(ctx context.Context, arg ListTaskAgentLaunchEventsParams) ([]ListTaskAgentLaunchEventsRow, error) {
+	rows, err := q.db.Query(ctx, listTaskAgentLaunchEvents, arg.RunID, arg.Sequence)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTaskAgentLaunchEventsRow
+	for rows.Next() {
+		var i ListTaskAgentLaunchEventsRow
+		if err := rows.Scan(&i.Event, &i.Sequence); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTaskAgentLaunches = `-- name: ListTaskAgentLaunches :many
+SELECT run_id, organization_id, workspace_id, task_id, status, endpoint, failure_stage,
+       failure_reason, last_sequence, created_at, updated_at
+FROM agent_launches
+WHERE organization_id = $1 AND workspace_id = $2 AND task_id = $3
+ORDER BY created_at DESC
+`
+
+type ListTaskAgentLaunchesParams struct {
+	OrganizationID string `json:"organization_id"`
+	WorkspaceID    string `json:"workspace_id"`
+	TaskID         string `json:"task_id"`
+}
+
+type ListTaskAgentLaunchesRow struct {
+	RunID          string             `json:"run_id"`
+	OrganizationID string             `json:"organization_id"`
+	WorkspaceID    string             `json:"workspace_id"`
+	TaskID         string             `json:"task_id"`
+	Status         string             `json:"status"`
+	Endpoint       string             `json:"endpoint"`
+	FailureStage   string             `json:"failure_stage"`
+	FailureReason  string             `json:"failure_reason"`
+	LastSequence   int64              `json:"last_sequence"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
+func (q *Queries) ListTaskAgentLaunches(ctx context.Context, arg ListTaskAgentLaunchesParams) ([]ListTaskAgentLaunchesRow, error) {
+	rows, err := q.db.Query(ctx, listTaskAgentLaunches, arg.OrganizationID, arg.WorkspaceID, arg.TaskID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTaskAgentLaunchesRow
+	for rows.Next() {
+		var i ListTaskAgentLaunchesRow
+		if err := rows.Scan(
+			&i.RunID,
+			&i.OrganizationID,
+			&i.WorkspaceID,
+			&i.TaskID,
+			&i.Status,
+			&i.Endpoint,
+			&i.FailureStage,
+			&i.FailureReason,
+			&i.LastSequence,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const saveAgentLaunchEvent = `-- name: SaveAgentLaunchEvent :execrows
 WITH inserted AS (
     INSERT INTO agent_launch_events (run_id, sequence, event)
