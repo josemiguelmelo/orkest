@@ -1,15 +1,15 @@
 # Orkest
 
 SDLC agent orchestration. This repository contains a Go platform API, a standalone
-OpenCode/ACP `agentctl` service, and a React/TypeScript/Vite shell. Organization and
-workspace membership APIs use PostgreSQL; task services and platform-to-agent
-integration are not implemented.
+OpenCode/ACP `agentctl` service, and a React/TypeScript/Vite management workbench. PostgreSQL backs organization,
+workspace, task, agent, skill, repository and integration management. Task starts
+can dispatch agents, but execution interaction APIs and recovery remain incomplete.
 Read [requirements](docs/requirements.md) and the
 [proposed stack](docs/tech-stack.md) before extending the project.
 
 ## Local development
 
-Prerequisites: Go 1.26.2, Node.js 22.19.0 (npm 11), Docker Engine with Compose v2.
+Prerequisites: Go 1.26.2, Node.js 22.22.2 (npm 11), Docker Engine with Compose v2.
 Dependencies are pinned in `web/package.json` and `web/package-lock.json`.
 
 1. Copy `.env.example` to `.env` and set `POSTGRES_PASSWORD` to a local password. The app accepts either `DATABASE_URL` or all five `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USERNAME`, `POSTGRES_PASSWORD`, and `POSTGRES_DB` values; `DATABASE_URL` takes precedence.
@@ -17,11 +17,12 @@ Dependencies are pinned in `web/package.json` and `web/package-lock.json`.
 3. Run `make db-up` to start PostgreSQL and wait for its health check.
 4. Run `make auth-up` to start Keycloak locally.
 5. Run `make dev` for the API at `http://127.0.0.1:8080` with Air auto-reload.
-6. In another terminal, run `make dev-web` for the frontend (Vite prints its URL).
+6. For the Go-served UI, run `make build` and open `http://127.0.0.1:8080`. For frontend iteration, run `make dev-web` and set the backend OIDC callback to the matching Vite origin. See [webapp development and verification](docs/webapp-implementation.md).
 
 `GET /healthz` reports process liveness only. The platform connects to PostgreSQL
 and applies pending Goose migrations on startup. Set `HTTP_ADDR` to override its
-listen address. The frontend is a static shell and does not yet call the API.
+listen address. The Go server serves the built webapp from `ORKEST_WEB_DIR` (default `web/dist`).
+Run `make build` before using it, or run Vite for frontend development.
 Visit `http://127.0.0.1:8080/auth/login` to sign in. The local Keycloak realm has
 username `local` and password `local`; `GET /api/me` returns the internal user
 profile and organization memberships. The API supports organization, workspace,
@@ -53,7 +54,8 @@ launch requests, persistent storage, and verification instructions.
 
 ## Verification and builds
 
-- `make check`: Go lint/formatting checks, tests, frontend type checks, and all builds.
+- `make check`: Go lint/tests, generated API drift checks, frontend lint/tests/type checks, and all builds.
+- `npm --prefix web run test:e2e`: desktop/mobile Chromium management journeys; see browser prerequisites in the webapp guide.
 - `make lint`: run golangci-lint v2.15.0 with the standard linters and gofumpt.
 - `make fmt`: format Go sources with gofumpt, including blank lines between
   multiline functions.
@@ -66,5 +68,5 @@ launch requests, persistent storage, and verification instructions.
 - `make test-recovery`: explicitly fails; recovery verification is not implemented.
 
 The platform API uses Chi, pgx, sqlc, and Goose. PostgreSQL schema migrations
-live in `db/migrations`; the startup runner embeds and applies them. Validate the
-pinned OpenCode/ACP prototype and recovery behavior before building the full UI.
+live in `db/migrations`; the startup runner embeds and applies them. Execution controls remain deferred in the management UI until the pinned
+OpenCode/ACP interaction and recovery behavior is validated.

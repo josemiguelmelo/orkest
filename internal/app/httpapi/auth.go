@@ -119,19 +119,25 @@ func (a *oidcAuth) logout(w http.ResponseWriter, r *http.Request) {
 func (a *oidcAuth) currentUser(w http.ResponseWriter, r *http.Request) {
 	user, ok := r.Context().Value(userContextKey{}).(identity.User)
 	if !ok {
-		http.Error(w, "authentication required", http.StatusUnauthorized)
+		writeError(w, http.StatusUnauthorized, "unauthorized")
 		return
 	}
 	organizations, err := a.organizations.ListOrganizations(r.Context(), user.ID)
 	if err != nil {
-		http.Error(w, "could not load user", http.StatusInternalServerError)
+		writeError(w, http.StatusInternalServerError, "internal_error")
+		return
+	}
+	platformAdmin, err := a.users.IsPlatformAdmin(r.Context(), user.ID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal_error")
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(struct {
+		PlatformAdmin bool                        `json:"platformAdmin"`
 		User          identity.User               `json:"user"`
 		Organizations []organization.Organization `json:"organizations"`
-	}{user, organizations})
+	}{platformAdmin, user, organizations})
 }
 
 func (a *oidcAuth) middleware(next http.Handler) http.Handler {

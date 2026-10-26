@@ -8,3 +8,8 @@
 /web/dist/
 *.tsbuildinfo
 .DS_Store
+/web/.api-source/
+/web/.api-check/
+/web/test-results/
+/web/playwright-report/
+/web/coverage/

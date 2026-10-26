@@ -5,7 +5,7 @@ Status: Mixed. This document distinguishes implemented technology from the propo
 ## Backend
 
 - **Go 1.26.2** for the core platform and `agentctl`.
-- **`net/http`** owns both servers. The platform currently routes with the standard library `ServeMux`; the `agentctl` REST and WebSocket APIs use **Chi v5.2.3** on top of `net/http`.
+- **`net/http`** owns both servers. The platform and the `agentctl` REST/WebSocket APIs use **Chi v5.2.3** on top of `net/http`.
 - **Manual constructor dependency injection** with wiring at the application boundary. Services receive explicit dependencies and do not look them up through a container. No DI framework is needed for the MVP; reconsider Uber Fx if wiring and lifecycle management become cumbersome.
 - **`log/slog`** for structured logging, with credentials redacted.
 - **`godotenv v1.5.1`** loads the optional local `.env` file through shared helpers in `internal/core/environment`; both command entry points use them.
@@ -28,8 +28,10 @@ For task and run persistence, use transactions and constraints for atomic member
 
 ## Frontend
 
-- **React 19.2.0**, **TypeScript 5.9.3**, and **Vite 7.3.7** are pinned in `web/package.json`; the current frontend is a static shell and does not call the API.
-- The documented local toolchain is **Node.js 22.19.0** with npm 11; `package.json` requires Node.js 22.12.0 or later.
+- **React 19.2.0**, **TypeScript 5.9.3**, and **Vite 7.3.7** are pinned in `web/package.json`; the frontend now implements the platform management workbench.
+- The documented local toolchain is **Node.js 22.22.2** with npm 11; `package.json` requires Node.js 22.22.2, 24.15.0, or supported 26+ releases.
+- The management UI uses **TanStack Router/Query**, **React Hook Form/Zod**, **Tailwind v4**, and owned shadcn-style **Radix** components. All added dependency versions are pinned in the npm manifest/lockfile. Hey API generates typed SDK functions and runtime validators from the platform contract. Strict application types, scoped caches, role-aware actions, schema-driven integration forms, frontend lint/tests and desktop/mobile browser journeys are implemented. See [webapp architecture and verification](webapp-implementation.md).
+- Go serves the SPA from `ORKEST_WEB_DIR` (default `web/dist`); Vite proxies the API and cookie-based OIDC routes during development. Execution starts and runtime interaction remain outside the management UI.
 - Browser HTTP commands and **Server-Sent Events (SSE)** with persisted cursors and replay remain proposed. The implemented agentctl activity stream is WebSocket, described below.
 
 ## Authentication and authorization
@@ -82,7 +84,7 @@ Avoid introducing microservices or a distributed workflow engine for the initial
 
 ## Validation status and next milestones
 
-The Go agentctl/OpenCode prototype exists. Unit tests use a subprocess fixture; the real OpenCode handshake has a documented integration target but remains unverified unless run with the pinned executable. Before building the full UI, validate the remaining high-risk behavior:
+The Go agentctl/OpenCode prototype exists. Unit tests use a subprocess fixture; the real OpenCode handshake has a documented integration target but remains unverified unless run with the pinned executable. Before exposing execution controls in the UI, validate the remaining high-risk behavior:
 
 1. Run `make test-docker` to verify agentctl starts in the Docker OpenCode image; validate OpenCode ACP interaction and subsequent recovery scenarios separately.
 2. Completes a user approval round trip.

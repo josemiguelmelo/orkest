@@ -10,22 +10,21 @@ import (
 type taskAPI struct{ tasks *task.Service }
 
 func (a taskAPI) routes(r chi.Router) {
-	r.Route("/organizations/{orgID}/workspaces/{workspaceID}", func(r chi.Router) {
-		r.Route("/tasks", func(r chi.Router) {
-			r.Get("/", a.listTasks)
-			r.Post("/", a.createTask)
-			r.Route("/{taskID}", func(r chi.Router) {
-				r.Get("/", a.getTask)
-				r.Put("/", a.updateTask)
-				r.Get("/comments", a.listComments)
-				r.Post("/comments", a.addComment)
-			})
+	const prefix = "/organizations/{orgID}/workspaces/{workspaceID}"
+	r.Route(prefix+"/tasks", func(r chi.Router) {
+		r.Get("/", a.listTasks)
+		r.Post("/", a.createTask)
+		r.Route("/{taskID}", func(r chi.Router) {
+			r.Get("/", a.getTask)
+			r.Put("/", a.updateTask)
+			r.Get("/comments", a.listComments)
+			r.Post("/comments", a.addComment)
 		})
-		r.Route("/components", func(r chi.Router) {
-			r.Get("/", a.listComponents)
-			r.Post("/", a.createComponent)
-			r.Put("/{componentID}", a.updateComponent)
-		})
+	})
+	r.Route(prefix+"/components", func(r chi.Router) {
+		r.Get("/", a.listComponents)
+		r.Post("/", a.createComponent)
+		r.Put("/{componentID}", a.updateComponent)
 	})
 }
 
