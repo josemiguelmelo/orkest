@@ -5,17 +5,7 @@ import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
-import {
-  ArrowLeft,
-  Bot,
-  CircleStop,
-  LayoutGrid,
-  List,
-  MessageSquare,
-  Search,
-  Send,
-} from 'lucide-react';
+import { ArrowLeft, Bot, CircleStop, LayoutGrid, List, Search, Send } from 'lucide-react';
 import { useApp } from '../../app/context';
 import { command, data } from '../../shared/api/client';
 import * as sdk from '../../shared/api/generated/sdk.gen';
@@ -342,6 +332,7 @@ export function TaskPage(): JSX.Element {
   const { scope, permissions } = useApp();
   const task = useQuery(taskQuery(scope, taskId));
   const agents = useQuery(agentsQuery(scope));
+  const components = useQuery(componentsQuery(scope));
   const [edit, setEdit] = useState(false);
   const startAction = useAction();
   const refresh = useRefresh();
@@ -398,45 +389,71 @@ export function TaskPage(): JSX.Element {
           This task is in progress. Review its run activity and interact with the agent below.
         </div>
       )}
-      <RunPanel task={item} />
       <div className="detail-layout">
-        <div>
-          <section className="panel">
-            <h2>Description</h2>
-            <div className="spacer">
-              {item.description ? (
-                <Markdown text={item.description} />
-              ) : (
-                <p className="muted">No description provided.</p>
-              )}
-            </div>
-          </section>
-          <Comments taskID={item.id} />
+        <div className="task-conversation-column">
+          <div className="task-context">
+            <details className="task-context-section">
+              <summary>
+                <span>Description</span>
+                <span className="muted">Task context</span>
+              </summary>
+              <div className="task-context-content">
+                {item.description ? (
+                  <Markdown text={item.description} />
+                ) : (
+                  <p className="muted">No description provided.</p>
+                )}
+              </div>
+            </details>
+            <details className="task-context-section">
+              <summary>
+                <span>Source comments</span>
+                <span className="muted">Read only</span>
+              </summary>
+              <div className="task-context-content">
+                <Comments taskID={item.id} />
+              </div>
+            </details>
+          </div>
+          <RunPanel task={item} />
         </div>
         <aside>
           <section className="panel">
             <dl className="detail-meta">
-              <div>
-                <dt>Status</dt>
-                <dd>
-                  <Badge>{statusNames[item.status]}</Badge>
-                </dd>
-              </div>
-              <div>
-                <dt>Assigned agent</dt>
-                <dd>
-                  {agents.data?.find((a) => a.id === item.assigneeAgentId)?.name ?? 'Unassigned'}
-                </dd>
-              </div>
+              {permissions.editWorkspace ? (
+                <TaskPropertyControls
+                  task={item}
+                  agents={agents.data ?? []}
+                  components={components.data ?? []}
+                  agentsLoading={agents.isPending || agents.isError}
+                  componentsLoading={components.isPending || components.isError}
+                />
+              ) : (
+                <>
+                  <div>
+                    <dt>Status</dt>
+                    <dd>
+                      <Badge>{statusNames[item.status]}</Badge>
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Assigned agent</dt>
+                    <dd>
+                      {agents.data?.find((a) => a.id === item.assigneeAgentId)?.name ??
+                        'Unassigned'}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt>Components</dt>
+                    <dd>{item.components.map((c) => c.name).join(', ') || 'None'}</dd>
+                  </div>
+                </>
+              )}
               <div>
                 <dt>Labels</dt>
                 <dd className="tags">
                   {item.labels.length ? item.labels.map((l) => <Badge key={l}>{l}</Badge>) : 'None'}
                 </dd>
-              </div>
-              <div>
-                <dt>Components</dt>
-                <dd>{item.components.map((c) => c.name).join(', ') || 'None'}</dd>
               </div>
               <div>
                 <dt>Source</dt>
@@ -463,6 +480,128 @@ export function TaskPage(): JSX.Element {
         </aside>
       </div>
       {edit && <TaskEditor task={item} onClose={() => setEdit(false)} />}
+    </>
+  );
+}
+
+function TaskPropertyControls({
+  task,
+  agents,
+  components,
+  agentsLoading,
+  componentsLoading,
+}: {
+  task: Task;
+  agents: { id: string; name: string }[];
+  components: { id: string; name: string }[];
+  agentsLoading: boolean;
+  componentsLoading: boolean;
+}): JSX.Element {
+  const { scope } = useApp();
+  const refresh = useRefresh();
+  const action = useAction();
+  async function update(patch: {
+    status?: Task['status'];
+    assigneeAgentId?: string;
+    componentIds?: string[];
+  }) {
+    await action.run(async () => {
+      try {
+        await data(
+          sdk.updateTask({
+            ...command,
+            path: { ...path(scope), taskID: task.id },
+            body: {
+              title: task.title,
+              description: task.description,
+              status: patch.status ?? task.status,
+              assigneeAgentId: patch.assigneeAgentId ?? task.assigneeAgentId ?? '',
+              labels: task.labels,
+              componentIds: patch.componentIds ?? task.components.map((component) => component.id),
+            },
+          }),
+        );
+      } finally {
+        await refresh(scope);
+      }
+    });
+  }
+  return (
+    <>
+      <div>
+        <dt>Status</dt>
+        <dd>
+          <select
+            aria-label="Task status"
+            value={task.status}
+            disabled={action.pending || task.status === 'done'}
+            onChange={(event) => void update({ status: event.target.value as Task['status'] })}
+          >
+            {statuses.map((status) => (
+              <option key={status} value={status}>
+                {statusNames[status]}
+              </option>
+            ))}
+          </select>
+        </dd>
+      </div>
+      <div>
+        <dt>Assigned agent</dt>
+        <dd>
+          <select
+            aria-label="Assigned agent"
+            value={task.assigneeAgentId ?? ''}
+            disabled={action.pending || agentsLoading}
+            onChange={(event) => void update({ assigneeAgentId: event.target.value })}
+          >
+            <option value="">Unassigned</option>
+            {agents.map((agent) => (
+              <option key={agent.id} value={agent.id}>
+                {agent.name}
+              </option>
+            ))}
+          </select>
+        </dd>
+      </div>
+      <div>
+        <dt>Components</dt>
+        <dd>
+          {componentsLoading ? (
+            <span className="muted">Loading components…</span>
+          ) : (
+            <div className="component-chips" aria-label="Components">
+              {components.length ? (
+                components.map((component) => {
+                  const selected = task.components.some((item) => item.id === component.id);
+                  return (
+                    <button
+                      className={`component-chip${selected ? ' is-selected' : ''}`}
+                      type="button"
+                      key={component.id}
+                      aria-pressed={selected}
+                      disabled={action.pending}
+                      onClick={() =>
+                        void update({
+                          componentIds: selected
+                            ? task.components
+                                .filter((item) => item.id !== component.id)
+                                .map((item) => item.id)
+                            : [...task.components.map((item) => item.id), component.id],
+                        })
+                      }
+                    >
+                      {component.name}
+                    </button>
+                  );
+                })
+              ) : (
+                <span className="muted">No components available.</span>
+              )}
+            </div>
+          )}
+          {action.error ? <ErrorState error={action.error} /> : null}
+        </dd>
+      </div>
     </>
   );
 }
@@ -544,10 +683,15 @@ function RunPanel({ task }: { task: Task }): JSX.Element {
       setText('');
   }
   return (
-    <section className="panel spacer" aria-label="Agent execution">
+    <section className="panel conversation-panel" aria-label="Task chat">
       <div className="split">
-        <h2>Agent activity</h2>
-        {runs.data?.length ? <Badge>{selected?.status}</Badge> : null}
+        <div>
+          <h2>Chat</h2>
+          <p className="muted">Conversation with the assigned agent</p>
+        </div>
+        {runs.data?.length ? (
+          <Badge>{selected ? runStatusLabel(selected.status) : ''}</Badge>
+        ) : null}
       </div>
       {runs.isPending ? (
         <Loading />
@@ -568,38 +712,60 @@ function RunPanel({ task }: { task: Task }): JSX.Element {
                   size="sm"
                   onClick={() => setSelectedRunID(run.runId)}
                 >
-                  {run.runId.slice(0, 8)} · {run.status}
+                  {run.runId.slice(0, 8)} · {runStatusLabel(run.status)}
                 </Button>
               ))}
             </div>
           )}
           {selected?.failureReason && <p className="error spacer">{selected.failureReason}</p>}
           {eventsQuery.isError ? (
-            <ErrorState error={eventsQuery.error} />
+            <ErrorState error={eventsQuery.error} retry={() => void eventsQuery.refetch()} />
           ) : eventsQuery.isPending ? (
             <Loading />
           ) : (
             <div className="spacer">
               {payloads.length ? (
-                payloads.map(({ event, payload }) => (
-                  <article className="comment" key={`${event.runId}-${event.sequence}`}>
-                    <div className="comment-meta">
-                      {payload.type?.replaceAll('_', ' ')} ·{' '}
-                      {date(payload.at ?? selected?.updatedAt ?? '')}
-                    </div>
-                    {payload.text && <Markdown text={payload.text} />}
-                    {payload.update?.text && <Markdown text={payload.update.text} />}
-                    {payload.update?.title && (
-                      <p>
-                        {payload.update.title} {payload.update.status}
-                      </p>
-                    )}
-                    {payload.error && <p className="error">{payload.error}</p>}
-                    {payload.stopReason && <p className="muted">{payload.stopReason}</p>}
-                  </article>
-                ))
+                payloads.map(({ event, payload }) => {
+                  const userMessage = payload.type === 'prompt_accepted';
+                  const agentMessage = payload.type === 'update' && payload.update?.kind === 'text';
+                  const message = userMessage
+                    ? payload.text
+                    : agentMessage
+                      ? payload.update?.text
+                      : '';
+                  return (
+                    <article
+                      className={`chat-message ${userMessage ? 'chat-message-user' : agentMessage ? 'chat-message-agent' : 'chat-message-activity'}`}
+                      key={`${event.runId}-${event.sequence}`}
+                    >
+                      <div className="chat-message-meta">
+                        <strong>
+                          {userMessage
+                            ? 'You'
+                            : agentMessage
+                              ? 'Agent'
+                              : activityLabel(payload.type)}
+                        </strong>
+                        <span>{date(payload.at ?? selected?.updatedAt ?? '')}</span>
+                      </div>
+                      {message && <Markdown text={message} />}
+                      {payload.update?.title && (
+                        <p>
+                          {payload.update.title} {payload.update.status}
+                        </p>
+                      )}
+                      {payload.error && <p className="error">{payload.error}</p>}
+                      {payload.stopReason && <p className="muted">{payload.stopReason}</p>}
+                      {payload.text && !userMessage && !message && <Markdown text={payload.text} />}
+                    </article>
+                  );
+                })
               ) : (
-                <p className="muted">Waiting for agent activity…</p>
+                <p className="muted">
+                  {selected?.failureReason
+                    ? 'The agent failed before recording activity.'
+                    : 'Waiting for agent activity…'}
+                </p>
               )}
             </div>
           )}
@@ -694,6 +860,43 @@ function RunPanel({ task }: { task: Task }): JSX.Element {
   );
 }
 
+function runStatusLabel(status: string): string {
+  switch (status) {
+    case 'starting':
+    case 'process_started':
+      return 'Starting';
+    case 'ready':
+      return 'Running';
+    case 'completed':
+    case 'completed_pending_close':
+      return 'Completed';
+    case 'failed':
+    case 'failed_pending_close':
+      return 'Failed';
+    default:
+      return status.replaceAll('_', ' ');
+  }
+}
+
+function activityLabel(type?: string): string {
+  switch (type) {
+    case 'permission_requested':
+      return 'Approval requested';
+    case 'permission_response':
+      return 'Approval response';
+    case 'prompt_completed':
+      return 'Agent finished';
+    case 'prompt_failed':
+      return 'Agent error';
+    case 'cancel_requested':
+      return 'Cancellation requested';
+    case 'update':
+      return 'Agent activity';
+    default:
+      return type?.replaceAll('_', ' ') ?? 'Activity';
+  }
+}
+
 function runtimeEvent(value: Record<string, unknown>): RuntimeEvent {
   const updateValue = value.update && typeof value.update === 'object' ? value.update : undefined;
   const permissionValue =
@@ -739,19 +942,11 @@ function isPermissionOption(value: unknown): value is { id: string; name: string
   );
 }
 
-const commentSchema = z.object({ body: z.string().trim().min(1, 'Write a comment.').max(20000) });
 function Comments({ taskID }: { taskID: string }) {
-  const { scope, permissions, session } = useApp();
+  const { scope, session } = useApp();
   const comments = useQuery(commentsQuery(scope, taskID));
-  const refresh = useRefresh();
-  const action = useAction();
-  const form = useForm({ resolver: zodResolver(commentSchema), defaultValues: { body: '' } });
   return (
-    <section className="panel">
-      <h2>
-        <MessageSquare size={16} style={{ display: 'inline', marginRight: 8 }} />
-        Comments
-      </h2>
+    <div className="source-comments">
       {comments.isPending ? (
         <Loading />
       ) : comments.isError ? (
@@ -771,32 +966,8 @@ function Comments({ taskID }: { taskID: string }) {
           ))}
         </div>
       ) : (
-        <p className="muted spacer">No comments yet.</p>
+        <p className="muted">No source comments.</p>
       )}
-      {permissions.editWorkspace && (
-        <div className="spacer">
-          <Form
-            form={form}
-            error={action.error}
-            label="Add comment"
-            onSubmit={async (body) => {
-              if (
-                await action.run(async () => {
-                  await data(
-                    sdk.createTaskComment({ ...command, path: { ...path(scope), taskID }, body }),
-                  );
-                  await refresh(scope);
-                })
-              )
-                form.reset();
-            }}
-          >
-            <Field label="Comment" error={form.formState.errors.body?.message}>
-              <textarea {...form.register('body')} placeholder="Share context or leave a note…" />
-            </Field>
-          </Form>
-        </div>
-      )}
-    </section>
+    </div>
   );
 }
