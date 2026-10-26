@@ -45,7 +45,7 @@ func TestDockerAgentctlLaunchSmoke(t *testing.T) {
 	}
 	defer func() { _ = executor.Close() }()
 
-	run := agentctl.RunConfig{OrganizationID: "docker-test-org", WorkspaceID: "docker-test-workspace", TaskID: "docker-test-task", RunID: "docker-test-run", Runtime: "opencode", Model: agentctl.ModelSelection{Provider: "provider", ID: "model"}, SystemPrompt: "test"}
+	run := agentctl.RunConfig{OrganizationID: "docker-test-org", WorkspaceID: "docker-test-workspace", TaskID: "docker-test-task", RunID: "docker-test-run", Runtime: "opencode", Model: agentctl.ModelSelection{Provider: "provider", ID: "model"}, Agent: agentctl.AgentDefinition{Name: "Test", Description: "Test", Instructions: "test"}}
 	process, launchErr := executor.StartAgentctl(ctx, run)
 	if process.ID != "" {
 		t.Cleanup(func() {

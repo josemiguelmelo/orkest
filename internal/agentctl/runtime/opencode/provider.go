@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -78,7 +79,7 @@ func (p *OpenCodeProvider) launch(ctx context.Context, config agentctl.RunConfig
 	if err := reserveRun(root, config.RunID); err != nil {
 		return nil, err
 	}
-	return p.startProcess(ctx, binary, env)
+	return p.startProcess(ctx, binary, env, config)
 }
 
 func (p *OpenCodeProvider) storageRoot(config agentctl.RunConfig) string {
@@ -87,16 +88,11 @@ func (p *OpenCodeProvider) storageRoot(config agentctl.RunConfig) string {
 }
 
 type runtimeConfiguration struct {
-	Autoupdate bool                          `json:"autoupdate"`
-	Share      string                        `json:"share"`
-	Agent      map[string]agentConfiguration `json:"agent"`
+	Autoupdate bool   `json:"autoupdate"`
+	Share      string `json:"share"`
 }
 
-type agentConfiguration struct {
-	Mode   string `json:"mode"`
-	Prompt string `json:"prompt"`
-	Model  string `json:"model"`
-}
+var agentNamePattern = regexp.MustCompile(`[^a-z0-9-]+`)
 
 func (p *OpenCodeProvider) prepareEnvironment(root string, config agentctl.RunConfig) ([]string, error) {
 	env := append([]string{}, p.Env...)
@@ -106,19 +102,74 @@ func (p *OpenCodeProvider) prepareEnvironment(root string, config agentctl.RunCo
 			return nil, errors.New("reserved or invalid provider environment variable")
 		}
 	}
-	for _, item := range []struct{ name, dir string }{{"HOME", "home"}, {"XDG_DATA_HOME", "data"}, {"XDG_CONFIG_HOME", "config"}, {"XDG_STATE_HOME", "state"}, {"XDG_CACHE_HOME", "cache"}} {
+	configDir := "config-" + fmt.Sprintf("%x", sha256.Sum256([]byte(config.RunID)))
+	for _, item := range []struct{ name, dir string }{{"HOME", "home"}, {"XDG_DATA_HOME", "data"}, {"XDG_CONFIG_HOME", configDir}, {"XDG_STATE_HOME", "state"}, {"XDG_CACHE_HOME", "cache"}} {
 		dir := filepath.Join(root, item.dir)
 		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return nil, runtimeFailure("create runtime storage failed", err)
 		}
 		env = append(env, item.name+"="+dir)
 	}
-	runtimeConfig, err := json.Marshal(runtimeConfiguration{Share: "disabled", Agent: map[string]agentConfiguration{"orkest": {Mode: "primary", Prompt: config.SystemPrompt, Model: config.Model.Provider + "/" + config.Model.ID}}})
+	if err := materializeAgent(filepath.Join(root, configDir, "opencode", "agents"), config); err != nil {
+		return nil, err
+	}
+	runtimeConfig, err := json.Marshal(runtimeConfiguration{Share: "disabled"})
 	if err != nil {
 		return nil, runtimeFailure("encode runtime configuration failed", err)
 	}
 	env = append(env, "OPENCODE_CONFIG_CONTENT="+string(runtimeConfig), "OPENCODE_DISABLE_PROJECT_CONFIG=true")
 	return env, nil
+}
+
+func materializeAgent(directory string, config agentctl.RunConfig) error {
+	name := strings.ToLower(strings.TrimSpace(config.Agent.Name))
+	name = agentNamePattern.ReplaceAllString(name, "-")
+	name = strings.Trim(name, "-")
+	if name == "" {
+		name = "orkest-agent"
+	}
+	description, err := json.Marshal(config.Agent.Description)
+	if err != nil {
+		return runtimeFailure("encode agent description failed", err)
+	}
+	model, err := json.Marshal(config.Model.Provider + "/" + config.Model.ID)
+	if err != nil {
+		return runtimeFailure("encode agent model failed", err)
+	}
+	if err := os.MkdirAll(directory, 0o700); err != nil {
+		return runtimeFailure("create agent configuration directory failed", err)
+	}
+	contents := "---\ndescription: " + string(description) + "\nmode: primary\nmodel: " + string(model) + "\n---\n\n" + config.Agent.Instructions + "\n"
+	path := filepath.Join(directory, name+".md")
+	if err := writeFileExclusive(path, []byte(contents)); err != nil {
+		if !errors.Is(err, os.ErrExist) {
+			return err
+		}
+		existing, readErr := os.ReadFile(path)
+		if readErr != nil || string(existing) != contents {
+			return errors.New("agent configuration already exists with different content")
+		}
+	}
+	return nil
+}
+
+func writeFileExclusive(path string, contents []byte) error {
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+	if err != nil {
+		return runtimeFailure("write agent configuration failed", err)
+	}
+	if _, err := file.Write(contents); err != nil {
+		_ = file.Close()
+		return runtimeFailure("write agent configuration failed", err)
+	}
+	if err := file.Sync(); err != nil {
+		_ = file.Close()
+		return runtimeFailure("sync agent configuration failed", err)
+	}
+	if err := file.Close(); err != nil {
+		return runtimeFailure("close agent configuration failed", err)
+	}
+	return nil
 }
 
 func verifyVersion(ctx context.Context, binary string, env []string) error {
@@ -146,7 +197,7 @@ func reserveRun(root, runID string) error {
 	return nil
 }
 
-func (p *OpenCodeProvider) startProcess(ctx context.Context, binary string, env []string) (agentctl.Process, error) {
+func (p *OpenCodeProvider) startProcess(ctx context.Context, binary string, env []string, config agentctl.RunConfig) (agentctl.Process, error) {
 	cmd := exec.Command(binary, "acp")
 	cmd.Dir, cmd.Env = p.WorkDir, env
 	stdin, err := cmd.StdinPipe()
@@ -177,7 +228,7 @@ func (p *OpenCodeProvider) startProcess(ctx context.Context, binary string, env 
 	conn := acp.NewClientSideConnection(client, stdin, stdout)
 	process.conn, process.client = conn, client
 	conn.SetLogger(slog.New(slog.NewTextHandler(io.Discard, nil)))
-	if err := process.initializeSession(ctx, p.WorkDir); err != nil {
+	if err := process.initializeSession(ctx, p.WorkDir, config); err != nil {
 		_ = process.Close()
 		return nil, errors.Join(err, process.Err())
 	}
@@ -193,7 +244,7 @@ func (p *OpenCodeProvider) startProcess(ctx context.Context, binary string, env 
 	return process, nil
 }
 
-func (p *process) initializeSession(ctx context.Context, workDir string) error {
+func (p *process) initializeSession(ctx context.Context, workDir string, config agentctl.RunConfig) error {
 	conn := p.conn
 	initialized, err := conn.Initialize(ctx, acp.InitializeRequest{ProtocolVersion: 1})
 	if err != nil {
@@ -209,7 +260,7 @@ func (p *process) initializeSession(ctx context.Context, workDir string) error {
 	if session.SessionId == "" {
 		return errors.New("opencode returned empty session identity")
 	}
-	_, err = conn.SetSessionMode(ctx, acp.SetSessionModeRequest{SessionId: session.SessionId, ModeId: "orkest"})
+	_, err = conn.SetSessionMode(ctx, acp.SetSessionModeRequest{SessionId: session.SessionId, ModeId: acp.SessionModeId(agentID(config.Agent.Name))})
 	if err != nil {
 		return runtimeFailure("select configured opencode mode failed", err)
 	}
@@ -218,6 +269,16 @@ func (p *process) initializeSession(ctx context.Context, workDir string) error {
 	p.client.sessionID = p.sessionID
 	p.client.mu.Unlock()
 	return nil
+}
+
+func agentID(value string) string {
+	name := strings.ToLower(strings.TrimSpace(value))
+	name = agentNamePattern.ReplaceAllString(name, "-")
+	name = strings.Trim(name, "-")
+	if name == "" {
+		return "orkest-agent"
+	}
+	return name
 }
 
 type process struct {

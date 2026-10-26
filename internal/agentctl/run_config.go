@@ -15,8 +15,16 @@ type RunConfig struct {
 	TaskID         string              `json:"taskId"`
 	RunID          string              `json:"runId"`
 	Runtime        coreruntime.Runtime `json:"runtime"`
+	Agent          AgentDefinition     `json:"agent"`
 	Model          ModelSelection      `json:"model"`
-	SystemPrompt   string              `json:"systemPrompt"`
+}
+
+// AgentDefinition is the portable Markdown instruction set selected for a run.
+// Runtime adapters map it to the files and options their runtime supports.
+type AgentDefinition struct {
+	Name         string `json:"name"`
+	Description  string `json:"description"`
+	Instructions string `json:"instructions"`
 }
 
 type ModelSelection struct {
@@ -39,7 +47,8 @@ func (c RunConfig) Validate() error {
 		{"runtime", string(c.Runtime)},
 		{"model.provider", c.Model.Provider},
 		{"model.id", c.Model.ID},
-		{"systemPrompt", c.SystemPrompt},
+		{"agent.name", c.Agent.Name},
+		{"agent.instructions", c.Agent.Instructions},
 	} {
 		if strings.TrimSpace(field.value) == "" {
 			return &ValidationError{Field: field.name}

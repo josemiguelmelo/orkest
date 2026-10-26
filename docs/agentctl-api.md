@@ -35,7 +35,11 @@ Example configuration:
   "runId": "run-1",
   "runtime": "opencode",
   "model": {"provider": "YOUR_PROVIDER", "id": "YOUR_MODEL"},
-  "systemPrompt": "Implement the requested task."
+  "agent": {
+    "name": "Implementer",
+    "description": "Implements the requested task.",
+    "instructions": "Follow repository guidance and implement the requested task."
+  }
 }
 ```
 

@@ -21,7 +21,7 @@ func TestOpenCodeHandshake(t *testing.T) {
 	provider := &opencode.OpenCodeProvider{Binary: binary, WorkDir: t.TempDir(), StateDir: t.TempDir(), Env: []string{"PATH=" + os.Getenv("PATH")}}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	process, err := provider.Launch(ctx, agentctl.RunConfig{OrganizationID: "integration-org", WorkspaceID: "integration-workspace", TaskID: "integration-task", RunID: "integration-run", Runtime: "opencode", Model: agentctl.ModelSelection{Provider: "anthropic", ID: "claude-sonnet-4-5"}, SystemPrompt: "You are a test agent."})
+	process, err := provider.Launch(ctx, agentctl.RunConfig{OrganizationID: "integration-org", WorkspaceID: "integration-workspace", TaskID: "integration-task", RunID: "integration-run", Runtime: "opencode", Agent: agentctl.AgentDefinition{Name: "Integration", Description: "Integration test", Instructions: "You are a test agent."}, Model: agentctl.ModelSelection{Provider: "anthropic", ID: "claude-sonnet-4-5"}})
 	if err != nil {
 		t.Fatal(err)
 	}

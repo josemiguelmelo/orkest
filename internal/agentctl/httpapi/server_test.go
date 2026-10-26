@@ -28,7 +28,7 @@ func TestTransportModulesShareState(t *testing.T) {
 	if response.Code != http.StatusConflict {
 		t.Fatal("unconfigured stream was accepted")
 	}
-	body := `{"organizationId":"org","workspaceId":"workspace","taskId":"task","runId":"run","runtime":"opencode","model":{"provider":"provider","id":"model"},"systemPrompt":"Work"}`
+	body := `{"organizationId":"org","workspaceId":"workspace","taskId":"task","runId":"run","runtime":"opencode","model":{"provider":"provider","id":"model"},"agent":{"name":"Work","description":"Work","instructions":"Work"}}`
 	request := httptest.NewRequest(http.MethodPost, "/agent/configure", strings.NewReader(body))
 	request.Header.Set("Content-Type", "application/json")
 	response = httptest.NewRecorder()

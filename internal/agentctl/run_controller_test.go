@@ -8,7 +8,7 @@ import (
 )
 
 func runConfig() RunConfig {
-	return RunConfig{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", RunID: "run", Runtime: "opencode", Model: ModelSelection{Provider: "provider", ID: "model"}, SystemPrompt: "Work on this task"}
+	return RunConfig{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", RunID: "run", Runtime: "opencode", Model: ModelSelection{Provider: "provider", ID: "model"}, Agent: AgentDefinition{Name: "Work", Description: "Work", Instructions: "Work on this task"}}
 }
 
 func TestConfigurationValidation(t *testing.T) {
@@ -29,7 +29,7 @@ func TestConfigurationValidation(t *testing.T) {
 			case "model":
 				config.Model.ID = ""
 			case "prompt":
-				config.SystemPrompt = "\t"
+				config.Agent.Instructions = "\t"
 			case "runtime":
 				config.Runtime = ""
 			}
@@ -41,7 +41,7 @@ func TestConfigurationValidation(t *testing.T) {
 			expected := map[string]string{
 				"organization": "organizationId", "workspace": "workspaceId",
 				"task": "taskId", "run": "runId", "provider": "model.provider",
-				"model": "model.id", "prompt": "systemPrompt", "runtime": "runtime",
+				"model": "model.id", "prompt": "agent.instructions", "runtime": "runtime",
 			}[field]
 			if validation.Field != expected {
 				t.Fatalf("got field %q, want %q", validation.Field, expected)
