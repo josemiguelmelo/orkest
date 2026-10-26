@@ -2,8 +2,11 @@ package github
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/josemiguelmelo/orkest/internal/coderepository"
@@ -23,6 +26,34 @@ func (GitHubCodeRepositoryProvider) ProviderName() string { return ProviderName 
 
 func (GitHubCodeRepositoryProvider) Clone(ctx context.Context, repositoryURL, path string) error {
 	return runGit(ctx, "clone", "--", repositoryURL, path)
+}
+
+func (p GitHubCodeRepositoryProvider) PrepareTaskCheckout(ctx context.Context, repositoryURL, path, branch string) error {
+	if strings.TrimSpace(branch) == "" || strings.ContainsAny(branch, "\x00\r\n") {
+		return fmt.Errorf("task branch is invalid")
+	}
+	if _, err := os.Stat(filepath.Join(path, ".git")); errors.Is(err, os.ErrNotExist) {
+		if err = p.Clone(ctx, repositoryURL, path); err != nil {
+			return err
+		}
+	} else if err != nil {
+		return fmt.Errorf("inspect task checkout: %w", err)
+	} else {
+		remoteURL, remoteErr := gitOutput(ctx, path, "remote", "get-url", "origin")
+		if remoteErr != nil {
+			return fmt.Errorf("read task checkout origin: %w", remoteErr)
+		}
+		if canonicalURL(remoteURL) != canonicalURL(repositoryURL) {
+			return fmt.Errorf("task checkout origin does not match registered repository")
+		}
+	}
+	if err := runGit(ctx, "-C", path, "check-ref-format", "--branch", branch); err != nil {
+		return fmt.Errorf("validate task branch: %w", err)
+	}
+	if _, err := gitOutput(ctx, path, "show-ref", "--verify", "--quiet", "refs/heads/"+branch); err == nil {
+		return runGit(ctx, "-C", path, "checkout", branch)
+	}
+	return runGit(ctx, "-C", path, "checkout", "-b", branch)
 }
 
 func (GitHubCodeRepositoryProvider) SyncMain(ctx context.Context, repositoryURL, path string) error {

@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/josemiguelmelo/orkest/internal/agentctl"
+	"github.com/josemiguelmelo/orkest/internal/coderepository"
 	"github.com/josemiguelmelo/orkest/internal/orchestration"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/network"
@@ -76,6 +77,24 @@ func TestStartAgentctlCreatesIsolatedContainerAndReturnsLoopbackEndpoint(t *test
 	}
 	if _, ok := engine.created.Config.Labels["orkest.managed"]; !ok {
 		t.Fatalf("missing managed label: %v", engine.created.Config.Labels)
+	}
+}
+
+func TestPrepareRepositoriesUsesProviderAndTaskWorkspacePaths(t *testing.T) {
+	provider := &checkoutProviderStub{}
+	executor := &Executor{repositoryProviders: map[string]coderepository.CodeRepositoryProvider{"test": provider}}
+	workDir := t.TempDir()
+	config := runConfig()
+	config.Repositories = []agentctl.WorkspaceRepository{{ID: "repo-id", ProviderName: "test", URL: "https://example.test/repo.git"}}
+	if err := executor.prepareRepositories(context.Background(), workDir, config); err != nil {
+		t.Fatalf("prepare repositories: %v", err)
+	}
+	wantPath := filepath.Join(workDir, "repositories", "test", "repo-id")
+	if provider.path != wantPath || provider.url != config.Repositories[0].URL || provider.branch != "orkest/task-"+config.TaskID {
+		t.Fatalf("unexpected checkout: %+v", provider)
+	}
+	if info, err := os.Stat(filepath.Dir(wantPath)); err != nil || !info.IsDir() {
+		t.Fatalf("repository parent directory was not created: %v", err)
 	}
 }
 
@@ -236,6 +255,16 @@ type fakeEngine struct {
 	inspectErr   error
 	stateMissing bool
 	running      bool
+}
+
+type checkoutProviderStub struct{ url, path, branch string }
+
+func (*checkoutProviderStub) ProviderName() string                           { return "test" }
+func (*checkoutProviderStub) Clone(context.Context, string, string) error    { return nil }
+func (*checkoutProviderStub) SyncMain(context.Context, string, string) error { return nil }
+func (p *checkoutProviderStub) PrepareTaskCheckout(_ context.Context, url, path, branch string) error {
+	p.url, p.path, p.branch = url, path, branch
+	return nil
 }
 
 func (f *fakeEngine) ContainerCreate(_ context.Context, options mobyclient.ContainerCreateOptions) (mobyclient.ContainerCreateResult, error) {

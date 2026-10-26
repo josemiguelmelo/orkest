@@ -9,6 +9,7 @@ import (
 
 	"github.com/josemiguelmelo/orkest/internal/agent"
 	"github.com/josemiguelmelo/orkest/internal/agentctl"
+	"github.com/josemiguelmelo/orkest/internal/coderepository"
 	"github.com/josemiguelmelo/orkest/internal/core/ids"
 	"github.com/josemiguelmelo/orkest/internal/mcpserver"
 	"github.com/josemiguelmelo/orkest/internal/skill"
@@ -29,6 +30,16 @@ type TaskDispatcher struct {
 	skillResolver interface {
 		ResolveForAgent(context.Context, string, string, []string) ([]skill.Skill, error)
 	}
+	repositories interface {
+		List(context.Context, string, string, string) ([]coderepository.CodeRepository, error)
+	}
+}
+
+func (d *TaskDispatcher) SetRepositoryResolver(resolver interface {
+	List(context.Context, string, string, string) ([]coderepository.CodeRepository, error)
+},
+) {
+	d.repositories = resolver
 }
 
 func (d *TaskDispatcher) SetSkillResolver(resolver interface {
@@ -88,6 +99,17 @@ func (d *TaskDispatcher) StartTask(ctx context.Context, userID, organizationID s
 		},
 		Model: agentctl.ModelSelection{Provider: definition.Provider, ID: definition.Model},
 	}
+	if d.repositories != nil {
+		repositories, resolveErr := d.repositories.List(ctx, userID, organizationID, value.WorkspaceID)
+		if resolveErr != nil {
+			return fmt.Errorf("resolve workspace repositories: %w", resolveErr)
+		}
+		for _, repository := range repositories {
+			config.Repositories = append(config.Repositories, agentctl.WorkspaceRepository{
+				ID: repository.ID, ProviderName: repository.ProviderName, URL: repository.URL,
+			})
+		}
+	}
 	if len(definition.SkillIDs) > 0 {
 		if d.skillResolver == nil {
 			return errors.New("agent skill resolver is unavailable")
@@ -115,7 +137,7 @@ func (d *TaskDispatcher) StartTask(ctx context.Context, userID, organizationID s
 			config.MCPServers = append(config.MCPServers, agentctl.MCPServer{ID: server.ID, Name: server.Name, URL: server.URL, Headers: server.Headers})
 		}
 	}
-	prompt, err := taskPrompt(value)
+	prompt, err := taskPrompt(value, config.Repositories)
 	if err != nil {
 		return err
 	}
@@ -125,16 +147,26 @@ func (d *TaskDispatcher) StartTask(ctx context.Context, userID, organizationID s
 	return nil
 }
 
-func taskPrompt(value task.Task) (string, error) {
+func taskPrompt(value task.Task, repositories []agentctl.WorkspaceRepository) (string, error) {
 	snapshot := struct {
-		Title       string           `json:"title"`
-		Description string           `json:"description"`
-		Labels      []string         `json:"labels"`
-		Components  []task.Component `json:"components"`
+		Title        string           `json:"title"`
+		Description  string           `json:"description"`
+		Labels       []string         `json:"labels"`
+		Components   []task.Component `json:"components"`
+		Repositories []struct {
+			ID   string `json:"id"`
+			Path string `json:"path"`
+		} `json:"repositories,omitempty"`
 	}{Title: value.Title, Description: value.Description, Labels: value.Labels, Components: value.Components}
+	for _, repository := range repositories {
+		snapshot.Repositories = append(snapshot.Repositories, struct {
+			ID   string `json:"id"`
+			Path string `json:"path"`
+		}{ID: repository.ID, Path: "repositories/" + repository.ProviderName + "/" + repository.ID})
+	}
 	encoded, err := json.MarshalIndent(snapshot, "", "  ")
 	if err != nil {
 		return "", fmt.Errorf("encode task context: %w", err)
 	}
-	return "Work on the following Orkest task. Use this task snapshot as the source of truth for the requested work:\n\n" + string(encoded), nil
+	return "Work on the following Orkest task. Use this task snapshot as the source of truth for the requested work. Workspace repositories are checked out under the listed paths on task-specific branches; inspect the repositories relevant to the task and make changes in those checkouts:\n\n" + string(encoded), nil
 }

@@ -27,6 +27,7 @@ const Version = "opencode v2.1.4"
 type OpenCodeProvider struct {
 	Binary, WorkDir, StateDir string
 	Env                       []string
+	Logger                    *slog.Logger
 }
 
 func (p *OpenCodeProvider) Runtime() coreruntime.Runtime { return coreruntime.OpenCode }
@@ -44,6 +45,8 @@ func (p *OpenCodeProvider) Launch(ctx context.Context, config agentctl.RunConfig
 }
 
 func (p *OpenCodeProvider) launch(ctx context.Context, config agentctl.RunConfig) (agentctl.Process, error) {
+	attrs := runtimeLogAttrs(config)
+	p.logger().Info("opencode provider launch started", attrs...)
 	if err := config.Validate(); err != nil {
 		return nil, err
 	}
@@ -73,13 +76,28 @@ func (p *OpenCodeProvider) launch(ctx context.Context, config agentctl.RunConfig
 	if err != nil {
 		return nil, err
 	}
+	p.logger().Info("opencode environment prepared", attrs...)
+	p.logger().Info("opencode version check started", attrs...)
 	if err := verifyVersion(ctx, binary, env); err != nil {
 		return nil, err
 	}
+	p.logger().Info("opencode version check completed", attrs...)
 	if err := reserveRun(root, config.RunID); err != nil {
 		return nil, err
 	}
+	p.logger().Info("opencode process startup started", attrs...)
 	return p.startProcess(ctx, binary, env, config)
+}
+
+func (p *OpenCodeProvider) logger() *slog.Logger {
+	if p.Logger != nil {
+		return p.Logger
+	}
+	return slog.Default()
+}
+
+func runtimeLogAttrs(config agentctl.RunConfig) []any {
+	return []any{"organization_id", config.OrganizationID, "workspace_id", config.WorkspaceID, "task_id", config.TaskID, "run_id", config.RunID}
 }
 
 func (p *OpenCodeProvider) storageRoot(config agentctl.RunConfig) string {
@@ -271,6 +289,7 @@ func (p *OpenCodeProvider) startProcess(ctx context.Context, binary string, env 
 		_ = stdout.Close()
 		return nil, runtimeFailure("start opencode failed", err)
 	}
+	p.logger().Info("opencode process started", runtimeLogAttrs(config)...)
 	process := &process{cmd: cmd, stdin: stdin, done: make(chan struct{})}
 	go func() { process.waitErr = cmd.Wait(); close(process.done) }()
 	success := false
@@ -283,10 +302,12 @@ func (p *OpenCodeProvider) startProcess(ctx context.Context, binary string, env 
 	conn := acp.NewClientSideConnection(client, stdin, stdout)
 	process.conn, process.client = conn, client
 	conn.SetLogger(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	p.logger().Info("opencode ACP initialization started", runtimeLogAttrs(config)...)
 	if err := process.initializeSession(ctx, p.WorkDir, config); err != nil {
 		_ = process.Close()
 		return nil, errors.Join(err, process.Err())
 	}
+	p.logger().Info("opencode ACP session ready", append(runtimeLogAttrs(config), "session_id", process.SessionID())...)
 	// A lost ACP connection invalidates this process; never launch a replacement automatically.
 	go func() {
 		select {

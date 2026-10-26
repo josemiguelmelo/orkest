@@ -16,7 +16,7 @@ func RunAgentctl(ctx context.Context, logger *slog.Logger, address string, provi
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	controller := agentctl.NewRunControllerWithRuntimeProvider(ctx, provider, stateDir)
+	controller := agentctl.NewRunControllerWithRuntimeProvider(ctx, provider, stateDir, logger)
 	defer func() { _ = controller.Close() }()
 
 	api, err := httpapi.NewServer(ctx, controller)

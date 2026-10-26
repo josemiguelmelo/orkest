@@ -3,6 +3,7 @@ package websocket
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/agentctl/httpapi/protocol"
 
 	"github.com/josemiguelmelo/orkest/internal/agentctl"
+	"github.com/josemiguelmelo/orkest/internal/core/httplog"
 
 	ws "github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
@@ -23,7 +25,13 @@ type streamMessage struct {
 }
 
 func (s *Server) stream(w http.ResponseWriter, r *http.Request) {
+	logger := httplog.LoggerFromWriter(w)
+	if logger == nil {
+		logger = slog.Default()
+	}
+	logger.Info("agent activity stream request received")
 	if !protocol.Snapshot(s.controller.Status(), s.startedAt).Configured {
+		logger.Warn("agent activity stream rejected", "reason", "run_not_configured")
 		protocol.WriteError(w, http.StatusConflict, "not_configured", "configure the agent before connecting")
 		return
 	}
@@ -33,6 +41,7 @@ func (s *Server) stream(w http.ResponseWriter, r *http.Request) {
 		err = nil
 	}
 	if err != nil {
+		logger.Warn("agent activity stream rejected", "reason", "invalid_cursor")
 		protocol.WriteValidationError(w, http.StatusBadRequest, "invalid_cursor", &protocol.ValidationError{
 			Field:   "afterSequence",
 			Message: "invalid afterSequence",
@@ -41,6 +50,7 @@ func (s *Server) stream(w http.ResponseWriter, r *http.Request) {
 	}
 	replay, events, unsubscribe, err := s.controller.Subscribe(after)
 	if err != nil {
+		logger.Warn("agent activity stream subscription failed", "reason", "subscription_unavailable")
 		if errors.Is(err, agentctl.ErrCursor) {
 			protocol.WriteValidationError(w, http.StatusBadRequest, "invalid_cursor", &protocol.ValidationError{
 				Field:   "afterSequence",
@@ -56,6 +66,7 @@ func (s *Server) stream(w http.ResponseWriter, r *http.Request) {
 	defer unsubscribe()
 	conn, err := ws.Accept(w, r, nil)
 	if err != nil {
+		logger.Warn("agent activity stream websocket upgrade failed")
 		return
 	}
 	defer func(conn *ws.Conn) { _ = conn.CloseNow() }(conn)
@@ -69,8 +80,10 @@ func (s *Server) stream(w http.ResponseWriter, r *http.Request) {
 	ctx = conn.CloseRead(ctx)
 	info := protocol.Snapshot(s.controller.Status(), s.startedAt)
 	if err := send(ctx, conn, streamMessage{Type: "ready", Info: &info}); err != nil {
+		logger.Warn("agent activity stream ready frame failed")
 		return
 	}
+	logger.Info("agent activity stream ready", "replay_count", len(replay))
 	for _, event := range replay {
 		if err := send(ctx, conn, streamMessage{Type: "event", Event: &event}); err != nil {
 			return

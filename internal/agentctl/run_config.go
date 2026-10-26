@@ -21,6 +21,17 @@ type RunConfig struct {
 	Model          ModelSelection      `json:"model"`
 	MCPServers     []MCPServer         `json:"mcpServers,omitempty"`
 	Skills         []Skill             `json:"skills,omitempty"`
+	// Repositories are executor-only checkout inputs and are intentionally
+	// excluded from the agentctl HTTP configuration payload.
+	Repositories []WorkspaceRepository `json:"-"`
+}
+
+// WorkspaceRepository identifies a registered workspace repository for the
+// executor to prepare in the task's durable working directory.
+type WorkspaceRepository struct {
+	ID           string `json:"-"`
+	ProviderName string `json:"-"`
+	URL          string `json:"-"`
 }
 
 // AgentDefinition is the portable Markdown instruction set selected for a run.
@@ -87,6 +98,13 @@ func (c RunConfig) Validate() error {
 				return &ValidationError{Field: "mcpServers.headers"}
 			}
 		}
+	}
+	seenRepositories := make(map[string]bool, len(c.Repositories))
+	for _, repository := range c.Repositories {
+		if strings.TrimSpace(repository.ID) == "" || strings.TrimSpace(repository.ProviderName) == "" || strings.TrimSpace(repository.URL) == "" || seenRepositories[repository.ID] {
+			return &ValidationError{Field: "repositories"}
+		}
+		seenRepositories[repository.ID] = true
 	}
 	seenSkills := make(map[string]bool, len(c.Skills))
 	for _, value := range c.Skills {

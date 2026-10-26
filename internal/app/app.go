@@ -72,8 +72,9 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 	launchRepo := postgres.NewAgentLaunchPostgresRepository(database)
 	client := orchestration.NewHTTPAgentctlClient(httplog.PropagatingHTTPClient(&http.Client{Timeout: 10 * time.Second}))
 	executor, executorErr := docker.New(ctx, docker.Config{
-		DataRoot:    filepath.Join(dataRoot, "agent-executions"),
-		ProviderEnv: splitEnvironmentNames(os.Getenv("ORKEST_AGENT_PROVIDER_ENV")),
+		DataRoot:                filepath.Join(dataRoot, "agent-executions"),
+		ProviderEnv:             splitEnvironmentNames(os.Getenv("ORKEST_AGENT_PROVIDER_ENV")),
+		CodeRepositoryProviders: []coderepository.CodeRepositoryProvider{githubprovider.NewGitHubCodeRepositoryProvider()},
 	})
 	if executorErr != nil {
 		return fmt.Errorf("initialize Docker agent executor: %w", executorErr)
@@ -105,6 +106,7 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	dispatcher.SetRepositoryResolver(codeRepositories)
 	dispatcher.SetSkillResolver(skillCatalog)
 	tasks := task.NewService(postgres.NewTaskPostgresRepository(database), workspaces, dispatcher)
 	integrations := taskintegration.NewTaskIntegrationService(postgres.NewPostgresTaskIntegrationRepository(database), secretBox, workspaces, organizations, postgres.NewPostgresImportedTaskRepository(database), githubcloud.NewGitHubCloudProvider(), jiraserver.NewJiraServerProvider())
