@@ -43,6 +43,19 @@ export type Membership = {
     role: 'owner' | 'admin' | 'member' | 'viewer';
 };
 export type TaskInput = {
+    /**
+     * Explicitly start another work step after a failed run; active execution conflicts.
+     */
+    startWork?: boolean;
+    /**
+     * Session choice when explicitly starting work. Defaults to continue when a session exists.
+     */
+    sessionMode?: 'continue' | 'new';
+    /**
+     * Optional initial prompt for a user-started work step.
+     */
+    promptText?: string;
+    commandId?: string;
     title: string;
     description?: string;
     status?: 'todo' | 'in_progress' | 'in_review' | 'done';
@@ -77,7 +90,12 @@ export type TaskComment = {
     createdAt: string;
 };
 export type TaskRun = {
+    recoveryBlocked?: boolean;
+    executionState?: string;
+    queuePaused?: boolean;
+    queueDepth?: number;
     runId: string;
+    taskSessionId?: string;
     taskId: string;
     status: string;
     failureStage?: string;
@@ -2814,3 +2832,75 @@ export type UpdateWorkspaceSkillResponses = {
     200: Skill;
 };
 export type UpdateWorkspaceSkillResponse = UpdateWorkspaceSkillResponses[keyof UpdateWorkspaceSkillResponses];
+export type ResumeTaskRunQueueData = {
+    body?: never;
+    path: {
+        orgID: string;
+        workspaceID: string;
+        taskID: string;
+        runID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/tasks/{taskID}/runs/{runID}/queue/resume';
+};
+export type ResumeTaskRunQueueErrors = {
+    /**
+     * Missing or invalid credentials
+     */
+    401: Error;
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+    /**
+     * Resource is absent or inaccessible
+     */
+    404: Error;
+    /**
+     * Queue unavailable
+     */
+    409: Error;
+};
+export type ResumeTaskRunQueueError = ResumeTaskRunQueueErrors[keyof ResumeTaskRunQueueErrors];
+export type ResumeTaskRunQueueResponses = {
+    /**
+     * Queue updated
+     */
+    200: unknown;
+};
+export type DiscardTaskRunQueueData = {
+    body?: never;
+    path: {
+        orgID: string;
+        workspaceID: string;
+        taskID: string;
+        runID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/tasks/{taskID}/runs/{runID}/queue/discard';
+};
+export type DiscardTaskRunQueueErrors = {
+    /**
+     * Missing or invalid credentials
+     */
+    401: Error;
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+    /**
+     * Resource is absent or inaccessible
+     */
+    404: Error;
+    /**
+     * Queue unavailable
+     */
+    409: Error;
+};
+export type DiscardTaskRunQueueError = DiscardTaskRunQueueErrors[keyof DiscardTaskRunQueueErrors];
+export type DiscardTaskRunQueueResponses = {
+    /**
+     * Queue updated
+     */
+    200: unknown;
+};

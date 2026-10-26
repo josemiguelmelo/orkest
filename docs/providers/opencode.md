@@ -38,16 +38,16 @@ OpenCode configuration under a hash of organization, workspace, and task scope.
 
 ## Run fencing and storage
 
-An exclusive run marker is retained under the provider's task-scoped state
-directory. It prevents duplicate launch after process restart, including after a
-startup failure. An existing marker requires reconciliation; do not delete it to
+An exclusive creation marker is retained under each durable session directory
+(or the legacy task directory). It prevents duplicate creation after restart,
+including after a startup failure. An existing marker requires reconciliation; do not delete it to
 force a retry. The executor must prevent separate runs from sharing a working
 tree concurrently.
 
-The provider currently creates a new ACP session. Session restoration and
-continuation after process/container restart are not implemented. The marker
-prevents duplicate work but does not prove that previous work stopped or restore
-an interrupted session; reconcile execution ownership before retrying.
+Creation uses `session/new`; explicit restoration verifies the saved manifest and
+uses ACP v1 `session/load` only when advertised. Runtime replay is separated from
+live activity. A task ownership lock prevents concurrent processes across runs.
+See [durable task sessions](../task-sessions.md) for continuation policy and limits.
 
 ## Verification
 

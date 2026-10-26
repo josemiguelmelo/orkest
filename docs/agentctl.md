@@ -27,21 +27,15 @@ go run ./cmd/agentctl -listen 127.0.0.1:8081 \
 - Activity is synced to private JSONL files under
   `AGENTCTL_STATE_DIR/conversations` before publication. These files contain task
   content; retain them with task storage. Existing journals are not overwritten.
-- WebSocket replay retains at most 4096 events. Event size is uncapped, so large
-  events can use substantial memory. Older events remain on disk, but there is no
-  disk-history API.
-- Configuration, live status, and acknowledgement cursors are not persisted.
-  The platform persists launch identity and the last committed event sequence.
-  On platform startup it checks recorded `process_started` and `ready` launches,
-  closes any whose provider is reported ended or whose agentctl lost its run
-  configuration, and reconnects healthy agents to replay events after that
-  sequence. An unreachable endpoint is retried because disconnection alone does
-  not prove the agent stopped. `starting` and failed rows are cleaned up by the
-  deterministic Docker container name when the process ID was not persisted.
-  Journal/session restoration,
-  command reconciliation, and process/container continuation after an
-  `agentctl` restart are not implemented. A client or platform disconnect does
-  not stop work while `agentctl` remains alive.
+- The journal retains at most 4096 events in memory; durable sessions replay older
+  cursors from disk. Event size and replay response size are uncapped, so large
+  events or long replay ranges can use substantial memory.
+- Durable task sessions persist runtime identity, configuration, commands, queue
+  state, and journal checkpoints. agentctl restores sessions after restart and
+  reconciles interrupted work conservatively. See [task sessions](task-sessions.md)
+  for ownership, continuation limits, secret-state handling, and API details.
+- Legacy configurations without `taskSessionId` retain one-run behavior and do
+  not opt into automatic daemon recovery.
 
 ## Verification
 

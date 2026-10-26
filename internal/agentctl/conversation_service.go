@@ -44,6 +44,13 @@ type ConversationService struct {
 	pending            map[string]*pendingPermission
 	activeCommand      string
 	permissionSequence uint64
+	queue              []queuedPrompt
+	commandStates      map[string]string
+	paused             bool
+	cancelled          bool
+	runEnded           bool
+	runFailed          bool
+	restore            bool
 }
 
 func newConversationService(ctx context.Context, stateDir string, loggers ...*slog.Logger) *ConversationService {
@@ -103,7 +110,7 @@ func (c *ConversationService) openJournalLocked() error {
 	}
 	config := *c.config
 	c.mu.Unlock()
-	journal, err := openJournal(c.stateDir, config)
+	journal, history, err := loadJournal(c.stateDir, config, c.restore)
 	c.mu.Lock()
 	if err != nil {
 		return err
@@ -111,6 +118,10 @@ func (c *ConversationService) openJournalLocked() error {
 	c.journal = journal
 	c.commands = make(map[string][sha256.Size]byte)
 	c.pending = make(map[string]*pendingPermission)
+	c.commandStates = make(map[string]string)
+	for _, event := range history {
+		c.replayEvent(event)
+	}
 	return nil
 }
 
@@ -128,6 +139,7 @@ func (c *ConversationService) recordLocked(event Event) error {
 	config := c.config
 	event.OrganizationID, event.WorkspaceID, event.TaskID, event.RunID = config.OrganizationID, config.WorkspaceID, config.TaskID, config.RunID
 	event.SessionID = c.process.SessionID()
+	event.TaskSessionID = config.TaskSessionID
 	c.mu.Unlock()
 	committed, err := c.journal.Append(event)
 	c.mu.Lock()
@@ -157,6 +169,12 @@ func (c *ConversationService) Prompt(commandID, text string) error {
 	if c.closed || c.process == nil || c.state == StateFailed {
 		return ErrConversation
 	}
+	if previous, exists := c.commands[commandID]; exists {
+		if previous == sha256.Sum256([]byte(text)) {
+			return nil
+		}
+		return ErrCommand
+	}
 	if c.state == StateInterrupted {
 		return ErrConversationInterrupted
 	}
@@ -185,7 +203,10 @@ func (c *ConversationService) Prompt(commandID, text string) error {
 	if len(c.commands) >= MaxCommands {
 		return ErrCommandLimit
 	}
-	if c.activeCommand != "" {
+	if c.runEnded || c.paused {
+		return ErrConversationInterrupted
+	}
+	if c.activeCommand != "" && c.config.TaskSessionID == "" {
 		return ErrConversationBusy
 	}
 	if err := c.recordLocked(promptAcceptedEvent(commandID, text)); err != nil {
@@ -198,11 +219,11 @@ func (c *ConversationService) Prompt(commandID, text string) error {
 		return ErrConversation
 	}
 	c.commands[commandID] = sha256.Sum256([]byte(text))
-	c.activeCommand = commandID
-	c.state = StateRunning
-	c.work.Add(1)
-	c.logger.Info("prompt accepted", logAttrs...)
-	go c.runPrompt(runtime, commandID, text)
+	c.commandStates[commandID] = "queued"
+	c.queue = append(c.queue, queuedPrompt{commandID, text})
+	if c.activeCommand == "" {
+		return c.startNextLocked(runtime)
+	}
 	return nil
 }
 
@@ -211,7 +232,7 @@ func (c *ConversationService) runPrompt(runtime RuntimeConversation, commandID, 
 	startedAt := time.Now()
 	logAttrs := c.logAttrs(commandID)
 	c.logger.Info("runtime prompt started", logAttrs...)
-	reason, err := runtime.Prompt(c.ctx, text, Observer{
+	observer := Observer{
 		Update: func(update Update) error {
 			c.eventMu.Lock()
 			defer c.eventMu.Unlock()
@@ -223,7 +244,14 @@ func (c *ConversationService) runPrompt(runtime RuntimeConversation, commandID, 
 			return c.recordLocked(updateEvent(commandID, update))
 		},
 		Permission: func(ctx context.Context, p Permission) (string, error) { return c.waitPermission(ctx, commandID, p) },
-	})
+	}
+	var reason string
+	var err error
+	if commandRuntime, ok := runtime.(RuntimeCommandConversation); ok && c.config.TaskSessionID != "" {
+		reason, err = commandRuntime.PromptCommand(c.ctx, commandID, text, observer)
+	} else {
+		reason, err = runtime.Prompt(c.ctx, text, observer)
+	}
 	c.turnMu.Lock()
 	defer c.turnMu.Unlock()
 	c.eventMu.Lock()
@@ -231,8 +259,20 @@ func (c *ConversationService) runPrompt(runtime RuntimeConversation, commandID, 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	event := promptResultEvent(commandID, reason, err)
+	if err != nil && c.config.TaskSessionID != "" && !c.cancelled && (c.closed || c.ctx.Err() != nil || c.runtimeStopped(runtime)) {
+		// A disconnected transport is an infrastructure interruption, not a failed
+		// user turn. Keep delivery unresolved for the restoration reconciliation.
+		c.activeCommand, c.state = "", StateInterrupted
+		c.paused = true
+		_ = c.recordLocked(Event{Type: EventRuntimeStopped, CommandID: commandID, Error: "runtime stopped; restoring durable session"})
+		return
+	}
 	if err != nil {
-		c.interruptLocked()
+		if c.config.TaskSessionID == "" {
+			c.interruptLocked()
+		} else {
+			c.state = StateInterrupted
+		}
 	}
 	for id, p := range c.pending {
 		if p.commandID == commandID {
@@ -240,7 +280,22 @@ func (c *ConversationService) runPrompt(runtime RuntimeConversation, commandID, 
 		}
 	}
 	c.activeCommand = ""
-	if err := c.recordLocked(event); err == nil && c.state != StateInterrupted {
+	c.commandStates[commandID] = "completed"
+	if err != nil {
+		c.commandStates[commandID] = "failed"
+	}
+	if recordErr := c.recordLocked(event); recordErr != nil {
+		return
+	}
+	if c.config.TaskSessionID != "" {
+		if err != nil || c.cancelled || reason == "cancelled" || c.state == StateInterrupted {
+			c.paused, c.runFailed, c.state = true, true, StateInterrupted
+			_ = c.recordLocked(Event{Type: EventQueuePaused})
+		} else {
+			c.state = StateReady
+			_ = c.startNextLocked(runtime)
+		}
+	} else if c.state != StateInterrupted {
 		c.state = StateReady
 	}
 	attrs := append(logAttrs, "duration_ms", time.Since(startedAt).Milliseconds())
@@ -369,6 +424,7 @@ func (c *ConversationService) prepareCancellation(commandID string) (RuntimeConv
 	if !ok {
 		return nil, ErrConversation
 	}
+	c.cancelled = true
 	if err := c.recordLocked(cancelRequestedEvent(commandID)); err != nil {
 		return nil, err
 	}
@@ -385,7 +441,13 @@ func (c *ConversationService) Subscribe(after uint64) ([]Event, <-chan Event, fu
 	if c.closed {
 		return nil, nil, nil, ErrConversation
 	}
-	events, err := c.journal.Replay(after)
+	journal := c.journal
+	c.mu.Unlock()
+	events, err := journal.Replay(after)
+	c.mu.Lock()
+	if c.closed {
+		return nil, nil, nil, ErrConversation
+	}
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -411,4 +473,16 @@ func (c *ConversationService) logAttrs(commandID string) []any {
 		attrs = append(attrs, "session_id", process.SessionID())
 	}
 	return attrs
+}
+
+func (c *ConversationService) runtimeStopped(runtime RuntimeConversation) bool {
+	if connection, ok := runtime.(interface{ ConnectionLost() bool }); ok && connection.ConnectionLost() {
+		return true
+	}
+	select {
+	case <-c.process.Done():
+		return true
+	default:
+		return false
+	}
 }

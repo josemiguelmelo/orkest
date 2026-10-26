@@ -88,13 +88,26 @@ func (s *Service) Update(ctx context.Context, userID, orgID, workspaceID, taskID
 	if err != nil {
 		return Task{}, err
 	}
+	if input.CommandID != "" && input.Status == "in_progress" {
+		if finder, ok := s.dispatcher.(interface {
+			TaskCommandAccepted(context.Context, string, string, string, string, string) (bool, error)
+		}); ok {
+			accepted, err := finder.TaskCommandAccepted(ctx, orgID, workspaceID, taskID, input.CommandID, input.PromptText)
+			if err != nil {
+				return Task{}, err
+			}
+			if accepted {
+				return current, nil
+			}
+		}
+	}
 	if current.SourceProvider != "manual" && (input.Title != current.Title || input.Description != current.Description || !slices.Equal(input.Labels, current.Labels)) {
 		return Task{}, modelerrors.ErrForbidden
 	}
 	if current.Status == "done" && input.Status != "done" {
 		return Task{}, modelerrors.ErrConflict
 	}
-	starting := current.Status == "todo" && input.Status == "in_progress"
+	starting := (current.Status != "in_progress" || input.StartWork) && input.Status == "in_progress"
 	if starting && strings.TrimSpace(input.AssigneeAgentID) == "" {
 		return Task{}, modelerrors.ErrConflict
 	}
@@ -103,7 +116,7 @@ func (s *Service) Update(ctx context.Context, userID, orgID, workspaceID, taskID
 	}
 	var updated Task
 	if starting {
-		updated, err = s.repository.UpdateTaskIfStatus(ctx, orgID, workspaceID, taskID, "todo", input)
+		updated, err = s.repository.UpdateTaskIfStatus(ctx, orgID, workspaceID, taskID, current.Status, input)
 	} else {
 		updated, err = s.repository.UpdateTask(ctx, orgID, workspaceID, taskID, input)
 	}
@@ -111,6 +124,7 @@ func (s *Service) Update(ctx context.Context, userID, orgID, workspaceID, taskID
 		return Task{}, err
 	}
 	if starting && s.dispatcher != nil {
+		updated.SessionMode, updated.PromptText, updated.CommandID = input.SessionMode, input.PromptText, input.CommandID
 		if err = s.dispatcher.StartTask(ctx, userID, orgID, updated); err != nil {
 			return updated, &DispatchError{Cause: fmt.Errorf("task moved to in_progress but agent dispatch failed: %w", err)}
 		}
@@ -189,6 +203,12 @@ func (s *Service) authorize(ctx context.Context, userID, orgID, workspaceID stri
 }
 
 func normalizeTask(input *TaskInput, creating bool) error {
+	if input.SessionMode != "" && input.SessionMode != "continue" && input.SessionMode != "new" {
+		return modelerrors.ErrInvalid
+	}
+	if len(input.PromptText) > 256*1024 || len(input.CommandID) > 200 || (input.CommandID != "" && strings.TrimSpace(input.CommandID) == "") {
+		return modelerrors.ErrInvalid
+	}
 	input.Title = strings.TrimSpace(input.Title)
 	input.Description = strings.TrimSpace(input.Description)
 	if input.Title == "" || len(input.Title) > 500 || len(input.Description) > 100000 {

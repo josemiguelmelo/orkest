@@ -84,6 +84,13 @@ export declare const zMembership: z.ZodObject<{
     }>;
 }, z.core.$strip>;
 export declare const zTaskInput: z.ZodObject<{
+    startWork: z.ZodOptional<z.ZodBoolean>;
+    sessionMode: z.ZodOptional<z.ZodEnum<{
+        continue: "continue";
+        new: "new";
+    }>>;
+    promptText: z.ZodOptional<z.ZodString>;
+    commandId: z.ZodOptional<z.ZodString>;
     title: z.ZodString;
     description: z.ZodOptional<z.ZodString>;
     status: z.ZodOptional<z.ZodEnum<{
@@ -105,7 +112,12 @@ export declare const zTaskComment: z.ZodObject<{
     createdAt: z.ZodISODateTime;
 }, z.core.$strip>;
 export declare const zTaskRun: z.ZodObject<{
+    recoveryBlocked: z.ZodOptional<z.ZodBoolean>;
+    executionState: z.ZodOptional<z.ZodString>;
+    queuePaused: z.ZodOptional<z.ZodBoolean>;
+    queueDepth: z.ZodOptional<z.ZodInt>;
     runId: z.ZodString;
+    taskSessionId: z.ZodOptional<z.ZodString>;
     taskId: z.ZodString;
     status: z.ZodString;
     failureStage: z.ZodOptional<z.ZodString>;
@@ -1005,6 +1017,13 @@ export declare const zListTasksResponse: z.ZodArray<z.ZodObject<{
     updatedAt: z.ZodISODateTime;
 }, z.core.$strip>>;
 export declare const zCreateTaskBody: z.ZodObject<{
+    startWork: z.ZodOptional<z.ZodBoolean>;
+    sessionMode: z.ZodOptional<z.ZodEnum<{
+        continue: "continue";
+        new: "new";
+    }>>;
+    promptText: z.ZodOptional<z.ZodString>;
+    commandId: z.ZodOptional<z.ZodString>;
     title: z.ZodString;
     description: z.ZodOptional<z.ZodString>;
     status: z.ZodOptional<z.ZodEnum<{
@@ -1091,6 +1110,13 @@ export declare const zGetTaskResponse: z.ZodObject<{
     updatedAt: z.ZodISODateTime;
 }, z.core.$strip>;
 export declare const zUpdateTaskBody: z.ZodObject<{
+    startWork: z.ZodOptional<z.ZodBoolean>;
+    sessionMode: z.ZodOptional<z.ZodEnum<{
+        continue: "continue";
+        new: "new";
+    }>>;
+    promptText: z.ZodOptional<z.ZodString>;
+    commandId: z.ZodOptional<z.ZodString>;
     title: z.ZodString;
     description: z.ZodOptional<z.ZodString>;
     status: z.ZodOptional<z.ZodEnum<{
@@ -1149,7 +1175,12 @@ export declare const zListTaskRunsPath: z.ZodObject<{
  * Task run history
  */
 export declare const zListTaskRunsResponse: z.ZodArray<z.ZodObject<{
+    recoveryBlocked: z.ZodOptional<z.ZodBoolean>;
+    executionState: z.ZodOptional<z.ZodString>;
+    queuePaused: z.ZodOptional<z.ZodBoolean>;
+    queueDepth: z.ZodOptional<z.ZodInt>;
     runId: z.ZodString;
+    taskSessionId: z.ZodOptional<z.ZodString>;
     taskId: z.ZodString;
     status: z.ZodString;
     failureStage: z.ZodOptional<z.ZodString>;
@@ -1580,4 +1611,16 @@ export declare const zUpdateWorkspaceSkillResponse: z.ZodObject<{
     skillMD: z.ZodString;
     createdAt: z.ZodISODateTime;
     updatedAt: z.ZodISODateTime;
+}, z.core.$strip>;
+export declare const zResumeTaskRunQueuePath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+    taskID: z.ZodString;
+    runID: z.ZodString;
+}, z.core.$strip>;
+export declare const zDiscardTaskRunQueuePath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+    taskID: z.ZodString;
+    runID: z.ZodString;
 }, z.core.$strip>;

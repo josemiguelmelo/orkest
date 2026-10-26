@@ -24,18 +24,25 @@ func (a taskRunAPI) routes(r chi.Router) {
 		r.Get("/{runID}/events", a.events)
 		r.Post("/{runID}/prompts", a.prompt)
 		r.Post("/{runID}/cancel", a.cancel)
+		r.Post("/{runID}/queue/resume", a.resumeQueue)
+		r.Post("/{runID}/queue/discard", a.discardQueue)
 		r.Post("/{runID}/permissions/respond", a.respondPermission)
 	})
 }
 
 type taskRunView struct {
-	RunID         string                     `json:"runId"`
-	TaskID        string                     `json:"taskId"`
-	Status        orchestration.LaunchStatus `json:"status"`
-	FailureStage  string                     `json:"failureStage,omitempty"`
-	FailureReason string                     `json:"failureReason,omitempty"`
-	LastSequence  uint64                     `json:"lastSequence"`
-	UpdatedAt     string                     `json:"updatedAt"`
+	RecoveryBlocked bool                       `json:"recoveryBlocked"`
+	ExecutionState  agentctl.State             `json:"executionState,omitempty"`
+	QueuePaused     bool                       `json:"queuePaused"`
+	QueueDepth      int                        `json:"queueDepth"`
+	RunID           string                     `json:"runId"`
+	TaskSessionID   string                     `json:"taskSessionId,omitempty"`
+	TaskID          string                     `json:"taskId"`
+	Status          orchestration.LaunchStatus `json:"status"`
+	FailureStage    string                     `json:"failureStage,omitempty"`
+	FailureReason   string                     `json:"failureReason,omitempty"`
+	LastSequence    uint64                     `json:"lastSequence"`
+	UpdatedAt       string                     `json:"updatedAt"`
 }
 
 func (a taskRunAPI) list(w http.ResponseWriter, r *http.Request) {
@@ -164,5 +171,22 @@ func scopeParams(r *http.Request) (string, string, string) {
 }
 
 func runView(item orchestration.Launch) taskRunView {
-	return taskRunView{RunID: item.RunID, TaskID: item.TaskID, Status: item.Status, FailureStage: item.FailureStage, FailureReason: item.FailureReason, LastSequence: item.LastSequence, UpdatedAt: item.UpdatedAt.UTC().Format("2006-01-02T15:04:05.999999999Z07:00")}
+	return taskRunView{RunID: item.RunID, TaskSessionID: item.TaskSessionID, ExecutionState: item.ExecutionState, RecoveryBlocked: item.RecoveryBlocked, QueuePaused: item.QueuePaused, QueueDepth: item.QueueDepth, TaskID: item.TaskID, Status: item.Status, FailureStage: item.FailureStage, FailureReason: item.FailureReason, LastSequence: item.LastSequence, UpdatedAt: item.UpdatedAt.UTC().Format("2006-01-02T15:04:05.999999999Z07:00")}
+}
+
+func (a taskRunAPI) resumeQueue(w http.ResponseWriter, r *http.Request) { a.queue(w, r, false) }
+
+func (a taskRunAPI) discardQueue(w http.ResponseWriter, r *http.Request) { a.queue(w, r, true) }
+
+func (a taskRunAPI) queue(w http.ResponseWriter, r *http.Request, discard bool) {
+	orgID, workspaceID, taskID := scopeParams(r)
+	if err := a.tasks.AuthorizeExecution(r.Context(), currentUserID(r), orgID, workspaceID, taskID, true); err != nil {
+		respond(w, nil, err, http.StatusOK)
+		return
+	}
+	if err := a.launches.TaskQueue(r.Context(), orgID, workspaceID, taskID, chi.URLParam(r, "runID"), discard); err != nil {
+		writeError(w, http.StatusConflict, "queue_unavailable")
+		return
+	}
+	respond(w, map[string]string{"status": "accepted"}, nil, http.StatusOK)
 }

@@ -15,6 +15,8 @@ type RunConfig struct {
 	OrganizationID string              `json:"organizationId"`
 	WorkspaceID    string              `json:"workspaceId"`
 	TaskID         string              `json:"taskId"`
+	TaskSessionID  string              `json:"taskSessionId,omitempty"`
+	RestoreSession bool                `json:"restoreSession,omitempty"`
 	RunID          string              `json:"runId"`
 	Runtime        coreruntime.Runtime `json:"runtime"`
 	Agent          AgentDefinition     `json:"agent"`
@@ -23,7 +25,10 @@ type RunConfig struct {
 	Skills         []Skill             `json:"skills,omitempty"`
 	// Repositories are executor-only checkout inputs and are intentionally
 	// excluded from the agentctl HTTP configuration payload.
-	Repositories []WorkspaceRepository `json:"-"`
+	Repositories     []WorkspaceRepository `json:"-"`
+	ReservedRun      bool                  `json:"-"`
+	InitialCommandID string                `json:"-"`
+	InitialPrompt    string                `json:"-"`
 }
 
 // WorkspaceRepository identifies a registered workspace repository for the

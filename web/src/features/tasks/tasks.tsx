@@ -1,11 +1,13 @@
+import { TaskChat } from './task-chat';
 import { Markdown } from '../../shared/ui/markdown';
-import type { FormEvent, JSX } from 'react';
+import type { JSX } from 'react';
 import { useState } from 'react';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
+import { useSessionChoice } from './session-choice';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { ArrowLeft, Bot, CircleStop, LayoutGrid, List, Search, Send } from 'lucide-react';
+import { ArrowLeft, Bot, LayoutGrid, List, Search } from 'lucide-react';
 import { useApp } from '../../app/context';
 import { command, data } from '../../shared/api/client';
 import * as sdk from '../../shared/api/generated/sdk.gen';
@@ -16,7 +18,6 @@ import {
   componentsQuery,
   path,
   taskQuery,
-  taskRunEventsQuery,
   taskRunsQuery,
   tasksQuery,
   useRefresh,
@@ -232,6 +233,8 @@ export function TaskEditor({ task, onClose }: { task?: Task; onClose: () => void
   const { scope } = useApp();
   const refresh = useRefresh();
   const action = useAction();
+  const sessionChoice = useSessionChoice();
+  const runs = useQuery({ ...taskRunsQuery(scope, task?.id ?? ''), enabled: !!task });
   const agents = useQuery(agentsQuery(scope));
   const components = useQuery(componentsQuery(scope));
   const form = useForm({
@@ -259,13 +262,20 @@ export function TaskEditor({ task, onClose }: { task?: Task; onClose: () => void
         if (!open && !action.pending) onClose();
       }}
     >
+      {sessionChoice.dialog}
       <Form
         form={form}
         error={action.error}
         onSubmit={async (values) => {
+          const starting = task && task.status !== 'in_progress' && values.status === 'in_progress';
+          const sessionMode =
+            starting && runs.data?.some((run) => run.taskSessionId)
+              ? await sessionChoice.choose()
+              : undefined;
+          if (sessionMode === null) return;
           if (
             await action.run(async () => {
-              const body = taskInput(values, task);
+              const body = { ...taskInput(values, task), ...(sessionMode ? { sessionMode } : {}) };
               if (task)
                 await data(
                   sdk.updateTask({ ...command, path: { ...path(scope), taskID: task.id }, body }),
@@ -284,7 +294,10 @@ export function TaskEditor({ task, onClose }: { task?: Task; onClose: () => void
           <textarea rows={6} {...form.register('description')} readOnly={imported} />
         </Field>
         <div className="form-grid">
-          <Field label="Status" hint="Execution starts are unavailable in this UI.">
+          <Field
+            label="Status"
+            hint="Starting work lets you choose whether to continue the saved session."
+          >
             <select {...form.register('status')} disabled={!task || task.status === 'done'}>
               {statuses.map((status) => (
                 <option key={status} value={status}>
@@ -335,12 +348,16 @@ export function TaskPage(): JSX.Element {
   const components = useQuery(componentsQuery(scope));
   const [edit, setEdit] = useState(false);
   const startAction = useAction();
+  const [startCommandID, setStartCommandID] = useState<string>();
+  const sessionChoice = useSessionChoice();
+  const runs = useQuery(taskRunsQuery(scope, taskId));
   const refresh = useRefresh();
   if (task.isPending) return <Loading />;
   if (task.isError) return <ErrorState error={task.error} />;
   const item = task.data;
   return (
     <>
+      {sessionChoice.dialog}
       <Link
         className="text-link"
         to="/organizations/$orgId/workspaces/$workspaceId/tasks"
@@ -351,44 +368,53 @@ export function TaskPage(): JSX.Element {
       </Link>
       <div className="spacer">
         <PageHeader title={item.title} description={`Task ${item.id.slice(0, 8)}`}>
-          {permissions.editWorkspace && item.status === 'todo' && item.assigneeAgentId && (
-            <Button
-              disabled={startAction.pending}
-              onClick={() => {
-                void startAction.run(async () => {
-                  try {
-                    await data(
-                      sdk.updateTask({
-                        ...command,
-                        path: { ...path(scope), taskID: item.id },
-                        body: {
-                          title: item.title,
-                          description: item.description,
-                          status: 'in_progress',
-                          assigneeAgentId: item.assigneeAgentId ?? '',
-                          labels: item.labels,
-                          componentIds: item.components.map((component) => component.id),
-                        },
-                      }),
-                    );
-                  } finally {
-                    await refresh(scope);
-                  }
-                });
-              }}
-            >
-              Start work
-            </Button>
-          )}
+          {permissions.editWorkspace &&
+            (['todo', 'in_review'].includes(item.status) ||
+              (item.status === 'in_progress' &&
+                (!runs.data?.length || runs.data[0]?.status === 'failed'))) &&
+            item.assigneeAgentId && (
+              <Button
+                disabled={startAction.pending}
+                onClick={() => {
+                  void startAction.run(async () => {
+                    const sessionMode = runs.data?.some((run) => run.taskSessionId)
+                      ? await sessionChoice.choose()
+                      : undefined;
+                    if (sessionMode === null) return;
+                    const commandId = startCommandID ?? crypto.randomUUID();
+                    setStartCommandID(commandId);
+                    try {
+                      await data(
+                        sdk.updateTask({
+                          ...command,
+                          path: { ...path(scope), taskID: item.id },
+                          body: {
+                            title: item.title,
+                            description: item.description,
+                            status: 'in_progress',
+                            startWork: true,
+                            commandId,
+                            ...(sessionMode ? { sessionMode } : {}),
+                            assigneeAgentId: item.assigneeAgentId ?? '',
+                            labels: item.labels,
+                            componentIds: item.components.map((component) => component.id),
+                          },
+                        }),
+                      );
+                      setStartCommandID(undefined);
+                    } finally {
+                      await refresh(scope);
+                    }
+                  });
+                }}
+              >
+                Start work
+              </Button>
+            )}
           {permissions.editWorkspace && <Button onClick={() => setEdit(true)}>Edit task</Button>}
         </PageHeader>
       </div>
       {startAction.error && <ErrorState error={startAction.error} />}
-      {item.status === 'in_progress' && (
-        <div className="notice">
-          This task is in progress. Review its run activity and interact with the agent below.
-        </div>
-      )}
       <div className="detail-layout">
         <div className="task-conversation-column">
           <div className="task-context">
@@ -415,7 +441,7 @@ export function TaskPage(): JSX.Element {
               </div>
             </details>
           </div>
-          <RunPanel task={item} />
+          <TaskChat key={item.id} task={item} />
         </div>
         <aside>
           <section className="panel">
@@ -603,342 +629,6 @@ function TaskPropertyControls({
         </dd>
       </div>
     </>
-  );
-}
-
-type RuntimeEvent = {
-  type?: string | undefined;
-  at?: string | undefined;
-  commandId?: string | undefined;
-  requestId?: string | undefined;
-  sessionId?: string | undefined;
-  text?: string | undefined;
-  error?: string | undefined;
-  stopReason?: string | undefined;
-  update?:
-    | {
-        kind?: string | undefined;
-        text?: string | undefined;
-        title?: string | undefined;
-        status?: string | undefined;
-      }
-    | undefined;
-  permission?:
-    | {
-        title?: string | undefined;
-        options?: { id: string; name: string; kind: string }[] | undefined;
-      }
-    | undefined;
-};
-
-function RunPanel({ task }: { task: Task }): JSX.Element {
-  const { scope, permissions } = useApp();
-  const runs = useQuery(taskRunsQuery(scope, task.id));
-  const [selectedRunID, setSelectedRunID] = useState<string>();
-  const selected = runs.data?.find((run) => run.runId === selectedRunID) ?? runs.data?.[0];
-  const eventsQuery = useQuery(taskRunEventsQuery(scope, task.id, selected?.runId ?? ''));
-  const action = useAction();
-  const refresh = useRefresh();
-  const [text, setText] = useState('');
-  const [pendingCommandID, setPendingCommandID] = useState<string | null>(null);
-  const events = eventsQuery.data ?? [];
-  const payloads = events.map((event) => ({ event, payload: runtimeEvent(event.payload) }));
-  const pending = new Map<string, RuntimeEvent>();
-  const commands = new Map<string, { accepted: RuntimeEvent; terminal: boolean }>();
-  for (const { payload } of payloads) {
-    if (payload.type === 'permission_requested' && payload.requestId)
-      pending.set(payload.requestId, payload);
-    if (payload.type === 'permission_response' && payload.requestId)
-      pending.delete(payload.requestId);
-    if (payload.commandId && payload.type === 'prompt_accepted')
-      commands.set(payload.commandId, { accepted: payload, terminal: false });
-    if (payload.commandId && ['prompt_completed', 'prompt_failed'].includes(payload.type ?? '')) {
-      const command = commands.get(payload.commandId);
-      if (command) command.terminal = true;
-    }
-  }
-  const activeCommand = [...commands.entries()]
-    .reverse()
-    .find(([, command]) => !command.terminal)?.[0];
-  async function submitPrompt(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const prompt = text.trim();
-    if (!selected || !prompt) return;
-    if (
-      await action.run(async () => {
-        const commandId = pendingCommandID ?? crypto.randomUUID();
-        setPendingCommandID(commandId);
-        await data(
-          sdk.sendTaskRunPrompt({
-            ...command,
-            path: { ...path(scope), taskID: task.id, runID: selected.runId },
-            body: { text: prompt, commandId },
-          }),
-        );
-        setPendingCommandID(null);
-        setText('');
-        await refresh(scope);
-      })
-    )
-      setText('');
-  }
-  return (
-    <section className="panel conversation-panel" aria-label="Task chat">
-      <div className="split">
-        <div>
-          <h2>Chat</h2>
-          <p className="muted">Conversation with the assigned agent</p>
-        </div>
-        {runs.data?.length ? (
-          <Badge>{selected ? runStatusLabel(selected.status) : ''}</Badge>
-        ) : null}
-      </div>
-      {runs.isPending ? (
-        <Loading />
-      ) : runs.isError ? (
-        <ErrorState error={runs.error} />
-      ) : !runs.data.length ? (
-        <p className="muted spacer">
-          No agent runs yet. Assign an agent and start work to launch one.
-        </p>
-      ) : (
-        <>
-          {runs.data.length > 1 && (
-            <div className="tags spacer">
-              {runs.data.map((run) => (
-                <Button
-                  key={run.runId}
-                  variant={run.runId === selected?.runId ? 'default' : 'outline'}
-                  size="sm"
-                  onClick={() => setSelectedRunID(run.runId)}
-                >
-                  {run.runId.slice(0, 8)} · {runStatusLabel(run.status)}
-                </Button>
-              ))}
-            </div>
-          )}
-          {selected?.failureReason && <p className="error spacer">{selected.failureReason}</p>}
-          {eventsQuery.isError ? (
-            <ErrorState error={eventsQuery.error} retry={() => void eventsQuery.refetch()} />
-          ) : eventsQuery.isPending ? (
-            <Loading />
-          ) : (
-            <div className="spacer">
-              {payloads.length ? (
-                payloads.map(({ event, payload }) => {
-                  const userMessage = payload.type === 'prompt_accepted';
-                  const agentMessage = payload.type === 'update' && payload.update?.kind === 'text';
-                  const message = userMessage
-                    ? payload.text
-                    : agentMessage
-                      ? payload.update?.text
-                      : '';
-                  return (
-                    <article
-                      className={`chat-message ${userMessage ? 'chat-message-user' : agentMessage ? 'chat-message-agent' : 'chat-message-activity'}`}
-                      key={`${event.runId}-${event.sequence}`}
-                    >
-                      <div className="chat-message-meta">
-                        <strong>
-                          {userMessage
-                            ? 'You'
-                            : agentMessage
-                              ? 'Agent'
-                              : activityLabel(payload.type)}
-                        </strong>
-                        <span>{date(payload.at ?? selected?.updatedAt ?? '')}</span>
-                      </div>
-                      {message && <Markdown text={message} />}
-                      {payload.update?.title && (
-                        <p>
-                          {payload.update.title} {payload.update.status}
-                        </p>
-                      )}
-                      {payload.error && <p className="error">{payload.error}</p>}
-                      {payload.stopReason && <p className="muted">{payload.stopReason}</p>}
-                      {payload.text && !userMessage && !message && <Markdown text={payload.text} />}
-                    </article>
-                  );
-                })
-              ) : (
-                <p className="muted">
-                  {selected?.failureReason
-                    ? 'The agent failed before recording activity.'
-                    : 'Waiting for agent activity…'}
-                </p>
-              )}
-            </div>
-          )}
-          {permissions.editWorkspace &&
-            selected?.status === 'ready' &&
-            task.status === 'in_progress' && (
-              <>
-                {[...pending.entries()].map(([requestId, permission]) => (
-                  <div className="notice spacer" key={requestId}>
-                    <strong>
-                      Approval needed: {permission.permission?.title ?? 'Agent permission'}
-                    </strong>
-                    <div className="actions spacer">
-                      {permission.permission?.options?.map((option) => (
-                        <Button
-                          key={option.id}
-                          variant={
-                            /reject|deny|cancel/i.test(`${option.id} ${option.name}`)
-                              ? 'outline'
-                              : 'default'
-                          }
-                          size="sm"
-                          disabled={action.pending}
-                          onClick={() =>
-                            void action.run(async () => {
-                              await data(
-                                sdk.respondTaskRunPermission({
-                                  ...command,
-                                  path: { ...path(scope), taskID: task.id, runID: selected.runId },
-                                  body: {
-                                    requestId,
-                                    sessionId: permission.sessionId ?? '',
-                                    optionId: option.id,
-                                  },
-                                }),
-                              );
-                              await refresh(scope);
-                            })
-                          }
-                        >
-                          {option.name}
-                        </Button>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-                <form className="spacer" onSubmit={(event) => void submitPrompt(event)}>
-                  <Field label="Message the agent">
-                    <textarea
-                      value={text}
-                      onChange={(event) => setText(event.target.value)}
-                      placeholder="Add context or answer the agent…"
-                      disabled={!!activeCommand || !!pendingCommandID || action.pending}
-                    />
-                  </Field>
-                  <div className="actions spacer">
-                    <Button
-                      type="submit"
-                      disabled={!text.trim() || !!activeCommand || action.pending}
-                    >
-                      <Send size={14} /> Send
-                    </Button>
-                    {activeCommand && (
-                      <Button
-                        type="button"
-                        variant="outline"
-                        disabled={action.pending}
-                        onClick={() =>
-                          void action.run(async () => {
-                            await data(
-                              sdk.cancelTaskRunPrompt({
-                                ...command,
-                                path: { ...path(scope), taskID: task.id, runID: selected.runId },
-                                body: { commandId: activeCommand },
-                              }),
-                            );
-                            await refresh(scope);
-                          })
-                        }
-                      >
-                        <CircleStop size={14} /> Cancel prompt
-                      </Button>
-                    )}
-                  </div>
-                </form>
-              </>
-            )}
-          {action.error && <ErrorState error={action.error} />}
-        </>
-      )}
-    </section>
-  );
-}
-
-function runStatusLabel(status: string): string {
-  switch (status) {
-    case 'starting':
-    case 'process_started':
-      return 'Starting';
-    case 'ready':
-      return 'Running';
-    case 'completed':
-    case 'completed_pending_close':
-      return 'Completed';
-    case 'failed':
-    case 'failed_pending_close':
-      return 'Failed';
-    default:
-      return status.replaceAll('_', ' ');
-  }
-}
-
-function activityLabel(type?: string): string {
-  switch (type) {
-    case 'permission_requested':
-      return 'Approval requested';
-    case 'permission_response':
-      return 'Approval response';
-    case 'prompt_completed':
-      return 'Agent finished';
-    case 'prompt_failed':
-      return 'Agent error';
-    case 'cancel_requested':
-      return 'Cancellation requested';
-    case 'update':
-      return 'Agent activity';
-    default:
-      return type?.replaceAll('_', ' ') ?? 'Activity';
-  }
-}
-
-function runtimeEvent(value: Record<string, unknown>): RuntimeEvent {
-  const updateValue = value.update && typeof value.update === 'object' ? value.update : undefined;
-  const permissionValue =
-    value.permission && typeof value.permission === 'object' ? value.permission : undefined;
-  const update = updateValue ? (updateValue as Record<string, unknown>) : undefined;
-  const permission = permissionValue ? (permissionValue as Record<string, unknown>) : undefined;
-  const options = Array.isArray(permission?.options)
-    ? permission.options.filter(isPermissionOption)
-    : undefined;
-  return {
-    type: typeof value.type === 'string' ? value.type : undefined,
-    at: typeof value.at === 'string' ? value.at : undefined,
-    commandId: typeof value.commandId === 'string' ? value.commandId : undefined,
-    requestId: typeof value.requestId === 'string' ? value.requestId : undefined,
-    sessionId: typeof value.sessionId === 'string' ? value.sessionId : undefined,
-    text: typeof value.text === 'string' ? value.text : undefined,
-    error: typeof value.error === 'string' ? value.error : undefined,
-    stopReason: typeof value.stopReason === 'string' ? value.stopReason : undefined,
-    update: update
-      ? {
-          kind: typeof update.kind === 'string' ? update.kind : undefined,
-          text: typeof update.text === 'string' ? update.text : undefined,
-          title: typeof update.title === 'string' ? update.title : undefined,
-          status: typeof update.status === 'string' ? update.status : undefined,
-        }
-      : undefined,
-    permission: permission
-      ? {
-          title: typeof permission.title === 'string' ? permission.title : undefined,
-          options,
-        }
-      : undefined,
-  };
-}
-
-function isPermissionOption(value: unknown): value is { id: string; name: string; kind: string } {
-  if (!value || typeof value !== 'object') return false;
-  const candidate = value as Record<string, unknown>;
-  return (
-    typeof candidate.id === 'string' &&
-    typeof candidate.name === 'string' &&
-    typeof candidate.kind === 'string'
   );
 }
 

@@ -98,7 +98,7 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	launchService, err := orchestration.NewLaunchService(launchRepo, launcher, client, communication)
+	launchService, err := orchestration.NewLaunchService(launchRepo, launcher, client, communication, completion)
 	if err != nil {
 		return err
 	}

@@ -12,9 +12,13 @@ import (
 
 // runtimeClient advertises no filesystem or terminal capabilities.
 type runtimeClient struct {
-	mu        sync.Mutex
-	observer  *agentctl.Observer
-	sessionID string
+	mu              sync.Mutex
+	observer        *agentctl.Observer
+	sessionID       string
+	restoring       bool
+	replayUser      string
+	replayUserChunk bool
+	replayTools     bool
 }
 
 func (*runtimeClient) ReadTextFile(context.Context, acp.ReadTextFileRequest) (acp.ReadTextFileResponse, error) {
@@ -74,6 +78,11 @@ func (*runtimeClient) WaitForTerminalExit(context.Context, acp.WaitForTerminalEx
 func (c *runtimeClient) SessionUpdate(_ context.Context, notification acp.SessionNotification) error {
 	c.mu.Lock()
 	observer, sessionID := c.observer, c.sessionID
+	if c.restoring && string(notification.SessionId) == sessionID {
+		c.replayUpdate(notification.Update)
+		c.mu.Unlock()
+		return nil
+	}
 	c.mu.Unlock()
 	if observer == nil || string(notification.SessionId) != sessionID {
 		return nil
@@ -102,4 +111,20 @@ func (c *runtimeClient) SessionUpdate(_ context.Context, notification acp.Sessio
 		return nil
 	}
 	return observer.Update(update)
+}
+
+func (c *runtimeClient) replayUpdate(update acp.SessionUpdate) {
+	if update.UserMessageChunk != nil && update.UserMessageChunk.Content.Text != nil {
+		if !c.replayUserChunk {
+			c.replayUser = ""
+			c.replayTools = false
+		}
+		c.replayUser += update.UserMessageChunk.Content.Text.Text
+		c.replayUserChunk = true
+		return
+	}
+	c.replayUserChunk = false
+	if update.ToolCall != nil || update.ToolCallUpdate != nil {
+		c.replayTools = true
+	}
 }

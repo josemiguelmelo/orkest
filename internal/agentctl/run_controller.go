@@ -3,9 +3,12 @@ package agentctl
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"reflect"
 	"sync"
 	"time"
@@ -29,16 +32,27 @@ func (e *LaunchError) Error() string { return e.Message }
 func (e *LaunchError) Unwrap() error { return e.Cause }
 
 type Status struct {
+	OrganizationID     string
+	WorkspaceID        string
+	TaskID             string
+	RunID              string
+	RecoveryBlocked    bool
 	Configured         bool
 	ExecutionAvailable bool
 	State              State
 	ProcessAlive       bool
 	SessionID          string
+	TaskSessionID      string
+	ActiveCommand      string
+	QueueDepth         int
+	QueuePaused        bool
+	RunEnded           bool
 }
 
 // RunController owns the lifecycle and conversation of one execution run.
 // Configuring a run never starts work.
 type RunController struct {
+	recoveryBlocked bool
 	// mu protects configuration and process lifecycle. When needed, acquire it
 	// before the conversation lock; conversation operations never acquire this lock.
 	mu           sync.RWMutex
@@ -96,7 +110,14 @@ func (c *RunController) Configure(config RunConfig) error {
 func (c *RunController) Status() Status {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	status := Status{Configured: c.runConfig != nil, ExecutionAvailable: c.provider != nil && !c.closed, State: c.launchState}
+	status := Status{RecoveryBlocked: c.recoveryBlocked, Configured: c.runConfig != nil, ExecutionAvailable: c.provider != nil && !c.closed, State: c.launchState}
+	if c.runConfig != nil {
+		status.TaskSessionID = c.runConfig.TaskSessionID
+		status.OrganizationID, status.WorkspaceID, status.TaskID, status.RunID = c.runConfig.OrganizationID, c.runConfig.WorkspaceID, c.runConfig.TaskID, c.runConfig.RunID
+	}
+	c.conversation.mu.RLock()
+	status.ActiveCommand, status.QueueDepth, status.QueuePaused, status.RunEnded = c.conversation.activeCommand, len(c.conversation.queue), c.conversation.paused, c.conversation.runEnded
+	c.conversation.mu.RUnlock()
 	if c.process != nil {
 		status.State = c.conversation.stateSnapshot()
 		status.SessionID = c.process.SessionID()
@@ -117,7 +138,35 @@ func (c *RunController) Status() Status {
 
 // Launch reserves the attempt before I/O. Failed attempts are never silently retried.
 // The controller context, rather than the requesting connection, owns startup.
-func (c *RunController) Launch() error {
+func (c *RunController) Launch() error { return c.launch(false) }
+
+func (c *RunController) Restore() error {
+	c.mu.Lock()
+	if c.closed {
+		c.mu.Unlock()
+		return ErrLaunchConflict
+	}
+	if c.attempted && c.process == nil && c.launchState != StateStarting {
+		c.attempted = false
+	}
+	c.recoveryBlocked = false
+	if c.attempted && c.process != nil {
+		select {
+		case <-c.process.Done():
+			old := c.conversation
+			_ = old.close()
+			c.conversation = newConversationService(c.ctx, old.stateDir, c.logger)
+			c.process, c.attempted = nil, false
+		default:
+			c.mu.Unlock()
+			return ErrLaunchConflict
+		}
+	}
+	c.mu.Unlock()
+	return c.launch(true)
+}
+
+func (c *RunController) launch(restore bool) error {
 	c.mu.Lock()
 	if c.runConfig == nil {
 		c.mu.Unlock()
@@ -141,16 +190,55 @@ func (c *RunController) Launch() error {
 	c.logger.Info("runtime launch started", runLogAttrs(config)...)
 	ctx, cancel := context.WithTimeout(c.ctx, 30*time.Second)
 	defer cancel()
-	process, err := c.provider.Launch(ctx, config)
+	var process Process
+	var err error
+	if restore {
+		provider, ok := c.provider.(RestoringRuntimeProvider)
+		if !ok {
+			err = ErrRuntimeProviderUnavailable
+		} else {
+			process, err = provider.Restore(ctx, config)
+		}
+	} else {
+		process, err = c.provider.Launch(ctx, config)
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	if err != nil {
 		c.launchState = StateFailed
+		if restore {
+			c.launchState = StateInterrupted
+			c.recoveryBlocked = true
+		}
 		c.logger.Error("runtime launch failed", append(runLogAttrs(config), "error_type", fmt.Sprintf("%T", err), "duration_ms", time.Since(startedAt).Milliseconds())...)
 		return err
 	}
 	c.process = process
 	c.conversation.bind(config, process)
+	if config.TaskSessionID != "" {
+		data, encodeErr := json.Marshal(runCheckpoint{Version: 1, Config: config})
+		if encodeErr == nil {
+			encodeErr = WriteDurableFile(filepath.Join(c.conversation.stateDir, "current-run.json"), data)
+		}
+		if encodeErr != nil {
+			_ = process.Close()
+			c.launchState, c.recoveryBlocked = StateInterrupted, true
+			c.conversation.mu.Lock()
+			c.conversation.state = StateInterrupted
+			c.conversation.mu.Unlock()
+			return ErrJournal
+		}
+	}
+	if restore {
+		if err := c.conversation.restoreConversation(); err != nil {
+			_ = process.Close()
+			c.launchState, c.recoveryBlocked = StateInterrupted, true
+			c.conversation.mu.Lock()
+			c.conversation.state = StateInterrupted
+			c.conversation.mu.Unlock()
+			return err
+		}
+	}
 	c.launchState = StateReady
 	c.logger.Info("runtime session ready", append(runLogAttrs(config), "session_id", process.SessionID(), "duration_ms", time.Since(startedAt).Milliseconds())...)
 	return nil
@@ -181,21 +269,57 @@ func (c *RunController) Close() error {
 
 // Prompt delegates conversation commands without coupling them to transport lifetimes.
 func (c *RunController) Prompt(commandID, text string) error {
-	return c.conversation.Prompt(commandID, text)
+	return c.conversationSnapshot().Prompt(commandID, text)
 }
 
 func (c *RunController) CancelPrompt(commandID string) error {
-	return c.conversation.CancelPrompt(commandID)
+	return c.conversationSnapshot().CancelPrompt(commandID)
 }
 
 func (c *RunController) RespondPermission(response PermissionResponse) error {
-	return c.conversation.RespondPermission(response)
+	return c.conversationSnapshot().RespondPermission(response)
 }
 
 func (c *RunController) Subscribe(after uint64) ([]Event, <-chan Event, func(), error) {
-	return c.conversation.Subscribe(after)
+	return c.conversationSnapshot().Subscribe(after)
 }
 
 func runLogAttrs(config RunConfig) []any {
 	return []any{"organization_id", config.OrganizationID, "workspace_id", config.WorkspaceID, "task_id", config.TaskID, "run_id", config.RunID, "runtime", config.Runtime}
+}
+
+// Recover restores the last bound run on daemon restart. Runtime ownership must
+// be acquired before any prompt is admitted. Finished runs are never resumed.
+func (c *RunController) Recover(expectedRuns ...string) error {
+	path := filepath.Join(c.conversation.stateDir, "current-run.json")
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return nil
+	}
+	if err != nil {
+		return ErrJournal
+	}
+	var checkpoint runCheckpoint
+	if json.Unmarshal(data, &checkpoint) != nil || checkpoint.Version != 1 {
+		return ErrJournal
+	}
+	config := checkpoint.Config
+	if len(expectedRuns) > 0 && expectedRuns[0] != "" && config.RunID != expectedRuns[0] {
+		return nil
+	}
+	if err := c.Configure(config); err != nil {
+		return err
+	}
+	return c.Restore()
+}
+
+func (c *RunController) conversationSnapshot() *ConversationService {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.conversation
+}
+
+type runCheckpoint struct {
+	Version int       `json:"version"`
+	Config  RunConfig `json:"config"`
 }

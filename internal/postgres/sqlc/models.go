@@ -34,6 +34,7 @@ type AgentLaunch struct {
 	LastSequence   int64              `json:"last_sequence"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+	TaskSessionID  pgtype.Text        `json:"task_session_id"`
 }
 
 type AgentLaunchEvent struct {
@@ -47,6 +48,14 @@ type AgentMcpServer struct {
 	WorkspaceID string `json:"workspace_id"`
 	AgentID     string `json:"agent_id"`
 	McpServerID string `json:"mcp_server_id"`
+}
+
+type AgentPromptOutbox struct {
+	RunID     string             `json:"run_id"`
+	CommandID string             `json:"command_id"`
+	Prompt    string             `json:"prompt"`
+	Delivered bool               `json:"delivered"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
 type AgentSkill struct {
@@ -121,6 +130,17 @@ type Task struct {
 	SourceUrl           pgtype.Text        `json:"source_url"`
 	AssigneeAgentID     pgtype.Text        `json:"assignee_agent_id"`
 	SourceIntegrationID pgtype.Text        `json:"source_integration_id"`
+}
+
+type TaskAgentSession struct {
+	ID               string             `json:"id"`
+	OrganizationID   string             `json:"organization_id"`
+	WorkspaceID      string             `json:"workspace_id"`
+	TaskID           string             `json:"task_id"`
+	Configuration    []byte             `json:"configuration"`
+	RuntimeSessionID string             `json:"runtime_session_id"`
+	IsCurrent        bool               `json:"is_current"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
 }
 
 type TaskComment struct {

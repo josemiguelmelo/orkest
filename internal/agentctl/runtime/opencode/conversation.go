@@ -2,6 +2,7 @@ package opencode
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 
 	acp "github.com/coder/acp-go-sdk"
@@ -51,4 +52,13 @@ func (p *process) Cancel(ctx context.Context) error {
 		return runtimeFailure("cancel opencode prompt failed", err)
 	}
 	return nil
+}
+
+func wirePrompt(commandID, text string) string {
+	identity, _ := json.Marshal(commandID)
+	return "[Orkest command " + string(identity) + "]\n\n" + text
+}
+
+func (p *process) PromptCommand(ctx context.Context, commandID, text string, observer agentctl.Observer) (string, error) {
+	return p.Prompt(ctx, wirePrompt(commandID, text), observer)
 }

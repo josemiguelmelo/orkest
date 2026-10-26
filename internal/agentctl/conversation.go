@@ -30,6 +30,7 @@ type Event struct {
 	WorkspaceID    string      `json:"workspaceId"`
 	TaskID         string      `json:"taskId"`
 	RunID          string      `json:"runId"`
+	TaskSessionID  string      `json:"taskSessionId,omitempty"`
 	SessionID      string      `json:"sessionId"`
 	CommandID      string      `json:"commandId,omitempty"`
 	RequestID      string      `json:"requestId,omitempty"`
@@ -47,3 +48,11 @@ type PermissionResponse struct {
 	RequestID string `json:"requestId"`
 	OptionID  string `json:"optionId"`
 }
+
+// CommandStatus describes durable acceptance separately from runtime delivery.
+type CommandStatus struct {
+	CommandID string `json:"commandId"`
+	Status    string `json:"status"`
+}
+
+type queuedPrompt struct{ commandID, text string }

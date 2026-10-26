@@ -10,11 +10,9 @@ const values: TaskFormValues = {
   componentIds: [],
 };
 describe('task updates', () => {
-  it('never starts execution through creation or a workflow update', () => {
+  it('requires an existing task for a work-start transition', () => {
     expect(() => taskInput({ ...values, status: 'in_progress' })).toThrow();
-    expect(() => taskInput({ ...values, status: 'in_progress' }, task)).toThrow(
-      'Execution controls',
-    );
+    expect(taskInput({ ...values, status: 'in_progress' }, task).status).toBe('in_progress');
     expect(
       taskInput({ ...values, status: 'in_progress' }, { ...task, status: 'in_progress' }).status,
     ).toBe('in_progress');

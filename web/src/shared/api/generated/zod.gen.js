@@ -57,6 +57,10 @@ export const zMembership = z.object({
     ])
 });
 export const zTaskInput = z.object({
+    startWork: z.boolean().optional(),
+    sessionMode: z.enum(['continue', 'new']).optional(),
+    promptText: z.string().max(262144).optional(),
+    commandId: z.string().max(200).optional(),
     title: z.string().min(1).max(500),
     description: z.string().max(100000).optional(),
     status: z.enum([
@@ -78,7 +82,12 @@ export const zTaskComment = z.object({
     createdAt: z.iso.datetime()
 });
 export const zTaskRun = z.object({
+    recoveryBlocked: z.boolean().optional(),
+    executionState: z.string().optional(),
+    queuePaused: z.boolean().optional(),
+    queueDepth: z.int().gte(0).optional(),
     runId: z.string(),
+    taskSessionId: z.string().optional(),
     taskId: z.string(),
     status: z.string(),
     failureStage: z.string().optional(),
@@ -825,3 +834,15 @@ export const zUpdateWorkspaceSkillPath = z.object({
  * Updated skill
  */
 export const zUpdateWorkspaceSkillResponse = zSkill;
+export const zResumeTaskRunQueuePath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string(),
+    taskID: z.string(),
+    runID: z.string()
+});
+export const zDiscardTaskRunQueuePath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string(),
+    taskID: z.string(),
+    runID: z.string()
+});

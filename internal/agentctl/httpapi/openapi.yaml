@@ -2,7 +2,7 @@ openapi: 3.1.0
 info:
   title: Orkest agentctl API
   version: 0.1.0
-  description: Standalone process-local control API. REST commands and status; receive-only WebSocket activity with private journaling and reconnect replay. Application failures, including request decoding and pre-upgrade validation, use Error. Router and WebSocket library rejections retain their native responses. Process restart recovery is not implemented.
+  description: Standalone process-local control API. REST commands and status; receive-only WebSocket activity with private journaling and reconnect replay. Application failures, including request decoding and pre-upgrade validation, use Error. Router and WebSocket library rejections retain their native responses. Durable task sessions support explicit restoration and queued prompts.
 servers:
   - url: /
 paths:
@@ -34,7 +34,7 @@ paths:
     post:
       operationId: configureAgent
       summary: Bind the process to one run without starting execution
-      description: Identical requests are idempotent. Any different configuration conflicts. Configuration is held in memory until process exit.
+      description: Identical requests are idempotent. Any different configuration conflicts. Durable task-session configuration is saved privately for restart recovery.
       requestBody:
         required: true
         content:
@@ -106,11 +106,45 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+  /agent/restore:
+    post:
+      operationId: restoreAgent
+      summary: Restore the configured durable session without creating a replacement
+      responses:
+        "200": {description: Session restored, content: {application/json: {schema: {$ref: "#/components/schemas/Info"}}}}
+        "409": {description: Not configured or execution still owned, content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}}
+        "502": {description: Restoration failed; original session retained, content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}}
+        "503": {description: Restoration unsupported or storage unavailable, content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}}
+  /agent/commands/{commandID}:
+    get:
+      operationId: agentCommandStatus
+      parameters:
+        - {name: commandID, in: path, required: true, schema: {type: string}}
+      responses:
+        "200": {description: Durable command status, content: {application/json: {schema: {type: object, required: [commandId, status], properties: {commandId: {type: string}, status: {type: string, enum: [queued, running, completed, failed, interrupted, discarded]}}}}}}
+        "400": {description: Unknown command, content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}}
+        "503": {description: Lookup unavailable, content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}}
+  /agent/queue/resume:
+    post:
+      operationId: resumeAgentQueue
+      summary: Explicitly resume paused pending prompts
+      responses:
+        "200": {description: Queue updated, content: {application/json: {schema: {$ref: "#/components/schemas/Info"}}}}
+        "409": {description: Queue unavailable, content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}}
+        "503": {description: Queue control or storage unavailable, content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}}
+  /agent/queue/discard:
+    post:
+      operationId: discardAgentQueue
+      summary: Explicitly discard paused pending prompts
+      responses:
+        "200": {description: Queue updated, content: {application/json: {schema: {$ref: "#/components/schemas/Info"}}}}
+        "409": {description: Queue unavailable, content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}}
+        "503": {description: Queue control or storage unavailable, content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}}
   /agent/prompt:
     post:
       operationId: promptAgent
       summary: Accept an explicit prompt independently of stream connections
-      description: One active prompt per process. Same commandId and text is idempotent while available; changed text is rejected. At most 4096 identities and 256 KiB of UTF-8 text per prompt. Acceptance is durable before execution; it is not completion. Events can arrive before the HTTP response.
+      description: Durable sessions queue follow-ups in FIFO order, with one executing prompt. Legacy configurations reject overlapping prompts. Same commandId and text is idempotent while available; changed text is rejected. At most 4096 identities and 256 KiB of UTF-8 text per prompt. Acceptance is durable before execution; it is not completion. Events can arrive before the HTTP response.
       requestBody:
         required: true
         content:
@@ -261,11 +295,12 @@ paths:
         messages close the connection with status 1008. Protocol ping/pong and close
         frames remain supported. Read current status through GET /info.
         Disconnect leaves execution and pending permissions running. afterSequence selects
-        events after the last processed sequence. Replay retains at most 4096 events.
-        Omit the cursor only while sequence zero is retained. Event size is not capped.
+        events after the last processed sequence. Replay retains at most 4096 events
+        in memory. Durable sessions replay older committed cursors from disk;
+        legacy configurations reject expired cursors. Event size is not capped.
         Invalid, expired, or future cursors return 400 with errorCode invalid_cursor.
         Slow subscribers are detached without stopping work. Events are synced to private
-        storage before streaming. Process restart recovery is not implemented.
+        storage before streaming. Durable task sessions support explicit restoration and queued prompts.
         Server shutdown closes streams; agentctl shutdown closes its owned provider.
       parameters:
         - in: query
@@ -344,6 +379,8 @@ components:
         organizationId: { type: string, pattern: '\S' }
         workspaceId: { type: string, pattern: '\S' }
         taskId: { type: string, pattern: '\S' }
+        taskSessionId: { type: string }
+        restoreSession: { type: boolean, default: false }
         runId: { type: string, pattern: '\S' }
         runtime: { type: string, enum: [opencode] }
         agent:
@@ -385,6 +422,10 @@ components:
           processAlive,
         ]
       properties:
+        organizationId: { type: string }
+        workspaceId: { type: string }
+        taskId: { type: string }
+        runId: { type: string }
         service: { type: string, enum: [agentctl] }
         apiVersion: { type: string, enum: [v1] }
         goVersion: { type: string }
@@ -411,6 +452,12 @@ components:
           type: boolean
           description: Provider process liveness, independent of execution state. Interrupted/failed states survive process exit.
         sessionId: { type: string }
+        taskSessionId: { type: string }
+        activeCommand: { type: string }
+        queueDepth: { type: integer, minimum: 0 }
+        queuePaused: { type: boolean }
+        runEnded: { type: boolean }
+        recoveryBlocked: { type: boolean }
 
     PromptRequest:
       type: object
@@ -485,6 +532,16 @@ components:
           enum:
             [
               prompt_accepted,
+              prompt_started,
+              prompt_interrupted,
+              queue_paused,
+              queue_resumed,
+              queue_discarded,
+              run_completed,
+              run_failed,
+              prompt_continued,
+              session_restored,
+              runtime_stopped,
               update,
               permission_requested,
               permission_response,
@@ -497,6 +554,7 @@ components:
         taskId: { type: string }
         runId: { type: string }
         sessionId: { type: string }
+        taskSessionId: { type: string }
         commandId: { type: string }
         requestId: { type: string }
         text: { type: string }

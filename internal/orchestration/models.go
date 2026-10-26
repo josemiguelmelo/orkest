@@ -25,18 +25,23 @@ type Process struct {
 }
 
 type Launch struct {
-	RunID          string
-	OrganizationID string
-	WorkspaceID    string
-	TaskID         string
-	Status         LaunchStatus
-	ProcessID      string
-	Endpoint       string
-	FailureStage   string
-	FailureReason  string
-	LastSequence   uint64
-	LastEventType  string
-	UpdatedAt      time.Time
+	RecoveryBlocked bool
+	ExecutionState  agentctl.State
+	QueuePaused     bool
+	QueueDepth      int
+	RunID           string
+	TaskSessionID   string
+	OrganizationID  string
+	WorkspaceID     string
+	TaskID          string
+	Status          LaunchStatus
+	ProcessID       string
+	Endpoint        string
+	FailureStage    string
+	FailureReason   string
+	LastSequence    uint64
+	LastEventType   string
+	UpdatedAt       time.Time
 }
 
 type Event struct {

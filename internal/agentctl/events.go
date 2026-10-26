@@ -4,6 +4,17 @@ package agentctl
 type EventType string
 
 const (
+	EventRuntimeStopped    EventType = "runtime_stopped"
+	EventPromptStarted     EventType = "prompt_started"
+	EventPromptInterrupted EventType = "prompt_interrupted"
+	EventQueuePaused       EventType = "queue_paused"
+	EventQueueResumed      EventType = "queue_resumed"
+	EventQueueDiscarded    EventType = "queue_discarded"
+	EventRunFailed         EventType = "run_failed"
+	EventPromptContinued   EventType = "prompt_continued"
+	EventRunCompleted      EventType = "run_completed"
+	EventSessionRestored   EventType = "session_restored"
+
 	EventPromptAccepted      EventType = "prompt_accepted"
 	EventPromptCompleted     EventType = "prompt_completed"
 	EventPromptFailed        EventType = "prompt_failed"

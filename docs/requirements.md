@@ -167,6 +167,19 @@ Pin and validate the selected OpenCode release before implementation acceptance:
 
 OpenCode documents free model offerings, some available for a limited time; available models and credentials must be configuration rather than immutable requirements. See [OpenCode models](https://dev.opencode.ai/v2/docs/console/models/). Do not silently select a paid model if a configured free model becomes unavailable.
 
+### 4.2 Task sessions — confirmed interaction decisions
+
+Tasks retain one current agent conversation across review iterations and may keep
+older sessions as history. When explicitly starting another work step, users
+choose to continue that session or create a new one. Continued sessions retain
+their original configuration; new sessions use the current assigned agent.
+Sending a message from review is an explicit start action with that same choice.
+Follow-up prompts during work queue durably and execute in order. Failure or
+cancellation pauses the queue until a user resumes or discards it. Infrastructure
+recovery automatically restores and continues where reconciliation establishes
+that doing so is safe; uncertain effects require intervention. See the
+[implemented design and verification limits](task-sessions.md).
+
 ## 5. Proposed manual execution flow
 
 1. A user creates a task or an integration imports it.

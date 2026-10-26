@@ -162,6 +162,7 @@ func TestPostgresRepositories(t *testing.T) {
 	if err != nil || createdTask.SourceProvider != "manual" || createdTask.AssigneeAgentID != worker.ID || len(createdTask.Components) != 1 || createdTask.Components[0].ID != componentID {
 		t.Fatalf("create task: task=%+v err=%v", createdTask, err)
 	}
+	t.Run("task sessions and prompt delivery", func(t *testing.T) { testTaskSessions(t, database, org.ID, workspaceID, taskID) })
 	commentID, err := ids.NewUUID()
 	if err != nil {
 		t.Fatal(err)

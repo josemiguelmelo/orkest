@@ -50,3 +50,18 @@ type Observer struct {
 	Update     func(Update) error
 	Permission func(context.Context, Permission) (string, error)
 }
+
+// RestoringRuntimeProvider loads a durable session without creating a replacement.
+type RestoringRuntimeProvider interface {
+	Restore(context.Context, RunConfig) (Process, error)
+}
+
+// RuntimeRecovery permits automatic continuation only when the adapter can prove
+// that the last delivered user turn has no tool effects to reconcile.
+type RuntimeRecovery interface{ CanContinue(string, string) bool }
+
+// RuntimeCommandConversation carries stable command identity into runtime history
+// so restoration cannot confuse two turns with identical user text.
+type RuntimeCommandConversation interface {
+	PromptCommand(context.Context, string, string, Observer) (string, error)
+}

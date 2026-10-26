@@ -36,9 +36,19 @@ func (s *LaunchCompletionService) AgentctlRunning(ctx context.Context, launch La
 func (s *LaunchCompletionService) HandleEvent(ctx context.Context, launch Launch, event Event) error {
 	var pendingStatus LaunchStatus
 	switch event.Payload.Type {
+	case agentctl.EventRunFailed:
+		pendingStatus = LaunchFailedPendingClose
+	case agentctl.EventRunCompleted:
+		pendingStatus = LaunchCompletedPendingClose
 	case agentctl.EventPromptCompleted:
+		if event.Payload.TaskSessionID != "" {
+			return s.repo.SaveEvent(ctx, event)
+		}
 		pendingStatus = LaunchCompletedPendingClose
 	case agentctl.EventPromptFailed:
+		if event.Payload.TaskSessionID != "" {
+			return s.repo.SaveEvent(ctx, event)
+		}
 		pendingStatus = LaunchFailedPendingClose
 	default:
 		return s.repo.SaveEvent(ctx, event)

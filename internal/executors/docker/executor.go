@@ -140,6 +140,9 @@ func (e *Executor) StartAgentctl(ctx context.Context, config agentctl.RunConfig)
 		"-work-dir", workMountPath,
 		"-state-dir", stateMountPath,
 	}
+	if config.TaskSessionID != "" {
+		command = append(command, "-run-id", config.RunID)
+	}
 	for _, variable := range providerEnv {
 		name, _, _ := strings.Cut(variable, "=")
 		command = append(command, "-env", name)
@@ -161,6 +164,9 @@ func (e *Executor) StartAgentctl(ctx context.Context, config agentctl.RunConfig)
 		// Agentctl cannot restore its active session after process restart yet. Do not
 		// silently restart an incomplete run until reconciliation is implemented.
 		RestartPolicy: container.RestartPolicy{Name: container.RestartPolicyDisabled},
+	}
+	if config.TaskSessionID != "" {
+		hostConfig.RestartPolicy.Name = container.RestartPolicyUnlessStopped
 	}
 	name := containerName(config.RunID)
 	created, err := e.client.ContainerCreate(ctx, mobyclient.ContainerCreateOptions{

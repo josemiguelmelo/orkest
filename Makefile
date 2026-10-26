@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help setup dev dev-once dev-agentctl dev-web db-up db-down db-logs auth-up lint-install lint fmt sqlc check build test-integration test-postgres test-recovery docker-agentctl-base docker-agentctl-opencode docker-agentctl-images test-docker
+.PHONY: help setup dev dev-once dev-agentctl dev-web db-up db-down db-logs auth-up lint-install lint fmt sqlc check build test-integration test-postgres test-recovery test-recovery-unit docker-agentctl-base docker-agentctl-opencode docker-agentctl-images test-docker
 
 GOLANGCI_LINT_VERSION := v2.15.0
 GOLANGCI_LINT := bin/tools/$(GOLANGCI_LINT_VERSION)/golangci-lint
@@ -22,6 +22,8 @@ help:
 	@echo "sqlc              Regenerate PostgreSQL query code"
 	@echo "check             Check lint, tests, frontend types, builds"
 	@echo "build             Build both Go binaries and frontend"
+	@echo "test-recovery-unit Run deterministic session/queue/recovery tests with race detection"
+	@echo "test-recovery      Also verify real OpenCode continuation (requires explicit model and credentials)"
 	@echo "test-postgres     Test PostgreSQL repositories (requires DATABASE_URL or all POSTGRES_* settings)"
 	@echo "docker-agentctl-images Build the agentctl base and OpenCode runtime images"
 	@echo "test-docker       Run Docker Engine smoke test (builds images; requires Docker Engine)"
@@ -87,7 +89,7 @@ test-integration:
 
 test-postgres:
 	@{ test -n "$$DATABASE_URL" || { test -n "$$POSTGRES_HOST" && test -n "$$POSTGRES_PORT" && test -n "$$POSTGRES_USERNAME" && test -n "$$POSTGRES_PASSWORD" && test -n "$$POSTGRES_DB"; }; } || (echo "Set DATABASE_URL or all POSTGRES_HOST, POSTGRES_PORT, POSTGRES_USERNAME, POSTGRES_PASSWORD, and POSTGRES_DB values; start PostgreSQL with make db-up"; exit 1)
-	go test ./internal/postgres -run TestPostgresRepositories -count=1
+	go test ./internal/postgres -run 'TestPostgresRepositories|TestSessionMigrations' -count=1
 
 docker-agentctl-base:
 	$(DOCKER) build -f build/docker/agentctl-base.Dockerfile -t $(AGENTCTL_BASE_IMAGE) .
@@ -98,8 +100,11 @@ docker-agentctl-opencode: docker-agentctl-base
 docker-agentctl-images: docker-agentctl-opencode
 
 test-docker: docker-agentctl-opencode
-	AGENTCTL_OPENCODE_IMAGE=$(AGENTCTL_OPENCODE_IMAGE) go test -tags=docker ./internal/executors/docker -run TestDockerAgentctlLaunchSmoke -count=1
+	AGENTCTL_OPENCODE_IMAGE=$(AGENTCTL_OPENCODE_IMAGE) go test -tags=docker ./internal/executors/docker -run 'TestDockerAgentctlLaunchSmoke|TestDockerSessionRestore' -count=1
 
-test-recovery:
-	@echo "$@: not implemented; restoration and continuation are not verified."
-	@exit 1
+test-recovery-unit:
+	go test -race ./internal/agentctl/... ./internal/orchestration -run 'Restore|Recovery|Queue|Session' -count=1
+
+test-recovery: test-recovery-unit
+	@{ test -n "$$ORKEST_OPENCODE_BINARY" && test -n "$$ORKEST_TEST_MODEL_PROVIDER" && test -n "$$ORKEST_TEST_MODEL_ID"; } || (echo "Set ORKEST_OPENCODE_BINARY, ORKEST_TEST_MODEL_PROVIDER, ORKEST_TEST_MODEL_ID and grant credentials with ORKEST_TEST_PROVIDER_ENV; real continuation is unverified without them"; exit 1)
+	go test -tags=integration ./tests/integration -run 'TestOpenCodeHandshake|TestOpenCodeContinuation' -count=1 -v

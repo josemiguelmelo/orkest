@@ -39,9 +39,18 @@ func TestMain(m *testing.M) {
 			var result any
 			switch request.Method {
 			case "initialize":
-				result = map[string]any{"protocolVersion": 1, "agentCapabilities": map[string]any{}, "authMethods": []any{}}
+				result = map[string]any{"protocolVersion": 1, "agentCapabilities": map[string]any{"loadSession": os.Getenv("ORKEST_ACP_NO_RESTORE") != "1"}, "authMethods": []any{}}
 			case "session/new":
 				result = map[string]any{"sessionId": "fixture-session"}
+			case "session/load":
+				var params struct {
+					SessionID string `json:"sessionId"`
+				}
+				if json.Unmarshal(request.Params, &params) != nil || params.SessionID != "fixture-session" {
+					os.Exit(9)
+				}
+				fixtureSend(map[string]any{"jsonrpc": "2.0", "method": "session/update", "params": map[string]any{"sessionId": "fixture-session", "update": map[string]any{"sessionUpdate": "agent_message_chunk", "content": map[string]any{"type": "text", "text": "restored history"}}}})
+				result = map[string]any{}
 			case "session/set_mode":
 				var params struct {
 					ModeID string `json:"modeId"`

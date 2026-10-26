@@ -44,19 +44,19 @@ Keycloak authenticates users while Orkest enforces access boundaries. Organizati
 
 ## Agent runtime and execution
 
-- **OpenCode v2.1.4** is the pinned runtime in the `agentctl` prototype. Its compatibility with the real executable still requires integration verification.
+- **OpenCode v2.1.4** is the pinned runtime in the `agentctl` prototype. Real handshake and session loading are verified; real model continuation and approval round trips still require credentialed validation.
 - **ACP over local stdio** uses `github.com/coder/acp-go-sdk v0.13.5` between `agentctl` and the OpenCode subprocess.
 - The standalone **Go `agentctl` binary** owns the subprocess and ACP connection. It exposes REST commands and a receive-only activity WebSocket using **`github.com/coder/websocket v1.8.15`**. It journals events and retains task-scoped runtime state.
-- The agentctl HTTP server uses **Chi v5.2.3**; WebSocket upgrades use `coder/websocket`. Platform startup reconciles persisted launches, closes confirmed-ended or unconfigured processes, and reconnects healthy endpoints to replay events from the stored sequence. Stable command reconciliation, agentctl restart recovery, session restoration, and continuation are not implemented.
-- The first **Docker Engine executor** is implemented in `internal/executors/docker` with the pinned Moby Go client v0.6.2. It starts agentctl containers with task-scoped durable host bind mounts and loopback-only dynamic port publication, then gracefully stops and removes containers after terminal prompt events. It targets a local Engine; permanent task/run API wiring and repository preparation are not implemented.
-- Docker image build targets create a shared agentctl base image and an OpenCode 2.1.4 runtime image. The mounted work and agentctl state directories persist on the Docker host. Container restart recovery and OpenCode session continuation are not implemented.
+- The agentctl HTTP server uses **Chi v5.2.3**; WebSocket upgrades use `coder/websocket`. Platform startup reconciles persisted launches, closes confirmed-ended or unconfigured processes, and reconnects healthy endpoints to replay events from the stored sequence. Durable task sessions implement command reconciliation, agentctl restart recovery, session loading, and conservative continuation. Uncertain effects pause for user reconciliation.
+- The first **Docker Engine executor** is implemented in `internal/executors/docker` with the pinned Moby Go client v0.6.2. It starts agentctl containers with task-scoped durable host bind mounts and loopback-only dynamic port publication, then gracefully stops and removes containers after terminal run events. Task/run API wiring and repository preparation are implemented; team-member slot allocation is separate unfinished work.
+- Docker image build targets create a shared agentctl base image and an OpenCode 2.1.4 runtime image. The mounted work and agentctl state directories persist on the Docker host. Session-enabled containers restore durable sessions after restart and preserve task files. Real model continuation remains separately gated on explicit model configuration.
 - An **authenticated platform-to-agentctl transport** remains proposed and unimplemented. The current local transport uses persisted run identities and event cursors for platform restart reconnect and replay, without transport authentication or explicit acknowledgements.
 
-The Go ACP library is selected, but real-runtime protocol compatibility, approvals, session restoration, and interrupted-work continuation are not yet verified.
+Real OpenCode handshake, session loading, daemon/container restoration, and retained working files have integration coverage. Real model-memory continuation and approval round trips remain unverified without explicit model configuration and credentials.
 
 The conversation service separates ordered event commits from its in-memory state lock, so journal writes and syncs do not block status reads or shutdown admission. Event-producing commands still serialize behind in-flight commits; final shutdown joins outstanding work and storage I/O. The journal owns sequence numbers and commit timestamps. A persistence failure fences the conversation and cancels local prompt/permission waits without selecting an approval option. Local cancellation does not prove runtime termination or permit replacement; reconciliation remains required.
 
-Runtime failures retain wrapped diagnostic causes and subprocess exit status in memory. Error strings and API messages remain sanitized; raw causes and runtime output must not be written to ordinary logs. Unexpected unsuccessful process exits are reported as failed unless the conversation is already interrupted. This does not implement restart recovery.
+Runtime failures retain wrapped diagnostic causes and subprocess exit status in memory. Error strings and API messages remain sanitized; raw causes and runtime output must not be written to ordinary logs. Unexpected unsuccessful process exits are reported as failed unless the conversation is already interrupted. Durable sessions use these states to trigger restoration or expose blocked recovery.
 
 Core platform shutdown must disconnect from agents without terminating their work. Agent environments retain independent lifecycles. Container/process restart recovery assumes durable task storage remains intact; complete executor-host or disk loss recovery is deferred by the MVP requirements.
 
@@ -71,8 +71,8 @@ Agents create and update pull requests through their permitted runtime capabilit
 
 ## Architecture and local development
 
-- **Modular monolith** is the proposed core platform shape. Implemented Go packages cover identity, organization, workspace, manual task and component APIs, GitHub Cloud and Jira task integrations, app lifecycle, task dispatch and launch orchestration, Docker agentctl execution, and standalone agentctl/OpenCode runtime code. Task run history and events use the versioned PostgreSQL schema and sqlc. Team-member slot allocation and validated restart continuation remain unimplemented.
-- **Independent `agentctl` process** is implemented as a separate binary and can be packaged into the Docker OpenCode runtime image; a task-start API and platform wiring remain future work.
+- **Modular monolith** is the proposed core platform shape. Implemented Go packages cover identity, organization, workspace, manual task and component APIs, GitHub Cloud and Jira task integrations, app lifecycle, task dispatch and launch orchestration, Docker agentctl execution, and standalone agentctl/OpenCode runtime code. Task run history and events use the versioned PostgreSQL schema and sqlc. Team-member slot allocation remains unimplemented; session restoration is implemented, with real model continuation still requiring credentialed validation.
+- **Independent `agentctl` process** is implemented as a separate binary and can be packaged into the Docker OpenCode runtime image; task-start APIs and platform wiring are implemented.
 - **Go code organization** stays in one root Go module, with logical package areas rather than nested Go modules:
   - `internal/app` owns platform wiring and lifecycle; platform features belong under `internal/` packages such as `identity`, `organization`, `workspace`, `task`, and `orchestration`.
   - `internal/agentctl` owns agentctl run state, provider contracts, transport APIs, daemon lifecycle (`internal/agentctl/daemon`), and runtime adapters (`internal/agentctl/runtime`). It runs independently of platform lifecycle.
@@ -85,17 +85,23 @@ Avoid introducing microservices or a distributed workflow engine for the initial
 
 ## Validation status and next milestones
 
-The Go agentctl/OpenCode prototype exists. Unit tests use a subprocess fixture; the real OpenCode handshake has a documented integration target but remains unverified unless run with the pinned executable. Before exposing execution controls in the UI, validate the remaining high-risk behavior:
+Deterministic tests cover FIFO execution, restart replay, duplicate prevention,
+paused queues, stale approvals, ownership, and continuation decisions. Real
+OpenCode 2.1.4 handshake/session loading and Docker daemon/container restoration
+have been exercised, including preserved task files and explicit new sessions.
+PostgreSQL tests cover atomic task-run reservation, session scope, and prompt
+outbox reconciliation. Fresh-schema migrations are tested separately.
 
-1. Run `make test-docker` to verify agentctl starts in the Docker OpenCode image; validate OpenCode ACP interaction and subsequent recovery scenarios separately.
-2. Completes a user approval round trip.
-3. Keeps the agent running across a core platform restart and replays missed events.
-4. Restores files and the supported agent session after a container/process restart.
-5. Reconciles execution and command identities without duplicate work.
+Real model-memory continuation and real runtime approval round trips still need
+explicit model configuration and credentials. Session loading alone does not
+prove arbitrary interrupted work resumes exactly. Complete host/disk loss and
+team-member slot allocation remain outside this implementation.
 
-The recovery and approval scenarios remain acceptance work; a successful subprocess fixture or session reload alone does not prove real runtime continuation.
-
-`make test-integration` runs the real OpenCode handshake when the pinned executable is supplied. `make test-postgres` runs domain repository integration tests using either PostgreSQL configuration form (start local PostgreSQL with `make db-up`). `make test-recovery` currently reports that the suite is not implemented.
+`make test-integration` verifies real handshake/loading when the pinned binary is
+supplied. `make test-postgres` runs the repository integrations. `make test-docker`
+checks daemon restart, container replacement, and fresh sessions. The deterministic
+`make test-recovery-unit` uses race detection; `make test-recovery` additionally
+requires an explicitly selected model and runs the real continuation test.
 
 ## References
 
@@ -108,3 +114,12 @@ The recovery and approval scenarios remain acceptance work; a successful subproc
 - [Docker Engine SDK](https://docs.docker.com/reference/api/engine/sdk/)
 - [MCP Go SDK](https://github.com/modelcontextprotocol/go-sdk)
 - [ACP protocol and libraries](https://github.com/agentclientprotocol/agent-client-protocol)
+
+## Durable task sessions
+
+Task-scoped session snapshots and command delivery intent use PostgreSQL/sqlc.
+agentctl uses private versioned manifests, exclusive OS ownership locks, and
+reopenable JSONL journals for runtime restoration and FIFO prompt execution.
+OpenCode 2.1.4 / ACP v1 remains pinned. See [task sessions](task-sessions.md) for
+implemented behavior, migration effects, verification commands, and recovery
+limitations. Team-member capacity allocation remains unimplemented.

@@ -75,18 +75,30 @@ func (c *HTTPAgentctlClient) Status(ctx context.Context, endpoint string) (agent
 		return agentctl.Status{}, fmt.Errorf("agentctl status endpoint returned HTTP %d", resp.StatusCode)
 	}
 	var status struct {
+		OrganizationID     string         `json:"organizationId"`
+		WorkspaceID        string         `json:"workspaceId"`
+		TaskID             string         `json:"taskId"`
+		RunID              string         `json:"runId"`
 		Configured         bool           `json:"configured"`
 		ExecutionAvailable bool           `json:"executionAvailable"`
 		ProcessAlive       bool           `json:"processAlive"`
 		State              agentctl.State `json:"state"`
 		SessionID          string         `json:"sessionId"`
+		TaskSessionID      string         `json:"taskSessionId"`
+		ActiveCommand      string         `json:"activeCommand"`
+		QueuePaused        bool           `json:"queuePaused"`
+		QueueDepth         int            `json:"queueDepth"`
+		RunEnded           bool           `json:"runEnded"`
+		RecoveryBlocked    bool           `json:"recoveryBlocked"`
 	}
 	if err = json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&status); err != nil {
 		return agentctl.Status{}, fmt.Errorf("decode agentctl status: %w", err)
 	}
 	return agentctl.Status{
-		Configured: status.Configured, ExecutionAvailable: status.ExecutionAvailable,
+		OrganizationID: status.OrganizationID, WorkspaceID: status.WorkspaceID, TaskID: status.TaskID, RunID: status.RunID,
+		RecoveryBlocked: status.RecoveryBlocked, Configured: status.Configured, ExecutionAvailable: status.ExecutionAvailable,
 		ProcessAlive: status.ProcessAlive, State: status.State, SessionID: status.SessionID,
+		TaskSessionID: status.TaskSessionID, ActiveCommand: status.ActiveCommand, QueuePaused: status.QueuePaused, QueueDepth: status.QueueDepth, RunEnded: status.RunEnded,
 	}, nil
 }
 
@@ -185,4 +197,16 @@ func (c *HTTPAgentctlClient) Connect(ctx context.Context, endpoint string, curso
 			}
 		}
 	}
+}
+
+func (c *HTTPAgentctlClient) RestoreAgent(ctx context.Context, endpoint string) error {
+	return c.post(ctx, endpoint, "/agent/restore", struct{}{})
+}
+
+func (c *HTTPAgentctlClient) Queue(ctx context.Context, endpoint string, discard bool) error {
+	path := "/agent/queue/resume"
+	if discard {
+		path = "/agent/queue/discard"
+	}
+	return c.post(ctx, endpoint, path, struct{}{})
 }

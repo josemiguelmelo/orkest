@@ -33,7 +33,7 @@ type OpenCodeProvider struct {
 func (p *OpenCodeProvider) Runtime() coreruntime.Runtime { return coreruntime.OpenCode }
 
 func (p *OpenCodeProvider) Launch(ctx context.Context, config agentctl.RunConfig) (agentctl.Process, error) {
-	process, err := p.launch(ctx, config)
+	process, err := p.launch(ctx, config, false)
 	if err != nil {
 		var validation *agentctl.ValidationError
 		if errors.As(err, &validation) {
@@ -44,7 +44,7 @@ func (p *OpenCodeProvider) Launch(ctx context.Context, config agentctl.RunConfig
 	return process, nil
 }
 
-func (p *OpenCodeProvider) launch(ctx context.Context, config agentctl.RunConfig) (agentctl.Process, error) {
+func (p *OpenCodeProvider) launch(ctx context.Context, config agentctl.RunConfig, restore bool) (agentctl.Process, error) {
 	attrs := runtimeLogAttrs(config)
 	p.logger().Info("opencode provider launch started", attrs...)
 	if err := config.Validate(); err != nil {
@@ -72,6 +72,39 @@ func (p *OpenCodeProvider) launch(ctx context.Context, config agentctl.RunConfig
 		return nil, runtimeFailure("opencode executable unavailable", err)
 	}
 	root := p.storageRoot(config)
+	owner, err := p.acquireOwnership(config)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if owner != nil {
+			_ = owner.Close()
+		}
+	}()
+	var restoredSession string
+	if restore {
+		restoredSession, err = p.readSession(config)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if !restore {
+		if _, err := os.Stat(filepath.Join(root, "session.json")); err == nil {
+			return nil, errors.New("session already exists; explicit restoration required")
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return nil, runtimeFailure("inspect session manifest failed", err)
+		}
+		if err := os.MkdirAll(root, 0o700); err != nil {
+			return nil, runtimeFailure("create session storage failed", err)
+		}
+		identity := config.RunID
+		if config.TaskSessionID != "" {
+			identity = config.TaskSessionID
+		}
+		if err := reserveRun(root, identity); err != nil {
+			return nil, err
+		}
+	}
 	env, err := p.prepareEnvironment(root, config)
 	if err != nil {
 		return nil, err
@@ -82,11 +115,17 @@ func (p *OpenCodeProvider) launch(ctx context.Context, config agentctl.RunConfig
 		return nil, err
 	}
 	p.logger().Info("opencode version check completed", attrs...)
-	if err := reserveRun(root, config.RunID); err != nil {
+	p.logger().Info("opencode process startup started", attrs...)
+	process, err := p.startProcess(ctx, binary, env, config, restoredSession, owner)
+	if err != nil {
 		return nil, err
 	}
-	p.logger().Info("opencode process startup started", attrs...)
-	return p.startProcess(ctx, binary, env, config)
+	owner = nil
+	if err := p.saveSession(config, process.SessionID()); err != nil {
+		_ = process.Close()
+		return nil, err
+	}
+	return process, nil
 }
 
 func (p *OpenCodeProvider) logger() *slog.Logger {
@@ -102,7 +141,11 @@ func runtimeLogAttrs(config agentctl.RunConfig) []any {
 
 func (p *OpenCodeProvider) storageRoot(config agentctl.RunConfig) string {
 	scope, _ := json.Marshal([]string{config.OrganizationID, config.WorkspaceID, config.TaskID})
-	return filepath.Join(p.StateDir, fmt.Sprintf("%x", sha256.Sum256(scope)))
+	root := filepath.Join(p.StateDir, fmt.Sprintf("%x", sha256.Sum256(scope)))
+	if config.TaskSessionID != "" {
+		return filepath.Join(root, "sessions", fmt.Sprintf("%x", sha256.Sum256([]byte(config.TaskSessionID))))
+	}
+	return root
 }
 
 type runtimeConfiguration struct {
@@ -135,7 +178,11 @@ func (p *OpenCodeProvider) prepareEnvironment(root string, config agentctl.RunCo
 			return nil, errors.New("reserved or invalid provider environment variable")
 		}
 	}
-	configDir := "config-" + fmt.Sprintf("%x", sha256.Sum256([]byte(config.RunID)))
+	configIdentity := config.RunID
+	if config.TaskSessionID != "" {
+		configIdentity = config.TaskSessionID
+	}
+	configDir := "config-" + fmt.Sprintf("%x", sha256.Sum256([]byte(configIdentity)))
 	for _, item := range []struct{ name, dir string }{{"HOME", "home"}, {"XDG_DATA_HOME", "data"}, {"XDG_CONFIG_HOME", configDir}, {"XDG_STATE_HOME", "state"}, {"XDG_CACHE_HOME", "cache"}} {
 		dir := filepath.Join(root, item.dir)
 		if err := os.MkdirAll(dir, 0o700); err != nil {
@@ -270,9 +317,10 @@ func reserveRun(root, runID string) error {
 	return nil
 }
 
-func (p *OpenCodeProvider) startProcess(ctx context.Context, binary string, env []string, config agentctl.RunConfig) (agentctl.Process, error) {
+func (p *OpenCodeProvider) startProcess(ctx context.Context, binary string, env []string, config agentctl.RunConfig, restoredSession string, owner *os.File) (agentctl.Process, error) {
 	cmd := exec.Command(binary, "acp")
 	cmd.Dir, cmd.Env = p.WorkDir, env
+	cmd.ExtraFiles = []*os.File{owner}
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, runtimeFailure("open opencode input failed", err)
@@ -291,7 +339,7 @@ func (p *OpenCodeProvider) startProcess(ctx context.Context, binary string, env 
 	}
 	p.logger().Info("opencode process started", runtimeLogAttrs(config)...)
 	process := &process{cmd: cmd, stdin: stdin, done: make(chan struct{})}
-	go func() { process.waitErr = cmd.Wait(); close(process.done) }()
+	go func() { process.waitErr = cmd.Wait(); _ = owner.Close(); close(process.done) }()
 	success := false
 	defer func() {
 		if !success {
@@ -303,7 +351,7 @@ func (p *OpenCodeProvider) startProcess(ctx context.Context, binary string, env 
 	process.conn, process.client = conn, client
 	conn.SetLogger(slog.New(slog.NewTextHandler(io.Discard, nil)))
 	p.logger().Info("opencode ACP initialization started", runtimeLogAttrs(config)...)
-	if err := process.initializeSession(ctx, p.WorkDir, config); err != nil {
+	if err := process.initializeSession(ctx, p.WorkDir, config, restoredSession); err != nil {
 		_ = process.Close()
 		return nil, errors.Join(err, process.Err())
 	}
@@ -320,7 +368,7 @@ func (p *OpenCodeProvider) startProcess(ctx context.Context, binary string, env 
 	return process, nil
 }
 
-func (p *process) initializeSession(ctx context.Context, workDir string, config agentctl.RunConfig) error {
+func (p *process) initializeSession(ctx context.Context, workDir string, config agentctl.RunConfig, restoredSession string) error {
 	conn := p.conn
 	initialized, err := conn.Initialize(ctx, acp.InitializeRequest{ProtocolVersion: 1})
 	if err != nil {
@@ -329,18 +377,34 @@ func (p *process) initializeSession(ctx context.Context, workDir string, config 
 	if initialized.ProtocolVersion != 1 {
 		return errors.New("unsupported ACP protocol version")
 	}
-	session, err := conn.NewSession(ctx, acp.NewSessionRequest{Cwd: workDir, McpServers: []acp.McpServer{}})
-	if err != nil {
-		return runtimeFailure("create opencode session failed", err)
+	sessionID := acp.SessionId(restoredSession)
+	if restoredSession == "" {
+		session, err := conn.NewSession(ctx, acp.NewSessionRequest{Cwd: workDir, McpServers: []acp.McpServer{}})
+		if err != nil {
+			return runtimeFailure("create opencode session failed", err)
+		}
+		sessionID = session.SessionId
+	} else {
+		if !initialized.AgentCapabilities.LoadSession {
+			return errors.New("opencode does not support session restoration")
+		}
+		// History replay belongs to reconciliation, never to the active prompt observer.
+		p.client.mu.Lock()
+		p.client.sessionID, p.client.restoring = restoredSession, true
+		p.client.mu.Unlock()
+		defer func() { p.client.mu.Lock(); p.client.restoring = false; p.client.mu.Unlock() }()
+		if _, err := conn.LoadSession(ctx, acp.LoadSessionRequest{SessionId: sessionID, Cwd: workDir, McpServers: []acp.McpServer{}}); err != nil {
+			return runtimeFailure("restore opencode session failed", err)
+		}
 	}
-	if session.SessionId == "" {
+	if sessionID == "" {
 		return errors.New("opencode returned empty session identity")
 	}
-	_, err = conn.SetSessionMode(ctx, acp.SetSessionModeRequest{SessionId: session.SessionId, ModeId: acp.SessionModeId(agentID(config.Agent.Name))})
+	_, err = conn.SetSessionMode(ctx, acp.SetSessionModeRequest{SessionId: sessionID, ModeId: acp.SessionModeId(agentID(config.Agent.Name))})
 	if err != nil {
 		return runtimeFailure("select configured opencode mode failed", err)
 	}
-	p.sessionID = string(session.SessionId)
+	p.sessionID = string(sessionID)
 	p.client.mu.Lock()
 	p.client.sessionID = p.sessionID
 	p.client.mu.Unlock()
