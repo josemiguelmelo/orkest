@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	modelerrors "github.com/josemiguelmelo/orkest/internal/core/model/errors"
 	"github.com/josemiguelmelo/orkest/internal/organization"
+	"github.com/josemiguelmelo/orkest/internal/task"
 	"github.com/josemiguelmelo/orkest/internal/workspace"
 )
 
@@ -165,7 +166,10 @@ func decodeBody(w http.ResponseWriter, r *http.Request, dst any) bool {
 func respond(w http.ResponseWriter, value any, err error, success int) {
 	if err != nil {
 		status, code := http.StatusInternalServerError, "internal_error"
+		var dispatchError *task.DispatchError
 		switch {
+		case errors.As(err, &dispatchError):
+			status, code = http.StatusBadGateway, "agent_dispatch_failed"
 		case errors.Is(err, modelerrors.ErrInvalid):
 			status, code = http.StatusBadRequest, "invalid_request"
 		case errors.Is(err, modelerrors.ErrForbidden):

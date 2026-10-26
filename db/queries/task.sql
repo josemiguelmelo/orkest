@@ -23,6 +23,12 @@ FROM workspaces w
 WHERE w.organization_id = $1 AND t.workspace_id = w.id AND t.workspace_id = $2 AND t.id = $3
 RETURNING t.id, t.workspace_id, t.title, t.description, t.source_provider, COALESCE(t.source_id, '') AS source_id, COALESCE(t.source_url, '') AS source_url, t.status, COALESCE(t.assignee_agent_id, '') AS assignee_agent_id, t.labels, t.created_at, t.updated_at;
 
+-- name: UpdateTaskIfStatus :one
+UPDATE tasks t SET title = $5, description = $6, status = $7, assignee_agent_id = NULLIF($8, ''), labels = $9, updated_at = now()
+FROM workspaces w
+WHERE w.organization_id = $1 AND t.workspace_id = w.id AND t.workspace_id = $2 AND t.id = $3 AND t.status = $4
+RETURNING t.id, t.workspace_id, t.title, t.description, t.source_provider, COALESCE(t.source_id, '') AS source_id, COALESCE(t.source_url, '') AS source_url, t.status, COALESCE(t.assignee_agent_id, '') AS assignee_agent_id, t.labels, t.created_at, t.updated_at;
+
 -- name: DeleteTaskComponents :exec
 DELETE FROM task_components WHERE workspace_id = $1 AND task_id = $2;
 
