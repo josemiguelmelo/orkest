@@ -13,7 +13,7 @@ make docker-agentctl-base
 make docker-agentctl-opencode
 ```
 
-The base image contains the `agentctl` binary. The runtime image extends that
+The base image contains the `agentctl` binary and Git. The runtime image extends that
 base and installs pinned OpenCode 2.1.4. Override `AGENTCTL_BASE_IMAGE` or
 `AGENTCTL_OPENCODE_IMAGE` when building or running a differently tagged image.
 The platform-side executor reads `ORKEST_DATA_DIR` through its constructor and
@@ -21,15 +21,17 @@ uses `orkest/agentctl-opencode:2.1.4` when no image is configured.
 
 For each organization/workspace/task scope, the executor creates durable
 `work` and `agentctl-state` directories beneath `ORKEST_DATA_DIR/tasks/<scope-hash>`
-and mounts them at `/workspace` and `/agentctl-state`. The hash keeps identifiers
+and mounts them at `/workspace` and `/agentctl-state`. Every repository registered
+in the task workspace is checked out under `/workspace/repositories/<provider>/<repository-id>`
+on a task-specific branch before the container starts. Those checkouts persist across
+review iterations. The hash keeps identifiers
 out of host paths and container labels. The directories are mode 0700 and the
 container runs as the platform process UID/GID so files remain writable by the
 platform user. The agentctl state directory must remain on persistent storage.
 
 No provider credentials are passed into containers in this first implementation.
 Model requests requiring credentials will fail until a credential integration
-is added. Repository checkout and task worktree preparation are also separate
-from this process launcher; the mounted work directory is initially empty.
+is added. The GitHub repository provider currently supports public HTTPS remotes.
 
 The container does not restart automatically. Agentctl session restoration is
 not implemented, so automatically restarting it after a daemon restart could

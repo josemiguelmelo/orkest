@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
@@ -36,6 +37,7 @@ type ConversationService struct {
 	closed             bool
 	work               sync.WaitGroup
 	stateDir           string
+	logger             *slog.Logger
 	journal            *Journal
 	subscriptions      EventSubscriptions
 	commands           map[string][sha256.Size]byte
@@ -44,9 +46,13 @@ type ConversationService struct {
 	permissionSequence uint64
 }
 
-func newConversationService(ctx context.Context, stateDir string) *ConversationService {
+func newConversationService(ctx context.Context, stateDir string, loggers ...*slog.Logger) *ConversationService {
 	ctx, cancel := context.WithCancel(ctx)
-	return &ConversationService{ctx: ctx, cancel: cancel, stateDir: stateDir}
+	logger := slog.Default()
+	if len(loggers) > 0 && loggers[0] != nil {
+		logger = loggers[0]
+	}
+	return &ConversationService{ctx: ctx, cancel: cancel, stateDir: stateDir, logger: logger}
 }
 
 // bind attaches the single successful launch before the controller exposes it.
@@ -136,7 +142,10 @@ func (c *ConversationService) recordLocked(event Event) error {
 // Prompt accepts an idempotent command before invoking the provider. It is owned
 // by the conversation context and continues when its requesting connection disappears.
 func (c *ConversationService) Prompt(commandID, text string) error {
+	logAttrs := c.logAttrs(commandID)
+	c.logger.Info("prompt received", logAttrs...)
 	if strings.TrimSpace(commandID) == "" || len(commandID) > 200 || len(text) > MaxPromptBytes || strings.TrimSpace(text) == "" {
+		c.logger.Warn("prompt rejected", append(logAttrs, "reason", "invalid_command")...)
 		return ErrCommand
 	}
 	c.turnMu.Lock()
@@ -161,6 +170,7 @@ func (c *ConversationService) Prompt(commandID, text string) error {
 		return ErrConversation
 	}
 	if err := c.openJournalLocked(); err != nil {
+		c.logger.Error("prompt journal setup failed", append(logAttrs, "reason", "journal_unavailable")...)
 		return err
 	}
 	if c.closed || c.ctx.Err() != nil {
@@ -179,6 +189,7 @@ func (c *ConversationService) Prompt(commandID, text string) error {
 		return ErrConversationBusy
 	}
 	if err := c.recordLocked(promptAcceptedEvent(commandID, text)); err != nil {
+		c.logger.Error("prompt acceptance persistence failed", append(logAttrs, "reason", "journal_write_failed")...)
 		return err
 	}
 	if c.closed || c.ctx.Err() != nil {
@@ -190,12 +201,16 @@ func (c *ConversationService) Prompt(commandID, text string) error {
 	c.activeCommand = commandID
 	c.state = StateRunning
 	c.work.Add(1)
+	c.logger.Info("prompt accepted", logAttrs...)
 	go c.runPrompt(runtime, commandID, text)
 	return nil
 }
 
 func (c *ConversationService) runPrompt(runtime RuntimeConversation, commandID, text string) {
 	defer c.work.Done()
+	startedAt := time.Now()
+	logAttrs := c.logAttrs(commandID)
+	c.logger.Info("runtime prompt started", logAttrs...)
 	reason, err := runtime.Prompt(c.ctx, text, Observer{
 		Update: func(update Update) error {
 			c.eventMu.Lock()
@@ -228,6 +243,12 @@ func (c *ConversationService) runPrompt(runtime RuntimeConversation, commandID, 
 	if err := c.recordLocked(event); err == nil && c.state != StateInterrupted {
 		c.state = StateReady
 	}
+	attrs := append(logAttrs, "duration_ms", time.Since(startedAt).Milliseconds())
+	if err != nil {
+		c.logger.Warn("runtime prompt finished with failure", append(attrs, "reason", "provider_error")...)
+		return
+	}
+	c.logger.Info("runtime prompt finished", append(attrs, "has_stop_reason", reason != "")...)
 }
 
 // registerPermission serializes request persistence with response admission.
@@ -316,6 +337,7 @@ func (c *ConversationService) RespondPermission(response PermissionResponse) err
 }
 
 func (c *ConversationService) CancelPrompt(commandID string) error {
+	c.logger.Info("prompt cancellation requested", c.logAttrs(commandID)...)
 	// Serialize delivery with completion and new turns, but allow status, updates,
 	// and permission responses to proceed while provider I/O is in flight.
 	c.turnMu.Lock()
@@ -374,4 +396,19 @@ func (c *ConversationService) Subscribe(after uint64) ([]Event, <-chan Event, fu
 		c.subscriptions.Remove(channel)
 	}
 	return events, channel, stop, nil
+}
+
+func (c *ConversationService) logAttrs(commandID string) []any {
+	attrs := []any{"command_id", commandID}
+	c.mu.RLock()
+	config := c.config
+	process := c.process
+	c.mu.RUnlock()
+	if config != nil {
+		attrs = append(attrs, runLogAttrs(*config)...)
+	}
+	if process != nil {
+		attrs = append(attrs, "session_id", process.SessionID())
+	}
+	return attrs
 }

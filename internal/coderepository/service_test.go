@@ -63,6 +63,8 @@ func (p *providerStub) SyncMain(_ context.Context, repositoryURL, path string) e
 	return nil
 }
 
+func (*providerStub) PrepareTaskCheckout(context.Context, string, string, string) error { return nil }
+
 func TestCreateNormalizesGitHubURLAndSetsProviderName(t *testing.T) {
 	repository := &repositoryStub{}
 	service := NewService(repository, workspaceStub{role: "member"}, t.TempDir(), &providerStub{})

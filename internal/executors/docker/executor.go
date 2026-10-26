@@ -17,6 +17,7 @@ import (
 
 	"github.com/containerd/errdefs"
 	"github.com/josemiguelmelo/orkest/internal/agentctl"
+	"github.com/josemiguelmelo/orkest/internal/coderepository"
 	"github.com/josemiguelmelo/orkest/internal/orchestration"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/mount"
@@ -41,16 +42,18 @@ type EngineClient interface {
 }
 
 type Config struct {
-	DataRoot      string
-	Image         string
-	AgentctlPort  int
-	ContainerUser string
-	ProviderEnv   []string
+	DataRoot                string
+	Image                   string
+	AgentctlPort            int
+	ContainerUser           string
+	ProviderEnv             []string
+	CodeRepositoryProviders []coderepository.CodeRepositoryProvider
 }
 
 type Executor struct {
-	client EngineClient
-	config Config
+	client              EngineClient
+	config              Config
+	repositoryProviders map[string]coderepository.CodeRepositoryProvider
 }
 
 func New(ctx context.Context, config Config) (*Executor, error) {
@@ -100,7 +103,14 @@ func NewWithClient(ctx context.Context, config Config, client EngineClient) (*Ex
 		return nil, err
 	}
 	config.DataRoot, config.Image, config.AgentctlPort, config.ContainerUser = root, image, port, containerUser
-	return &Executor{client: client, config: config}, nil
+	providers := make(map[string]coderepository.CodeRepositoryProvider, len(config.CodeRepositoryProviders))
+	for _, provider := range config.CodeRepositoryProviders {
+		if provider == nil || strings.TrimSpace(provider.ProviderName()) == "" {
+			return nil, errors.New("code repository provider name is required")
+		}
+		providers[provider.ProviderName()] = provider
+	}
+	return &Executor{client: client, config: config, repositoryProviders: providers}, nil
 }
 
 var (
@@ -115,6 +125,9 @@ func (e *Executor) StartAgentctl(ctx context.Context, config agentctl.RunConfig)
 	workDir, stateDir, err := e.taskDirectories(config)
 	if err != nil {
 		return orchestration.Process{}, err
+	}
+	if err = e.prepareRepositories(ctx, workDir, config); err != nil {
+		return orchestration.Process{}, fmt.Errorf("prepare task repositories: %w", err)
 	}
 	labels, err := labelsFor(config)
 	if err != nil {
@@ -194,6 +207,31 @@ func (e *Executor) StartAgentctl(ctx context.Context, config agentctl.RunConfig)
 	}
 	process.Endpoint = endpoint
 	return process, nil
+}
+
+func (e *Executor) prepareRepositories(ctx context.Context, workDir string, config agentctl.RunConfig) error {
+	for _, repository := range config.Repositories {
+		provider, ok := e.repositoryProviders[repository.ProviderName]
+		if !ok {
+			return fmt.Errorf("repository provider %q is unavailable", repository.ProviderName)
+		}
+		if !safePathComponent(repository.ProviderName) || !safePathComponent(repository.ID) {
+			return errors.New("repository identity is invalid")
+		}
+		path := filepath.Join(workDir, "repositories", repository.ProviderName, repository.ID)
+		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+			return fmt.Errorf("create repository directory: %w", err)
+		}
+		branch := "orkest/task-" + config.TaskID
+		if err := provider.PrepareTaskCheckout(ctx, repository.URL, path, branch); err != nil {
+			return fmt.Errorf("prepare repository %q: %w", repository.ID, err)
+		}
+	}
+	return nil
+}
+
+func safePathComponent(value string) bool {
+	return value != "" && value != "." && value != ".." && filepath.Base(value) == value && !strings.ContainsRune(value, filepath.Separator)
 }
 
 func (e *Executor) providerEnvironment() []string {

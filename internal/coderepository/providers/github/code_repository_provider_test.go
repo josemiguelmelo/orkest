@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -54,6 +55,40 @@ func TestSyncMainRejectsDifferentOrigin(t *testing.T) {
 	}
 }
 
+func TestPrepareTaskCheckoutCreatesAndReusesTaskBranch(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git executable is unavailable")
+	}
+	root := t.TempDir()
+	remote := filepath.Join(root, "remote.git")
+	source := filepath.Join(root, "source")
+	checkout := filepath.Join(root, "task", "repo")
+	runTestGit(t, root, "init", "--bare", "--initial-branch=main", remote)
+	runTestGit(t, root, "clone", remote, source)
+	runTestGit(t, source, "config", "user.email", "test@example.com")
+	runTestGit(t, source, "config", "user.name", "Test")
+	writeTestFile(t, filepath.Join(source, "README.md"), "task source")
+	runTestGit(t, source, "add", "README.md")
+	runTestGit(t, source, "commit", "-m", "initial")
+	runTestGit(t, source, "push", "origin", "main")
+
+	provider := NewGitHubCodeRepositoryProvider()
+	branch := "orkest/task-task-id"
+	if err := provider.PrepareTaskCheckout(context.Background(), remote, checkout, branch); err != nil {
+		t.Fatalf("prepare checkout: %v", err)
+	}
+	if got := gitOutputTest(t, checkout, "branch", "--show-current"); got != branch {
+		t.Fatalf("branch = %q, want %q", got, branch)
+	}
+	writeTestFile(t, filepath.Join(checkout, "work.txt"), "preserve me")
+	if err := provider.PrepareTaskCheckout(context.Background(), remote, checkout, branch); err != nil {
+		t.Fatalf("reuse checkout: %v", err)
+	}
+	if got := readTestFile(t, filepath.Join(checkout, "work.txt")); got != "preserve me" {
+		t.Fatalf("working tree was not preserved: %q", got)
+	}
+}
+
 func runTestGit(t *testing.T, directory string, args ...string) {
 	t.Helper()
 	command := exec.Command("git", args...)
@@ -61,6 +96,16 @@ func runTestGit(t *testing.T, directory string, args ...string) {
 	if output, err := command.CombinedOutput(); err != nil {
 		t.Fatalf("git %v: %v\n%s", args, err, output)
 	}
+}
+
+func gitOutputTest(t *testing.T, directory string, args ...string) string {
+	t.Helper()
+	command := exec.Command("git", append([]string{"-C", directory}, args...)...)
+	output, err := command.Output()
+	if err != nil {
+		t.Fatalf("git %v: %v", args, err)
+	}
+	return strings.TrimSpace(string(output))
 }
 
 func writeTestFile(t *testing.T, path, contents string) {

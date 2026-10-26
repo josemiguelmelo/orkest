@@ -4,6 +4,8 @@ package agentctl
 import (
 	"context"
 	"errors"
+	"fmt"
+	"log/slog"
 	"reflect"
 	"sync"
 	"time"
@@ -50,6 +52,7 @@ type RunController struct {
 	launchState  State
 	launches     sync.WaitGroup
 	conversation *ConversationService
+	logger       *slog.Logger
 }
 
 func NewRunController() *RunController {
@@ -57,13 +60,18 @@ func NewRunController() *RunController {
 }
 
 // NewRunControllerWithRuntimeProvider wires a runtime at the application boundary.
-func NewRunControllerWithRuntimeProvider(ctx context.Context, provider RuntimeProvider, stateDir string) *RunController {
+func NewRunControllerWithRuntimeProvider(ctx context.Context, provider RuntimeProvider, stateDir string, loggers ...*slog.Logger) *RunController {
 	ctx, cancel := context.WithCancel(ctx)
+	logger := slog.Default()
+	if len(loggers) > 0 && loggers[0] != nil {
+		logger = loggers[0]
+	}
 	return &RunController{
 		ctx:          ctx,
 		cancel:       cancel,
 		provider:     provider,
-		conversation: newConversationService(ctx, stateDir),
+		conversation: newConversationService(ctx, stateDir, logger),
+		logger:       logger,
 	}
 }
 
@@ -81,6 +89,7 @@ func (c *RunController) Configure(config RunConfig) error {
 		return ErrConfigurationConflict
 	}
 	c.runConfig = &config
+	c.logger.Info("agent run configured", runLogAttrs(config)...)
 	return nil
 }
 
@@ -128,6 +137,8 @@ func (c *RunController) Launch() error {
 	c.launches.Add(1)
 	c.mu.Unlock()
 	defer c.launches.Done()
+	startedAt := time.Now()
+	c.logger.Info("runtime launch started", runLogAttrs(config)...)
 	ctx, cancel := context.WithTimeout(c.ctx, 30*time.Second)
 	defer cancel()
 	process, err := c.provider.Launch(ctx, config)
@@ -135,11 +146,13 @@ func (c *RunController) Launch() error {
 	defer c.mu.Unlock()
 	if err != nil {
 		c.launchState = StateFailed
+		c.logger.Error("runtime launch failed", append(runLogAttrs(config), "error_type", fmt.Sprintf("%T", err), "duration_ms", time.Since(startedAt).Milliseconds())...)
 		return err
 	}
 	c.process = process
 	c.conversation.bind(config, process)
 	c.launchState = StateReady
+	c.logger.Info("runtime session ready", append(runLogAttrs(config), "session_id", process.SessionID(), "duration_ms", time.Since(startedAt).Milliseconds())...)
 	return nil
 }
 
@@ -181,4 +194,8 @@ func (c *RunController) RespondPermission(response PermissionResponse) error {
 
 func (c *RunController) Subscribe(after uint64) ([]Event, <-chan Event, func(), error) {
 	return c.conversation.Subscribe(after)
+}
+
+func runLogAttrs(config RunConfig) []any {
+	return []any{"organization_id", config.OrganizationID, "workspace_id", config.WorkspaceID, "task_id", config.TaskID, "run_id", config.RunID, "runtime", config.Runtime}
 }

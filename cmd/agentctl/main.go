@@ -36,7 +36,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	if err := daemon.RunAgentctl(ctx, logger, *address, &opencode.OpenCodeProvider{Binary: *binary, WorkDir: *workDir, StateDir: *stateDir, Env: env}, *stateDir); err != nil {
+	if err := daemon.RunAgentctl(ctx, logger, *address, &opencode.OpenCodeProvider{Binary: *binary, WorkDir: *workDir, StateDir: *stateDir, Env: env, Logger: logger}, *stateDir); err != nil {
 		logger.Error("agentctl stopped", "error", err)
 		os.Exit(1)
 	}
