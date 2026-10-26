@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -66,5 +67,6 @@ func NewRouter(users *identity.UserRegistrationService, organizations *organizat
 		})
 	})
 	openapi.Enable(router, "Orkest API", OpenAPIContract)
+	mountWeb(router, os.Getenv("ORKEST_WEB_DIR"))
 	return router, nil
 }

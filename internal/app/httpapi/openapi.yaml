@@ -34,7 +34,7 @@ paths:
       operationId: temporaryLaunchAgentWithPrompt
       summary: Start a Docker agent and submit its first prompt (temporary)
       description: Available only when ORKEST_ENABLE_TEMP_AGENT_LAUNCH=true. Requires authentication. Intended for local manual testing and does not perform task or workspace authorization.
-      security: [{bearerAuth: []}]
+      security: [{bearerAuth: []}, {cookieAuth: []}]
       requestBody:
         required: true
         content:
@@ -96,8 +96,7 @@ paths:
       tags: [Users]
       operationId: getCurrentUser
       summary: Return the authenticated Keycloak identity
-      security:
-        - bearerAuth: []
+      security: [{bearerAuth: []}, {cookieAuth: []}]
       responses:
         "200":
           description: Internal user profile and organization memberships
@@ -106,53 +105,91 @@ paths:
               schema:
                 $ref: "#/components/schemas/CurrentUser"
         "401":
-          description: Missing or invalid access token
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /api/organizations:
     get:
       tags: [Organizations]
       operationId: listOrganizations
-      security: [{bearerAuth: []}]
+      security: [{bearerAuth: []}, {cookieAuth: []}]
       responses:
         "200": {description: Organizations the user belongs to, content: {application/json: {schema: {type: array, items: {$ref: "#/components/schemas/Organization"}}}}}
-        "401": {$ref: "#/components/responses/Unauthorized"}
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
     post:
       tags: [Organizations]
       operationId: createOrganization
-      security: [{bearerAuth: []}]
+      security: [{bearerAuth: []}, {cookieAuth: []}]
       requestBody: {$ref: "#/components/requestBodies/NamedResource"}
       responses:
         "201": {description: Organization created; creator is Owner, content: {application/json: {schema: {$ref: "#/components/schemas/Organization"}}}}
         "400": {$ref: "#/components/responses/BadRequest"}
-        "401": {$ref: "#/components/responses/Unauthorized"}
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /api/organizations/{orgID}:
     parameters:
       - {name: orgID, in: path, required: true, schema: {type: string}}
     get:
       tags: [Organizations]
       operationId: getOrganization
-      security: [{bearerAuth: []}]
+      security: [{bearerAuth: []}, {cookieAuth: []}]
       responses:
         "200": {description: Organization, content: {application/json: {schema: {$ref: "#/components/schemas/Organization"}}}}
-        "401": {$ref: "#/components/responses/Unauthorized"}
-        "404": {$ref: "#/components/responses/NotFound"}
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
     patch:
       tags: [Organizations]
       operationId: updateOrganization
-      security: [{bearerAuth: []}]
+      security: [{bearerAuth: []}, {cookieAuth: []}]
       requestBody: {$ref: "#/components/requestBodies/NamedResource"}
       responses:
         "200": {description: Updated organization, content: {application/json: {schema: {$ref: "#/components/schemas/Organization"}}}}
         "400": {$ref: "#/components/responses/BadRequest"}
-        "403": {$ref: "#/components/responses/Forbidden"}
-        "404": {$ref: "#/components/responses/NotFound"}
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
     delete:
       tags: [Organizations]
       operationId: deleteOrganization
-      security: [{bearerAuth: []}]
+      security: [{bearerAuth: []}, {cookieAuth: []}]
       responses:
         "204": {description: Organization deleted}
-        "403": {$ref: "#/components/responses/Forbidden"}
-        "404": {$ref: "#/components/responses/NotFound"}
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
     # Membership changes are limited to users registered on a prior login.
   /api/organizations/{orgID}/members:
     parameters:
@@ -160,11 +197,17 @@ paths:
     get:
       tags: [Organizations]
       operationId: listOrganizationMembers
-      security: [{bearerAuth: []}]
+      security: [{bearerAuth: []}, {cookieAuth: []}]
       responses:
         "200": {description: Organization members, content: {application/json: {schema: {type: array, items: {$ref: "#/components/schemas/Membership"}}}}}
-        "403": {$ref: "#/components/responses/Forbidden"}
-        "404": {$ref: "#/components/responses/NotFound"}
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /api/organizations/{orgID}/members/{userID}:
     parameters:
       - {name: orgID, in: path, required: true, schema: {type: string}}
@@ -172,43 +215,68 @@ paths:
     put:
       tags: [Organizations]
       operationId: setOrganizationMember
-      security: [{bearerAuth: []}]
+      security: [{bearerAuth: []}, {cookieAuth: []}]
       requestBody: {$ref: "#/components/requestBodies/OrganizationRole"}
       responses:
-        "200": {description: Membership updated}
+        "200": {description: Membership updated, content: {application/json: {schema: {$ref: "#/components/schemas/OperationStatus"}}}}
         "400": {$ref: "#/components/responses/BadRequest"}
-        "403": {$ref: "#/components/responses/Forbidden"}
-        "404": {$ref: "#/components/responses/NotFound"}
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
         "409": {$ref: "#/components/responses/Conflict"}
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
     delete:
       tags: [Organizations]
       operationId: removeOrganizationMember
-      security: [{bearerAuth: []}]
+      security: [{bearerAuth: []}, {cookieAuth: []}]
       responses:
         "204": {description: Membership removed}
-        "403": {$ref: "#/components/responses/Forbidden"}
-        "404": {$ref: "#/components/responses/NotFound"}
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
         "409": {$ref: "#/components/responses/Conflict"}
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /api/organizations/{orgID}/workspaces:
     parameters:
       - {name: orgID, in: path, required: true, schema: {type: string}}
     get:
       tags: [Workspaces]
       operationId: listWorkspaces
-      security: [{bearerAuth: []}]
+      security: [{bearerAuth: []}, {cookieAuth: []}]
       responses:
         "200": {description: Workspaces accessible to the user, content: {application/json: {schema: {type: array, items: {$ref: "#/components/schemas/Workspace"}}}}}
-        "401": {$ref: "#/components/responses/Unauthorized"}
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
     post:
       tags: [Workspaces]
       operationId: createWorkspace
-      security: [{bearerAuth: []}]
+      security: [{bearerAuth: []}, {cookieAuth: []}]
       requestBody: {$ref: "#/components/requestBodies/NamedResource"}
       responses:
         "201": {description: Workspace created, content: {application/json: {schema: {$ref: "#/components/schemas/Workspace"}}}}
         "400": {$ref: "#/components/responses/BadRequest"}
-        "403": {$ref: "#/components/responses/Forbidden"}
-        "404": {$ref: "#/components/responses/NotFound"}
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /api/organizations/{orgID}/workspaces/{workspaceID}:
     parameters:
       - {name: orgID, in: path, required: true, schema: {type: string}}
@@ -216,28 +284,47 @@ paths:
     get:
       tags: [Workspaces]
       operationId: getWorkspace
-      security: [{bearerAuth: []}]
+      security: [{bearerAuth: []}, {cookieAuth: []}]
       responses:
         "200": {description: Workspace, content: {application/json: {schema: {$ref: "#/components/schemas/Workspace"}}}}
-        "404": {$ref: "#/components/responses/NotFound"}
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
     patch:
       tags: [Workspaces]
       operationId: updateWorkspace
-      security: [{bearerAuth: []}]
+      security: [{bearerAuth: []}, {cookieAuth: []}]
       requestBody: {$ref: "#/components/requestBodies/NamedResource"}
       responses:
         "200": {description: Updated workspace, content: {application/json: {schema: {$ref: "#/components/schemas/Workspace"}}}}
         "400": {$ref: "#/components/responses/BadRequest"}
-        "403": {$ref: "#/components/responses/Forbidden"}
-        "404": {$ref: "#/components/responses/NotFound"}
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
     delete:
       tags: [Workspaces]
       operationId: deleteWorkspace
-      security: [{bearerAuth: []}]
+      security: [{bearerAuth: []}, {cookieAuth: []}]
       responses:
         "204": {description: Workspace deleted}
-        "403": {$ref: "#/components/responses/Forbidden"}
-        "404": {$ref: "#/components/responses/NotFound"}
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /api/organizations/{orgID}/workspaces/{workspaceID}/members:
     parameters:
       - {name: orgID, in: path, required: true, schema: {type: string}}
@@ -245,11 +332,17 @@ paths:
     get:
       tags: [Workspaces]
       operationId: listWorkspaceMembers
-      security: [{bearerAuth: []}]
+      security: [{bearerAuth: []}, {cookieAuth: []}]
       responses:
         "200": {description: Workspace members, content: {application/json: {schema: {type: array, items: {$ref: "#/components/schemas/Membership"}}}}}
-        "403": {$ref: "#/components/responses/Forbidden"}
-        "404": {$ref: "#/components/responses/NotFound"}
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /api/organizations/{orgID}/workspaces/{workspaceID}/members/{userID}:
     parameters:
       - {name: orgID, in: path, required: true, schema: {type: string}}
@@ -258,21 +351,33 @@ paths:
     put:
       tags: [Workspaces]
       operationId: setWorkspaceMember
-      security: [{bearerAuth: []}]
+      security: [{bearerAuth: []}, {cookieAuth: []}]
       requestBody: {$ref: "#/components/requestBodies/WorkspaceRole"}
       responses:
-        "200": {description: Membership updated}
+        "200": {description: Membership updated, content: {application/json: {schema: {$ref: "#/components/schemas/OperationStatus"}}}}
         "400": {$ref: "#/components/responses/BadRequest"}
-        "403": {$ref: "#/components/responses/Forbidden"}
-        "404": {$ref: "#/components/responses/NotFound"}
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
     delete:
       tags: [Workspaces]
       operationId: removeWorkspaceMember
-      security: [{bearerAuth: []}]
+      security: [{bearerAuth: []}, {cookieAuth: []}]
       responses:
         "204": {description: Membership removed}
-        "403": {$ref: "#/components/responses/Forbidden"}
-        "404": {$ref: "#/components/responses/NotFound"}
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /api/organizations/{orgID}/workspaces/{workspaceID}/code-repositories:
     parameters:
       - {name: orgID, in: path, required: true, schema: {type: string}}
@@ -280,22 +385,34 @@ paths:
     get:
       tags: [CodeRepositories]
       operationId: listCodeRepositories
-      security: [{bearerAuth: []}]
+      security: [{bearerAuth: []}, {cookieAuth: []}]
       responses:
         "200": {description: Workspace code repositories, content: {application/json: {schema: {type: array, items: {$ref: "#/components/schemas/CodeRepository"}}}}}
-        "403": {$ref: "#/components/responses/Forbidden"}
-        "404": {$ref: "#/components/responses/NotFound"}
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
     post:
       tags: [CodeRepositories]
       operationId: createCodeRepository
-      security: [{bearerAuth: []}]
+      security: [{bearerAuth: []}, {cookieAuth: []}]
       requestBody: {$ref: "#/components/requestBodies/CodeRepositoryCreate"}
       responses:
         "201": {description: Code repository registered, content: {application/json: {schema: {$ref: "#/components/schemas/CodeRepository"}}}}
         "400": {$ref: "#/components/responses/BadRequest"}
-        "403": {$ref: "#/components/responses/Forbidden"}
-        "404": {$ref: "#/components/responses/NotFound"}
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
         "409": {$ref: "#/components/responses/Conflict"}
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /api/organizations/{orgID}/workspaces/{workspaceID}/code-repositories/{repositoryID}:
     parameters:
       - {name: orgID, in: path, required: true, schema: {type: string}}
@@ -304,19 +421,31 @@ paths:
     get:
       tags: [CodeRepositories]
       operationId: getCodeRepository
-      security: [{bearerAuth: []}]
+      security: [{bearerAuth: []}, {cookieAuth: []}]
       responses:
         "200": {description: Registered code repository, content: {application/json: {schema: {$ref: "#/components/schemas/CodeRepository"}}}}
-        "403": {$ref: "#/components/responses/Forbidden"}
-        "404": {$ref: "#/components/responses/NotFound"}
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
     delete:
       tags: [CodeRepositories]
       operationId: deleteCodeRepository
-      security: [{bearerAuth: []}]
+      security: [{bearerAuth: []}, {cookieAuth: []}]
       responses:
         "204": {description: Code repository removed}
-        "403": {$ref: "#/components/responses/Forbidden"}
-        "404": {$ref: "#/components/responses/NotFound"}
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /api/organizations/{orgID}/workspaces/{workspaceID}/code-repositories/{repositoryID}/clone:
     parameters:
       - {name: orgID, in: path, required: true, schema: {type: string}}
@@ -325,12 +454,18 @@ paths:
     post:
       tags: [CodeRepositories]
       operationId: cloneCodeRepository
-      security: [{bearerAuth: []}]
+      security: [{bearerAuth: []}, {cookieAuth: []}]
       responses:
         "204": {description: Repository cloned}
         "400": {$ref: "#/components/responses/BadRequest"}
-        "403": {$ref: "#/components/responses/Forbidden"}
-        "404": {$ref: "#/components/responses/NotFound"}
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /api/organizations/{orgID}/workspaces/{workspaceID}/code-repositories/{repositoryID}/sync-main:
     parameters:
       - {name: orgID, in: path, required: true, schema: {type: string}}
@@ -339,12 +474,18 @@ paths:
     post:
       tags: [CodeRepositories]
       operationId: syncCodeRepositoryMain
-      security: [{bearerAuth: []}]
+      security: [{bearerAuth: []}, {cookieAuth: []}]
       responses:
         "204": {description: Checkout reset to the latest remote main branch}
         "400": {$ref: "#/components/responses/BadRequest"}
-        "403": {$ref: "#/components/responses/Forbidden"}
-        "404": {$ref: "#/components/responses/NotFound"}
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /api/organizations/{orgID}/workspaces/{workspaceID}/task-integrations:
     parameters:
       - {name: orgID, in: path, required: true, schema: {type: string}}
@@ -352,30 +493,50 @@ paths:
     get:
       tags: [TaskIntegrations]
       operationId: listTaskIntegrations
-      security: [{bearerAuth: []}]
+      security: [{bearerAuth: []}, {cookieAuth: []}]
       responses:
         "200": {description: Configured task integrations, content: {application/json: {schema: {type: array, items: {$ref: "#/components/schemas/TaskIntegration"}}}}}
-        "403": {$ref: "#/components/responses/Forbidden"}
-        "404": {$ref: "#/components/responses/NotFound"}
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
     post:
       tags: [TaskIntegrations]
       operationId: createTaskIntegration
-      security: [{bearerAuth: []}]
+      security: [{bearerAuth: []}, {cookieAuth: []}]
       requestBody: {$ref: "#/components/requestBodies/TaskIntegration"}
       responses:
         "201": {description: Integration configured, content: {application/json: {schema: {$ref: "#/components/schemas/TaskIntegration"}}}}
         "400": {$ref: "#/components/responses/BadRequest"}
-        "403": {$ref: "#/components/responses/Forbidden"}
-        "502": {description: Provider connectivity or credential validation failed}
-        "503": {description: Integration credential encryption is not configured}
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "502": {description: Provider connectivity or credential validation failed, content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}}
+        "503": {description: Integration credential encryption is not configured, content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}}
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /api/task-integration-providers:
     get:
       tags: [TaskIntegrations]
       operationId: listTaskIntegrationProviders
-      security: [{bearerAuth: []}]
+      security: [{bearerAuth: []}, {cookieAuth: []}]
       responses:
         "200": {description: Available providers and their config schemas, content: {application/json: {schema: {type: array, items: {$ref: "#/components/schemas/TaskIntegrationProvider"}}}}}
-        "401": {$ref: "#/components/responses/Unauthorized"}
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /api/organizations/{orgID}/workspaces/{workspaceID}/task-integrations/validate:
     parameters:
       - {name: orgID, in: path, required: true, schema: {type: string}}
@@ -383,13 +544,20 @@ paths:
     post:
       tags: [TaskIntegrations]
       operationId: validateTaskIntegration
-      security: [{bearerAuth: []}]
+      security: [{bearerAuth: []}, {cookieAuth: []}]
       requestBody: {$ref: "#/components/requestBodies/TaskIntegration"}
       responses:
-        "200": {description: Connectivity validated}
+        "200": {description: Connectivity validated, content: {application/json: {schema: {$ref: "#/components/schemas/OperationStatus"}}}}
         "400": {$ref: "#/components/responses/BadRequest"}
-        "403": {$ref: "#/components/responses/Forbidden"}
-        "502": {description: Provider connectivity or credential validation failed}
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "502": {description: Provider connectivity or credential validation failed, content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}}
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /api/organizations/{orgID}/workspaces/{workspaceID}/task-integrations/{integrationID}:
     parameters:
       - {name: orgID, in: path, required: true, schema: {type: string}}
@@ -398,23 +566,35 @@ paths:
     put:
       tags: [TaskIntegrations]
       operationId: updateTaskIntegration
-      security: [{bearerAuth: []}]
+      security: [{bearerAuth: []}, {cookieAuth: []}]
       requestBody: {$ref: "#/components/requestBodies/TaskIntegration"}
       responses:
         "200": {description: Integration updated, content: {application/json: {schema: {$ref: "#/components/schemas/TaskIntegration"}}}}
         "400": {$ref: "#/components/responses/BadRequest"}
-        "403": {$ref: "#/components/responses/Forbidden"}
-        "404": {$ref: "#/components/responses/NotFound"}
-        "502": {description: Provider connectivity or credential validation failed}
-        "503": {description: Integration credential encryption is not configured}
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "502": {description: Provider connectivity or credential validation failed, content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}}
+        "503": {description: Integration credential encryption is not configured, content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}}
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
     delete:
       tags: [TaskIntegrations]
       operationId: deleteTaskIntegration
-      security: [{bearerAuth: []}]
+      security: [{bearerAuth: []}, {cookieAuth: []}]
       responses:
         "204": {description: Integration deleted}
-        "403": {$ref: "#/components/responses/Forbidden"}
-        "404": {$ref: "#/components/responses/NotFound"}
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /api/organizations/{orgID}/workspaces/{workspaceID}/task-integrations/{integrationID}/sync:
     parameters:
       - {name: orgID, in: path, required: true, schema: {type: string}}
@@ -423,11 +603,17 @@ paths:
     post:
       tags: [TaskIntegrations]
       operationId: syncTaskIntegrationNow
-      security: [{bearerAuth: []}]
+      security: [{bearerAuth: []}, {cookieAuth: []}]
       responses:
         "204": {description: Synchronization completed}
-        "403": {$ref: "#/components/responses/Forbidden"}
-        "404": {$ref: "#/components/responses/NotFound"}
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /api/organizations/{orgID}/workspaces/{workspaceID}/mcp-servers:
     parameters:
       - {name: orgID, in: path, required: true, schema: {type: string}}
@@ -435,20 +621,34 @@ paths:
     get:
       tags: [MCPServers]
       operationId: listMCPServers
-      security: [{bearerAuth: []}]
+      security: [{bearerAuth: []}, {cookieAuth: []}]
       responses:
         "200": {description: Workspace MCP servers, content: {application/json: {schema: {type: array, items: {$ref: "#/components/schemas/MCPServer"}}}}}
-        "403": {$ref: "#/components/responses/Forbidden"}
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
     post:
       tags: [MCPServers]
       operationId: createMCPServer
-      security: [{bearerAuth: []}]
+      security: [{bearerAuth: []}, {cookieAuth: []}]
       requestBody: {$ref: "#/components/requestBodies/MCPServerInput"}
       responses:
         "201": {description: MCP server created, content: {application/json: {schema: {$ref: "#/components/schemas/MCPServer"}}}}
         "400": {$ref: "#/components/responses/BadRequest"}
-        "403": {$ref: "#/components/responses/Forbidden"}
-        "503": {description: MCP credential encryption is not configured}
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "503": {description: MCP credential encryption is not configured, content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}}
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /api/organizations/{orgID}/workspaces/{workspaceID}/mcp-servers/{serverID}:
     parameters:
       - {name: orgID, in: path, required: true, schema: {type: string}}
@@ -457,22 +657,34 @@ paths:
     put:
       tags: [MCPServers]
       operationId: updateMCPServer
-      security: [{bearerAuth: []}]
+      security: [{bearerAuth: []}, {cookieAuth: []}]
       requestBody: {$ref: "#/components/requestBodies/MCPServerInput"}
       responses:
         "200": {description: MCP server updated; omitted headers preserve existing credentials, content: {application/json: {schema: {$ref: "#/components/schemas/MCPServer"}}}}
         "400": {$ref: "#/components/responses/BadRequest"}
-        "403": {$ref: "#/components/responses/Forbidden"}
-        "404": {$ref: "#/components/responses/NotFound"}
-        "503": {description: MCP credential encryption is not configured}
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "503": {description: MCP credential encryption is not configured, content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}}
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
     delete:
       tags: [MCPServers]
       operationId: deleteMCPServer
-      security: [{bearerAuth: []}]
+      security: [{bearerAuth: []}, {cookieAuth: []}]
       responses:
         "204": {description: MCP server deleted and removed from agent selections}
-        "403": {$ref: "#/components/responses/Forbidden"}
-        "404": {$ref: "#/components/responses/NotFound"}
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /api/organizations/{orgID}/workspaces/{workspaceID}/agents:
     parameters:
       - {name: orgID, in: path, required: true, schema: {type: string}}
@@ -480,21 +692,33 @@ paths:
     get:
       tags: [Agents]
       operationId: listAgents
-      security: [{bearerAuth: []}]
+      security: [{bearerAuth: []}, {cookieAuth: []}]
       responses:
         "200": {description: Workspace agents, content: {application/json: {schema: {type: array, items: {$ref: "#/components/schemas/Agent"}}}}}
-        "403": {$ref: "#/components/responses/Forbidden"}
-        "404": {$ref: "#/components/responses/NotFound"}
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
     post:
       tags: [Agents]
       operationId: createAgent
-      security: [{bearerAuth: []}]
+      security: [{bearerAuth: []}, {cookieAuth: []}]
       requestBody: {$ref: "#/components/requestBodies/AgentDefinition"}
       responses:
         "201": {description: Agent created, content: {application/json: {schema: {$ref: "#/components/schemas/Agent"}}}}
         "400": {$ref: "#/components/responses/BadRequest"}
-        "403": {$ref: "#/components/responses/Forbidden"}
-        "404": {$ref: "#/components/responses/NotFound"}
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /api/organizations/{orgID}/workspaces/{workspaceID}/agents/{agentID}:
     parameters:
       - {name: orgID, in: path, required: true, schema: {type: string}}
@@ -503,29 +727,47 @@ paths:
     get:
       tags: [Agents]
       operationId: getAgent
-      security: [{bearerAuth: []}]
+      security: [{bearerAuth: []}, {cookieAuth: []}]
       responses:
         "200": {description: Agent definition, content: {application/json: {schema: {$ref: "#/components/schemas/Agent"}}}}
-        "403": {$ref: "#/components/responses/Forbidden"}
-        "404": {$ref: "#/components/responses/NotFound"}
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
     put:
       tags: [Agents]
       operationId: updateAgent
-      security: [{bearerAuth: []}]
+      security: [{bearerAuth: []}, {cookieAuth: []}]
       requestBody: {$ref: "#/components/requestBodies/AgentDefinition"}
       responses:
         "200": {description: Agent updated, content: {application/json: {schema: {$ref: "#/components/schemas/Agent"}}}}
         "400": {$ref: "#/components/responses/BadRequest"}
-        "403": {$ref: "#/components/responses/Forbidden"}
-        "404": {$ref: "#/components/responses/NotFound"}
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
     delete:
       tags: [Agents]
       operationId: deleteAgent
-      security: [{bearerAuth: []}]
+      security: [{bearerAuth: []}, {cookieAuth: []}]
       responses:
         "204": {description: Agent deleted}
-        "403": {$ref: "#/components/responses/Forbidden"}
-        "404": {$ref: "#/components/responses/NotFound"}
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /api/organizations/{orgID}/workspaces/{workspaceID}/tasks:
     parameters:
       - {name: orgID, in: path, required: true, schema: {type: string}}
@@ -533,18 +775,33 @@ paths:
     get:
       tags: [Tasks]
       operationId: listTasks
-      security: [{bearerAuth: []}]
+      security: [{bearerAuth: []}, {cookieAuth: []}]
       responses:
         "200": {description: Workspace tasks, content: {application/json: {schema: {type: array, items: {$ref: "#/components/schemas/Task"}}}}}
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
     post:
       tags: [Tasks]
       operationId: createTask
-      security: [{bearerAuth: []}]
+      security: [{bearerAuth: []}, {cookieAuth: []}]
       requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/TaskInput"}}}}
       responses:
         "201": {description: Created task, content: {application/json: {schema: {$ref: "#/components/schemas/Task"}}}}
         "400": {$ref: "#/components/responses/BadRequest"}
-        "403": {$ref: "#/components/responses/Forbidden"}
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /api/organizations/{orgID}/workspaces/{workspaceID}/tasks/{taskID}:
     parameters:
       - {name: orgID, in: path, required: true, schema: {type: string}}
@@ -553,22 +810,36 @@ paths:
     get:
       tags: [Tasks]
       operationId: getTask
-      security: [{bearerAuth: []}]
+      security: [{bearerAuth: []}, {cookieAuth: []}]
       responses:
         "200": {description: Task, content: {application/json: {schema: {$ref: "#/components/schemas/Task"}}}}
-        "404": {$ref: "#/components/responses/NotFound"}
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
     put:
       tags: [Tasks]
       operationId: updateTask
       description: Moving an assigned task from todo to in_progress starts its assigned agent with the task title, description, labels, and component details. A dispatch failure leaves the task in_progress and returns 502.
-      security: [{bearerAuth: []}]
+      security: [{bearerAuth: []}, {cookieAuth: []}]
       requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/TaskInput"}}}}
       responses:
         "200": {description: Updated task, content: {application/json: {schema: {$ref: "#/components/schemas/Task"}}}}
         "400": {$ref: "#/components/responses/BadRequest"}
-        "403": {$ref: "#/components/responses/Forbidden"}
+        "403":
+          $ref: "#/components/responses/Forbidden"
         "409": {$ref: "#/components/responses/Conflict"}
-        "502": {description: Task was moved to in_progress but agent dispatch failed}
+        "502": {description: Task was moved to in_progress but agent dispatch failed, content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}}
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /api/organizations/{orgID}/workspaces/{workspaceID}/tasks/{taskID}/comments:
     parameters:
       - {name: orgID, in: path, required: true, schema: {type: string}}
@@ -577,17 +848,33 @@ paths:
     get:
       tags: [Tasks]
       operationId: listTaskComments
-      security: [{bearerAuth: []}]
+      security: [{bearerAuth: []}, {cookieAuth: []}]
       responses:
         "200": {description: Task comments, content: {application/json: {schema: {type: array, items: {$ref: "#/components/schemas/TaskComment"}}}}}
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
     post:
       tags: [Tasks]
       operationId: createTaskComment
-      security: [{bearerAuth: []}]
-      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [body], properties: {body: {type: string}}}}}}
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [body], properties: {body: {type: string, minLength: 1, maxLength: 20000}}}}}}
       responses:
         "201": {description: Created comment, content: {application/json: {schema: {$ref: "#/components/schemas/TaskComment"}}}}
         "400": {$ref: "#/components/responses/BadRequest"}
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /api/organizations/{orgID}/workspaces/{workspaceID}/components:
     parameters:
       - {name: orgID, in: path, required: true, schema: {type: string}}
@@ -595,18 +882,34 @@ paths:
     get:
       tags: [Tasks]
       operationId: listComponents
-      security: [{bearerAuth: []}]
+      security: [{bearerAuth: []}, {cookieAuth: []}]
       responses:
         "200": {description: Workspace components, content: {application/json: {schema: {type: array, items: {$ref: "#/components/schemas/Component"}}}}}
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
     post:
       tags: [Tasks]
       operationId: createComponent
-      security: [{bearerAuth: []}]
+      security: [{bearerAuth: []}, {cookieAuth: []}]
       requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/ComponentInput"}}}}
       responses:
         "201": {description: Created component, content: {application/json: {schema: {$ref: "#/components/schemas/Component"}}}}
         "400": {$ref: "#/components/responses/BadRequest"}
         "409": {$ref: "#/components/responses/Conflict"}
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "404":
+          $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /api/organizations/{orgID}/workspaces/{workspaceID}/components/{componentID}:
     parameters:
       - {name: orgID, in: path, required: true, schema: {type: string}}
@@ -615,55 +918,62 @@ paths:
     put:
       tags: [Tasks]
       operationId: updateComponent
-      security: [{bearerAuth: []}]
+      security: [{bearerAuth: []}, {cookieAuth: []}]
       requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/ComponentInput"}}}}
       responses:
         "200": {description: Updated component, content: {application/json: {schema: {$ref: "#/components/schemas/Component"}}}}
-        "404": {$ref: "#/components/responses/NotFound"}
+        "404":
+          $ref: "#/components/responses/NotFound"
         "409": {$ref: "#/components/responses/Conflict"}
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/Forbidden"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
   /api/skills:
     get:
       tags: [Skills]
       operationId: listGlobalSkills
-      security: [{bearerAuth: []}]
-      responses: {"200": {description: Global skills, content: {application/json: {schema: {$ref: "#/components/schemas/Skills"}}}}}
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      responses: {"200": {description: Global skills, content: {application/json: {schema: {$ref: "#/components/schemas/Skills"}}}}, "401": {$ref: "#/components/responses/Unauthorized"}, "403": {$ref: "#/components/responses/Forbidden"}, "404": {$ref: "#/components/responses/NotFound"}, "500": {$ref: "#/components/responses/InternalServerError"}}
     post:
       tags: [Skills]
       operationId: createGlobalSkill
-      security: [{bearerAuth: []}]
+      security: [{bearerAuth: []}, {cookieAuth: []}]
       requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/SkillInput"}}}}
-      responses: {"201": {description: Created skill, content: {application/json: {schema: {$ref: "#/components/schemas/Skill"}}}}, "403": {$ref: "#/components/responses/Forbidden"}}
+      responses: {"201": {description: Created skill, content: {application/json: {schema: {$ref: "#/components/schemas/Skill"}}}}, "403": {$ref: "#/components/responses/Forbidden"}, "401": {$ref: "#/components/responses/Unauthorized"}, "404": {$ref: "#/components/responses/NotFound"}, "500": {$ref: "#/components/responses/InternalServerError"}}
   /api/skills/{skillID}:
     parameters: [{name: skillID, in: path, required: true, schema: {type: string}}]
     get:
       tags: [Skills]
       operationId: getGlobalSkill
-      security: [{bearerAuth: []}]
-      responses: {"200": {description: Skill, content: {application/json: {schema: {$ref: "#/components/schemas/Skill"}}}}, "404": {$ref: "#/components/responses/NotFound"}}
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      responses: {"200": {description: Skill, content: {application/json: {schema: {$ref: "#/components/schemas/Skill"}}}}, "404": {$ref: "#/components/responses/NotFound"}, "401": {$ref: "#/components/responses/Unauthorized"}, "403": {$ref: "#/components/responses/Forbidden"}, "500": {$ref: "#/components/responses/InternalServerError"}}
     put:
       tags: [Skills]
       operationId: updateGlobalSkill
-      security: [{bearerAuth: []}]
+      security: [{bearerAuth: []}, {cookieAuth: []}]
       requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/SkillInput"}}}}
-      responses: {"200": {description: Updated skill, content: {application/json: {schema: {$ref: "#/components/schemas/Skill"}}}}, "403": {$ref: "#/components/responses/Forbidden"}}
+      responses: {"200": {description: Updated skill, content: {application/json: {schema: {$ref: "#/components/schemas/Skill"}}}}, "403": {$ref: "#/components/responses/Forbidden"}, "401": {$ref: "#/components/responses/Unauthorized"}, "404": {$ref: "#/components/responses/NotFound"}, "500": {$ref: "#/components/responses/InternalServerError"}}
     delete:
       tags: [Skills]
       operationId: deleteGlobalSkill
-      security: [{bearerAuth: []}]
-      responses: {"204": {description: Deleted skill}, "403": {$ref: "#/components/responses/Forbidden"}}
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      responses: {"204": {description: Deleted skill}, "403": {$ref: "#/components/responses/Forbidden"}, "401": {$ref: "#/components/responses/Unauthorized"}, "404": {$ref: "#/components/responses/NotFound"}, "500": {$ref: "#/components/responses/InternalServerError"}}
   /api/organizations/{orgID}/skills:
     parameters: [{name: orgID, in: path, required: true, schema: {type: string}}]
     get:
       tags: [Skills]
       operationId: listOrganizationSkills
-      security: [{bearerAuth: []}]
-      responses: {"200": {description: Organization skills, content: {application/json: {schema: {$ref: "#/components/schemas/Skills"}}}}}
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      responses: {"200": {description: Organization skills, content: {application/json: {schema: {$ref: "#/components/schemas/Skills"}}}}, "401": {$ref: "#/components/responses/Unauthorized"}, "403": {$ref: "#/components/responses/Forbidden"}, "404": {$ref: "#/components/responses/NotFound"}, "500": {$ref: "#/components/responses/InternalServerError"}}
     post:
       tags: [Skills]
       operationId: createOrganizationSkill
-      security: [{bearerAuth: []}]
+      security: [{bearerAuth: []}, {cookieAuth: []}]
       requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/SkillInput"}}}}
-      responses: {"201": {description: Created skill, content: {application/json: {schema: {$ref: "#/components/schemas/Skill"}}}}, "403": {$ref: "#/components/responses/Forbidden"}}
+      responses: {"201": {description: Created skill, content: {application/json: {schema: {$ref: "#/components/schemas/Skill"}}}}, "403": {$ref: "#/components/responses/Forbidden"}, "401": {$ref: "#/components/responses/Unauthorized"}, "404": {$ref: "#/components/responses/NotFound"}, "500": {$ref: "#/components/responses/InternalServerError"}}
   /api/organizations/{orgID}/skills/{skillID}:
     parameters:
       - {name: orgID, in: path, required: true, schema: {type: string}}
@@ -671,19 +981,19 @@ paths:
     get:
       tags: [Skills]
       operationId: getOrganizationSkill
-      security: [{bearerAuth: []}]
-      responses: {"200": {description: Skill, content: {application/json: {schema: {$ref: "#/components/schemas/Skill"}}}}, "404": {$ref: "#/components/responses/NotFound"}}
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      responses: {"200": {description: Skill, content: {application/json: {schema: {$ref: "#/components/schemas/Skill"}}}}, "404": {$ref: "#/components/responses/NotFound"}, "401": {$ref: "#/components/responses/Unauthorized"}, "403": {$ref: "#/components/responses/Forbidden"}, "500": {$ref: "#/components/responses/InternalServerError"}}
     put:
       tags: [Skills]
       operationId: updateOrganizationSkill
-      security: [{bearerAuth: []}]
+      security: [{bearerAuth: []}, {cookieAuth: []}]
       requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/SkillInput"}}}}
-      responses: {"200": {description: Updated skill, content: {application/json: {schema: {$ref: "#/components/schemas/Skill"}}}}, "403": {$ref: "#/components/responses/Forbidden"}}
+      responses: {"200": {description: Updated skill, content: {application/json: {schema: {$ref: "#/components/schemas/Skill"}}}}, "403": {$ref: "#/components/responses/Forbidden"}, "401": {$ref: "#/components/responses/Unauthorized"}, "404": {$ref: "#/components/responses/NotFound"}, "500": {$ref: "#/components/responses/InternalServerError"}}
     delete:
       tags: [Skills]
       operationId: deleteOrganizationSkill
-      security: [{bearerAuth: []}]
-      responses: {"204": {description: Deleted skill}, "403": {$ref: "#/components/responses/Forbidden"}}
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      responses: {"204": {description: Deleted skill}, "403": {$ref: "#/components/responses/Forbidden"}, "401": {$ref: "#/components/responses/Unauthorized"}, "404": {$ref: "#/components/responses/NotFound"}, "500": {$ref: "#/components/responses/InternalServerError"}}
   /api/organizations/{orgID}/workspaces/{workspaceID}/skills:
     parameters:
       - {name: orgID, in: path, required: true, schema: {type: string}}
@@ -691,14 +1001,14 @@ paths:
     get:
       tags: [Skills]
       operationId: listWorkspaceSkills
-      security: [{bearerAuth: []}]
-      responses: {"200": {description: Skills visible in workspace, content: {application/json: {schema: {$ref: "#/components/schemas/Skills"}}}}}
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      responses: {"200": {description: Skills visible in workspace, content: {application/json: {schema: {$ref: "#/components/schemas/Skills"}}}}, "401": {$ref: "#/components/responses/Unauthorized"}, "403": {$ref: "#/components/responses/Forbidden"}, "404": {$ref: "#/components/responses/NotFound"}, "500": {$ref: "#/components/responses/InternalServerError"}}
     post:
       tags: [Skills]
       operationId: createWorkspaceSkill
-      security: [{bearerAuth: []}]
+      security: [{bearerAuth: []}, {cookieAuth: []}]
       requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/SkillInput"}}}}
-      responses: {"201": {description: Created skill, content: {application/json: {schema: {$ref: "#/components/schemas/Skill"}}}}, "403": {$ref: "#/components/responses/Forbidden"}}
+      responses: {"201": {description: Created skill, content: {application/json: {schema: {$ref: "#/components/schemas/Skill"}}}}, "403": {$ref: "#/components/responses/Forbidden"}, "401": {$ref: "#/components/responses/Unauthorized"}, "404": {$ref: "#/components/responses/NotFound"}, "500": {$ref: "#/components/responses/InternalServerError"}}
   /api/organizations/{orgID}/workspaces/{workspaceID}/skills/{skillID}:
     parameters:
       - {name: orgID, in: path, required: true, schema: {type: string}}
@@ -707,19 +1017,19 @@ paths:
     get:
       tags: [Skills]
       operationId: getWorkspaceSkill
-      security: [{bearerAuth: []}]
-      responses: {"200": {description: Skill, content: {application/json: {schema: {$ref: "#/components/schemas/Skill"}}}}, "404": {$ref: "#/components/responses/NotFound"}}
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      responses: {"200": {description: Skill, content: {application/json: {schema: {$ref: "#/components/schemas/Skill"}}}}, "404": {$ref: "#/components/responses/NotFound"}, "401": {$ref: "#/components/responses/Unauthorized"}, "403": {$ref: "#/components/responses/Forbidden"}, "500": {$ref: "#/components/responses/InternalServerError"}}
     put:
       tags: [Skills]
       operationId: updateWorkspaceSkill
-      security: [{bearerAuth: []}]
+      security: [{bearerAuth: []}, {cookieAuth: []}]
       requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/SkillInput"}}}}
-      responses: {"200": {description: Updated skill, content: {application/json: {schema: {$ref: "#/components/schemas/Skill"}}}}, "403": {$ref: "#/components/responses/Forbidden"}}
+      responses: {"200": {description: Updated skill, content: {application/json: {schema: {$ref: "#/components/schemas/Skill"}}}}, "403": {$ref: "#/components/responses/Forbidden"}, "401": {$ref: "#/components/responses/Unauthorized"}, "404": {$ref: "#/components/responses/NotFound"}, "500": {$ref: "#/components/responses/InternalServerError"}}
     delete:
       tags: [Skills]
       operationId: deleteWorkspaceSkill
-      security: [{bearerAuth: []}]
-      responses: {"204": {description: Deleted skill}, "403": {$ref: "#/components/responses/Forbidden"}}
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      responses: {"204": {description: Deleted skill}, "403": {$ref: "#/components/responses/Forbidden"}, "401": {$ref: "#/components/responses/Unauthorized"}, "404": {$ref: "#/components/responses/NotFound"}, "500": {$ref: "#/components/responses/InternalServerError"}}
 components:
   requestBodies:
     NamedResource:
@@ -753,6 +1063,7 @@ components:
               systemPrompt: {type: string, maxLength: 100000}
               mcpServerIds: {type: array, uniqueItems: true, items: {type: string}}
               skillIds: {type: array, uniqueItems: true, items: {type: string}}
+            additionalProperties: false
     MCPServerInput:
       required: true
       content:
@@ -776,17 +1087,24 @@ components:
         application/json:
           schema: {$ref: "#/components/schemas/TaskIntegrationInput"}
   responses:
-    Unauthorized: {description: Missing or invalid credentials}
-    Forbidden: {description: Insufficient role permissions}
-    NotFound: {description: Resource is absent or inaccessible}
-    BadRequest: {description: Request body or role is invalid}
-    Conflict: {description: Operation conflicts with membership invariants}
+    Unauthorized: {description: Missing or invalid credentials, content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}}
+    Forbidden: {description: Insufficient role permissions, content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}}
+    NotFound: {description: Resource is absent or inaccessible, content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}}
+    BadRequest: {description: Request body or role is invalid, content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}}
+    Conflict: {description: Operation conflicts with membership invariants, content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}}
+    InternalServerError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
   schemas:
     SkillInput:
       type: object
       required: [skillMD]
       properties:
         skillMD: {type: string, minLength: 1, maxLength: 100000, description: Complete SKILL.md including required frontmatter}
+      additionalProperties: false
     Skill:
       type: object
       required: [id, scope, skillMD, createdAt, updatedAt]
@@ -833,10 +1151,16 @@ components:
         prompt: {type: string, minLength: 1}
     CurrentUser:
       type: object
-      required: [user, organizations]
+      required:
+        - user
+        - organizations
+        - platformAdmin
       properties:
         user: {$ref: "#/components/schemas/User"}
         organizations: {type: array, items: {$ref: "#/components/schemas/Organization"}}
+        platformAdmin:
+          type: boolean
+          readOnly: true
     User:
       type: object
       required: [id, username, email]
@@ -870,11 +1194,12 @@ components:
       required: [title]
       properties:
         title: {type: string, minLength: 1, maxLength: 500}
-        description: {type: string}
+        description: {type: string, maxLength: 100000}
         status: {type: string, enum: [todo, in_progress, in_review, done]}
         assigneeAgentId: {type: string}
         labels: {type: array, items: {type: string}}
         componentIds: {type: array, items: {type: string}}
+      additionalProperties: false
     Task:
       type: object
       required: [id, workspaceId, title, description, sourceProvider, status, labels, components, createdAt, updatedAt]
@@ -885,7 +1210,9 @@ components:
         description: {type: string}
         sourceProvider: {type: string}
         sourceId: {type: string}
-        sourceUrl: {type: string, format: uri}
+        sourceUrl:
+          type: string
+          description: Source link, possibly empty for draft items.
         status: {type: string, enum: [todo, in_progress, in_review, done]}
         assigneeAgentId: {type: string}
         labels: {type: array, items: {type: string}}
@@ -900,7 +1227,7 @@ components:
         workspaceId: {type: string}
         taskId: {type: string}
         authorUserId: {type: string}
-        body: {type: string}
+        body: {type: string, maxLength: 20000}
         createdAt: {type: string, format: date-time}
     ComponentInput:
       type: object
@@ -910,6 +1237,7 @@ components:
         name: {type: string, minLength: 1, maxLength: 200}
         repositoryId: {type: string}
         description: {type: string, maxLength: 2000}
+      additionalProperties: false
     Component:
       type: object
       required: [id, workspaceId, identifier, name, repositoryId, description, createdAt, updatedAt]
@@ -971,6 +1299,7 @@ components:
         labels: {type: array, items: {type: string}}
         interval: {type: string, example: 5m}
         credential: {type: string, writeOnly: true}
+      additionalProperties: false
     TaskIntegration:
       type: object
       required: [id, workspaceId, provider, name, enabled, config, labels, interval, createdAt, updatedAt]
@@ -1000,8 +1329,26 @@ components:
           type: object
           description: JSON Schema that validates the provider-specific TaskIntegrationInput config.
           additionalProperties: true
+    Error:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: string
+    OperationStatus:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: orkest_session

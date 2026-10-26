@@ -57,7 +57,7 @@ func TestCreateTaskDefaultsAndNormalizes(t *testing.T) {
 }
 
 func TestDoneTaskCannotBeReopened(t *testing.T) {
-	repository := &taskRepositoryStub{task: Task{ID: "task", Status: "done"}}
+	repository := &taskRepositoryStub{task: Task{ID: "task", Title: "Task", SourceProvider: "manual", Status: "done"}}
 	service := NewService(repository, workspaceAccessStub{role: "member"})
 	_, err := service.Update(context.Background(), "user", "org", "workspace", "task", TaskInput{Title: "Task", Status: "todo"})
 	if !errors.Is(err, modelerrors.ErrConflict) {

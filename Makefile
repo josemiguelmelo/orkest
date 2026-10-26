@@ -61,16 +61,19 @@ $(GOLANGCI_LINT):
 lint-install: $(GOLANGCI_LINT)
 
 lint: $(GOLANGCI_LINT)
-	$(GOLANGCI_LINT) run ./...
+	$(GOLANGCI_LINT) run ./cmd/... ./internal/... ./db/...
 
 fmt: $(GOLANGCI_LINT)
-	$(GOLANGCI_LINT) fmt ./...
+	$(GOLANGCI_LINT) fmt ./cmd/... ./internal/... ./db/...
 
 sqlc:
 	go run github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION) generate
 
 check: lint
-	go test ./...
+	go test ./cmd/... ./internal/... ./db/...
+	npm --prefix web run check:generated
+	npm --prefix web run lint
+	npm --prefix web run test
 	npm --prefix web run typecheck
 	$(MAKE) build
 
