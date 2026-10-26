@@ -59,7 +59,7 @@ Orkest manages its own assignment, execution, and agent chat without updating so
 
 ### 3.4 Integration
 
-An integration connects a workspace to an external task system, imports tasks, and keeps source-managed task data synchronized. GitHub Projects v2 and Jira Server are the initial implementations. Each source is configured and enabled per workspace, selects source tasks using label filters, and is polled on a configurable interval. GitHub sources select a Projects v2 board URL; Jira sources select project keys on their configured server.
+An integration connects a workspace to an external task system, imports tasks, and keeps source-managed task data synchronized. GitHub Cloud Projects v2 and Jira Server are the initial implementations. Each source is configured and enabled per workspace, selects source tasks using label filters, and is polled on a configurable interval. GitHub Cloud sources select a Projects v2 board URL; Jira sources select project keys on their configured server.
 
 Integration implementations must conform to a common contract so another task system can be added through a new implementation class without changing the core task or orchestration logic. Provider configuration, credentials, and source-specific mapping may differ.
 
@@ -71,7 +71,7 @@ Proposed contract responsibilities:
 - Process source updates idempotently.
 - Reconcile missed updates and surface synchronization failures.
 
-MVP does not change source status. Imported title, description, labels, and source URL are read-only in Orkest and updated idempotently by polling. Closed source issues move their imported task to done. Items removed from the selected source or no longer matching its filters are deleted from Orkest. GitHub imports issue and draft issue items from the selected board; pull request items are excluded. Label filters require all configured labels on an item. Credentials are encrypted at rest and omitted from API responses and ordinary logs. Outbound comments and other source writes remain unspecified. Local task workflow status, source status, and run execution state are separate concepts.
+MVP does not change source status. Imported title, description, labels, and source URL are read-only in Orkest and updated idempotently by polling. Closed source issues move their imported task to done. Items removed from the selected source or no longer matching its filters are deleted from Orkest. GitHub Cloud imports issue and draft issue items from the selected board; pull request items are excluded. Label filters require all configured labels on an item. Credentials are encrypted at rest and omitted from API responses and ordinary logs. Outbound comments and other source writes remain unspecified. Local task workflow status, source status, and run execution state are separate concepts.
 
 ### 3.5 Tool
 

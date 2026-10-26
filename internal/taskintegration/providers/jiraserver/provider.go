@@ -1,4 +1,4 @@
-package jira
+package jiraserver
 
 import (
 	"context"
@@ -12,11 +12,19 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/taskintegration"
 )
 
-type Provider struct{ Client *http.Client }
+type JiraServerProvider struct{ Client *http.Client }
 
-func New() Provider           { return Provider{Client: &http.Client{Timeout: 20 * time.Second}} }
-func (Provider) Name() string { return taskintegration.ProviderJira }
-func (p Provider) Validate(ctx context.Context, c taskintegration.Config, token string) error {
+var _ taskintegration.SourceIntegrationProvider = JiraServerProvider{}
+
+func NewJiraServerProvider() JiraServerProvider {
+	return JiraServerProvider{Client: &http.Client{Timeout: 20 * time.Second}}
+}
+
+func (JiraServerProvider) Provider() taskintegration.TaskIntegrationSourceProvider {
+	return taskintegration.TaskIntegrationSourceProviderJiraServer
+}
+
+func (p JiraServerProvider) Validate(ctx context.Context, c taskintegration.TaskIntegrationConfig, token string) error {
 	if c.BaseURL == "" || token == "" {
 		return fmt.Errorf("jira URL and personal access token are required")
 	}
@@ -36,7 +44,7 @@ func (p Provider) Validate(ctx context.Context, c taskintegration.Config, token 
 	return nil
 }
 
-func (p Provider) Discover(ctx context.Context, c taskintegration.Config, token string, labels []string) ([]taskintegration.RemoteTask, error) {
+func (p JiraServerProvider) Discover(ctx context.Context, c taskintegration.TaskIntegrationConfig, token string, labels []string) ([]taskintegration.DiscoveredTask, error) {
 	projects := make([]string, 0, len(c.Projects))
 	for _, v := range c.Projects {
 		projects = append(projects, "'"+strings.ReplaceAll(v, "'", "\\'")+"'")
@@ -49,7 +57,7 @@ func (p Provider) Discover(ctx context.Context, c taskintegration.Config, token 
 		}
 		jql += " AND labels in (" + strings.Join(q, ",") + ")"
 	}
-	out := []taskintegration.RemoteTask{}
+	out := []taskintegration.DiscoveredTask{}
 	start := 0
 	for {
 		endpoint := c.BaseURL + "/rest/api/2/search"
@@ -96,7 +104,7 @@ func (p Provider) Discover(ctx context.Context, c taskintegration.Config, token 
 		}
 		for _, issue := range result.Issues {
 			description, _ := issue.Fields.Description.(string)
-			out = append(out, taskintegration.RemoteTask{ID: issue.Key, URL: c.BaseURL + "/browse/" + issue.Key, Title: issue.Fields.Summary, Description: description, Labels: issue.Fields.Labels, Closed: issue.Fields.Status.StatusCategory.Key == "done"})
+			out = append(out, taskintegration.DiscoveredTask{ID: issue.Key, URL: c.BaseURL + "/browse/" + issue.Key, Title: issue.Fields.Summary, Description: description, Labels: issue.Fields.Labels, Closed: issue.Fields.Status.StatusCategory.Key == "done"})
 		}
 		start += len(result.Issues)
 		if len(result.Issues) == 0 || start >= result.Total {
@@ -106,7 +114,7 @@ func (p Provider) Discover(ctx context.Context, c taskintegration.Config, token 
 	return out, nil
 }
 
-func (p Provider) client() *http.Client {
+func (p JiraServerProvider) client() *http.Client {
 	if p.Client != nil {
 		return p.Client
 	}

@@ -23,8 +23,8 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/postgres"
 	"github.com/josemiguelmelo/orkest/internal/task"
 	"github.com/josemiguelmelo/orkest/internal/taskintegration"
-	githubtaskintegration "github.com/josemiguelmelo/orkest/internal/taskintegration/providers/github"
-	jiraprovider "github.com/josemiguelmelo/orkest/internal/taskintegration/providers/jira"
+	githubcloud "github.com/josemiguelmelo/orkest/internal/taskintegration/providers/githubcloud"
+	jiraserver "github.com/josemiguelmelo/orkest/internal/taskintegration/providers/jiraserver"
 	"github.com/josemiguelmelo/orkest/internal/workspace"
 )
 
@@ -101,7 +101,7 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 			return err
 		}
 	}
-	integrations := taskintegration.NewService(postgres.NewTaskIntegrationPostgresRepository(database), secretBox, workspaces, organizations, postgres.NewImportedTaskPostgresRepository(database), githubtaskintegration.New(), jiraprovider.New())
+	integrations := taskintegration.NewTaskIntegrationService(postgres.NewPostgresTaskIntegrationRepository(database), secretBox, workspaces, organizations, postgres.NewPostgresImportedTaskRepository(database), githubcloud.NewGitHubCloudProvider(), jiraserver.NewJiraServerProvider())
 	runnerCtx, stopRunner := context.WithCancel(ctx)
 	var runnerWG sync.WaitGroup
 	runnerWG.Add(1)

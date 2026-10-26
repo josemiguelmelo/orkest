@@ -14,13 +14,13 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/workspace"
 )
 
-type Service struct {
-	repo          Repository
+type TaskIntegrationService struct {
+	repo          TaskIntegrationRepository
 	box           *SecretBox
-	providers     map[string]SourceIntegration
+	providers     map[TaskIntegrationSourceProvider]SourceIntegrationProvider
 	workspaces    WorkspaceAccess
 	organizations OrganizationAccess
-	importer      TaskImporter
+	importer      ImportedTaskRepository
 	mu            sync.Mutex
 	inFlight      map[string]bool
 }
@@ -32,72 +32,74 @@ type OrganizationAccess interface {
 	RoleForUser(context.Context, string, string) (string, error)
 }
 
-func NewService(repo Repository, box *SecretBox, workspaces WorkspaceAccess, organizations OrganizationAccess, importer TaskImporter, providers ...SourceIntegration) *Service {
-	s := &Service{repo: repo, box: box, workspaces: workspaces, organizations: organizations, importer: importer, providers: map[string]SourceIntegration{}, inFlight: map[string]bool{}}
+func NewTaskIntegrationService(repo TaskIntegrationRepository, box *SecretBox, workspaces WorkspaceAccess, organizations OrganizationAccess, importer ImportedTaskRepository, providers ...SourceIntegrationProvider) *TaskIntegrationService {
+	s := &TaskIntegrationService{repo: repo, box: box, workspaces: workspaces, organizations: organizations, importer: importer, providers: map[TaskIntegrationSourceProvider]SourceIntegrationProvider{}, inFlight: map[string]bool{}}
 	for _, p := range providers {
-		s.providers[p.Name()] = p
+		s.providers[p.Provider()] = p
 	}
 	return s
 }
 
-func (s *Service) List(ctx context.Context, userID, orgID, workspaceID string) ([]Source, error) {
+func (s *TaskIntegrationService) List(ctx context.Context, userID, orgID, workspaceID string) ([]TaskIntegration, error) {
 	if _, err := s.workspaces.GetWorkspace(ctx, userID, orgID, workspaceID); err != nil {
 		return nil, err
 	}
 	return s.repo.List(ctx, workspaceID)
 }
 
-func (s *Service) Create(ctx context.Context, userID, orgID, workspaceID string, in SourceInput) (Source, error) {
+func (s *TaskIntegrationService) Create(ctx context.Context, userID, orgID, workspaceID string, in TaskIntegrationInput) (TaskIntegration, error) {
 	if err := s.authorize(ctx, userID, orgID, workspaceID); err != nil {
-		return Source{}, err
+		return TaskIntegration{}, err
 	}
 	if s.box == nil {
-		return Source{}, ErrEncryptionKeyUnavailable
+		return TaskIntegration{}, ErrEncryptionKeyUnavailable
 	}
-	provider, ok := s.providers[strings.ToLower(strings.TrimSpace(in.Provider))]
+	in.Provider = TaskIntegrationSourceProvider(strings.ToLower(strings.TrimSpace(string(in.Provider))))
+	provider, ok := s.providers[in.Provider]
 	if !ok {
-		return Source{}, &ConfigurationError{Code: "integration_provider_unsupported"}
+		return TaskIntegration{}, &ConfigurationError{Code: "integration_provider_unsupported"}
 	}
-	in.Provider = provider.Name()
+	in.Provider = provider.Provider()
 	if err := normalize(&in); err != nil {
-		return Source{}, err
+		return TaskIntegration{}, err
 	}
 	if strings.TrimSpace(in.Credential) == "" {
-		return Source{}, &ConfigurationError{Code: "integration_credential_required"}
+		return TaskIntegration{}, &ConfigurationError{Code: "integration_credential_required"}
 	}
 	if err := provider.Validate(ctx, in.Config, in.Credential); err != nil {
-		return Source{}, validationError(err)
+		return TaskIntegration{}, validationError(err)
 	}
 	secret, err := s.box.Seal(in.Credential)
 	if err != nil {
-		return Source{}, fmt.Errorf("encrypt integration credential: %w", err)
+		return TaskIntegration{}, fmt.Errorf("encrypt integration credential: %w", err)
 	}
 	id, err := ids.NewUUID()
 	if err != nil {
-		return Source{}, err
+		return TaskIntegration{}, err
 	}
-	return s.repo.Create(ctx, toSource(id, workspaceID, in), string(secret))
+	return s.repo.Create(ctx, toTaskIntegration(id, workspaceID, in), string(secret))
 }
 
-func (s *Service) Update(ctx context.Context, userID, orgID, workspaceID, sourceID string, in SourceInput) (Source, error) {
+func (s *TaskIntegrationService) Update(ctx context.Context, userID, orgID, workspaceID, sourceID string, in TaskIntegrationInput) (TaskIntegration, error) {
 	if err := s.authorize(ctx, userID, orgID, workspaceID); err != nil {
-		return Source{}, err
+		return TaskIntegration{}, err
 	}
 	if s.box == nil {
-		return Source{}, ErrEncryptionKeyUnavailable
+		return TaskIntegration{}, ErrEncryptionKeyUnavailable
 	}
 	old, oldSecret, err := s.repo.Get(ctx, workspaceID, sourceID)
 	if err != nil {
-		return Source{}, err
+		return TaskIntegration{}, err
 	}
 	if in.Provider == "" {
 		in.Provider = old.Provider
 	}
-	provider, ok := s.providers[strings.ToLower(strings.TrimSpace(in.Provider))]
+	in.Provider = TaskIntegrationSourceProvider(strings.ToLower(strings.TrimSpace(string(in.Provider))))
+	provider, ok := s.providers[in.Provider]
 	if !ok {
-		return Source{}, &ConfigurationError{Code: "integration_provider_unsupported"}
+		return TaskIntegration{}, &ConfigurationError{Code: "integration_provider_unsupported"}
 	}
-	in.Provider = provider.Name()
+	in.Provider = provider.Provider()
 	if in.Config.BaseURL == "" && in.Config.ProjectURL == "" && len(in.Config.Projects) == 0 {
 		in.Config = old.Config
 	}
@@ -113,34 +115,35 @@ func (s *Service) Update(ctx context.Context, userID, orgID, workspaceID, source
 	if in.Credential == "" {
 		in.Credential, err = s.box.Open([]byte(oldSecret))
 		if err != nil {
-			return Source{}, err
+			return TaskIntegration{}, err
 		}
 	}
 	if err = normalize(&in); err != nil {
-		return Source{}, err
+		return TaskIntegration{}, err
 	}
 	if err = provider.Validate(ctx, in.Config, in.Credential); err != nil {
-		return Source{}, validationError(err)
+		return TaskIntegration{}, validationError(err)
 	}
 	secret, err := s.box.Seal(in.Credential)
 	if err != nil {
-		return Source{}, err
+		return TaskIntegration{}, err
 	}
-	return s.repo.Update(ctx, workspaceID, sourceID, toSource(sourceID, workspaceID, in), string(secret))
+	return s.repo.Update(ctx, workspaceID, sourceID, toTaskIntegration(sourceID, workspaceID, in), string(secret))
 }
 
-func (s *Service) Delete(ctx context.Context, userID, orgID, workspaceID, sourceID string) error {
+func (s *TaskIntegrationService) Delete(ctx context.Context, userID, orgID, workspaceID, sourceID string) error {
 	if err := s.authorize(ctx, userID, orgID, workspaceID); err != nil {
 		return err
 	}
 	return s.repo.Delete(ctx, workspaceID, sourceID)
 }
 
-func (s *Service) Validate(ctx context.Context, userID, orgID, workspaceID string, in SourceInput) error {
+func (s *TaskIntegrationService) Validate(ctx context.Context, userID, orgID, workspaceID string, in TaskIntegrationInput) error {
 	if err := s.authorize(ctx, userID, orgID, workspaceID); err != nil {
 		return err
 	}
-	p, ok := s.providers[strings.ToLower(strings.TrimSpace(in.Provider))]
+	in.Provider = TaskIntegrationSourceProvider(strings.ToLower(strings.TrimSpace(string(in.Provider))))
+	p, ok := s.providers[in.Provider]
 	if !ok {
 		return &ConfigurationError{Code: "integration_provider_unsupported"}
 	}
@@ -161,10 +164,14 @@ func validationError(err error) error {
 	if errors.As(err, &validationErr) {
 		return err
 	}
+	var configurationErr *ConfigurationError
+	if errors.As(err, &configurationErr) {
+		return err
+	}
 	return &ValidationError{Code: "integration_validation_failed", Cause: err}
 }
 
-func (s *Service) SyncNow(ctx context.Context, userID, orgID, workspaceID, sourceID string) error {
+func (s *TaskIntegrationService) SyncNow(ctx context.Context, userID, orgID, workspaceID, sourceID string) error {
 	if err := s.authorize(ctx, userID, orgID, workspaceID); err != nil {
 		return err
 	}
@@ -175,7 +182,7 @@ func (s *Service) SyncNow(ctx context.Context, userID, orgID, workspaceID, sourc
 	return s.sync(ctx, source, encrypted)
 }
 
-func (s *Service) Run(ctx context.Context) {
+func (s *TaskIntegrationService) Run(ctx context.Context) {
 	ticker := time.NewTicker(15 * time.Second)
 	defer ticker.Stop()
 	for {
@@ -188,7 +195,7 @@ func (s *Service) Run(ctx context.Context) {
 	}
 }
 
-func (s *Service) syncDue(ctx context.Context) error {
+func (s *TaskIntegrationService) syncDue(ctx context.Context) error {
 	sources, err := s.repo.Due(ctx, time.Now().UTC())
 	if err != nil {
 		return err
@@ -206,7 +213,7 @@ func (s *Service) syncDue(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
-func (s *Service) sync(ctx context.Context, source Source, encrypted string) error {
+func (s *TaskIntegrationService) sync(ctx context.Context, source TaskIntegration, encrypted string) error {
 	if !source.Enabled {
 		return nil
 	}
@@ -233,7 +240,7 @@ func (s *Service) sync(ctx context.Context, source Source, encrypted string) err
 	if err == nil {
 		seen := make([]string, 0, len(items))
 		for _, item := range items {
-			if e := s.importer.UpsertImportedTask(ctx, source.WorkspaceID, source.ID, source.Provider, item); e != nil {
+			if e := s.importer.UpsertImportedTask(ctx, source.WorkspaceID, source.ID, string(source.Provider), item); e != nil {
 				err = e
 				break
 			}
@@ -253,12 +260,12 @@ func (s *Service) sync(ctx context.Context, source Source, encrypted string) err
 	return err
 }
 
-func (s *Service) recordSyncError(ctx context.Context, sourceID string, cause error) error {
+func (s *TaskIntegrationService) recordSyncError(ctx context.Context, sourceID string, cause error) error {
 	_ = s.repo.RecordSync(ctx, sourceID, time.Now().UTC(), "synchronization failed")
 	return cause
 }
 
-func (s *Service) authorize(ctx context.Context, userID, orgID, workspaceID string) error {
+func (s *TaskIntegrationService) authorize(ctx context.Context, userID, orgID, workspaceID string) error {
 	w, err := s.workspaces.GetWorkspace(ctx, userID, orgID, workspaceID)
 	if err != nil {
 		return err
@@ -276,7 +283,7 @@ func (s *Service) authorize(ctx context.Context, userID, orgID, workspaceID stri
 	return modelerrors.ErrForbidden
 }
 
-func normalize(in *SourceInput) error {
+func normalize(in *TaskIntegrationInput) error {
 	in.Name = strings.TrimSpace(in.Name)
 	in.Labels = normalizeValues(in.Labels)
 	if in.Name == "" || len(in.Name) > 200 {
@@ -299,18 +306,15 @@ func normalize(in *SourceInput) error {
 		}
 	}
 	in.Config.Projects = normalizeValues(in.Config.Projects)
-	switch strings.ToLower(in.Provider) {
-	case ProviderGitHub:
+	switch in.Provider {
+	case TaskIntegrationSourceProviderGitHubCloud:
 		if in.Config.ProjectURL == "" {
 			return &ConfigurationError{Code: "github_project_url_required"}
-		}
-		if _, err := ParseGitHubProjectURL(in.Config.ProjectURL); err != nil {
-			return &ConfigurationError{Code: "github_project_url_invalid"}
 		}
 		if in.Config.BaseURL != "" || len(in.Config.Projects) != 0 {
 			return &ConfigurationError{Code: "github_config_invalid"}
 		}
-	case ProviderJira:
+	case TaskIntegrationSourceProviderJiraServer:
 		if in.Config.BaseURL == "" {
 			return &ConfigurationError{Code: "jira_base_url_required"}
 		}
@@ -326,8 +330,8 @@ func normalize(in *SourceInput) error {
 	return nil
 }
 
-func toSource(id, workspaceID string, in SourceInput) Source {
-	return Source{ID: id, WorkspaceID: workspaceID, Provider: in.Provider, Name: in.Name, Enabled: in.Enabled, Config: in.Config, Labels: in.Labels, Interval: in.Interval}
+func toTaskIntegration(id, workspaceID string, in TaskIntegrationInput) TaskIntegration {
+	return TaskIntegration{ID: id, WorkspaceID: workspaceID, Provider: in.Provider, Name: in.Name, Enabled: in.Enabled, Config: in.Config, Labels: in.Labels, Interval: in.Interval}
 }
 
 func normalizeValues(values []string) []string {

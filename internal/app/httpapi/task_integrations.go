@@ -7,7 +7,9 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/taskintegration"
 )
 
-type taskIntegrationAPI struct{ service *taskintegration.Service }
+type taskIntegrationAPI struct {
+	service *taskintegration.TaskIntegrationService
+}
 
 func (a taskIntegrationAPI) routes(r chi.Router) {
 	r.Route("/organizations/{orgID}/workspaces/{workspaceID}/task-integrations", func(r chi.Router) {
@@ -28,7 +30,7 @@ func (a taskIntegrationAPI) list(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a taskIntegrationAPI) create(w http.ResponseWriter, r *http.Request) {
-	var body taskintegration.SourceInput
+	var body taskintegration.TaskIntegrationInput
 	if !decodeBody(w, r, &body) {
 		return
 	}
@@ -37,7 +39,7 @@ func (a taskIntegrationAPI) create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a taskIntegrationAPI) update(w http.ResponseWriter, r *http.Request) {
-	var body taskintegration.SourceInput
+	var body taskintegration.TaskIntegrationInput
 	if !decodeBody(w, r, &body) {
 		return
 	}
@@ -50,7 +52,7 @@ func (a taskIntegrationAPI) delete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a taskIntegrationAPI) validate(w http.ResponseWriter, r *http.Request) {
-	var body taskintegration.SourceInput
+	var body taskintegration.TaskIntegrationInput
 	if !decodeBody(w, r, &body) {
 		return
 	}

@@ -764,7 +764,7 @@ components:
       type: object
       required: [provider, name, config]
       properties:
-        provider: {type: string, enum: [github, jira]}
+        provider: {type: string, enum: [github_cloud, jira_server]}
         name: {type: string, minLength: 1, maxLength: 200}
         enabled: {type: boolean}
         config: {$ref: "#/components/schemas/TaskIntegrationConfig"}
@@ -777,7 +777,7 @@ components:
       properties:
         id: {type: string}
         workspaceId: {type: string}
-        provider: {type: string, enum: [github, jira]}
+        provider: {type: string, enum: [github_cloud, jira_server]}
         name: {type: string}
         enabled: {type: boolean}
         config: {$ref: "#/components/schemas/TaskIntegrationConfig"}

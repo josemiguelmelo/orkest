@@ -1,4 +1,4 @@
-package github
+package githubcloud
 
 import (
 	"bytes"
@@ -15,10 +15,17 @@ import (
 
 const projectItemsQuery = `query($owner:String!,$number:Int!,$cursor:String){ OWNER_LOOKUP { projectV2(number:$number) { id items(first:100,after:$cursor) { nodes { id content { __typename ... on Issue { id number state repository { nameWithOwner } url title body labels(first:100) { nodes { name } } } ... on PullRequest { id url title body labels(first:100) { nodes { name } } } ... on DraftIssue { id title body } } } pageInfo { hasNextPage endCursor } } } } }`
 
-type Provider struct{ Client *http.Client }
+type GitHubCloudProvider struct{ Client *http.Client }
 
-func New() Provider           { return Provider{Client: &http.Client{Timeout: 20 * time.Second}} }
-func (Provider) Name() string { return taskintegration.ProviderGitHub }
+var _ taskintegration.SourceIntegrationProvider = GitHubCloudProvider{}
+
+func NewGitHubCloudProvider() GitHubCloudProvider {
+	return GitHubCloudProvider{Client: &http.Client{Timeout: 20 * time.Second}}
+}
+
+func (GitHubCloudProvider) Provider() taskintegration.TaskIntegrationSourceProvider {
+	return taskintegration.TaskIntegrationSourceProviderGitHubCloud
+}
 
 type projectPage struct {
 	ID    string `json:"id"`
@@ -65,13 +72,13 @@ type graphQLResponse struct {
 	} `json:"errors"`
 }
 
-func (p Provider) Validate(ctx context.Context, config taskintegration.Config, token string) error {
+func (p GitHubCloudProvider) Validate(ctx context.Context, config taskintegration.TaskIntegrationConfig, token string) error {
 	if strings.TrimSpace(token) == "" {
 		return fmt.Errorf("GitHub token is required")
 	}
-	target, err := taskintegration.ParseGitHubProjectURL(config.ProjectURL)
+	target, err := ParseProjectURL(config.ProjectURL)
 	if err != nil {
-		return err
+		return &taskintegration.ConfigurationError{Code: "github_project_url_invalid"}
 	}
 	page, err := p.fetchPage(ctx, target, token, "")
 	if err != nil {
@@ -83,12 +90,12 @@ func (p Provider) Validate(ctx context.Context, config taskintegration.Config, t
 	return nil
 }
 
-func (p Provider) Discover(ctx context.Context, config taskintegration.Config, token string, filters []string) ([]taskintegration.RemoteTask, error) {
-	target, err := taskintegration.ParseGitHubProjectURL(config.ProjectURL)
+func (p GitHubCloudProvider) Discover(ctx context.Context, config taskintegration.TaskIntegrationConfig, token string, filters []string) ([]taskintegration.DiscoveredTask, error) {
+	target, err := ParseProjectURL(config.ProjectURL)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]taskintegration.RemoteTask, 0)
+	out := make([]taskintegration.DiscoveredTask, 0)
 	cursor := ""
 	for {
 		page, fetchErr := p.fetchPage(ctx, target, token, cursor)
@@ -115,7 +122,7 @@ func (p Provider) Discover(ctx context.Context, config taskintegration.Config, t
 				id = fmt.Sprintf("%s#%d", content.Repository.NameWithOwner, content.Number)
 				sourceURL = content.URL
 			}
-			out = append(out, taskintegration.RemoteTask{ID: id, URL: sourceURL, Title: content.Title, Description: content.Body, Labels: labels, Closed: content.State == "CLOSED"})
+			out = append(out, taskintegration.DiscoveredTask{ID: id, URL: sourceURL, Title: content.Title, Description: content.Body, Labels: labels, Closed: content.State == "CLOSED"})
 		}
 		if !page.Items.PageInfo.HasNextPage {
 			break
@@ -125,7 +132,7 @@ func (p Provider) Discover(ctx context.Context, config taskintegration.Config, t
 	return out, nil
 }
 
-func (p Provider) fetchPage(ctx context.Context, target taskintegration.GitHubProjectTarget, token, cursor string) (*projectPage, error) {
+func (p GitHubCloudProvider) fetchPage(ctx context.Context, target ProjectTarget, token, cursor string) (*projectPage, error) {
 	query := strings.Replace(projectItemsQuery, "OWNER_LOOKUP", "organization(login:$owner)", 1)
 	if target.OwnerType == "user" {
 		query = strings.Replace(projectItemsQuery, "OWNER_LOOKUP", "user(login:$owner)", 1)
@@ -211,7 +218,7 @@ func nullableCursor(cursor string) any {
 	return cursor
 }
 
-func (p Provider) client() *http.Client {
+func (p GitHubCloudProvider) client() *http.Client {
 	if p.Client != nil {
 		return p.Client
 	}
