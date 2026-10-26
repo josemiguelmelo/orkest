@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -25,7 +26,7 @@ func (r *PostgresTaskIntegrationRepository) Create(ctx context.Context, s taskin
 	if err != nil {
 		return taskintegration.TaskIntegration{}, err
 	}
-	row, err := r.queries.CreateTaskIntegration(ctx, sqlc.CreateTaskIntegrationParams{ID: s.ID, WorkspaceID: s.WorkspaceID, Provider: string(s.Provider), Name: s.Name, Enabled: s.Enabled, BaseUrl: s.Config.BaseURL, ProjectUrl: s.Config.ProjectURL, Projects: s.Config.Projects, Labels: s.Labels, IntervalSeconds: seconds, EncryptedCredential: secret})
+	row, err := r.queries.CreateTaskIntegration(ctx, sqlc.CreateTaskIntegrationParams{ID: s.ID, WorkspaceID: s.WorkspaceID, Provider: string(s.Provider), Name: s.Name, Enabled: s.Enabled, ProviderConfig: s.Config, Labels: s.Labels, IntervalSeconds: seconds, EncryptedCredential: secret})
 	return taskIntegrationFromRow(row), err
 }
 
@@ -34,7 +35,7 @@ func (r *PostgresTaskIntegrationRepository) Update(ctx context.Context, workspac
 	if err != nil {
 		return taskintegration.TaskIntegration{}, err
 	}
-	row, err := r.queries.UpdateTaskIntegration(ctx, sqlc.UpdateTaskIntegrationParams{WorkspaceID: workspaceID, ID: id, Provider: string(s.Provider), Name: s.Name, Enabled: s.Enabled, BaseUrl: s.Config.BaseURL, ProjectUrl: s.Config.ProjectURL, Projects: s.Config.Projects, Labels: s.Labels, IntervalSeconds: seconds, EncryptedCredential: secret})
+	row, err := r.queries.UpdateTaskIntegration(ctx, sqlc.UpdateTaskIntegrationParams{WorkspaceID: workspaceID, ID: id, Provider: string(s.Provider), Name: s.Name, Enabled: s.Enabled, ProviderConfig: s.Config, Labels: s.Labels, IntervalSeconds: seconds, EncryptedCredential: secret})
 	if err != nil {
 		return taskintegration.TaskIntegration{}, mapError(err, errors.ErrNotFound, errors.ErrConflict)
 	}
@@ -113,7 +114,7 @@ func (r *PostgresImportedTaskRepository) RemoveMissingImportedTasks(ctx context.
 
 func taskIntegrationFromRow(row sqlc.TaskIntegration) taskintegration.TaskIntegration {
 	interval := time.Duration(row.IntervalSeconds) * time.Second
-	s := taskintegration.TaskIntegration{ID: row.ID, WorkspaceID: row.WorkspaceID, Provider: taskintegration.TaskIntegrationSourceProvider(row.Provider), Name: row.Name, Enabled: row.Enabled, Config: taskintegration.TaskIntegrationConfig{BaseURL: row.BaseUrl, ProjectURL: row.ProjectUrl, Projects: row.Projects}, Labels: row.Labels, Interval: interval.String(), LastError: row.LastError, CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time}
+	s := taskintegration.TaskIntegration{ID: row.ID, WorkspaceID: row.WorkspaceID, Provider: taskintegration.TaskIntegrationSourceProvider(row.Provider), Name: row.Name, Enabled: row.Enabled, Config: json.RawMessage(row.ProviderConfig), Labels: row.Labels, Interval: interval.String(), LastError: row.LastError, CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time}
 	if row.LastSyncedAt.Valid {
 		lastSynced := row.LastSyncedAt.Time
 		s.LastSynced = &lastSynced

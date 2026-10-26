@@ -1,10 +1,10 @@
 -- name: CreateTaskIntegration :one
-INSERT INTO task_integrations (id, workspace_id, provider, name, enabled, base_url, project_url, projects, labels, interval_seconds, encrypted_credential)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+INSERT INTO task_integrations (id, workspace_id, provider, name, enabled, provider_config, labels, interval_seconds, encrypted_credential)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
 RETURNING *;
 
 -- name: UpdateTaskIntegration :one
-UPDATE task_integrations SET provider=$3, name=$4, enabled=$5, base_url=$6, project_url=$7, projects=$8, labels=$9, interval_seconds=$10, encrypted_credential=$11, updated_at=now()
+UPDATE task_integrations SET provider=$3, name=$4, enabled=$5, provider_config=$6, labels=$7, interval_seconds=$8, encrypted_credential=$9, updated_at=now()
 WHERE workspace_id=$1 AND id=$2 RETURNING *;
 
 -- name: GetTaskIntegration :one

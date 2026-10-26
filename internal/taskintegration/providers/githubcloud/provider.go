@@ -15,6 +15,12 @@ import (
 
 const projectItemsQuery = `query($owner:String!,$number:Int!,$cursor:String){ OWNER_LOOKUP { projectV2(number:$number) { id items(first:100,after:$cursor) { nodes { id content { __typename ... on Issue { id number state repository { nameWithOwner } url title body labels(first:100) { nodes { name } } } ... on PullRequest { id url title body labels(first:100) { nodes { name } } } ... on DraftIssue { id title body } } } pageInfo { hasNextPage endCursor } } } } }`
 
+const ProviderID taskintegration.TaskIntegrationSourceProvider = "github_cloud"
+
+type GitHubCloudConfig struct {
+	ProjectURL string `json:"projectUrl" jsonschema:"format=uri,pattern=^https://github\\.com/(orgs|users)/[^/]+/projects/[1-9][0-9]*(/views/[1-9][0-9]*)?$" jsonschema_description:"GitHub Cloud Projects v2 board URL."`
+}
+
 type GitHubCloudProvider struct{ Client *http.Client }
 
 var _ taskintegration.SourceIntegrationProvider = GitHubCloudProvider{}
@@ -24,11 +30,22 @@ func NewGitHubCloudProvider() GitHubCloudProvider {
 }
 
 func (GitHubCloudProvider) Provider() taskintegration.TaskIntegrationSourceProvider {
-	return taskintegration.TaskIntegrationSourceProviderGitHubCloud
+	return ProviderID
 }
 
-func (GitHubCloudProvider) ParseProjectURL(raw string) error {
-	if _, err := parseProjectURL(raw); err != nil {
+func (GitHubCloudProvider) ConfigSchema() json.RawMessage {
+	return taskintegration.GenerateProviderConfigSchema(GitHubCloudConfig{}, "GitHub Cloud configuration")
+}
+
+func (GitHubCloudProvider) ValidateConfig(raw json.RawMessage) error {
+	config, err := taskintegration.DecodeProviderConfig[GitHubCloudConfig](raw)
+	if err != nil {
+		return &taskintegration.ConfigurationError{Code: "github_config_invalid"}
+	}
+	if strings.TrimSpace(config.ProjectURL) == "" {
+		return &taskintegration.ConfigurationError{Code: "github_project_url_required"}
+	}
+	if _, err := parseProjectURL(config.ProjectURL); err != nil {
 		return &taskintegration.ConfigurationError{Code: "github_project_url_invalid"}
 	}
 	return nil
@@ -79,13 +96,18 @@ type graphQLResponse struct {
 	} `json:"errors"`
 }
 
-func (p GitHubCloudProvider) Validate(ctx context.Context, config taskintegration.TaskIntegrationConfig, token string) error {
+func (p GitHubCloudProvider) Validate(ctx context.Context, raw json.RawMessage, token string) error {
 	if strings.TrimSpace(token) == "" {
 		return fmt.Errorf("GitHub token is required")
 	}
-	if err := p.ParseProjectURL(config.ProjectURL); err != nil {
+	if err := p.ValidateConfig(raw); err != nil {
 		return err
 	}
+	config, err := taskintegration.DecodeProviderConfig[GitHubCloudConfig](raw)
+	if err != nil {
+		return err
+	}
+	config.ProjectURL = strings.TrimSpace(config.ProjectURL)
 	target, err := parseProjectURL(config.ProjectURL)
 	if err != nil {
 		return err
@@ -100,7 +122,15 @@ func (p GitHubCloudProvider) Validate(ctx context.Context, config taskintegratio
 	return nil
 }
 
-func (p GitHubCloudProvider) Discover(ctx context.Context, config taskintegration.TaskIntegrationConfig, token string, filters []string) ([]taskintegration.DiscoveredTask, error) {
+func (p GitHubCloudProvider) Discover(ctx context.Context, raw json.RawMessage, token string, filters []string) ([]taskintegration.DiscoveredTask, error) {
+	if err := p.ValidateConfig(raw); err != nil {
+		return nil, err
+	}
+	config, err := taskintegration.DecodeProviderConfig[GitHubCloudConfig](raw)
+	if err != nil {
+		return nil, err
+	}
+	config.ProjectURL = strings.TrimSpace(config.ProjectURL)
 	target, err := parseProjectURL(config.ProjectURL)
 	if err != nil {
 		return nil, err

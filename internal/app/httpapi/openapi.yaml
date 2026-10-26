@@ -364,6 +364,14 @@ paths:
         "403": {$ref: "#/components/responses/Forbidden"}
         "502": {description: Provider connectivity or credential validation failed}
         "503": {description: Integration credential encryption is not configured}
+  /api/task-integration-providers:
+    get:
+      tags: [TaskIntegrations]
+      operationId: listTaskIntegrationProviders
+      security: [{bearerAuth: []}]
+      responses:
+        "200": {description: Available providers and their config schemas, content: {application/json: {schema: {type: array, items: {$ref: "#/components/schemas/TaskIntegrationProvider"}}}}}
+        "401": {$ref: "#/components/responses/Unauthorized"}
   /api/organizations/{orgID}/workspaces/{workspaceID}/task-integrations/validate:
     parameters:
       - {name: orgID, in: path, required: true, schema: {type: string}}
@@ -764,7 +772,7 @@ components:
       type: object
       required: [provider, name, config]
       properties:
-        provider: {type: string, enum: [github_cloud, jira_server]}
+        provider: {type: string}
         name: {type: string, minLength: 1, maxLength: 200}
         enabled: {type: boolean}
         config: {$ref: "#/components/schemas/TaskIntegrationConfig"}
@@ -777,7 +785,7 @@ components:
       properties:
         id: {type: string}
         workspaceId: {type: string}
-        provider: {type: string, enum: [github_cloud, jira_server]}
+        provider: {type: string}
         name: {type: string}
         enabled: {type: boolean}
         config: {$ref: "#/components/schemas/TaskIntegrationConfig"}
@@ -789,10 +797,17 @@ components:
         updatedAt: {type: string, format: date-time}
     TaskIntegrationConfig:
       type: object
+      description: Provider-defined config. Retrieve allowed fields and constraints from GET /api/task-integration-providers.
+      additionalProperties: true
+    TaskIntegrationProvider:
+      type: object
+      required: [provider, configSchema]
       properties:
-        baseUrl: {type: string, format: uri}
-        projectUrl: {type: string, format: uri, description: GitHub Projects v2 board URL such as https://github.com/orgs/acme/projects/12 or https://github.com/users/acme/projects/12}
-        projects: {type: array, items: {type: string}}
+        provider: {type: string}
+        configSchema:
+          type: object
+          description: JSON Schema that validates the provider-specific TaskIntegrationInput config.
+          additionalProperties: true
   securitySchemes:
     bearerAuth:
       type: http

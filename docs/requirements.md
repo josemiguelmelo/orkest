@@ -61,7 +61,7 @@ Orkest manages its own assignment, execution, and agent chat without updating so
 
 An integration connects a workspace to an external task system, imports tasks, and keeps source-managed task data synchronized. GitHub Cloud Projects v2 and Jira Server are the initial implementations. Each source is configured and enabled per workspace, selects source tasks using label filters, and is polled on a configurable interval. GitHub Cloud sources select a Projects v2 board URL; Jira sources select project keys on their configured server.
 
-Integration implementations must conform to a common contract so another task system can be added through a new implementation class without changing the core task or orchestration logic. Provider configuration, credentials, and source-specific mapping may differ.
+Integration implementations must conform to a common contract so another task system can be added through a new implementation class without changing the core task or orchestration logic. Each provider owns a typed configuration, strict validation, and a machine-readable config schema. The authenticated provider catalog exposes these schemas to setup clients. Provider configuration, credentials, and source-specific mapping may differ.
 
 Proposed contract responsibilities:
 

@@ -1,15 +1,14 @@
 package taskintegration
 
 import (
+	"encoding/json"
 	"time"
 )
 
 type TaskIntegrationSourceProvider string
 
 const (
-	TaskIntegrationSourceProviderGitHubCloud TaskIntegrationSourceProvider = "github_cloud"
-	TaskIntegrationSourceProviderJiraServer  TaskIntegrationSourceProvider = "jira_server"
-	DefaultInterval                                                        = 5 * time.Minute
+	DefaultInterval = 5 * time.Minute
 )
 
 type TaskIntegration struct {
@@ -18,7 +17,7 @@ type TaskIntegration struct {
 	Provider    TaskIntegrationSourceProvider `json:"provider"`
 	Name        string                        `json:"name"`
 	Enabled     bool                          `json:"enabled"`
-	Config      TaskIntegrationConfig         `json:"config"`
+	Config      json.RawMessage               `json:"config"`
 	Labels      []string                      `json:"labels"`
 	Interval    string                        `json:"interval"`
 	LastSynced  *time.Time                    `json:"lastSynced,omitempty"`
@@ -27,22 +26,19 @@ type TaskIntegration struct {
 	UpdatedAt   time.Time                     `json:"updatedAt"`
 }
 
-// TaskIntegrationConfig contains provider-specific non-secret settings. Credentials are always
-// supplied separately and are never serialized from TaskIntegration.
-type TaskIntegrationConfig struct {
-	BaseURL    string   `json:"baseUrl,omitempty"`
-	ProjectURL string   `json:"projectUrl,omitempty"`
-	Projects   []string `json:"projects,omitempty"`
-}
-
 type TaskIntegrationInput struct {
 	Provider   TaskIntegrationSourceProvider `json:"provider"`
 	Name       string                        `json:"name"`
 	Enabled    bool                          `json:"enabled"`
-	Config     TaskIntegrationConfig         `json:"config"`
+	Config     json.RawMessage               `json:"config"`
 	Labels     []string                      `json:"labels"`
 	Interval   string                        `json:"interval,omitempty"`
 	Credential string                        `json:"credential,omitempty"`
+}
+
+type SourceIntegrationProviderInfo struct {
+	Provider     TaskIntegrationSourceProvider `json:"provider"`
+	ConfigSchema json.RawMessage               `json:"configSchema"`
 }
 
 type DiscoveredTask struct {

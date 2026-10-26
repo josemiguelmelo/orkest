@@ -19,10 +19,10 @@ func parseProjectURL(raw string) (ProjectTarget, error) {
 		return ProjectTarget{}, fmt.Errorf("invalid GitHub Cloud project URL")
 	}
 	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
-	if len(parts) < 4 || len(parts) > 6 || (parts[0] != "orgs" && parts[0] != "users") || parts[1] == "" || parts[2] != "projects" {
+	if (len(parts) != 4 && len(parts) != 6) || (parts[0] != "orgs" && parts[0] != "users") || parts[1] == "" || parts[2] != "projects" {
 		return ProjectTarget{}, fmt.Errorf("invalid GitHub Cloud project URL")
 	}
-	if len(parts) == 6 && parts[4] != "views" {
+	if len(parts) == 6 && (parts[4] != "views" || parts[5] == "") {
 		return ProjectTarget{}, fmt.Errorf("invalid GitHub Cloud project URL")
 	}
 	number, err := strconv.Atoi(parts[3])

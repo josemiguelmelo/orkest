@@ -2,9 +2,10 @@ package taskintegration
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
-	"net/url"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -47,6 +48,18 @@ func (s *TaskIntegrationService) List(ctx context.Context, userID, orgID, worksp
 	return s.repo.List(ctx, workspaceID)
 }
 
+func (s *TaskIntegrationService) Providers() []SourceIntegrationProviderInfo {
+	providers := make([]SourceIntegrationProviderInfo, 0, len(s.providers))
+	for id, provider := range s.providers {
+		providers = append(providers, SourceIntegrationProviderInfo{
+			Provider:     id,
+			ConfigSchema: append(json.RawMessage(nil), provider.ConfigSchema()...),
+		})
+	}
+	sort.Slice(providers, func(i, j int) bool { return providers[i].Provider < providers[j].Provider })
+	return providers
+}
+
 func (s *TaskIntegrationService) Create(ctx context.Context, userID, orgID, workspaceID string, in TaskIntegrationInput) (TaskIntegration, error) {
 	if err := s.authorize(ctx, userID, orgID, workspaceID); err != nil {
 		return TaskIntegration{}, err
@@ -60,7 +73,10 @@ func (s *TaskIntegrationService) Create(ctx context.Context, userID, orgID, work
 		return TaskIntegration{}, &ConfigurationError{Code: "integration_provider_unsupported"}
 	}
 	in.Provider = provider.Provider()
-	if err := normalize(&in); err != nil {
+	if err := normalizeCommonFields(&in); err != nil {
+		return TaskIntegration{}, err
+	}
+	if err := provider.ValidateConfig(in.Config); err != nil {
 		return TaskIntegration{}, err
 	}
 	if strings.TrimSpace(in.Credential) == "" {
@@ -100,7 +116,7 @@ func (s *TaskIntegrationService) Update(ctx context.Context, userID, orgID, work
 		return TaskIntegration{}, &ConfigurationError{Code: "integration_provider_unsupported"}
 	}
 	in.Provider = provider.Provider()
-	if in.Config.BaseURL == "" && in.Config.ProjectURL == "" && len(in.Config.Projects) == 0 {
+	if len(strings.TrimSpace(string(in.Config))) == 0 || strings.TrimSpace(string(in.Config)) == "null" {
 		in.Config = old.Config
 	}
 	if in.Name == "" {
@@ -118,7 +134,10 @@ func (s *TaskIntegrationService) Update(ctx context.Context, userID, orgID, work
 			return TaskIntegration{}, err
 		}
 	}
-	if err = normalize(&in); err != nil {
+	if err = normalizeCommonFields(&in); err != nil {
+		return TaskIntegration{}, err
+	}
+	if err = provider.ValidateConfig(in.Config); err != nil {
 		return TaskIntegration{}, err
 	}
 	if err = provider.Validate(ctx, in.Config, in.Credential); err != nil {
@@ -150,7 +169,10 @@ func (s *TaskIntegrationService) Validate(ctx context.Context, userID, orgID, wo
 	if in.Credential == "" {
 		return &ConfigurationError{Code: "integration_credential_required"}
 	}
-	if err := normalize(&in); err != nil {
+	if err := normalizeCommonFields(&in); err != nil {
+		return err
+	}
+	if err := p.ValidateConfig(in.Config); err != nil {
 		return err
 	}
 	if err := p.Validate(ctx, in.Config, in.Credential); err != nil {
@@ -283,7 +305,7 @@ func (s *TaskIntegrationService) authorize(ctx context.Context, userID, orgID, w
 	return modelerrors.ErrForbidden
 }
 
-func normalize(in *TaskIntegrationInput) error {
+func normalizeCommonFields(in *TaskIntegrationInput) error {
 	in.Name = strings.TrimSpace(in.Name)
 	in.Labels = normalizeValues(in.Labels)
 	if in.Name == "" || len(in.Name) > 200 {
@@ -297,36 +319,6 @@ func normalize(in *TaskIntegrationInput) error {
 		return &ConfigurationError{Code: "integration_interval_invalid"}
 	}
 	in.Interval = d.String()
-	in.Config.BaseURL = strings.TrimRight(strings.TrimSpace(in.Config.BaseURL), "/")
-	in.Config.ProjectURL = strings.TrimRight(strings.TrimSpace(in.Config.ProjectURL), "/")
-	if in.Config.BaseURL != "" {
-		u, e := url.ParseRequestURI(in.Config.BaseURL)
-		if e != nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" {
-			return &ConfigurationError{Code: "jira_base_url_invalid"}
-		}
-	}
-	in.Config.Projects = normalizeValues(in.Config.Projects)
-	switch in.Provider {
-	case TaskIntegrationSourceProviderGitHubCloud:
-		if in.Config.ProjectURL == "" {
-			return &ConfigurationError{Code: "github_project_url_required"}
-		}
-		if in.Config.BaseURL != "" || len(in.Config.Projects) != 0 {
-			return &ConfigurationError{Code: "github_config_invalid"}
-		}
-	case TaskIntegrationSourceProviderJiraServer:
-		if in.Config.BaseURL == "" {
-			return &ConfigurationError{Code: "jira_base_url_required"}
-		}
-		if len(in.Config.Projects) == 0 {
-			return &ConfigurationError{Code: "jira_projects_required"}
-		}
-		if in.Config.ProjectURL != "" {
-			return &ConfigurationError{Code: "jira_config_invalid"}
-		}
-	default:
-		return &ConfigurationError{Code: "integration_provider_unsupported"}
-	}
 	return nil
 }
 

@@ -112,8 +112,6 @@ type TaskIntegration struct {
 	Provider            string             `json:"provider"`
 	Name                string             `json:"name"`
 	Enabled             bool               `json:"enabled"`
-	BaseUrl             string             `json:"base_url"`
-	Projects            []string           `json:"projects"`
 	Labels              []string           `json:"labels"`
 	IntervalSeconds     int32              `json:"interval_seconds"`
 	EncryptedCredential string             `json:"encrypted_credential"`
@@ -121,7 +119,7 @@ type TaskIntegration struct {
 	LastError           string             `json:"last_error"`
 	CreatedAt           pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
-	ProjectUrl          string             `json:"project_url"`
+	ProviderConfig      []byte             `json:"provider_config"`
 }
 
 type User struct {

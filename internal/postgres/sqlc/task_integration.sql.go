@@ -12,9 +12,9 @@ import (
 )
 
 const createTaskIntegration = `-- name: CreateTaskIntegration :one
-INSERT INTO task_integrations (id, workspace_id, provider, name, enabled, base_url, project_url, projects, labels, interval_seconds, encrypted_credential)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-RETURNING id, workspace_id, provider, name, enabled, base_url, projects, labels, interval_seconds, encrypted_credential, last_synced_at, last_error, created_at, updated_at, project_url
+INSERT INTO task_integrations (id, workspace_id, provider, name, enabled, provider_config, labels, interval_seconds, encrypted_credential)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+RETURNING id, workspace_id, provider, name, enabled, labels, interval_seconds, encrypted_credential, last_synced_at, last_error, created_at, updated_at, provider_config
 `
 
 type CreateTaskIntegrationParams struct {
@@ -23,9 +23,7 @@ type CreateTaskIntegrationParams struct {
 	Provider            string   `json:"provider"`
 	Name                string   `json:"name"`
 	Enabled             bool     `json:"enabled"`
-	BaseUrl             string   `json:"base_url"`
-	ProjectUrl          string   `json:"project_url"`
-	Projects            []string `json:"projects"`
+	ProviderConfig      []byte   `json:"provider_config"`
 	Labels              []string `json:"labels"`
 	IntervalSeconds     int32    `json:"interval_seconds"`
 	EncryptedCredential string   `json:"encrypted_credential"`
@@ -38,9 +36,7 @@ func (q *Queries) CreateTaskIntegration(ctx context.Context, arg CreateTaskInteg
 		arg.Provider,
 		arg.Name,
 		arg.Enabled,
-		arg.BaseUrl,
-		arg.ProjectUrl,
-		arg.Projects,
+		arg.ProviderConfig,
 		arg.Labels,
 		arg.IntervalSeconds,
 		arg.EncryptedCredential,
@@ -52,8 +48,6 @@ func (q *Queries) CreateTaskIntegration(ctx context.Context, arg CreateTaskInteg
 		&i.Provider,
 		&i.Name,
 		&i.Enabled,
-		&i.BaseUrl,
-		&i.Projects,
 		&i.Labels,
 		&i.IntervalSeconds,
 		&i.EncryptedCredential,
@@ -61,7 +55,7 @@ func (q *Queries) CreateTaskIntegration(ctx context.Context, arg CreateTaskInteg
 		&i.LastError,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.ProjectUrl,
+		&i.ProviderConfig,
 	)
 	return i, err
 }
@@ -84,7 +78,7 @@ func (q *Queries) DeleteTaskIntegration(ctx context.Context, arg DeleteTaskInteg
 }
 
 const dueTaskIntegrations = `-- name: DueTaskIntegrations :many
-SELECT id, workspace_id, provider, name, enabled, base_url, projects, labels, interval_seconds, encrypted_credential, last_synced_at, last_error, created_at, updated_at, project_url FROM task_integrations WHERE enabled AND (last_synced_at IS NULL OR last_synced_at <= $1::timestamptz - interval_seconds * interval '1 second') ORDER BY last_synced_at NULLS FIRST
+SELECT id, workspace_id, provider, name, enabled, labels, interval_seconds, encrypted_credential, last_synced_at, last_error, created_at, updated_at, provider_config FROM task_integrations WHERE enabled AND (last_synced_at IS NULL OR last_synced_at <= $1::timestamptz - interval_seconds * interval '1 second') ORDER BY last_synced_at NULLS FIRST
 `
 
 func (q *Queries) DueTaskIntegrations(ctx context.Context, now pgtype.Timestamptz) ([]TaskIntegration, error) {
@@ -102,8 +96,6 @@ func (q *Queries) DueTaskIntegrations(ctx context.Context, now pgtype.Timestampt
 			&i.Provider,
 			&i.Name,
 			&i.Enabled,
-			&i.BaseUrl,
-			&i.Projects,
 			&i.Labels,
 			&i.IntervalSeconds,
 			&i.EncryptedCredential,
@@ -111,7 +103,7 @@ func (q *Queries) DueTaskIntegrations(ctx context.Context, now pgtype.Timestampt
 			&i.LastError,
 			&i.CreatedAt,
 			&i.UpdatedAt,
-			&i.ProjectUrl,
+			&i.ProviderConfig,
 		); err != nil {
 			return nil, err
 		}
@@ -124,7 +116,7 @@ func (q *Queries) DueTaskIntegrations(ctx context.Context, now pgtype.Timestampt
 }
 
 const getTaskIntegration = `-- name: GetTaskIntegration :one
-SELECT id, workspace_id, provider, name, enabled, base_url, projects, labels, interval_seconds, encrypted_credential, last_synced_at, last_error, created_at, updated_at, project_url FROM task_integrations WHERE workspace_id=$1 AND id=$2
+SELECT id, workspace_id, provider, name, enabled, labels, interval_seconds, encrypted_credential, last_synced_at, last_error, created_at, updated_at, provider_config FROM task_integrations WHERE workspace_id=$1 AND id=$2
 `
 
 type GetTaskIntegrationParams struct {
@@ -141,8 +133,6 @@ func (q *Queries) GetTaskIntegration(ctx context.Context, arg GetTaskIntegration
 		&i.Provider,
 		&i.Name,
 		&i.Enabled,
-		&i.BaseUrl,
-		&i.Projects,
 		&i.Labels,
 		&i.IntervalSeconds,
 		&i.EncryptedCredential,
@@ -150,13 +140,13 @@ func (q *Queries) GetTaskIntegration(ctx context.Context, arg GetTaskIntegration
 		&i.LastError,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.ProjectUrl,
+		&i.ProviderConfig,
 	)
 	return i, err
 }
 
 const listTaskIntegrations = `-- name: ListTaskIntegrations :many
-SELECT id, workspace_id, provider, name, enabled, base_url, projects, labels, interval_seconds, encrypted_credential, last_synced_at, last_error, created_at, updated_at, project_url FROM task_integrations WHERE workspace_id=$1 ORDER BY created_at, id
+SELECT id, workspace_id, provider, name, enabled, labels, interval_seconds, encrypted_credential, last_synced_at, last_error, created_at, updated_at, provider_config FROM task_integrations WHERE workspace_id=$1 ORDER BY created_at, id
 `
 
 func (q *Queries) ListTaskIntegrations(ctx context.Context, workspaceID string) ([]TaskIntegration, error) {
@@ -174,8 +164,6 @@ func (q *Queries) ListTaskIntegrations(ctx context.Context, workspaceID string) 
 			&i.Provider,
 			&i.Name,
 			&i.Enabled,
-			&i.BaseUrl,
-			&i.Projects,
 			&i.Labels,
 			&i.IntervalSeconds,
 			&i.EncryptedCredential,
@@ -183,7 +171,7 @@ func (q *Queries) ListTaskIntegrations(ctx context.Context, workspaceID string) 
 			&i.LastError,
 			&i.CreatedAt,
 			&i.UpdatedAt,
-			&i.ProjectUrl,
+			&i.ProviderConfig,
 		); err != nil {
 			return nil, err
 		}
@@ -228,8 +216,8 @@ func (q *Queries) RemoveMissingImportedTasks(ctx context.Context, arg RemoveMiss
 }
 
 const updateTaskIntegration = `-- name: UpdateTaskIntegration :one
-UPDATE task_integrations SET provider=$3, name=$4, enabled=$5, base_url=$6, project_url=$7, projects=$8, labels=$9, interval_seconds=$10, encrypted_credential=$11, updated_at=now()
-WHERE workspace_id=$1 AND id=$2 RETURNING id, workspace_id, provider, name, enabled, base_url, projects, labels, interval_seconds, encrypted_credential, last_synced_at, last_error, created_at, updated_at, project_url
+UPDATE task_integrations SET provider=$3, name=$4, enabled=$5, provider_config=$6, labels=$7, interval_seconds=$8, encrypted_credential=$9, updated_at=now()
+WHERE workspace_id=$1 AND id=$2 RETURNING id, workspace_id, provider, name, enabled, labels, interval_seconds, encrypted_credential, last_synced_at, last_error, created_at, updated_at, provider_config
 `
 
 type UpdateTaskIntegrationParams struct {
@@ -238,9 +226,7 @@ type UpdateTaskIntegrationParams struct {
 	Provider            string   `json:"provider"`
 	Name                string   `json:"name"`
 	Enabled             bool     `json:"enabled"`
-	BaseUrl             string   `json:"base_url"`
-	ProjectUrl          string   `json:"project_url"`
-	Projects            []string `json:"projects"`
+	ProviderConfig      []byte   `json:"provider_config"`
 	Labels              []string `json:"labels"`
 	IntervalSeconds     int32    `json:"interval_seconds"`
 	EncryptedCredential string   `json:"encrypted_credential"`
@@ -253,9 +239,7 @@ func (q *Queries) UpdateTaskIntegration(ctx context.Context, arg UpdateTaskInteg
 		arg.Provider,
 		arg.Name,
 		arg.Enabled,
-		arg.BaseUrl,
-		arg.ProjectUrl,
-		arg.Projects,
+		arg.ProviderConfig,
 		arg.Labels,
 		arg.IntervalSeconds,
 		arg.EncryptedCredential,
@@ -267,8 +251,6 @@ func (q *Queries) UpdateTaskIntegration(ctx context.Context, arg UpdateTaskInteg
 		&i.Provider,
 		&i.Name,
 		&i.Enabled,
-		&i.BaseUrl,
-		&i.Projects,
 		&i.Labels,
 		&i.IntervalSeconds,
 		&i.EncryptedCredential,
@@ -276,7 +258,7 @@ func (q *Queries) UpdateTaskIntegration(ctx context.Context, arg UpdateTaskInteg
 		&i.LastError,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-		&i.ProjectUrl,
+		&i.ProviderConfig,
 	)
 	return i, err
 }

@@ -1,12 +1,16 @@
 package taskintegration
 
-import "context"
+import (
+	"context"
+	"encoding/json"
+)
 
-// SourceIntegrationProvider parses provider project URLs, validates a source,
-// and discovers its current tasks.
+// SourceIntegrationProvider owns a provider's configuration schema, validation,
+// connectivity check, and task discovery.
 type SourceIntegrationProvider interface {
 	Provider() TaskIntegrationSourceProvider
-	ParseProjectURL(string) error
-	Validate(context.Context, TaskIntegrationConfig, string) error
-	Discover(context.Context, TaskIntegrationConfig, string, []string) ([]DiscoveredTask, error)
+	ConfigSchema() json.RawMessage
+	ValidateConfig(json.RawMessage) error
+	Validate(context.Context, json.RawMessage, string) error
+	Discover(context.Context, json.RawMessage, string, []string) ([]DiscoveredTask, error)
 }

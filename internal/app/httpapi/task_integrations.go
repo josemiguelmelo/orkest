@@ -12,6 +12,7 @@ type taskIntegrationAPI struct {
 }
 
 func (a taskIntegrationAPI) routes(r chi.Router) {
+	r.Get("/task-integration-providers", a.providers)
 	r.Route("/organizations/{orgID}/workspaces/{workspaceID}/task-integrations", func(r chi.Router) {
 		r.Get("/", a.list)
 		r.Post("/", a.create)
@@ -22,6 +23,10 @@ func (a taskIntegrationAPI) routes(r chi.Router) {
 			r.Post("/sync", a.syncNow)
 		})
 	})
+}
+
+func (a taskIntegrationAPI) providers(w http.ResponseWriter, r *http.Request) {
+	respond(w, a.service.Providers(), nil, http.StatusOK)
 }
 
 func (a taskIntegrationAPI) list(w http.ResponseWriter, r *http.Request) {
