@@ -59,10 +59,10 @@ Core platform shutdown must disconnect from agents without terminating their wor
 
 - **HTTP MCP connections** for external agent capabilities; stdio MCP servers are outside the MVP. No MCP client or server implementation exists yet.
 - **Official MCP Go SDK** is proposed where the platform implements MCP clients or servers. Whether built-in platform tools use an internal HTTP MCP endpoint remains open.
-- **GitHub Issues** as the first task-provider integration, accessed through a provider-independent integration contract; no provider implementation exists yet.
+- **GitHub Projects v2 and Jira Server** are task providers behind the `internal/taskintegration` contract. Workspace configurations are stored in PostgreSQL, credentials are AES-GCM encrypted using a deployment-managed 32-byte hex `ORKEST_INTEGRATION_ENCRYPTION_KEY`, and a platform lifecycle runner polls enabled sources using their configured interval (five-minute default). GitHub sources use a project board URL and GraphQL; GitHub documents classic PATs with `read:project` or GitHub App installation tokens for querying Projects. Jira sources use configured project keys. API responses exclude credentials.
 - Separate interfaces for **task providers, executors, and agent runtimes** so provider-specific behavior stays outside core orchestration.
 
-Agents create and update pull requests through their permitted runtime capabilities and configured integrations. Imported issue content remains source-managed, while Orkest owns local workflow and execution state.
+Agents create and update pull requests through their permitted runtime capabilities and configured integrations. Imported issue content remains source-managed; polling removes imported tasks no longer present in the selected source or matching its filters, and moves tasks for closed source issues to done. Orkest owns local workflow and execution state for all other transitions.
 
 ## Architecture and local development
 

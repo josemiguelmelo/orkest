@@ -14,7 +14,7 @@ Orkest is a platform for orchestrating, monitoring, and interacting with AI agen
 - Use OpenCode as the initial agent runtime; keep runtime adapters extensible.
 - Provide built-in tools for communicating with the core platform; user-defined tools are outside MVP scope.
 - Use the pinned OpenCode release’s default permission behavior. Forward any runtime approval requests to the task UI; workspace permission-policy customization is deferred.
-- Support manual task creation and tasks imported from GitHub Issues.
+- Support manual task creation and tasks imported from GitHub Projects v2 issue and draft issue items.
 - Require users to assign tasks to specific team members and manually move tasks to in progress.
 - Support reusable agent definitions and workspace teams with individual members providing execution slots.
 - Execute agents using Docker behind an executor abstraction suitable for future implementations such as Kubernetes.
@@ -55,11 +55,11 @@ Tasks may be created in Orkest or imported from an integration. Imported tasks r
 
 Users assign tasks to workspace agents. Only a user can initiate work by moving a task into in progress. Linking execution slots/team members to these agents is part of the team and orchestration work. Agent completion must not automatically initiate another task.
 
-For MVP, assume source status does not change. Orkest manages its own workflow status, assignment, execution, and agent chat without updating the source status. Imported title and description remain source-managed. Source comment synchronization remains open.
+Orkest manages its own assignment, execution, and agent chat without updating source status. Imported title, description, labels, and source URL remain source-managed. When a source issue is closed, the imported task moves to done; when an item is removed from an integration's selected source or no longer matches its filters, its imported task is removed from Orkest. Source comment synchronization remains open.
 
 ### 3.4 Integration
 
-An integration connects a workspace to an external task system, imports tasks, and keeps source-managed task data synchronized. GitHub Issues is the first implementation.
+An integration connects a workspace to an external task system, imports tasks, and keeps source-managed task data synchronized. GitHub Projects v2 and Jira Server are the initial implementations. Each source is configured and enabled per workspace, selects source tasks using label filters, and is polled on a configurable interval. GitHub sources select a Projects v2 board URL; Jira sources select project keys on their configured server.
 
 Integration implementations must conform to a common contract so another task system can be added through a new implementation class without changing the core task or orchestration logic. Provider configuration, credentials, and source-specific mapping may differ.
 
@@ -71,7 +71,7 @@ Proposed contract responsibilities:
 - Process source updates idempotently.
 - Reconcile missed updates and surface synchronization failures.
 
-MVP does not change source status and assumes no incoming source status changes. Outbound comments and other source writes remain unspecified. Local task workflow status, source status, and run execution state are separate concepts.
+MVP does not change source status. Imported title, description, labels, and source URL are read-only in Orkest and updated idempotently by polling. Closed source issues move their imported task to done. Items removed from the selected source or no longer matching its filters are deleted from Orkest. GitHub imports issue and draft issue items from the selected board; pull request items are excluded. Label filters require all configured labels on an item. Credentials are encrypted at rest and omitted from API responses and ordinary logs. Outbound comments and other source writes remain unspecified. Local task workflow status, source status, and run execution state are separate concepts.
 
 ### 3.5 Tool
 
@@ -239,9 +239,9 @@ Event retention, recovery time targets, host-loss guarantees, and overall availa
 - The agent identifies relevant workspace repositories and uses a task-specific branch in each changed repository.
 - Local workflow changes do not update source status.
 - Agents create and update pull requests autonomously; users do not need to perform these actions on the agent’s behalf.
-- Only users can mark tasks done. The initial manual task API does not support reopening done tasks; a later workflow decision may define reopen behavior.
+- Users mark manually managed tasks done; closing an imported source issue also moves its Orkest task to done. The initial manual task API does not support reopening done tasks.
 - All project configuration is workspace-scoped; configuration and credentials from another workspace cannot be selected or used implicitly.
-- GitHub Issues import and source updates preserve source identity and avoid duplicate tasks when updates are delivered repeatedly.
+- GitHub Projects v2 import and source updates preserve source identity and avoid duplicate tasks when updates are delivered repeatedly.
 - Source-managed task fields are read-only in Orkest.
 - Failed launches and interrupted sessions remain visible and do not silently erase run history or create duplicate execution.
 - Executor and integration implementations are accessed through common contracts rather than provider-specific orchestration branches.

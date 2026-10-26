@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/josemiguelmelo/orkest/internal/core/ids"
@@ -71,6 +72,9 @@ func (s *Service) Update(ctx context.Context, userID, orgID, workspaceID, taskID
 	current, err := s.repository.Task(ctx, orgID, workspaceID, taskID)
 	if err != nil {
 		return Task{}, err
+	}
+	if current.SourceProvider != "manual" && (input.Title != current.Title || input.Description != current.Description || !slices.Equal(input.Labels, current.Labels)) {
+		return Task{}, modelerrors.ErrForbidden
 	}
 	if current.Status == "done" && input.Status != "done" {
 		return Task{}, modelerrors.ErrConflict

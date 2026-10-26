@@ -76,18 +76,19 @@ type OrganizationMembership struct {
 }
 
 type Task struct {
-	ID              string             `json:"id"`
-	WorkspaceID     string             `json:"workspace_id"`
-	Title           string             `json:"title"`
-	Description     string             `json:"description"`
-	Status          string             `json:"status"`
-	Labels          []string           `json:"labels"`
-	CreatedAt       pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
-	SourceProvider  string             `json:"source_provider"`
-	SourceID        pgtype.Text        `json:"source_id"`
-	SourceUrl       pgtype.Text        `json:"source_url"`
-	AssigneeAgentID pgtype.Text        `json:"assignee_agent_id"`
+	ID                  string             `json:"id"`
+	WorkspaceID         string             `json:"workspace_id"`
+	Title               string             `json:"title"`
+	Description         string             `json:"description"`
+	Status              string             `json:"status"`
+	Labels              []string           `json:"labels"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+	SourceProvider      string             `json:"source_provider"`
+	SourceID            pgtype.Text        `json:"source_id"`
+	SourceUrl           pgtype.Text        `json:"source_url"`
+	AssigneeAgentID     pgtype.Text        `json:"assignee_agent_id"`
+	SourceIntegrationID pgtype.Text        `json:"source_integration_id"`
 }
 
 type TaskComment struct {
@@ -103,6 +104,24 @@ type TaskComponent struct {
 	WorkspaceID string `json:"workspace_id"`
 	TaskID      string `json:"task_id"`
 	ComponentID string `json:"component_id"`
+}
+
+type TaskIntegration struct {
+	ID                  string             `json:"id"`
+	WorkspaceID         string             `json:"workspace_id"`
+	Provider            string             `json:"provider"`
+	Name                string             `json:"name"`
+	Enabled             bool               `json:"enabled"`
+	BaseUrl             string             `json:"base_url"`
+	Projects            []string           `json:"projects"`
+	Labels              []string           `json:"labels"`
+	IntervalSeconds     int32              `json:"interval_seconds"`
+	EncryptedCredential string             `json:"encrypted_credential"`
+	LastSyncedAt        pgtype.Timestamptz `json:"last_synced_at"`
+	LastError           string             `json:"last_error"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+	ProjectUrl          string             `json:"project_url"`
 }
 
 type User struct {
