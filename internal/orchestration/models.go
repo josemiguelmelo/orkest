@@ -40,7 +40,7 @@ type Launch struct {
 }
 
 type Event struct {
-	RunID    string
-	Sequence uint64
-	Payload  agentctl.Event
+	RunID    string         `json:"runId"`
+	Sequence uint64         `json:"sequence"`
+	Payload  agentctl.Event `json:"payload"`
 }

@@ -1,12 +1,21 @@
 import { Markdown } from '../../shared/ui/markdown';
-import type { JSX } from 'react';
+import type { FormEvent, JSX } from 'react';
 import { useState } from 'react';
 import { Link, useNavigate, useParams, useSearch } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { ArrowLeft, Bot, LayoutGrid, List, MessageSquare, Search } from 'lucide-react';
+import {
+  ArrowLeft,
+  Bot,
+  CircleStop,
+  LayoutGrid,
+  List,
+  MessageSquare,
+  Search,
+  Send,
+} from 'lucide-react';
 import { useApp } from '../../app/context';
 import { command, data } from '../../shared/api/client';
 import * as sdk from '../../shared/api/generated/sdk.gen';
@@ -17,6 +26,8 @@ import {
   componentsQuery,
   path,
   taskQuery,
+  taskRunEventsQuery,
+  taskRunsQuery,
   tasksQuery,
   useRefresh,
 } from '../../shared/api/queries';
@@ -286,11 +297,7 @@ export function TaskEditor({ task, onClose }: { task?: Task; onClose: () => void
           <Field label="Status" hint="Execution starts are unavailable in this UI.">
             <select {...form.register('status')} disabled={!task || task.status === 'done'}>
               {statuses.map((status) => (
-                <option
-                  key={status}
-                  value={status}
-                  disabled={status === 'in_progress' && task?.status !== 'in_progress'}
-                >
+                <option key={status} value={status}>
                   {statusNames[status]}
                 </option>
               ))}
@@ -336,6 +343,8 @@ export function TaskPage(): JSX.Element {
   const task = useQuery(taskQuery(scope, taskId));
   const agents = useQuery(agentsQuery(scope));
   const [edit, setEdit] = useState(false);
+  const startAction = useAction();
+  const refresh = useRefresh();
   if (task.isPending) return <Loading />;
   if (task.isError) return <ErrorState error={task.error} />;
   const item = task.data;
@@ -351,15 +360,45 @@ export function TaskPage(): JSX.Element {
       </Link>
       <div className="spacer">
         <PageHeader title={item.title} description={`Task ${item.id.slice(0, 8)}`}>
+          {permissions.editWorkspace && item.status === 'todo' && item.assigneeAgentId && (
+            <Button
+              disabled={startAction.pending}
+              onClick={() => {
+                void startAction.run(async () => {
+                  try {
+                    await data(
+                      sdk.updateTask({
+                        ...command,
+                        path: { ...path(scope), taskID: item.id },
+                        body: {
+                          title: item.title,
+                          description: item.description,
+                          status: 'in_progress',
+                          assigneeAgentId: item.assigneeAgentId ?? '',
+                          labels: item.labels,
+                          componentIds: item.components.map((component) => component.id),
+                        },
+                      }),
+                    );
+                  } finally {
+                    await refresh(scope);
+                  }
+                });
+              }}
+            >
+              Start work
+            </Button>
+          )}
           {permissions.editWorkspace && <Button onClick={() => setEdit(true)}>Edit task</Button>}
         </PageHeader>
       </div>
+      {startAction.error && <ErrorState error={startAction.error} />}
       {item.status === 'in_progress' && (
         <div className="notice">
-          This task is in progress. Live execution state and agent controls are not available in the
-          management UI.
+          This task is in progress. Review its run activity and interact with the agent below.
         </div>
       )}
+      <RunPanel task={item} />
       <div className="detail-layout">
         <div>
           <section className="panel">
@@ -427,6 +466,279 @@ export function TaskPage(): JSX.Element {
     </>
   );
 }
+
+type RuntimeEvent = {
+  type?: string | undefined;
+  at?: string | undefined;
+  commandId?: string | undefined;
+  requestId?: string | undefined;
+  sessionId?: string | undefined;
+  text?: string | undefined;
+  error?: string | undefined;
+  stopReason?: string | undefined;
+  update?:
+    | {
+        kind?: string | undefined;
+        text?: string | undefined;
+        title?: string | undefined;
+        status?: string | undefined;
+      }
+    | undefined;
+  permission?:
+    | {
+        title?: string | undefined;
+        options?: { id: string; name: string; kind: string }[] | undefined;
+      }
+    | undefined;
+};
+
+function RunPanel({ task }: { task: Task }): JSX.Element {
+  const { scope, permissions } = useApp();
+  const runs = useQuery(taskRunsQuery(scope, task.id));
+  const [selectedRunID, setSelectedRunID] = useState<string>();
+  const selected = runs.data?.find((run) => run.runId === selectedRunID) ?? runs.data?.[0];
+  const eventsQuery = useQuery(taskRunEventsQuery(scope, task.id, selected?.runId ?? ''));
+  const action = useAction();
+  const refresh = useRefresh();
+  const [text, setText] = useState('');
+  const [pendingCommandID, setPendingCommandID] = useState<string | null>(null);
+  const events = eventsQuery.data ?? [];
+  const payloads = events.map((event) => ({ event, payload: runtimeEvent(event.payload) }));
+  const pending = new Map<string, RuntimeEvent>();
+  const commands = new Map<string, { accepted: RuntimeEvent; terminal: boolean }>();
+  for (const { payload } of payloads) {
+    if (payload.type === 'permission_requested' && payload.requestId)
+      pending.set(payload.requestId, payload);
+    if (payload.type === 'permission_response' && payload.requestId)
+      pending.delete(payload.requestId);
+    if (payload.commandId && payload.type === 'prompt_accepted')
+      commands.set(payload.commandId, { accepted: payload, terminal: false });
+    if (payload.commandId && ['prompt_completed', 'prompt_failed'].includes(payload.type ?? '')) {
+      const command = commands.get(payload.commandId);
+      if (command) command.terminal = true;
+    }
+  }
+  const activeCommand = [...commands.entries()]
+    .reverse()
+    .find(([, command]) => !command.terminal)?.[0];
+  async function submitPrompt(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const prompt = text.trim();
+    if (!selected || !prompt) return;
+    if (
+      await action.run(async () => {
+        const commandId = pendingCommandID ?? crypto.randomUUID();
+        setPendingCommandID(commandId);
+        await data(
+          sdk.sendTaskRunPrompt({
+            ...command,
+            path: { ...path(scope), taskID: task.id, runID: selected.runId },
+            body: { text: prompt, commandId },
+          }),
+        );
+        setPendingCommandID(null);
+        setText('');
+        await refresh(scope);
+      })
+    )
+      setText('');
+  }
+  return (
+    <section className="panel spacer" aria-label="Agent execution">
+      <div className="split">
+        <h2>Agent activity</h2>
+        {runs.data?.length ? <Badge>{selected?.status}</Badge> : null}
+      </div>
+      {runs.isPending ? (
+        <Loading />
+      ) : runs.isError ? (
+        <ErrorState error={runs.error} />
+      ) : !runs.data.length ? (
+        <p className="muted spacer">
+          No agent runs yet. Assign an agent and start work to launch one.
+        </p>
+      ) : (
+        <>
+          {runs.data.length > 1 && (
+            <div className="tags spacer">
+              {runs.data.map((run) => (
+                <Button
+                  key={run.runId}
+                  variant={run.runId === selected?.runId ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setSelectedRunID(run.runId)}
+                >
+                  {run.runId.slice(0, 8)} · {run.status}
+                </Button>
+              ))}
+            </div>
+          )}
+          {selected?.failureReason && <p className="error spacer">{selected.failureReason}</p>}
+          {eventsQuery.isError ? (
+            <ErrorState error={eventsQuery.error} />
+          ) : eventsQuery.isPending ? (
+            <Loading />
+          ) : (
+            <div className="spacer">
+              {payloads.length ? (
+                payloads.map(({ event, payload }) => (
+                  <article className="comment" key={`${event.runId}-${event.sequence}`}>
+                    <div className="comment-meta">
+                      {payload.type?.replaceAll('_', ' ')} ·{' '}
+                      {date(payload.at ?? selected?.updatedAt ?? '')}
+                    </div>
+                    {payload.text && <Markdown text={payload.text} />}
+                    {payload.update?.text && <Markdown text={payload.update.text} />}
+                    {payload.update?.title && (
+                      <p>
+                        {payload.update.title} {payload.update.status}
+                      </p>
+                    )}
+                    {payload.error && <p className="error">{payload.error}</p>}
+                    {payload.stopReason && <p className="muted">{payload.stopReason}</p>}
+                  </article>
+                ))
+              ) : (
+                <p className="muted">Waiting for agent activity…</p>
+              )}
+            </div>
+          )}
+          {permissions.editWorkspace &&
+            selected?.status === 'ready' &&
+            task.status === 'in_progress' && (
+              <>
+                {[...pending.entries()].map(([requestId, permission]) => (
+                  <div className="notice spacer" key={requestId}>
+                    <strong>
+                      Approval needed: {permission.permission?.title ?? 'Agent permission'}
+                    </strong>
+                    <div className="actions spacer">
+                      {permission.permission?.options?.map((option) => (
+                        <Button
+                          key={option.id}
+                          variant={
+                            /reject|deny|cancel/i.test(`${option.id} ${option.name}`)
+                              ? 'outline'
+                              : 'default'
+                          }
+                          size="sm"
+                          disabled={action.pending}
+                          onClick={() =>
+                            void action.run(async () => {
+                              await data(
+                                sdk.respondTaskRunPermission({
+                                  ...command,
+                                  path: { ...path(scope), taskID: task.id, runID: selected.runId },
+                                  body: {
+                                    requestId,
+                                    sessionId: permission.sessionId ?? '',
+                                    optionId: option.id,
+                                  },
+                                }),
+                              );
+                              await refresh(scope);
+                            })
+                          }
+                        >
+                          {option.name}
+                        </Button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                <form className="spacer" onSubmit={(event) => void submitPrompt(event)}>
+                  <Field label="Message the agent">
+                    <textarea
+                      value={text}
+                      onChange={(event) => setText(event.target.value)}
+                      placeholder="Add context or answer the agent…"
+                      disabled={!!activeCommand || !!pendingCommandID || action.pending}
+                    />
+                  </Field>
+                  <div className="actions spacer">
+                    <Button
+                      type="submit"
+                      disabled={!text.trim() || !!activeCommand || action.pending}
+                    >
+                      <Send size={14} /> Send
+                    </Button>
+                    {activeCommand && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={action.pending}
+                        onClick={() =>
+                          void action.run(async () => {
+                            await data(
+                              sdk.cancelTaskRunPrompt({
+                                ...command,
+                                path: { ...path(scope), taskID: task.id, runID: selected.runId },
+                                body: { commandId: activeCommand },
+                              }),
+                            );
+                            await refresh(scope);
+                          })
+                        }
+                      >
+                        <CircleStop size={14} /> Cancel prompt
+                      </Button>
+                    )}
+                  </div>
+                </form>
+              </>
+            )}
+          {action.error && <ErrorState error={action.error} />}
+        </>
+      )}
+    </section>
+  );
+}
+
+function runtimeEvent(value: Record<string, unknown>): RuntimeEvent {
+  const updateValue = value.update && typeof value.update === 'object' ? value.update : undefined;
+  const permissionValue =
+    value.permission && typeof value.permission === 'object' ? value.permission : undefined;
+  const update = updateValue ? (updateValue as Record<string, unknown>) : undefined;
+  const permission = permissionValue ? (permissionValue as Record<string, unknown>) : undefined;
+  const options = Array.isArray(permission?.options)
+    ? permission.options.filter(isPermissionOption)
+    : undefined;
+  return {
+    type: typeof value.type === 'string' ? value.type : undefined,
+    at: typeof value.at === 'string' ? value.at : undefined,
+    commandId: typeof value.commandId === 'string' ? value.commandId : undefined,
+    requestId: typeof value.requestId === 'string' ? value.requestId : undefined,
+    sessionId: typeof value.sessionId === 'string' ? value.sessionId : undefined,
+    text: typeof value.text === 'string' ? value.text : undefined,
+    error: typeof value.error === 'string' ? value.error : undefined,
+    stopReason: typeof value.stopReason === 'string' ? value.stopReason : undefined,
+    update: update
+      ? {
+          kind: typeof update.kind === 'string' ? update.kind : undefined,
+          text: typeof update.text === 'string' ? update.text : undefined,
+          title: typeof update.title === 'string' ? update.title : undefined,
+          status: typeof update.status === 'string' ? update.status : undefined,
+        }
+      : undefined,
+    permission: permission
+      ? {
+          title: typeof permission.title === 'string' ? permission.title : undefined,
+          options,
+        }
+      : undefined,
+  };
+}
+
+function isPermissionOption(value: unknown): value is { id: string; name: string; kind: string } {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.id === 'string' &&
+    typeof candidate.name === 'string' &&
+    typeof candidate.kind === 'string'
+  );
+}
+
 const commentSchema = z.object({ body: z.string().trim().min(1, 'Write a comment.').max(20000) });
 function Comments({ taskID }: { taskID: string }) {
   const { scope, permissions, session } = useApp();

@@ -58,6 +58,9 @@ func NewRouter(users *identity.UserRegistrationService, organizations *organizat
 			}
 			codeRepositoryAPI{repositories: codeRepositories}.routes(api)
 			taskAPI{tasks: tasks}.routes(api)
+			if len(tempLaunches) > 0 && tempLaunches[0] != nil {
+				taskRunAPI{tasks: tasks, launches: tempLaunches[0]}.routes(api)
+			}
 			if integrations != nil {
 				taskIntegrationAPI{service: integrations}.routes(api)
 			}

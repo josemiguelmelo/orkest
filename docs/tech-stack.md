@@ -31,7 +31,7 @@ For task and run persistence, use transactions and constraints for atomic member
 - **React 19.2.0**, **TypeScript 5.9.3**, and **Vite 7.3.7** are pinned in `web/package.json`; the frontend now implements the platform management workbench.
 - The documented local toolchain is **Node.js 22.22.2** with npm 11; `package.json` requires Node.js 22.22.2, 24.15.0, or supported 26+ releases.
 - The management UI uses **TanStack Router/Query**, **React Hook Form/Zod**, **Tailwind v4**, and owned shadcn-style **Radix** components. All added dependency versions are pinned in the npm manifest/lockfile. Hey API generates typed SDK functions and runtime validators from the platform contract. Strict application types, scoped caches, role-aware actions, schema-driven integration forms, frontend lint/tests and desktop/mobile browser journeys are implemented. See [webapp architecture and verification](webapp-implementation.md).
-- Go serves the SPA from `ORKEST_WEB_DIR` (default `web/dist`); Vite proxies the API and cookie-based OIDC routes during development. Execution starts and runtime interaction remain outside the management UI.
+- Go serves the SPA from `ORKEST_WEB_DIR` (default `web/dist`); Vite proxies the API and cookie-based OIDC routes during development. Task detail starts assigned work through the task workflow and exposes scoped run history, activity, chat, permission responses, and cancellation through the platform API.
 - Browser HTTP commands and **Server-Sent Events (SSE)** with persisted cursors and replay remain proposed. The implemented agentctl activity stream is WebSocket, described below.
 
 ## Authentication and authorization
@@ -70,7 +70,7 @@ Agents create and update pull requests through their permitted runtime capabilit
 
 ## Architecture and local development
 
-- **Modular monolith** is the proposed core platform shape. Implemented Go packages cover identity, organization, workspace, manual task and component APIs, GitHub Cloud and Jira task integrations, app lifecycle, launch orchestration, Docker agentctl execution, and standalone agentctl/OpenCode runtime code. Task persistence uses versioned PostgreSQL migrations and sqlc; task execution wiring remains unimplemented.
+- **Modular monolith** is the proposed core platform shape. Implemented Go packages cover identity, organization, workspace, manual task and component APIs, GitHub Cloud and Jira task integrations, app lifecycle, task dispatch and launch orchestration, Docker agentctl execution, and standalone agentctl/OpenCode runtime code. Task run history and events use the versioned PostgreSQL schema and sqlc. Team-member slot allocation and validated restart continuation remain unimplemented.
 - **Independent `agentctl` process** is implemented as a separate binary and can be packaged into the Docker OpenCode runtime image; a task-start API and platform wiring remain future work.
 - **Go code organization** stays in one root Go module, with logical package areas rather than nested Go modules:
   - `internal/app` owns platform wiring and lifecycle; platform features belong under `internal/` packages such as `identity`, `organization`, `workspace`, `task`, and `orchestration`.

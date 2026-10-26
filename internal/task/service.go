@@ -48,6 +48,21 @@ func (s *Service) Get(ctx context.Context, userID, orgID, workspaceID, taskID st
 	return s.repository.Task(ctx, orgID, workspaceID, taskID)
 }
 
+// AuthorizeExecution checks task visibility and whether the caller may interact with its run.
+func (s *Service) AuthorizeExecution(ctx context.Context, userID, orgID, workspaceID, taskID string, mutate bool) error {
+	if _, err := s.repository.Task(ctx, orgID, workspaceID, taskID); err != nil {
+		return err
+	}
+	w, err := s.workspaces.GetWorkspace(ctx, userID, orgID, workspaceID)
+	if err != nil {
+		return err
+	}
+	if mutate && w.Role == "viewer" {
+		return modelerrors.ErrForbidden
+	}
+	return nil
+}
+
 func (s *Service) Create(ctx context.Context, userID, orgID, workspaceID string, input TaskInput) (Task, error) {
 	if err := s.authorize(ctx, userID, orgID, workspaceID); err != nil {
 		return Task{}, err
