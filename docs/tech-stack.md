@@ -8,6 +8,7 @@ Status: Mixed. This document distinguishes implemented technology from the propo
 - **`net/http`** owns both servers. The platform and the `agentctl` REST/WebSocket APIs use **Chi v5.2.3** on top of `net/http`.
 - **Manual constructor dependency injection** with wiring at the application boundary. Services receive explicit dependencies and do not look them up through a container. No DI framework is needed for the MVP; reconsider Uber Fx if wiring and lifecycle management become cumbersome.
 - **`log/slog`** for structured logging, with credentials redacted.
+- **Structured request correlation** assigns a validated 32-character `trace_id` to each inbound request, includes it in request and backend error logs, and propagates it over platform-to-agentctl HTTP calls using `X-Trace-ID`. Request summaries are emitted for server errors and requests slower than two seconds; routine successes are omitted. This is a log correlation ID; no tracing SDK or span exporter is configured.
 - **`godotenv v1.5.1`** loads the optional local `.env` file through shared helpers in `internal/core/environment`; both command entry points use them.
 - **OpenAPI 3.1 YAML contracts** live inside their API packages: `internal/app/httpapi/openapi.yaml` (platform/orchestrator) and `internal/agentctl/httpapi/openapi.yaml` (`agentctl`). The shared core OpenAPI package validates and serves each contract at server startup. **kin-openapi v0.133.0** parses and validates the contracts; **swaggest/swgui v1.8.9** serves embedded Swagger UI assets, so the UI does not depend on a CDN.
 

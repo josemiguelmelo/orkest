@@ -6,12 +6,14 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
+	"github.com/josemiguelmelo/orkest/internal/core/httplog"
 	"github.com/josemiguelmelo/orkest/internal/identity"
 	"github.com/josemiguelmelo/orkest/internal/organization"
 	"golang.org/x/oauth2"
@@ -99,6 +101,7 @@ func (a *oidcAuth) callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if _, err := a.users.EnsureUserProfile(r.Context(), tokenClaims.Subject, tokenClaims.Username, tokenClaims.Email); err != nil {
+		logServerError(r, "register authenticated user", err)
 		http.Error(w, "login failed", http.StatusInternalServerError)
 		return
 	}
@@ -124,11 +127,13 @@ func (a *oidcAuth) currentUser(w http.ResponseWriter, r *http.Request) {
 	}
 	organizations, err := a.organizations.ListOrganizations(r.Context(), user.ID)
 	if err != nil {
+		logServerError(r, "load current user organizations", err)
 		writeError(w, http.StatusInternalServerError, "internal_error")
 		return
 	}
 	platformAdmin, err := a.users.IsPlatformAdmin(r.Context(), user.ID)
 	if err != nil {
+		logServerError(r, "load current user permissions", err)
 		writeError(w, http.StatusInternalServerError, "internal_error")
 		return
 	}
@@ -168,11 +173,20 @@ func (a *oidcAuth) middleware(next http.Handler) http.Handler {
 		}
 		user, err := a.users.EnsureUserProfile(r.Context(), claims.Subject, claims.Username, claims.Email)
 		if err != nil {
+			logServerError(r, "register authenticated user", err)
 			writeError(w, http.StatusInternalServerError, "internal_error")
 			return
 		}
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), userContextKey{}, user)))
 	})
+}
+
+func logServerError(r *http.Request, message string, err error) {
+	logger := httplog.LoggerFromContext(r.Context())
+	if logger == nil {
+		logger = slog.Default()
+	}
+	logger.Error(message, "error", err)
 }
 
 func currentUserID(r *http.Request) string {
