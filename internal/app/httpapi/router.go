@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -60,12 +61,12 @@ func NewRouter(users *identity.UserRegistrationService, organizations *organizat
 			taskAPI{tasks: tasks}.routes(api)
 			if len(tempLaunches) > 0 && tempLaunches[0] != nil {
 				taskRunAPI{tasks: tasks, launches: tempLaunches[0]}.routes(api)
+				if strings.EqualFold(os.Getenv("ORKEST_ENABLE_TEMP_AGENT_LAUNCH"), "true") {
+					tempAgentLaunchAPI{launches: tempLaunches[0]}.routes(api)
+				}
 			}
 			if integrations != nil {
 				taskIntegrationAPI{service: integrations}.routes(api)
-			}
-			if len(tempLaunches) > 0 && tempLaunches[0] != nil {
-				tempAgentLaunchAPI{launches: tempLaunches[0]}.routes(api)
 			}
 		})
 	})

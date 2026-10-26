@@ -112,12 +112,7 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 	var runnerWG sync.WaitGroup
 	runnerWG.Add(1)
 	go func() { defer runnerWG.Done(); integrations.Run(runnerCtx) }()
-	var router http.Handler
-	if strings.EqualFold(os.Getenv("ORKEST_ENABLE_TEMP_AGENT_LAUNCH"), "true") {
-		router, err = httpapi.NewRouter(users, organizations, workspaces, agents, codeRepositories, tasks, integrations, mcpServerService, skillCatalog, launchService)
-	} else {
-		router, err = httpapi.NewRouter(users, organizations, workspaces, agents, codeRepositories, tasks, integrations, mcpServerService, skillCatalog)
-	}
+	router, err := httpapi.NewRouter(users, organizations, workspaces, agents, codeRepositories, tasks, integrations, mcpServerService, skillCatalog, launchService)
 	if err != nil {
 		stopRunner()
 		runnerWG.Wait()
