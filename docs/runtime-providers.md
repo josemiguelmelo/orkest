@@ -135,5 +135,4 @@ real approval round trips, or full history coverage. Docker restoration has a
 known intermittent HTTP 502 at container replacement, reproduced on the code
 before domain organization. Report it as a failed check whenever it occurs.
 OpenCode 2.1.4 remains the only production profile; no new runtime/version is
-qualified. See [task sessions](task-sessions.md) and the historical
-[refactor plan](../agentctl-refactor.md) for prerequisites and limitations.
+qualified. See [task sessions](task-sessions.md) for prerequisites and limitations.
