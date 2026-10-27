@@ -47,6 +47,15 @@ export const zWorkspace = z.object({
         'viewer'
     ]).optional()
 });
+export const zWorkspaceEnvironmentInput = z.object({
+    value: z.string().max(65536),
+    secret: z.boolean().optional().default(false)
+});
+export const zWorkspaceEnvironmentValue = z.object({
+    name: z.string(),
+    secret: z.boolean(),
+    value: z.string().optional()
+});
 export const zMembership = z.object({
     user: zUser,
     role: z.enum([
@@ -365,6 +374,33 @@ export const zListWorkspaceMembersPath = z.object({
  * Workspace members
  */
 export const zListWorkspaceMembersResponse = z.array(zMembership);
+export const zListWorkspaceEnvironmentPath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string()
+});
+/**
+ * Variables are returned with values; secrets return only their names and secret status
+ */
+export const zListWorkspaceEnvironmentResponse = z.array(zWorkspaceEnvironmentValue);
+export const zDeleteWorkspaceEnvironmentPath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string(),
+    name: z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/)
+});
+/**
+ * Value deleted
+ */
+export const zDeleteWorkspaceEnvironmentResponse = z.void();
+export const zPutWorkspaceEnvironmentBody = zWorkspaceEnvironmentInput;
+export const zPutWorkspaceEnvironmentPath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string(),
+    name: z.string().regex(/^[A-Za-z_][A-Za-z0-9_]*$/)
+});
+/**
+ * Value updated
+ */
+export const zPutWorkspaceEnvironmentResponse = zOperationStatus;
 export const zRemoveWorkspaceMemberPath = z.object({
     orgID: z.string(),
     workspaceID: z.string(),

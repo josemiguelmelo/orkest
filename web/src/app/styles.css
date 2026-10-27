@@ -476,6 +476,14 @@ tr:last-child td {
 td {
   font-size: 12px;
 }
+.env-value {
+  display: inline-block;
+  max-width: min(42vw, 520px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: bottom;
+  white-space: nowrap;
+}
 td a:hover {
   color: var(--primary);
 }
@@ -507,6 +515,106 @@ input[type='checkbox'] {
   grid-template-columns: 1fr 1fr;
   gap: 16px;
 }
+.env-type-picker {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+.env-type-picker legend {
+  margin-bottom: 8px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.env-type-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.env-type-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+  padding: 13px;
+  text-align: left;
+  color: var(--foreground);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  transition:
+    border-color 120ms ease,
+    background 120ms ease,
+    box-shadow 120ms ease;
+}
+.env-type-card:hover {
+  border-color: color-mix(in srgb, var(--primary) 55%, var(--border));
+}
+.env-type-card.is-selected {
+  border-color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 8%, var(--surface));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--primary) 25%, transparent);
+}
+.env-type-card.is-secret .env-type-icon {
+  color: var(--primary);
+  background: color-mix(in srgb, var(--primary) 14%, var(--surface));
+}
+.env-type-icon {
+  display: grid;
+  place-items: center;
+  flex: 0 0 34px;
+  height: 34px;
+  color: var(--muted);
+  background: var(--surface-muted);
+  border-radius: 7px;
+}
+.env-type-copy {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+.env-type-copy strong {
+  font-size: 12px;
+  font-weight: 650;
+}
+.env-type-copy small {
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.4;
+}
+.env-secret-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 12px;
+  color: var(--foreground);
+  background: color-mix(in srgb, var(--primary) 7%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--primary) 24%, var(--border));
+  border-radius: 8px;
+  font-size: 11px;
+}
+.env-secret-note svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: var(--primary);
+}
+.env-value-control {
+  position: relative;
+}
+.env-value-control input {
+  width: 100%;
+  padding-right: 46px;
+}
+.env-value-control .env-reveal {
+  position: absolute;
+  top: 50%;
+  right: 5px;
+  transform: translateY(-50%);
+  color: var(--muted);
+}
+.env-value-control .env-reveal:hover {
+  color: var(--foreground);
+}
 .field {
   display: grid;
   gap: 6px;
@@ -520,6 +628,11 @@ input[type='checkbox'] {
 }
 .field-error {
   color: var(--danger);
+}
+@media (max-width: 540px) {
+  .env-type-options {
+    grid-template-columns: 1fr;
+  }
 }
 .form-actions {
   display: flex;
