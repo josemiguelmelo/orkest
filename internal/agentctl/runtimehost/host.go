@@ -100,6 +100,11 @@ func (h *Host) start(ctx context.Context, config runconfig.RuntimeConfig, restor
 			session.callbacks.secrets = append(session.callbacks.secrets, value)
 		}
 	}
+	for _, value := range config.Environment {
+		if value != "" {
+			session.callbacks.secrets = append(session.callbacks.secrets, value)
+		}
+	}
 	for _, server := range config.MCPServers {
 		for _, value := range server.Headers {
 			session.callbacks.secrets = append(session.callbacks.secrets, value)
@@ -149,7 +154,8 @@ func (h *Host) prepareRuntime(ctx context.Context, config runconfig.RuntimeConfi
 	if err != nil {
 		return "", nil, err
 	}
-	environment, err := applyProvisioningPlan(paths.RuntimeRoot, h.environment.GrantedEnv, descriptor.ReservedEnvNames, descriptor.ReservedEnvPrefixes, plan)
+	granted := append(slices.Clone(h.environment.GrantedEnv), environmentEntries(config.Environment)...)
+	environment, err := applyProvisioningPlan(paths.RuntimeRoot, granted, descriptor.ReservedEnvNames, descriptor.ReservedEnvPrefixes, plan)
 	if err != nil {
 		return "", nil, err
 	}
@@ -161,6 +167,14 @@ func (h *Host) prepareRuntime(ctx context.Context, config runconfig.RuntimeConfi
 		return "", nil, err
 	}
 	return executable, environment, nil
+}
+
+func environmentEntries(values map[string]string) []string {
+	entries := make([]string, 0, len(values))
+	for name, value := range values {
+		entries = append(entries, name+"="+value)
+	}
+	return entries
 }
 
 func (h *Host) startProcess(ctx context.Context, executable string, environment []string, descriptor agentruntime.RuntimeDescriptor, owner *os.File) (*Session, error) {

@@ -235,3 +235,28 @@ func (q *Queries) SetRuntimeSessionID(ctx context.Context, arg SetRuntimeSession
 	_, err := q.db.Exec(ctx, setRuntimeSessionID, arg.ID, arg.RuntimeSessionID)
 	return err
 }
+
+const updateTaskAgentSessionConfiguration = `-- name: UpdateTaskAgentSessionConfiguration :execrows
+UPDATE task_agent_sessions SET configuration = $4::jsonb
+WHERE organization_id = $1 AND workspace_id = $2 AND task_id = $3 AND is_current
+`
+
+type UpdateTaskAgentSessionConfigurationParams struct {
+	OrganizationID string `json:"organization_id"`
+	WorkspaceID    string `json:"workspace_id"`
+	TaskID         string `json:"task_id"`
+	Configuration  []byte `json:"configuration"`
+}
+
+func (q *Queries) UpdateTaskAgentSessionConfiguration(ctx context.Context, arg UpdateTaskAgentSessionConfigurationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateTaskAgentSessionConfiguration,
+		arg.OrganizationID,
+		arg.WorkspaceID,
+		arg.TaskID,
+		arg.Configuration,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}

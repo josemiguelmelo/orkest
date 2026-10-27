@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"testing"
 
@@ -10,12 +11,17 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
 	"github.com/josemiguelmelo/orkest/internal/core/ids"
 	"github.com/josemiguelmelo/orkest/internal/orchestration"
+	"github.com/josemiguelmelo/orkest/internal/taskintegration"
 )
 
 func testTaskSessions(t *testing.T, database *PostgresDatabase, orgID, workspaceID, taskID string) {
 	t.Helper()
 	ctx := context.Background()
-	repo := NewAgentLaunchPostgresRepository(database)
+	box, err := taskintegration.NewSecretBox("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := NewAgentLaunchPostgresRepository(database, box)
 	newID := func() string {
 		id, err := ids.NewUUID()
 		if err != nil {
@@ -24,7 +30,12 @@ func testTaskSessions(t *testing.T, database *PostgresDatabase, orgID, workspace
 		return id
 	}
 	configs := []runconfig.RunConfig{
-		{RuntimeConfig: runconfig.RuntimeConfig{OrganizationID: orgID, WorkspaceID: workspaceID, TaskID: taskID, TaskSessionID: newID(), RunID: newID(), Runtime: "opencode", Agent: runconfig.AgentDefinition{Name: "original", Instructions: "original"}, Model: runconfig.ModelSelection{Provider: "test", ID: "model"}, MCPServers: []runconfig.MCPServer{{ID: "mcp", Name: "mcp", URL: "https://example.test/mcp", Headers: map[string]string{"Authorization": "private"}}}}, InitialCommandID: "initial", InitialPrompt: "hello"},
+		{RuntimeConfig: runconfig.RuntimeConfig{
+			OrganizationID: orgID, WorkspaceID: workspaceID, TaskID: taskID, TaskSessionID: newID(), RunID: newID(), Runtime: "opencode",
+			Agent: runconfig.AgentDefinition{Name: "original", Instructions: "original"}, Model: runconfig.ModelSelection{Provider: "test", ID: "model"},
+			MCPServers:  []runconfig.MCPServer{{ID: "mcp", Name: "mcp", URL: "https://example.test/mcp", Headers: map[string]string{"Authorization": "private"}}},
+			Environment: map[string]string{"TOKEN": "environment-secret"},
+		}, InitialCommandID: "initial", InitialPrompt: "hello"},
 	}
 	second := configs[0]
 	second.TaskSessionID, second.RunID = newID(), newID()
@@ -58,6 +69,16 @@ func testTaskSessions(t *testing.T, database *PostgresDatabase, orgID, workspace
 	if len(current.MCPServers[0].Headers) != 0 {
 		t.Fatal("credentials persisted in session snapshot")
 	}
+	if current.Environment["TOKEN"] != "environment-secret" {
+		t.Fatalf("environment snapshot lost value: %#v", current.Environment)
+	}
+	var persisted string
+	if err := database.pool.QueryRow(ctx, `SELECT configuration::text FROM task_agent_sessions WHERE id=$1`, config.TaskSessionID).Scan(&persisted); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(persisted, "environment-secret") {
+		t.Fatal("plaintext environment value persisted in task session")
+	}
 	if _, exists, err := repo.CurrentSession(ctx, "other-org", workspaceID, taskID); err != nil || exists {
 		t.Fatal("session crossed organization boundary", err)
 	}
@@ -81,8 +102,13 @@ func testTaskSessions(t *testing.T, database *PostgresDatabase, orgID, workspace
 	next := config
 	next.RunID = newID()
 	next.RestoreSession = true
+	next.Environment = map[string]string{"TOKEN": "rotated-secret"}
 	if err := repo.ReserveSessionRun(ctx, next); err != nil {
 		t.Fatal("session could not continue in a new run", err)
+	}
+	current, exists, err = repo.CurrentSession(ctx, orgID, workspaceID, taskID)
+	if err != nil || !exists || current.Environment["TOKEN"] != "rotated-secret" {
+		t.Fatalf("updated run environment snapshot mismatch: %#v, %v", current.Environment, err)
 	}
 	launches, err := repo.ListTaskLaunches(ctx, orgID, workspaceID, taskID)
 	if err != nil || len(launches) != 2 || launches[0].TaskSessionID != config.TaskSessionID {

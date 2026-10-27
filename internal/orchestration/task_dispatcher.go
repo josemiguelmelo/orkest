@@ -15,6 +15,7 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/mcpserver"
 	"github.com/josemiguelmelo/orkest/internal/skill"
 	"github.com/josemiguelmelo/orkest/internal/task"
+	"github.com/josemiguelmelo/orkest/internal/workspaceenv"
 )
 
 type taskAgentGetter interface {
@@ -31,9 +32,19 @@ type TaskDispatcher struct {
 	skillResolver interface {
 		ResolveForAgent(context.Context, string, string, []string) ([]skill.Skill, error)
 	}
+	environmentResolver interface {
+		Resolve(context.Context, string) (workspaceenv.RuntimeValues, error)
+	}
 	repositories interface {
 		List(context.Context, string, string, string) ([]coderepository.CodeRepository, error)
 	}
+}
+
+func (d *TaskDispatcher) SetEnvironmentResolver(resolver interface {
+	Resolve(context.Context, string) (workspaceenv.RuntimeValues, error)
+},
+) {
+	d.environmentResolver = resolver
 }
 
 func (d *TaskDispatcher) SetRepositoryResolver(resolver interface {
@@ -100,6 +111,12 @@ func (d *TaskDispatcher) StartTask(ctx context.Context, userID, organizationID s
 		}
 	}
 	config.RunID, config.RestoreSession = runID, continuing
+	if d.environmentResolver != nil {
+		config.Environment, err = d.environmentResolver.Resolve(ctx, value.WorkspaceID)
+		if err != nil {
+			return fmt.Errorf("resolve workspace environment: %w", err)
+		}
+	}
 	if d.repositories != nil {
 		repositories, resolveErr := d.repositories.List(ctx, userID, organizationID, value.WorkspaceID)
 		if resolveErr != nil {

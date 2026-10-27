@@ -190,6 +190,14 @@ type Workspace struct {
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 }
 
+type WorkspaceEnvironment struct {
+	WorkspaceID string             `json:"workspace_id"`
+	Name        string             `json:"name"`
+	Value       string             `json:"value"`
+	IsSecret    bool               `json:"is_secret"`
+	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
+}
+
 type WorkspaceMembership struct {
 	OrganizationID string             `json:"organization_id"`
 	WorkspaceID    string             `json:"workspace_id"`

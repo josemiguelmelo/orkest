@@ -33,6 +33,8 @@ Automatic assignment and automatic movement into in progress are outside the MVP
 
 An organization groups users and multiple workspaces. Each workspace represents an isolated project within the organization. Repositories, tasks, agent definitions, team members, tools, MCP servers, integrations, executor configurations, and workflow configuration belong to a workspace and are isolated from other workspaces, including those in the same organization. Configuration and credentials must not be implicitly shared across projects.
 
+Workspace Admins and inherited organization Owners/Admins can manage workspace environment variables and secrets. Variables are readable through workspace configuration APIs; secret values are encrypted at rest and write-only. Workspace values are supplied to the runtime process and child tools for each run. Updates apply to future runs; an existing run's environment snapshot is encrypted and retained for recovery.
+
 Organization roles are Owner, Admin, and Member. Workspace roles are Admin, Member, and Viewer. Authentication is delegated to Keycloak. Orkest owns user profiles, organization/workspace membership, and application authorization; Keycloak authenticates users. On first successful login, Orkest creates a user keyed by the verified Keycloak subject and records username and email. The profile is not overwritten by later logins. Users must be organization members before receiving workspace membership.
 
 Organization Owners manage the organization and all memberships. Organization Admins manage organization settings and workspaces and manage memberships, but cannot grant, change, or remove an Owner. Organization Members can read organization details. Owner and Admin access is inherited across every workspace in the organization. Workspace Admins manage workspace settings and memberships; Members may read and edit project resources; Viewers are read-only. The last organization Owner cannot be demoted or removed. Invitations are not part of this first membership API. A workspace Viewer must not mutate tasks or configurations, start executions, or answer approval requests. The platform must enforce organization and workspace access boundaries on all data and execution operations.
@@ -200,6 +202,7 @@ Imported tasks use local assignment and execution controls without changing sour
 - One organization's users must not gain access to another organization's resources through identifiers, subscriptions, or executor connections.
 - Execution environments must receive only the configuration and credentials needed for the task.
 - Credentials must be stored and transmitted securely and redacted from ordinary logs.
+- Workspace secrets and task-session environment snapshots must be encrypted at rest; secret values must not be returned by workspace APIs or written to ordinary logs.
 - Approval requests must remain associated with the correct task, run, and session; stale responses must not approve a different action.
 - Proposed: record an audit trail for assignments, transitions, execution controls, and approval decisions.
 
