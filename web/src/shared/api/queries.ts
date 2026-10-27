@@ -88,6 +88,11 @@ export const repositoriesQuery = (s: WorkspaceScope) =>
     queryKey: [...keys.workspace(s), 'repositories'],
     queryFn: ({ signal }) => data(sdk.listCodeRepositories({ ...command, path: path(s), signal })),
   });
+export const codingIntegrationsQuery = (s: WorkspaceScope) =>
+  queryOptions({
+    queryKey: [...keys.workspace(s), 'coding-integrations'],
+    queryFn: ({ signal }) => data(sdk.listCodingIntegrations({ ...command, path: path(s), signal })),
+  });
 export const mcpQuery = (s: WorkspaceScope) =>
   queryOptions({
     queryKey: [...keys.workspace(s), 'mcp'],

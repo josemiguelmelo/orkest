@@ -19,9 +19,15 @@ import (
 
 const ProviderName = "github"
 
-type GitHubProvider struct{ Client *http.Client }
+type GitHubProvider struct {
+	Client     *http.Client
+	APIBaseURL string
+}
 
-var _ coderepository.CodingProvider = GitHubProvider{}
+var (
+	_ coderepository.CodingProvider           = GitHubProvider{}
+	_ coderepository.LegacyRepositoryCheckout = GitHubProvider{}
+)
 
 func NewGitHubProvider() GitHubProvider {
 	return GitHubProvider{Client: &http.Client{Timeout: 20 * time.Second}}
@@ -38,7 +44,7 @@ func (GitHubProvider) ValidateConfig(raw json.RawMessage) error {
 		return nil
 	}
 	var cfg map[string]string
-	if json.Unmarshal(raw, &cfg) != nil || (cfg["host"] != "" && cfg["host"] != "github.com") {
+	if json.Unmarshal(raw, &cfg) != nil || len(cfg) > 1 || (cfg["host"] != "" && cfg["host"] != "github.com") {
 		return errors.New("GitHub configuration is invalid")
 	}
 	return nil
@@ -49,24 +55,24 @@ func (p GitHubProvider) ValidateAuthentication(ctx context.Context, cfg json.Raw
 		return err
 	}
 	if strings.TrimSpace(credential.Token) == "" {
-		return errors.New("GitHub token is required")
+		return &coderepository.ProviderError{Code: "github_token_required", Status: http.StatusBadRequest}
 	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, "https://api.github.com/user", nil)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, p.apiBase()+"/user", nil)
 	if err != nil {
-		return errors.New("GitHub connection failed")
+		return &coderepository.ProviderError{Code: "github_connection_failed", Status: http.StatusBadGateway}
 	}
 	request.Header.Set("Authorization", "Bearer "+credential.Token)
 	request.Header.Set("Accept", "application/vnd.github+json")
 	response, err := p.client().Do(request)
 	if err != nil {
-		return errors.New("GitHub connection failed")
+		return &coderepository.ProviderError{Code: "github_connection_failed", Status: http.StatusBadGateway}
 	}
 	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode == http.StatusUnauthorized || response.StatusCode == http.StatusForbidden {
-		return errors.New("GitHub authentication or permission check failed")
+		return &coderepository.ProviderError{Code: "github_authentication_failed", Status: http.StatusBadGateway}
 	}
 	if response.StatusCode < 200 || response.StatusCode > 299 {
-		return errors.New("GitHub connection failed")
+		return &coderepository.ProviderError{Code: "github_connection_failed", Status: http.StatusBadGateway}
 	}
 	return nil
 }
@@ -76,7 +82,7 @@ func (p GitHubProvider) DiscoverRepositories(ctx context.Context, cfg json.RawMe
 		return coderepository.RepositoryPage{}, err
 	}
 	if strings.TrimSpace(credential.Token) == "" {
-		return coderepository.RepositoryPage{}, errors.New("GitHub token is required")
+		return coderepository.RepositoryPage{}, &coderepository.ProviderError{Code: "github_token_required", Status: http.StatusBadRequest}
 	}
 	if page < 1 {
 		page = 1
@@ -84,26 +90,26 @@ func (p GitHubProvider) DiscoverRepositories(ctx context.Context, cfg json.RawMe
 	if perPage < 1 || perPage > 100 {
 		perPage = 50
 	}
-	endpoint := "https://api.github.com/user/repos?page=" + strconv.Itoa(page) + "&per_page=" + strconv.Itoa(perPage) + "&sort=full_name&affiliation=owner,collaborator,organization_member"
+	endpoint := p.apiBase() + "/user/repos?page=" + strconv.Itoa(page) + "&per_page=" + strconv.Itoa(perPage) + "&sort=full_name&affiliation=owner,collaborator,organization_member"
 	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
-		return coderepository.RepositoryPage{}, errors.New("GitHub repository request failed")
+		return coderepository.RepositoryPage{}, &coderepository.ProviderError{Code: "github_repository_request_failed", Status: http.StatusBadGateway}
 	}
 	request.Header.Set("Authorization", "Bearer "+credential.Token)
 	request.Header.Set("Accept", "application/vnd.github+json")
 	response, err := p.client().Do(request)
 	if err != nil {
-		return coderepository.RepositoryPage{}, errors.New("GitHub repository request failed")
+		return coderepository.RepositoryPage{}, &coderepository.ProviderError{Code: "github_repository_request_failed", Status: http.StatusBadGateway}
 	}
 	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode == 401 {
-		return coderepository.RepositoryPage{}, errors.New("GitHub token is invalid or revoked")
+		return coderepository.RepositoryPage{}, &coderepository.ProviderError{Code: "github_token_invalid_or_revoked", Status: http.StatusBadGateway}
 	}
 	if response.StatusCode == 403 {
-		return coderepository.RepositoryPage{}, errors.New("GitHub denied repository access or rate limit was reached")
+		return coderepository.RepositoryPage{}, &coderepository.ProviderError{Code: "github_permission_denied_or_rate_limited", Status: http.StatusBadGateway}
 	}
 	if response.StatusCode < 200 || response.StatusCode > 299 {
-		return coderepository.RepositoryPage{}, errors.New("GitHub repository request failed")
+		return coderepository.RepositoryPage{}, &coderepository.ProviderError{Code: "github_repository_request_failed", Status: http.StatusBadGateway}
 	}
 	var entries []struct {
 		ID            int64  `json:"id"`
@@ -113,7 +119,7 @@ func (p GitHubProvider) DiscoverRepositories(ctx context.Context, cfg json.RawMe
 		DefaultBranch string `json:"default_branch"`
 	}
 	if json.NewDecoder(response.Body).Decode(&entries) != nil {
-		return coderepository.RepositoryPage{}, errors.New("GitHub repository response was invalid")
+		return coderepository.RepositoryPage{}, &coderepository.ProviderError{Code: "github_repository_response_invalid", Status: http.StatusBadGateway}
 	}
 	result := coderepository.RepositoryPage{Repositories: make([]coderepository.RepositoryMetadata, 0, len(entries))}
 	for _, entry := range entries {
@@ -140,7 +146,7 @@ func (p GitHubProvider) ResolveRepository(ctx context.Context, cfg json.RawMessa
 			break
 		}
 	}
-	return coderepository.RepositoryMetadata{}, errors.New("GitHub repository is unavailable to this integration")
+	return coderepository.RepositoryMetadata{}, &coderepository.ProviderError{Code: "github_repository_unavailable", Status: http.StatusNotFound}
 }
 
 func (GitHubProvider) NormalizeRepositoryURL(value string) (string, error) {
@@ -171,6 +177,13 @@ func (p GitHubProvider) client() *http.Client {
 	return &http.Client{Timeout: 20 * time.Second}
 }
 
+func (p GitHubProvider) apiBase() string {
+	if strings.TrimSpace(p.APIBaseURL) != "" {
+		return strings.TrimRight(p.APIBaseURL, "/")
+	}
+	return "https://api.github.com"
+}
+
 func (p GitHubProvider) gitAuthenticated(ctx context.Context, repo coderepository.RepositoryMetadata, credential coderepository.Credentials, path, operation string, branch ...string) error {
 	if strings.TrimSpace(credential.Token) == "" {
 		return errors.New("GitHub token is required")
@@ -178,6 +191,20 @@ func (p GitHubProvider) gitAuthenticated(ctx context.Context, repo coderepositor
 	canonical, err := p.NormalizeRepositoryURL(repo.CloneURL)
 	if err != nil || canonicalURL(canonical) != canonicalURL(repo.CloneURL) {
 		return errors.New("registered GitHub origin is invalid")
+	}
+	if operation == "clone" {
+		if _, statErr := os.Stat(filepath.Join(path, ".git")); statErr == nil {
+			origin, originErr := gitOutput(ctx, path, "remote", "get-url", "origin")
+			if originErr != nil {
+				return errors.New("read checkout origin failed")
+			}
+			if canonicalURL(origin) != canonicalURL(canonical) {
+				return errors.New("checkout origin does not match registered repository")
+			}
+			return nil
+		} else if !errors.Is(statErr, os.ErrNotExist) {
+			return errors.New("inspect checkout origin failed")
+		}
 	}
 	if operation != "clone" {
 		origin, originErr := gitOutput(ctx, path, "remote", "get-url", "origin")
@@ -210,14 +237,14 @@ func (p GitHubProvider) gitAuthenticated(ctx context.Context, repo coderepositor
 	}
 	defer func() { _ = os.RemoveAll(credentialDir) }()
 	helper := filepath.Join(credentialDir, "helper.sh")
-	script := "#!/bin/sh\nprintf 'username=x-access-token\\npassword=%s\\n' \"$(cat '" + filepath.Join(credentialDir, "token") + "')\"\n"
+	script := "#!/bin/sh\ntoken_file=\"${0%/*}/token\"\nprintf 'username=x-access-token\\npassword=%s\\n' \"$(cat \"$token_file\")\"\n"
 	if err = os.WriteFile(filepath.Join(credentialDir, "token"), []byte(credential.Token), 0o600); err != nil {
 		return errors.New("prepare Git credential helper failed")
 	}
 	if err = os.WriteFile(helper, []byte(script), 0o700); err != nil {
 		return errors.New("prepare Git credential helper failed")
 	}
-	args := []string{"-c", "credential.helper=" + helper, "-c", "credential.useHttpPath=true"}
+	args := []string{"-c", "credential.helper=", "-c", "credential.helper=" + helper, "-c", "credential.useHttpPath=true"}
 	cmd := []string{}
 	switch operation {
 	case "clone":
@@ -243,6 +270,14 @@ func (p GitHubProvider) gitAuthenticated(ctx context.Context, repo coderepositor
 	if err = runGitWithPrefix(ctx, args, cmd...); err != nil {
 		return errors.New("GitHub repository operation failed")
 	}
+	if operation == "clone-task" {
+		if err = runGitWithPrefix(ctx, args, "-C", path, "check-ref-format", "--branch", branch[0]); err != nil {
+			return errors.New("task branch is invalid")
+		}
+		if err = runGitWithPrefix(ctx, args, "-C", path, "checkout", "-b", branch[0]); err != nil {
+			return errors.New("GitHub task checkout preparation failed")
+		}
+	}
 	return nil
 }
 
@@ -256,16 +291,16 @@ func runGitWithPrefix(ctx context.Context, prefix []string, args ...string) erro
 	return nil
 }
 
-func (GitHubProvider) Clone(ctx context.Context, repositoryURL, path string) error {
+func (GitHubProvider) ClonePublic(ctx context.Context, repositoryURL, path string) error {
 	return runGit(ctx, "clone", "--", repositoryURL, path)
 }
 
-func (p GitHubProvider) PrepareTaskCheckout(ctx context.Context, repositoryURL, path, branch string) error {
+func (p GitHubProvider) PreparePublicTaskCheckout(ctx context.Context, repositoryURL, path, branch string) error {
 	if strings.TrimSpace(branch) == "" || strings.ContainsAny(branch, "\x00\r\n") {
 		return fmt.Errorf("task branch is invalid")
 	}
 	if _, err := os.Stat(filepath.Join(path, ".git")); errors.Is(err, os.ErrNotExist) {
-		if err = p.Clone(ctx, repositoryURL, path); err != nil {
+		if err = p.ClonePublic(ctx, repositoryURL, path); err != nil {
 			return err
 		}
 	} else if err != nil {
@@ -288,7 +323,7 @@ func (p GitHubProvider) PrepareTaskCheckout(ctx context.Context, repositoryURL, 
 	return runGit(ctx, "-C", path, "checkout", "-b", branch)
 }
 
-func (GitHubProvider) Sync(ctx context.Context, repositoryURL, path string) error {
+func (GitHubProvider) SyncPublic(ctx context.Context, repositoryURL, path string) error {
 	remoteURL, err := gitOutput(ctx, path, "remote", "get-url", "origin")
 	if err != nil {
 		return fmt.Errorf("read origin URL: %w", err)
@@ -296,13 +331,34 @@ func (GitHubProvider) Sync(ctx context.Context, repositoryURL, path string) erro
 	if canonicalURL(remoteURL) != canonicalURL(repositoryURL) {
 		return fmt.Errorf("checkout origin does not match registered repository")
 	}
-	if err = runGit(ctx, "-C", path, "fetch", "origin", "main"); err != nil {
-		return fmt.Errorf("fetch main: %w", err)
+	branch, err := publicDefaultBranch(ctx, repositoryURL)
+	if err != nil {
+		return err
+	}
+	if err = runGit(ctx, "-C", path, "fetch", "origin", branch); err != nil {
+		return fmt.Errorf("fetch default branch: %w", err)
 	}
 	if err = runGit(ctx, "-C", path, "reset", "--hard", "FETCH_HEAD"); err != nil {
 		return fmt.Errorf("reset to fetched main: %w", err)
 	}
 	return nil
+}
+
+func publicDefaultBranch(ctx context.Context, repositoryURL string) (string, error) {
+	command := exec.CommandContext(ctx, "git", "ls-remote", "--symref", repositoryURL, "HEAD")
+	output, err := command.Output()
+	if err != nil {
+		return "", errors.New("resolve repository default branch failed")
+	}
+	for _, line := range strings.Split(string(output), "\n") {
+		if strings.HasPrefix(line, "ref: refs/heads/") {
+			fields := strings.Fields(line)
+			if len(fields) == 3 && fields[2] == "HEAD" {
+				return strings.TrimPrefix(fields[1], "refs/heads/"), nil
+			}
+		}
+	}
+	return "", errors.New("repository default branch is unavailable")
 }
 
 func runGit(ctx context.Context, args ...string) error {

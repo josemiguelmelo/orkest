@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/josemiguelmelo/orkest/internal/agent"
+	"github.com/josemiguelmelo/orkest/internal/coderepository"
 	"github.com/josemiguelmelo/orkest/internal/core/ids"
 	modelerrors "github.com/josemiguelmelo/orkest/internal/core/model/errors"
 	"github.com/josemiguelmelo/orkest/internal/task"
@@ -118,7 +119,11 @@ func TestPostgresRepositories(t *testing.T) {
 		t.Fatal(err)
 	}
 	codeRepositoryRepository := NewCodeReposPostgresRepository(database)
-	codeRepository, err := codeRepositoryRepository.CreateCodeRepository(ctx, codeRepositoryID, workspaceID, "github", "https://github.com/acme/project.git")
+	_, err = database.pool.Exec(ctx, `INSERT INTO code_repositories (id,workspace_id,provider_name,url) VALUES ($1,$2,'github',$3)`, codeRepositoryID, workspaceID, "https://github.com/acme/project.git")
+	if err != nil {
+		t.Fatalf("insert legacy public repository fixture: %v", err)
+	}
+	codeRepository, err := codeRepositoryRepository.CodeRepository(ctx, org.ID, workspaceID, codeRepositoryID)
 	if err != nil || codeRepository.ID != codeRepositoryID || codeRepository.WorkspaceID != workspaceID || codeRepository.ProviderName != "github" {
 		t.Fatalf("create code repository: repository=%+v err=%v", codeRepository, err)
 	}
@@ -129,8 +134,23 @@ func TestPostgresRepositories(t *testing.T) {
 	if _, err = codeRepositoryRepository.CodeRepository(ctx, "another-organization", workspaceID, codeRepositoryID); !errors.Is(err, modelerrors.ErrNotFound) {
 		t.Fatalf("code repository read crossed organization boundary: %v", err)
 	}
-	if _, err = codeRepositoryRepository.CreateCodeRepository(ctx, "duplicate-repository", workspaceID, "github", codeRepository.URL); !errors.Is(err, modelerrors.ErrConflict) {
-		t.Fatalf("expected duplicate repository conflict, got %v", err)
+	integrationID, err := ids.NewUUID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	integration, err := codeRepositoryRepository.CreateCodingIntegration(ctx, coderepository.CodingIntegration{ID: integrationID, WorkspaceID: workspaceID, Name: "GitHub", ProviderName: "github", ProviderConfig: []byte(`{}`)}, "encrypted-token")
+	if err != nil {
+		t.Fatalf("create coding integration: %v", err)
+	}
+	attached, err := codeRepositoryRepository.CreateIntegratedCodeRepository(ctx, coderepository.CodeRepository{ID: "replacement-id", WorkspaceID: workspaceID, ProviderName: "github", URL: codeRepository.URL, IntegrationID: integration.ID, ProviderRepositoryID: "42", DefaultBranch: "trunk", Name: "acme/project", Private: true})
+	if err != nil || attached.ID != codeRepositoryID || attached.IntegrationID != integrationID || attached.DefaultBranch != "trunk" || !attached.Private {
+		t.Fatalf("attach matching repository: item=%+v err=%v", attached, err)
+	}
+	if err = codeRepositoryRepository.DeleteCodingIntegration(ctx, workspaceID, integrationID); !errors.Is(err, modelerrors.ErrConflict) {
+		t.Fatalf("delete referenced coding integration error=%v", err)
+	}
+	if _, err = codeRepositoryRepository.CreateIntegratedCodeRepository(ctx, coderepository.CodeRepository{ID: "duplicate-repository", WorkspaceID: workspaceID, ProviderName: "github", URL: "https://github.com/acme/project-renamed.git", IntegrationID: integrationID, ProviderRepositoryID: "42", DefaultBranch: "trunk"}); !errors.Is(err, modelerrors.ErrConflict) {
+		t.Fatalf("duplicate provider repository identity error=%v", err)
 	}
 
 	agentID, err := ids.NewUUID()

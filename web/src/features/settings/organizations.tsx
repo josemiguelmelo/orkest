@@ -16,6 +16,7 @@ import {
   Users,
 } from 'lucide-react';
 import { useApp } from '../../app/context';
+import { CodingIntegrationsPanel } from './coding-integrations';
 import { command, data } from '../../shared/api/client';
 import * as sdk from '../../shared/api/generated/sdk.gen';
 import type { Membership, WorkspaceEnvironmentValue } from '../../shared/api/generated/types.gen';
@@ -276,6 +277,7 @@ export function WorkspaceSettingsPage() {
         )}
       </PageHeader>
       <WorkspaceEnvironmentPanel />
+      <CodingIntegrationsPanel />
       <Members workspace />
       {permissions.workspaceAdmin && (
         <section className="panel">

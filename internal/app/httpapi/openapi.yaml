@@ -23,11 +23,108 @@ tags:
     description: Workspace-scoped HTTP MCP server connections.
   - name: CodeRepositories
     description: Workspace-scoped code repository registration and Git operations.
+  - name: CodingIntegrations
+    description: Workspace-scoped authenticated coding provider connections.
   - name: TaskIntegrations
     description: Workspace-scoped external task source integrations.
   - name: Tasks
     description: Workspace-scoped manual tasks, comments, and components.
 paths:
+  /api/coding-providers:
+    get:
+      tags: [CodingIntegrations]
+      operationId: listCodingProviders
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      responses:
+        "200": {description: Coding provider catalog, content: {application/json: {schema: {type: array, items: {$ref: "#/components/schemas/CodingProvider"}}}}}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/coding-integrations:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [CodingIntegrations]
+      operationId: listCodingIntegrations
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      responses:
+        "200": {description: Workspace coding integrations, content: {application/json: {schema: {type: array, items: {$ref: "#/components/schemas/CodingIntegration"}}}}}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+    post:
+      tags: [CodingIntegrations]
+      operationId: createCodingIntegration
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/CodingIntegrationInput"}}}
+      responses:
+        "201": {description: Coding integration created, content: {application/json: {schema: {$ref: "#/components/schemas/CodingIntegration"}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "409": {$ref: "#/components/responses/Conflict"}
+        "502": {$ref: "#/components/responses/BadGateway"}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/coding-integrations/{integrationID}:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+      - {name: integrationID, in: path, required: true, schema: {type: string}}
+    put:
+      tags: [CodingIntegrations]
+      operationId: updateCodingIntegration
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/CodingIntegrationInput"}}}
+      responses:
+        "204": {description: Coding integration updated}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "502": {$ref: "#/components/responses/BadGateway"}
+    delete:
+      tags: [CodingIntegrations]
+      operationId: deleteCodingIntegration
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      responses:
+        "204": {description: Coding integration deleted}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/coding-integrations/{integrationID}/validate:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+      - {name: integrationID, in: path, required: true, schema: {type: string}}
+    post:
+      tags: [CodingIntegrations]
+      operationId: validateCodingIntegration
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      responses:
+        "200": {description: Saved connection validation succeeded, content: {application/json: {schema: {$ref: "#/components/schemas/CodingIntegrationValidation"}}}}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "502": {$ref: "#/components/responses/BadGateway"}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/coding-integrations/{integrationID}/repositories:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+      - {name: integrationID, in: path, required: true, schema: {type: string}}
+      - {name: page, in: query, schema: {type: integer, minimum: 1, default: 1}}
+      - {name: perPage, in: query, schema: {type: integer, minimum: 1, maximum: 100, default: 50}}
+    get:
+      tags: [CodingIntegrations]
+      operationId: browseCodingRepositories
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      responses:
+        "200": {description: Provider repository page, content: {application/json: {schema: {$ref: "#/components/schemas/CodingRepositoryPage"}}}}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "502": {$ref: "#/components/responses/BadGateway"}
   /healthz:
     get:
       tags: [System]
@@ -497,10 +594,10 @@ paths:
       - {name: repositoryID, in: path, required: true, schema: {type: string}}
     post:
       tags: [CodeRepositories]
-      operationId: syncCodeRepositoryMain
+      operationId: syncCodeRepository
       security: [{bearerAuth: []}, {cookieAuth: []}]
       responses:
-        "204": {description: Checkout reset to the latest remote main branch}
+        "204": {description: Shared checkout synced to the registered repository default branch}
         "400": {$ref: "#/components/responses/BadRequest"}
         "403":
           $ref: "#/components/responses/Forbidden"
@@ -1222,6 +1319,7 @@ components:
     NotFound: {description: Resource is absent or inaccessible, content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}}
     BadRequest: {description: Request body or role is invalid, content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}}
     Conflict: {description: Operation conflicts with membership invariants, content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}}
+    BadGateway: {description: Coding provider rejected the connection or failed to respond, content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}}
     InternalServerError:
       description: Internal server error
       content:
@@ -1415,19 +1513,69 @@ components:
         hasHeaders: {type: boolean}
     CodeRepository:
       type: object
-      required: [id, workspaceId, providerName, url]
+      required: [id, workspaceId, providerName, url, defaultBranch, private]
       properties:
         id: {type: string}
         workspaceId: {type: string}
         providerName: {type: string, enum: [github]}
         url: {type: string, format: uri}
+        integrationId: {type: string}
+        providerRepositoryId: {type: string}
+        defaultBranch: {type: string}
+        name: {type: string}
+        private: {type: boolean}
+    CodingIntegrationInput:
+      type: object
+      required: [name, providerName]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 200}
+        providerName: {type: string}
+        providerConfig: {type: object, additionalProperties: true}
+        credential: {type: string, writeOnly: true}
+      additionalProperties: false
+    CodingIntegration:
+      type: object
+      required: [id, workspaceId, name, providerName, providerConfig]
+      properties:
+        id: {type: string}
+        workspaceId: {type: string}
+        name: {type: string}
+        providerName: {type: string}
+        providerConfig: {type: object, additionalProperties: true}
+        updatedAt: {type: string}
+    CodingProvider:
+      type: object
+      required: [providerName, configSchema]
+      properties:
+        providerName: {type: string}
+        configSchema: {type: object, additionalProperties: true}
+    CodingRepository:
+      type: object
+      required: [id, name, cloneUrl, private, defaultBranch]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        cloneUrl: {type: string, format: uri}
+        private: {type: boolean}
+        defaultBranch: {type: string}
+    CodingRepositoryPage:
+      type: object
+      required: [repositories]
+      properties:
+        repositories: {type: array, items: {$ref: "#/components/schemas/CodingRepository"}}
+        nextPage: {type: integer}
+    CodingIntegrationValidation:
+      type: object
+      required: [connected]
+      properties:
+        connected: {type: boolean}
     CodeRepositoryCreate:
       type: object
-      required: [providerName, url]
+      required: [integrationId, providerRepositoryId]
       additionalProperties: false
       properties:
-        providerName: {type: string, enum: [github]}
-        url: {type: string, format: uri}
+        integrationId: {type: string}
+        providerRepositoryId: {type: string}
     TaskIntegrationInput:
       type: object
       required: [provider, name, config]

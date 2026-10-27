@@ -72,12 +72,14 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 	workspaceEnvironment := workspaceenv.NewService(postgres.NewWorkspaceEnvironmentPostgresRepository(database), workspaces, secretBox)
 	agents := agent.NewService(postgres.NewAgentPostgresRepository(database), workspaces, mcpServerService, skillCatalog)
 	codeRepositories := coderepository.NewService(postgres.NewCodeReposPostgresRepository(database), workspaces, dataRoot, githubprovider.NewGitHubProvider())
+	codeRepositories.SetSecretBox(secretBox)
 	launchRepo := postgres.NewAgentLaunchPostgresRepository(database, secretBox)
 	client := orchestration.NewHTTPAgentctlClient(httplog.PropagatingHTTPClient(&http.Client{Timeout: 10 * time.Second}))
 	executor, executorErr := docker.New(ctx, docker.Config{
-		DataRoot:        filepath.Join(dataRoot, "agent-executions"),
-		ProviderEnv:     splitEnvironmentNames(os.Getenv("ORKEST_AGENT_PROVIDER_ENV")),
-		CodingProviders: []coderepository.CodingProvider{githubprovider.NewGitHubProvider()},
+		DataRoot:                 filepath.Join(dataRoot, "agent-executions"),
+		ProviderEnv:              splitEnvironmentNames(os.Getenv("ORKEST_AGENT_PROVIDER_ENV")),
+		CodingProviders:          []coderepository.CodingProvider{githubprovider.NewGitHubProvider()},
+		CodingCredentialResolver: codeRepositories,
 	})
 	if executorErr != nil {
 		return fmt.Errorf("initialize Docker agent executor: %w", executorErr)

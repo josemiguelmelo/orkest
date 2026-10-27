@@ -258,12 +258,16 @@ type fakeEngine struct {
 	running      bool
 }
 
-type checkoutProviderStub struct{ url, path, branch string }
+type checkoutProviderStub struct {
+	url, path, branch string
+	credential        coderepository.Credentials
+	metadata          coderepository.RepositoryMetadata
+}
 
-func (*checkoutProviderStub) ProviderName() string                        { return "test" }
-func (*checkoutProviderStub) Clone(context.Context, string, string) error { return nil }
-func (*checkoutProviderStub) Sync(context.Context, string, string) error  { return nil }
-func (p *checkoutProviderStub) PrepareTaskCheckout(_ context.Context, url, path, branch string) error {
+func (*checkoutProviderStub) ProviderName() string                              { return "test" }
+func (*checkoutProviderStub) ClonePublic(context.Context, string, string) error { return nil }
+func (*checkoutProviderStub) SyncPublic(context.Context, string, string) error  { return nil }
+func (p *checkoutProviderStub) PreparePublicTaskCheckout(_ context.Context, url, path, branch string) error {
 	p.url, p.path, p.branch = url, path, branch
 	return nil
 }
@@ -291,8 +295,37 @@ func (*checkoutProviderStub) SyncAuthenticated(context.Context, coderepository.R
 	return nil
 }
 
-func (*checkoutProviderStub) PrepareAuthenticatedTaskCheckout(context.Context, coderepository.RepositoryMetadata, coderepository.Credentials, string, string) error {
+func (p *checkoutProviderStub) PrepareAuthenticatedTaskCheckout(_ context.Context, metadata coderepository.RepositoryMetadata, credential coderepository.Credentials, path, branch string) error {
+	p.metadata = metadata
+	p.credential = credential
+	p.path = path
+	p.branch = branch
 	return nil
+}
+
+type credentialResolverStub struct{ workspaceID, integrationID string }
+
+func (r *credentialResolverStub) CodingCredential(_ context.Context, workspaceID, integrationID string) (coderepository.Credentials, error) {
+	r.workspaceID = workspaceID
+	r.integrationID = integrationID
+	return coderepository.Credentials{Token: "secret-token"}, nil
+}
+
+func TestTaskCheckoutResolvesCredentialFromScopedIntegrationReference(t *testing.T) {
+	provider := &checkoutProviderStub{}
+	resolver := &credentialResolverStub{}
+	executor := &Executor{repositoryProviders: map[string]coderepository.CodingProvider{"github": provider}, config: Config{CodingCredentialResolver: resolver}}
+	run := runConfig()
+	run.Repositories = []runconfig.WorkspaceRepository{{ID: "repo", ProviderName: "github", URL: "https://github.com/acme/project.git", IntegrationID: "integration", ProviderRepositoryID: "42", DefaultBranch: "trunk", Name: "acme/project"}}
+	if err := executor.prepareRepositories(context.Background(), t.TempDir(), run); err != nil {
+		t.Fatal(err)
+	}
+	if resolver.workspaceID != run.WorkspaceID || resolver.integrationID != "integration" || provider.credential.Token != "secret-token" {
+		t.Fatalf("resolver=%+v provider credential=%+v", resolver, provider.credential)
+	}
+	if provider.metadata.DefaultBranch != "trunk" || provider.metadata.ID != "42" || provider.branch != "orkest/task-"+run.TaskID {
+		t.Fatalf("metadata=%+v branch=%q", provider.metadata, provider.branch)
+	}
 }
 
 func (f *fakeEngine) ContainerCreate(_ context.Context, options mobyclient.ContainerCreateOptions) (mobyclient.ContainerCreateResult, error) {

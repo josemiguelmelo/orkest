@@ -73,6 +73,8 @@ type CodeRepository struct {
 	IntegrationID        pgtype.Text        `json:"integration_id"`
 	ProviderRepositoryID pgtype.Text        `json:"provider_repository_id"`
 	DefaultBranch        string             `json:"default_branch"`
+	DisplayName          string             `json:"display_name"`
+	IsPrivate            bool               `json:"is_private"`
 }
 
 type CodingIntegration struct {

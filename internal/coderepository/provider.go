@@ -3,7 +3,17 @@ package coderepository
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 )
+
+type ProviderError struct {
+	Code   string
+	Status int
+}
+
+func (e *ProviderError) Error() string {
+	return fmt.Sprintf("coding provider request failed (%s)", e.Code)
+}
 
 type Credentials struct{ Token string }
 
@@ -33,7 +43,12 @@ type CodingProvider interface {
 	CloneAuthenticated(context.Context, RepositoryMetadata, Credentials, string) error
 	SyncAuthenticated(context.Context, RepositoryMetadata, Credentials, string) error
 	PrepareAuthenticatedTaskCheckout(context.Context, RepositoryMetadata, Credentials, string, string) error
-	Clone(context.Context, string, string) error
-	Sync(context.Context, string, string) error
-	PrepareTaskCheckout(context.Context, string, string, string) error
+}
+
+// LegacyRepositoryCheckout supports pre-integration public registrations while
+// they remain in workspace data. New registrations always use CodingProvider.
+type LegacyRepositoryCheckout interface {
+	ClonePublic(context.Context, string, string) error
+	SyncPublic(context.Context, string, string) error
+	PreparePublicTaskCheckout(context.Context, string, string, string) error
 }

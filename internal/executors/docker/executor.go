@@ -42,12 +42,15 @@ type EngineClient interface {
 }
 
 type Config struct {
-	DataRoot        string
-	Image           string
-	AgentctlPort    int
-	ContainerUser   string
-	ProviderEnv     []string
-	CodingProviders []coderepository.CodingProvider
+	DataRoot                 string
+	Image                    string
+	AgentctlPort             int
+	ContainerUser            string
+	ProviderEnv              []string
+	CodingProviders          []coderepository.CodingProvider
+	CodingCredentialResolver interface {
+		CodingCredential(context.Context, string, string) (coderepository.Credentials, error)
+	}
 }
 
 type Executor struct {
@@ -229,8 +232,26 @@ func (e *Executor) prepareRepositories(ctx context.Context, workDir string, conf
 			return fmt.Errorf("create repository directory: %w", err)
 		}
 		branch := "orkest/task-" + config.TaskID
-		if err := provider.PrepareTaskCheckout(ctx, repository.URL, path, branch); err != nil {
-			return fmt.Errorf("prepare repository %q: %w", repository.ID, err)
+		var checkoutErr error
+		if repository.IntegrationID != "" {
+			if e.config.CodingCredentialResolver == nil {
+				return errors.New("coding credential resolver is unavailable")
+			}
+			credential, resolveErr := e.config.CodingCredentialResolver.CodingCredential(ctx, config.WorkspaceID, repository.IntegrationID)
+			if resolveErr != nil {
+				return fmt.Errorf("resolve coding integration credential: %w", resolveErr)
+			}
+			metadata := coderepository.RepositoryMetadata{ID: repository.ProviderRepositoryID, Name: repository.Name, CloneURL: repository.URL, DefaultBranch: repository.DefaultBranch}
+			checkoutErr = provider.PrepareAuthenticatedTaskCheckout(ctx, metadata, credential, path, branch)
+		} else {
+			legacy, ok := provider.(coderepository.LegacyRepositoryCheckout)
+			if !ok {
+				return errors.New("legacy repository checkout is unavailable")
+			}
+			checkoutErr = legacy.PreparePublicTaskCheckout(ctx, repository.URL, path, branch)
+		}
+		if checkoutErr != nil {
+			return fmt.Errorf("prepare repository %q: %w", repository.ID, checkoutErr)
 		}
 	}
 	return nil

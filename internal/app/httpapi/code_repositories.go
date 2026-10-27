@@ -37,7 +37,7 @@ func (a codeRepositoryAPI) create(w http.ResponseWriter, r *http.Request) {
 	if !decodeBody(w, r, &body) {
 		return
 	}
-	v, err := a.repositories.Create(r.Context(), currentUserID(r), chi.URLParam(r, "orgID"), chi.URLParam(r, "workspaceID"), body.ProviderName, body.URL)
+	v, err := a.repositories.RegisterRepository(r.Context(), currentUserID(r), chi.URLParam(r, "orgID"), chi.URLParam(r, "workspaceID"), body.IntegrationID, body.ProviderRepositoryID)
 	respond(w, v, err, http.StatusCreated)
 }
 

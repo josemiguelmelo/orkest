@@ -7,6 +7,8 @@ package sqlc
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const deleteCodeRepository = `-- name: DeleteCodeRepository :execrows
@@ -29,7 +31,7 @@ func (q *Queries) DeleteCodeRepository(ctx context.Context, arg DeleteCodeReposi
 }
 
 const getCodeRepository = `-- name: GetCodeRepository :one
-SELECT cr.id, cr.workspace_id, cr.provider_name, cr.url
+SELECT cr.id, cr.workspace_id, cr.provider_name, cr.url, cr.integration_id, cr.provider_repository_id, cr.default_branch, cr.display_name, cr.is_private
 FROM code_repositories cr JOIN workspaces w ON w.id = cr.workspace_id
 WHERE w.organization_id = $1 AND cr.workspace_id = $2 AND cr.id = $3
 `
@@ -41,10 +43,15 @@ type GetCodeRepositoryParams struct {
 }
 
 type GetCodeRepositoryRow struct {
-	ID           string `json:"id"`
-	WorkspaceID  string `json:"workspace_id"`
-	ProviderName string `json:"provider_name"`
-	Url          string `json:"url"`
+	ID                   string      `json:"id"`
+	WorkspaceID          string      `json:"workspace_id"`
+	ProviderName         string      `json:"provider_name"`
+	Url                  string      `json:"url"`
+	IntegrationID        pgtype.Text `json:"integration_id"`
+	ProviderRepositoryID pgtype.Text `json:"provider_repository_id"`
+	DefaultBranch        string      `json:"default_branch"`
+	DisplayName          string      `json:"display_name"`
+	IsPrivate            bool        `json:"is_private"`
 }
 
 func (q *Queries) GetCodeRepository(ctx context.Context, arg GetCodeRepositoryParams) (GetCodeRepositoryRow, error) {
@@ -55,49 +62,81 @@ func (q *Queries) GetCodeRepository(ctx context.Context, arg GetCodeRepositoryPa
 		&i.WorkspaceID,
 		&i.ProviderName,
 		&i.Url,
+		&i.IntegrationID,
+		&i.ProviderRepositoryID,
+		&i.DefaultBranch,
+		&i.DisplayName,
+		&i.IsPrivate,
 	)
 	return i, err
 }
 
-const insertCodeRepository = `-- name: InsertCodeRepository :one
-INSERT INTO code_repositories (id, workspace_id, provider_name, url)
-SELECT $1, w.id, $3, $4 FROM workspaces w WHERE w.id = $2
-RETURNING id, workspace_id, provider_name, url
+const insertIntegratedCodeRepository = `-- name: InsertIntegratedCodeRepository :one
+INSERT INTO code_repositories (id, workspace_id, provider_name, url, integration_id, provider_repository_id, default_branch, display_name, is_private)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+ON CONFLICT (workspace_id, provider_name, url) DO UPDATE
+SET integration_id=EXCLUDED.integration_id,
+    provider_repository_id=EXCLUDED.provider_repository_id,
+    default_branch=EXCLUDED.default_branch,
+    display_name=EXCLUDED.display_name,
+    is_private=EXCLUDED.is_private
+WHERE code_repositories.integration_id IS NULL
+RETURNING id, workspace_id, provider_name, url, integration_id, provider_repository_id, default_branch, display_name, is_private
 `
 
-type InsertCodeRepositoryParams struct {
-	ID           string `json:"id"`
-	ID_2         string `json:"id_2"`
-	ProviderName string `json:"provider_name"`
-	Url          string `json:"url"`
+type InsertIntegratedCodeRepositoryParams struct {
+	ID                   string      `json:"id"`
+	WorkspaceID          string      `json:"workspace_id"`
+	ProviderName         string      `json:"provider_name"`
+	Url                  string      `json:"url"`
+	IntegrationID        pgtype.Text `json:"integration_id"`
+	ProviderRepositoryID pgtype.Text `json:"provider_repository_id"`
+	DefaultBranch        string      `json:"default_branch"`
+	DisplayName          string      `json:"display_name"`
+	IsPrivate            bool        `json:"is_private"`
 }
 
-type InsertCodeRepositoryRow struct {
-	ID           string `json:"id"`
-	WorkspaceID  string `json:"workspace_id"`
-	ProviderName string `json:"provider_name"`
-	Url          string `json:"url"`
+type InsertIntegratedCodeRepositoryRow struct {
+	ID                   string      `json:"id"`
+	WorkspaceID          string      `json:"workspace_id"`
+	ProviderName         string      `json:"provider_name"`
+	Url                  string      `json:"url"`
+	IntegrationID        pgtype.Text `json:"integration_id"`
+	ProviderRepositoryID pgtype.Text `json:"provider_repository_id"`
+	DefaultBranch        string      `json:"default_branch"`
+	DisplayName          string      `json:"display_name"`
+	IsPrivate            bool        `json:"is_private"`
 }
 
-func (q *Queries) InsertCodeRepository(ctx context.Context, arg InsertCodeRepositoryParams) (InsertCodeRepositoryRow, error) {
-	row := q.db.QueryRow(ctx, insertCodeRepository,
+func (q *Queries) InsertIntegratedCodeRepository(ctx context.Context, arg InsertIntegratedCodeRepositoryParams) (InsertIntegratedCodeRepositoryRow, error) {
+	row := q.db.QueryRow(ctx, insertIntegratedCodeRepository,
 		arg.ID,
-		arg.ID_2,
+		arg.WorkspaceID,
 		arg.ProviderName,
 		arg.Url,
+		arg.IntegrationID,
+		arg.ProviderRepositoryID,
+		arg.DefaultBranch,
+		arg.DisplayName,
+		arg.IsPrivate,
 	)
-	var i InsertCodeRepositoryRow
+	var i InsertIntegratedCodeRepositoryRow
 	err := row.Scan(
 		&i.ID,
 		&i.WorkspaceID,
 		&i.ProviderName,
 		&i.Url,
+		&i.IntegrationID,
+		&i.ProviderRepositoryID,
+		&i.DefaultBranch,
+		&i.DisplayName,
+		&i.IsPrivate,
 	)
 	return i, err
 }
 
 const listCodeRepositories = `-- name: ListCodeRepositories :many
-SELECT cr.id, cr.workspace_id, cr.provider_name, cr.url
+SELECT cr.id, cr.workspace_id, cr.provider_name, cr.url, cr.integration_id, cr.provider_repository_id, cr.default_branch, cr.display_name, cr.is_private
 FROM code_repositories cr JOIN workspaces w ON w.id = cr.workspace_id
 WHERE w.organization_id = $1 AND cr.workspace_id = $2
 ORDER BY cr.url, cr.id
@@ -109,10 +148,15 @@ type ListCodeRepositoriesParams struct {
 }
 
 type ListCodeRepositoriesRow struct {
-	ID           string `json:"id"`
-	WorkspaceID  string `json:"workspace_id"`
-	ProviderName string `json:"provider_name"`
-	Url          string `json:"url"`
+	ID                   string      `json:"id"`
+	WorkspaceID          string      `json:"workspace_id"`
+	ProviderName         string      `json:"provider_name"`
+	Url                  string      `json:"url"`
+	IntegrationID        pgtype.Text `json:"integration_id"`
+	ProviderRepositoryID pgtype.Text `json:"provider_repository_id"`
+	DefaultBranch        string      `json:"default_branch"`
+	DisplayName          string      `json:"display_name"`
+	IsPrivate            bool        `json:"is_private"`
 }
 
 func (q *Queries) ListCodeRepositories(ctx context.Context, arg ListCodeRepositoriesParams) ([]ListCodeRepositoriesRow, error) {
@@ -129,6 +173,11 @@ func (q *Queries) ListCodeRepositories(ctx context.Context, arg ListCodeReposito
 			&i.WorkspaceID,
 			&i.ProviderName,
 			&i.Url,
+			&i.IntegrationID,
+			&i.ProviderRepositoryID,
+			&i.DefaultBranch,
+			&i.DisplayName,
+			&i.IsPrivate,
 		); err != nil {
 			return nil, err
 		}

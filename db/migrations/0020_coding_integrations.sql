@@ -15,7 +15,9 @@ CREATE TABLE coding_integrations (
 ALTER TABLE code_repositories DROP CONSTRAINT code_repositories_provider_name_check;
 ALTER TABLE code_repositories ADD COLUMN integration_id text;
 ALTER TABLE code_repositories ADD COLUMN provider_repository_id text;
-ALTER TABLE code_repositories ADD COLUMN default_branch text NOT NULL DEFAULT 'main';
+ALTER TABLE code_repositories ADD COLUMN default_branch text NOT NULL DEFAULT '';
+ALTER TABLE code_repositories ADD COLUMN display_name text NOT NULL DEFAULT '';
+ALTER TABLE code_repositories ADD COLUMN is_private boolean NOT NULL DEFAULT false;
 ALTER TABLE code_repositories ADD CONSTRAINT code_repositories_integration_fk
     FOREIGN KEY (workspace_id, integration_id)
     REFERENCES coding_integrations(workspace_id, id) ON DELETE RESTRICT;
@@ -28,6 +30,8 @@ ALTER TABLE code_repositories ADD CONSTRAINT code_repositories_integration_ident
 ALTER TABLE code_repositories DROP CONSTRAINT code_repositories_integration_identity_unique;
 ALTER TABLE code_repositories DROP CONSTRAINT code_repositories_integration_fk;
 ALTER TABLE code_repositories DROP COLUMN default_branch;
+ALTER TABLE code_repositories DROP COLUMN display_name;
+ALTER TABLE code_repositories DROP COLUMN is_private;
 ALTER TABLE code_repositories DROP COLUMN provider_repository_id;
 ALTER TABLE code_repositories DROP COLUMN integration_id;
 ALTER TABLE code_repositories ADD CONSTRAINT code_repositories_provider_name_check CHECK (provider_name IN ('github'));

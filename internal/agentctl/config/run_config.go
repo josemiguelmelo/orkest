@@ -22,9 +22,13 @@ type RunConfig struct {
 // WorkspaceRepository identifies a registered workspace repository for the
 // executor to prepare in the task's durable working directory.
 type WorkspaceRepository struct {
-	ID           string `json:"-"`
-	ProviderName string `json:"-"`
-	URL          string `json:"-"`
+	ID                   string `json:"-"`
+	ProviderName         string `json:"-"`
+	URL                  string `json:"-"`
+	IntegrationID        string `json:"-"`
+	ProviderRepositoryID string `json:"-"`
+	DefaultBranch        string `json:"-"`
+	Name                 string `json:"-"`
 }
 
 // Validate checks the resolved run configuration without starting execution.
@@ -36,6 +40,9 @@ func (c RunConfig) Validate() error {
 	for _, repository := range c.Repositories {
 		if strings.TrimSpace(repository.ID) == "" || strings.TrimSpace(repository.ProviderName) == "" || strings.TrimSpace(repository.URL) == "" {
 			return &ValidationError{Field: "repositories", Reason: "must include an ID, provider name, and URL"}
+		}
+		if repository.IntegrationID != "" && (strings.TrimSpace(repository.ProviderRepositoryID) == "" || strings.TrimSpace(repository.DefaultBranch) == "") {
+			return &ValidationError{Field: "repositories", Reason: "integrated repositories must include provider identity and default branch"}
 		}
 		if seen[repository.ID] {
 			return &ValidationError{Field: "repositories", Reason: "must have unique IDs"}
