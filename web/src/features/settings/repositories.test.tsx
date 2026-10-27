@@ -41,12 +41,12 @@ it('clears a repository selection when integration changes and registers provide
   };
   render(<QueryClientProvider client={client}><AppContext.Provider value={value as never}><RepositoriesPage /></AppContext.Provider></QueryClientProvider>);
   await user.click(await screen.findByRole('button', { name: 'Register repository' }));
-  const integrationSelect = await screen.findByLabelText('Coding integration');
+  const integrationSelect = await screen.findByLabelText('1. Choose a connection');
   await user.selectOptions(integrationSelect, 'first');
-  await user.selectOptions(await screen.findByLabelText('Repository'), '42');
+  await user.click(await screen.findByRole('option', { name: /acme\/first/ }));
   await user.selectOptions(integrationSelect, 'second');
-  expect(screen.getByRole('button', { name: /^Register repository$/ })).toBeDisabled();
-  await user.selectOptions(await screen.findByLabelText('Repository'), '84');
-  await user.click(screen.getByRole('button', { name: /^Register repository$/ }));
+  expect(screen.getByRole('button', { name: /^Add repository$/ })).toBeDisabled();
+  await user.click(await screen.findByRole('option', { name: /acme\/second/ }));
+  await user.click(screen.getByRole('button', { name: /^Add repository$/ }));
   await waitFor(() => expect(api.createCodeRepository).toHaveBeenCalledWith(expect.objectContaining({ body: { integrationId: 'second', providerRepositoryId: '84' } })));
 });
