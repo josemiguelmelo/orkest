@@ -65,11 +65,27 @@ type AgentSkill struct {
 }
 
 type CodeRepository struct {
-	ID           string             `json:"id"`
-	WorkspaceID  string             `json:"workspace_id"`
-	ProviderName string             `json:"provider_name"`
-	Url          string             `json:"url"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	ID                   string             `json:"id"`
+	WorkspaceID          string             `json:"workspace_id"`
+	ProviderName         string             `json:"provider_name"`
+	Url                  string             `json:"url"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	IntegrationID        pgtype.Text        `json:"integration_id"`
+	ProviderRepositoryID pgtype.Text        `json:"provider_repository_id"`
+	DefaultBranch        string             `json:"default_branch"`
+	DisplayName          string             `json:"display_name"`
+	IsPrivate            bool               `json:"is_private"`
+}
+
+type CodingIntegration struct {
+	ID                  string             `json:"id"`
+	WorkspaceID         string             `json:"workspace_id"`
+	Name                string             `json:"name"`
+	ProviderName        string             `json:"provider_name"`
+	ProviderConfig      []byte             `json:"provider_config"`
+	EncryptedCredential string             `json:"encrypted_credential"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
 }
 
 type Component struct {

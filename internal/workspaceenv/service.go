@@ -9,7 +9,7 @@ import (
 	"strings"
 
 	modelerrors "github.com/josemiguelmelo/orkest/internal/core/model/errors"
-	"github.com/josemiguelmelo/orkest/internal/taskintegration"
+	"github.com/josemiguelmelo/orkest/internal/core/secretbox"
 )
 
 var namePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
@@ -17,10 +17,10 @@ var namePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 type Service struct {
 	repository Repository
 	workspaces WorkspaceAccess
-	box        *taskintegration.SecretBox
+	box        *secretbox.Box
 }
 
-func NewService(repository Repository, workspaces WorkspaceAccess, box *taskintegration.SecretBox) *Service {
+func NewService(repository Repository, workspaces WorkspaceAccess, box *secretbox.Box) *Service {
 	return &Service{repository: repository, workspaces: workspaces, box: box}
 }
 
@@ -53,7 +53,7 @@ func (s *Service) Put(ctx context.Context, userID, orgID, workspaceID, name stri
 	value := input.Value
 	if input.Secret {
 		if s.box == nil {
-			return taskintegration.ErrEncryptionKeyUnavailable
+			return secretbox.ErrKeyUnavailable
 		}
 		sealed, err := s.box.Seal(value)
 		if err != nil {
@@ -84,7 +84,7 @@ func (s *Service) Resolve(ctx context.Context, workspaceID string) (RuntimeValue
 		value := item.Value
 		if item.Encrypted {
 			if s.box == nil {
-				return nil, taskintegration.ErrEncryptionKeyUnavailable
+				return nil, secretbox.ErrKeyUnavailable
 			}
 			value, err = s.box.Open([]byte(value))
 			if err != nil {
@@ -101,7 +101,7 @@ func (s *Service) SealSnapshot(values RuntimeValues) (string, error) {
 		return "", nil
 	}
 	if s.box == nil {
-		return "", taskintegration.ErrEncryptionKeyUnavailable
+		return "", secretbox.ErrKeyUnavailable
 	}
 	encoded, err := json.Marshal(values)
 	if err != nil {
@@ -119,7 +119,7 @@ func (s *Service) OpenSnapshot(encrypted string) (RuntimeValues, error) {
 		return nil, nil
 	}
 	if s.box == nil {
-		return nil, taskintegration.ErrEncryptionKeyUnavailable
+		return nil, secretbox.ErrKeyUnavailable
 	}
 	plain, err := s.box.Open([]byte(encrypted))
 	if err != nil {

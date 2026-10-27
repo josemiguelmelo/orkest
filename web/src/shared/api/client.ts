@@ -22,11 +22,19 @@ export class ApiError extends Error {
 const messages: Record<string, string> = {
   invalid_request: 'Some values are invalid. Check the form and try again.',
   conflict:
-    'This change conflicts with the current state. The last owner cannot be removed, and done tasks cannot reopen.',
+    'This item is still in use, or its current state prevents this change. Remove dependent resources and try again.',
   integration_encryption_not_configured: 'Credential encryption is not configured on the server.',
   integration_credential_required: 'A credential is required to validate this connection.',
   github_project_not_found_or_not_accessible:
     'The GitHub project is unavailable with these credentials.',
+  github_token_invalid_or_revoked:
+    'The GitHub token is invalid or revoked. Rotate the credential in workspace settings.',
+  github_permission_denied_or_rate_limited:
+    'GitHub denied repository access or the API rate limit was reached. Check token permissions and try again later.',
+  github_repository_unavailable:
+    'This repository is no longer accessible to the selected integration.',
+  github_connection_failed:
+    'Could not validate the GitHub connection. Check the token and try again.',
   agent_dispatch_failed:
     'The task changed to in progress, but agent dispatch failed. Refresh to see its current state.',
   run_not_found: 'This run is no longer available. Refresh the task to load its current run history.',

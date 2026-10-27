@@ -1,189 +1,71 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
-import { FolderGit2 } from 'lucide-react';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { ArrowUpRight, FolderGit2, GitBranch, Globe2, LockKeyhole, Search } from 'lucide-react';
 import { useApp } from '../../app/context';
 import * as sdk from '../../shared/api/generated/sdk.gen';
-import type { CodeRepository } from '../../shared/api/generated/types.gen';
+import type { CodeRepository, CodingRepository } from '../../shared/api/generated/types.gen';
 import { command, data } from '../../shared/api/client';
-import { path, repositoriesQuery, useRefresh } from '../../shared/api/queries';
-import {
-  Badge,
-  ConfirmButton,
-  CreateButton,
-  Empty,
-  ErrorState,
-  Loading,
-  PageHeader,
-} from '../../shared/ui/common';
+import { codingIntegrationsQuery, path, repositoriesQuery, useRefresh } from '../../shared/api/queries';
+import { Badge, ConfirmButton, CreateButton, Empty, ErrorState, Loading, PageHeader } from '../../shared/ui/common';
 import { Button } from '../../shared/ui/button';
 import { Dialog } from '../../shared/ui/dialog';
-import { Field, Form } from '../../shared/ui/form';
+import { Field } from '../../shared/ui/form';
 import { useAction } from '../../shared/use-action';
-const schema = z.object({
-  url: z.url().refine((value) => {
-    const url = new URL(value);
-    return (
-      url.protocol === 'https:' &&
-      url.hostname === 'github.com' &&
-      !url.username &&
-      !url.password &&
-      !url.search &&
-      !url.hash &&
-      url.pathname.split('/').filter(Boolean).length === 2
-    );
-  }, 'Enter a public GitHub HTTPS repository URL.'),
-});
+
 export function RepositoriesPage() {
   const { scope, permissions } = useApp();
   const repos = useQuery(repositoriesQuery(scope));
   const [create, setCreate] = useState(false);
-  return (
-    <>
-      <PageHeader
-        title="Repositories"
-        description="Register public GitHub repositories for this workspace."
-      >
-        {permissions.editWorkspace && (
-          <CreateButton onClick={() => setCreate(true)}>Register repository</CreateButton>
-        )}
-      </PageHeader>
-      {repos.isPending ? (
-        <Loading />
-      ) : repos.isError ? (
-        <ErrorState error={repos.error} />
-      ) : repos.data.length ? (
-        <div className="grid">
-          {repos.data.map((repo) => (
-            <RepositoryCard key={repo.id} item={repo} />
-          ))}
-        </div>
-      ) : (
-        <Empty title="No repositories registered">
-          Add a public GitHub repository to connect your code.
-        </Empty>
-      )}
-      {create && <RepositoryEditor onClose={() => setCreate(false)} />}
-    </>
-  );
+  return <>
+    <PageHeader title="Repositories" description="Manage the codebases your workspace uses for tasks and agent checkouts.">
+      {permissions.editWorkspace && <CreateButton onClick={() => setCreate(true)}>Register repository</CreateButton>}
+    </PageHeader>
+    {repos.isPending ? <Loading /> : repos.isError ? <ErrorState error={repos.error} retry={() => void repos.refetch()} /> : repos.data.length ? <>
+      <div className="repository-list-heading"><span>{repos.data.length} {repos.data.length === 1 ? 'repository' : 'repositories'}</span><span className="muted">Available to workspace tasks</span></div>
+      <div className="grid">{repos.data.map((repo) => <RepositoryCard key={repo.id} item={repo} />)}</div>
+    </> : <div className="repository-empty"><div className="repository-empty-icon"><FolderGit2 size={24} /></div><h2>Start with a repository</h2><p className="muted">Connect GitHub to choose a repository. Agents use registered repositories when preparing task workspaces.</p>{permissions.editWorkspace && <Button onClick={() => setCreate(true)}>Add your first repository</Button>}</div>}
+    {create && <RepositoryEditor onClose={() => setCreate(false)} />}
+  </>;
 }
+
 function RepositoryCard({ item }: { item: CodeRepository }) {
-  const { scope, permissions } = useApp();
-  const refresh = useRefresh();
-  const action = useAction();
-  return (
-    <article className="resource-card">
-      <div className="split">
-        <FolderGit2 size={22} className="card-icon" />
-        <Badge>{item.providerName}</Badge>
-      </div>
-      <h3>{item.url.replace('https://github.com/', '').replace(/\.git$/, '')}</h3>
-      <a className="text-link" href={item.url} target="_blank" rel="noreferrer">
-        Open repository ↗
-      </a>
-      <p className="muted">ID: {item.id}</p>
-      {permissions.editWorkspace && (
-        <div className="actions">
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={action.pending}
-            onClick={() => {
-              void action.run(
-                () =>
-                  data(
-                    sdk.cloneCodeRepository({
-                      ...command,
-                      path: { ...path(scope), repositoryID: item.id },
-                    }),
-                  ),
-                'Repository cloned.',
-              );
-            }}
-          >
-            Clone
-          </Button>
-          <ConfirmButton
-            label="Sync main"
-            title="Reset checkout to remote main?"
-            description="This fetches remote main and hard-resets the server checkout, discarding local changes."
-            pending={action.pending}
-            onConfirm={async () => {
-              await data(
-                sdk.syncCodeRepositoryMain({
-                  ...command,
-                  path: { ...path(scope), repositoryID: item.id },
-                }),
-              );
-            }}
-          />
-          <ConfirmButton
-            title="Remove repository?"
-            description="This removes the repository registration. Referencing components may prevent removal."
-            onConfirm={async () => {
-              await data(
-                sdk.deleteCodeRepository({
-                  ...command,
-                  path: { ...path(scope), repositoryID: item.id },
-                }),
-              );
-              await refresh(scope);
-            }}
-          />
-        </div>
-      )}
-      {action.error !== undefined && <ErrorState error={action.error} />}{' '}
-      {action.message && (
-        <p role="status" className="muted">
-          {action.message}
-        </p>
-      )}
-    </article>
-  );
+  const { scope, permissions } = useApp(); const refresh = useRefresh(); const action = useAction();
+  return <article className="repository-card">
+    <div className="repository-card-heading"><div className="repository-card-icon"><FolderGit2 size={19} /></div><div className="repository-card-title"><h3>{item.name || item.url.replace('https://github.com/', '').replace(/\.git$/, '')}</h3><a className="text-link" href={item.url} target="_blank" rel="noreferrer">Open on GitHub <ArrowUpRight size={13} /></a></div><Badge>{item.private ? <><LockKeyhole size={11} /> Private</> : <><Globe2 size={11} /> Public</>}</Badge></div>
+    <div className="repository-branch"><GitBranch size={14} /><span>Default branch</span><code>{item.defaultBranch || 'Detected on sync'}</code></div>
+    {permissions.editWorkspace && <div className="actions">
+      <Button variant="outline" size="sm" disabled={action.pending} onClick={() => void action.run(() => data(sdk.cloneCodeRepository({ ...command, path: { ...path(scope), repositoryID: item.id } })), 'Repository cloned.')}>Clone checkout</Button>
+      <ConfirmButton label="Sync" title={`Sync checkout to ${item.defaultBranch || 'GitHub default branch'}?`} description="Sync resets the shared checkout to the repository’s default branch and discards local changes in that shared checkout." pending={action.pending} onConfirm={async () => { await data(sdk.syncCodeRepository({ ...command, path: { ...path(scope), repositoryID: item.id } })); }} />
+      <ConfirmButton title="Remove repository?" description="This removes the repository registration. Referencing components may prevent removal." onConfirm={async () => { await data(sdk.deleteCodeRepository({ ...command, path: { ...path(scope), repositoryID: item.id } })); await refresh(scope); }} />
+    </div>}
+    {action.error !== undefined && <ErrorState error={action.error} />}{action.message && <p role="status" className="muted">{action.message}</p>}
+  </article>;
 }
+
 function RepositoryEditor({ onClose }: { onClose: () => void }) {
-  const { scope } = useApp();
-  const refresh = useRefresh();
-  const action = useAction();
-  const form = useForm({ resolver: zodResolver(schema), defaultValues: { url: '' } });
-  return (
-    <Dialog
-      title="Register repository"
-      description="Public GitHub HTTPS repositories are supported. Private repository credentials are not implemented."
-      open
-      onOpenChange={(v) => {
-        if (!v && !action.pending) onClose();
-      }}
-    >
-      <Form
-        form={form}
-        error={action.error}
-        label="Register repository"
-        onSubmit={async (values) => {
-          if (
-            await action.run(async () => {
-              await data(
-                sdk.createCodeRepository({
-                  ...command,
-                  path: path(scope),
-                  body: { providerName: 'github', url: values.url },
-                }),
-              );
-              await refresh(scope);
-            })
-          )
-            onClose();
-        }}
-      >
-        <Field label="Repository URL" error={form.formState.errors.url?.message}>
-          <input
-            placeholder="https://github.com/organization/repository"
-            {...form.register('url')}
-          />
-        </Field>
-      </Form>
-    </Dialog>
-  );
+  const { scope } = useApp(); const refresh = useRefresh(); const action = useAction();
+  const integrations = useQuery(codingIntegrationsQuery(scope));
+  const [integrationID, setIntegrationID] = useState(''); const [selected, setSelected] = useState<CodingRepository | null>(null);
+  const [search, setSearch] = useState('');
+  const repositories = useInfiniteQuery({ queryKey: ['coding-repository-picker', scope.orgID, scope.workspaceID, integrationID], initialPageParam: 1, queryFn: ({ signal, pageParam }) => data(sdk.browseCodingRepositories({ ...command, path: { ...path(scope), integrationID }, query: { page: pageParam, perPage: 50 }, signal })), getNextPageParam: (lastPage) => lastPage.nextPage, enabled: !!integrationID });
+  const repositoryItems = repositories.data?.pages.flatMap((page) => page.repositories) ?? [];
+  const filteredRepositories = repositoryItems.filter((repo) => `${repo.name} ${repo.defaultBranch}`.toLowerCase().includes(search.trim().toLowerCase()));
+  return <Dialog title="Register repository" description="Select a repository visible to this integration." open onOpenChange={(open) => { if (!open && !action.pending) onClose(); }}>
+    <form className="form-stack" onSubmit={(event) => { event.preventDefault(); if (!selected) return; void action.run(async () => { await data(sdk.createCodeRepository({ ...command, path: path(scope), body: { integrationId: integrationID, providerRepositoryId: selected.id } })); await refresh(scope); onClose(); }); }}>
+      {integrations.isError && <ErrorState error={integrations.error} retry={() => void integrations.refetch()} />}
+      {!integrations.isPending && integrations.data?.length === 0 ? <div className="picker-empty"><KeyRoundIcon /><strong>No connections yet</strong><span>Ask a workspace administrator to connect GitHub in Settings.</span></div> : <Field label="1. Choose a connection" hint="Repositories are listed according to the access granted to this connection."><select required value={integrationID} onChange={(event) => { setIntegrationID(event.target.value); setSelected(null); setSearch(''); }}><option value="">Select a GitHub connection</option>{integrations.data?.map((item) => <option key={item.id} value={item.id}>{item.name} · {item.providerName}</option>)}</select></Field>}
+      {integrationID && repositories.isPending ? <Loading /> : repositories.isError ? <ErrorState error={repositories.error} /> : integrationID && repositoryItems.length ? <>
+        <Field label="2. Choose a repository"><div className="input-with-icon"><Search size={15} /><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search repositories" /></div></Field>
+        <div className="repository-picker-list" role="listbox" aria-label="Available repositories">{filteredRepositories.map((repo) => <button type="button" role="option" aria-selected={selected?.id === repo.id} className={`repository-picker-option ${selected?.id === repo.id ? 'selected' : ''}`} key={repo.id} onClick={() => setSelected(repo)}><span className="picker-repo-icon"><FolderGit2 size={17} /></span><span className="picker-repo-copy"><strong>{repo.name}</strong><small><GitBranch size={12} /> {repo.defaultBranch}</small></span><Badge>{repo.private ? <><LockKeyhole size={11} /> Private</> : <><Globe2 size={11} /> Public</>}</Badge></button>)}{filteredRepositories.length === 0 && <p className="picker-no-match">No repositories match “{search}”.</p>}</div>
+        <p className="picker-count">Showing {repositoryItems.length}{repositories.hasNextPage ? ' of more' : ''} repositories</p>
+        {repositories.hasNextPage && <Button className="picker-load-more" type="button" variant="outline" disabled={repositories.isFetchingNextPage} onClick={() => void repositories.fetchNextPage()}>{repositories.isFetchingNextPage ? 'Loading repositories…' : 'Load more repositories'}</Button>}
+        {selected && <div className="selected-repository"><CheckMark /><span><strong>{selected.name}</strong> is ready to register</span></div>}
+      </> : integrationID ? <Empty title="No repositories available">This connection cannot see any repositories. Check its permissions or connect another GitHub account.</Empty> : null}
+      {action.error !== undefined && <ErrorState error={action.error} />}
+      <div className="form-actions"><Button type="button" variant="outline" onClick={onClose}>Cancel</Button><Button type="submit" disabled={!selected || action.pending}>{action.pending ? 'Adding…' : 'Add repository'}</Button></div>
+    </form>
+  </Dialog>;
 }
+
+function KeyRoundIcon() { return <LockKeyhole size={18} />; }
+function CheckMark() { return <span className="selected-check">✓</span>; }

@@ -2,14 +2,15 @@ package coderepository
 
 import (
 	"context"
+	"errors"
 	"fmt"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
-	"github.com/josemiguelmelo/orkest/internal/core/ids"
 	modelerrors "github.com/josemiguelmelo/orkest/internal/core/model/errors"
+	"github.com/josemiguelmelo/orkest/internal/core/secretbox"
 	"github.com/josemiguelmelo/orkest/internal/workspace"
 )
 
@@ -18,19 +19,23 @@ type WorkspaceAccess interface {
 }
 
 type Service struct {
-	repository CodeReposRepository
-	workspaces WorkspaceAccess
-	dataRoot   string
-	providers  map[string]CodeRepositoryProvider
+	repository  CodeReposRepository
+	workspaces  WorkspaceAccess
+	dataRoot    string
+	providers   map[string]CodingProvider
+	secretBox   *secretbox.Box
+	operationMu sync.Mutex
 }
 
-func NewService(repository CodeReposRepository, workspaces WorkspaceAccess, dataRoot string, providers ...CodeRepositoryProvider) *Service {
-	providerMap := make(map[string]CodeRepositoryProvider, len(providers))
+func NewService(repository CodeReposRepository, workspaces WorkspaceAccess, dataRoot string, providers ...CodingProvider) *Service {
+	providerMap := make(map[string]CodingProvider, len(providers))
 	for _, provider := range providers {
 		providerMap[provider.ProviderName()] = provider
 	}
 	return &Service{repository: repository, workspaces: workspaces, dataRoot: dataRoot, providers: providerMap}
 }
+
+func (s *Service) SetSecretBox(box *secretbox.Box) { s.secretBox = box }
 
 func (s *Service) List(ctx context.Context, userID, orgID, workspaceID string) ([]CodeRepository, error) {
 	if _, err := s.workspaces.GetWorkspace(ctx, userID, orgID, workspaceID); err != nil {
@@ -46,30 +51,6 @@ func (s *Service) Get(ctx context.Context, userID, orgID, workspaceID, id string
 	return s.repository.CodeRepository(ctx, orgID, workspaceID, id)
 }
 
-func (s *Service) Create(ctx context.Context, userID, orgID, workspaceID, providerName, rawURL string) (CodeRepository, error) {
-	if err := s.authorize(ctx, userID, orgID, workspaceID); err != nil {
-		return CodeRepository{}, err
-	}
-	providerName = strings.TrimSpace(providerName)
-	provider, ok := s.providers[providerName]
-	if !ok || providerName == "" {
-		return CodeRepository{}, modelerrors.ErrInvalid
-	}
-	parsed, err := url.Parse(strings.TrimSpace(rawURL))
-	if err != nil || parsed.Scheme != "https" || parsed.Host != "github.com" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || strings.Trim(parsed.Path, "/") == "" {
-		return CodeRepository{}, modelerrors.ErrInvalid
-	}
-	repositoryURL := "https://github.com/" + strings.Trim(strings.TrimSpace(parsed.Path), "/")
-	if !strings.HasSuffix(repositoryURL, ".git") {
-		repositoryURL += ".git"
-	}
-	id, err := ids.NewUUID()
-	if err != nil {
-		return CodeRepository{}, fmt.Errorf("generate code repository ID: %w", err)
-	}
-	return s.repository.CreateCodeRepository(ctx, id, workspaceID, provider.ProviderName(), repositoryURL)
-}
-
 func (s *Service) Delete(ctx context.Context, userID, orgID, workspaceID, id string) error {
 	if err := s.authorize(ctx, userID, orgID, workspaceID); err != nil {
 		return err
@@ -81,7 +62,7 @@ func (s *Service) Clone(ctx context.Context, userID, orgID, workspaceID, id stri
 	return s.runOperation(ctx, userID, orgID, workspaceID, id, true)
 }
 
-func (s *Service) SyncMain(ctx context.Context, userID, orgID, workspaceID, id string) error {
+func (s *Service) Sync(ctx context.Context, userID, orgID, workspaceID, id string) error {
 	return s.runOperation(ctx, userID, orgID, workspaceID, id, false)
 }
 
@@ -107,10 +88,31 @@ func (s *Service) runOperation(ctx context.Context, userID, orgID, workspaceID, 
 	if err = os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("create workspace repository directory: %w", err)
 	}
-	if clone {
-		return provider.Clone(ctx, repository.URL, path)
+	s.operationMu.Lock()
+	defer s.operationMu.Unlock()
+	if repository.IntegrationID != "" {
+		credential, credentialErr := s.CodingCredential(ctx, workspaceID, repository.IntegrationID)
+		if credentialErr != nil {
+			return credentialErr
+		}
+		metadata := RepositoryMetadata{ID: repository.ProviderRepositoryID, Name: repository.Name, CloneURL: repository.URL, DefaultBranch: repository.DefaultBranch, Private: repository.Private}
+		if clone {
+			return provider.CloneAuthenticated(ctx, metadata, credential, path)
+		}
+		return provider.SyncAuthenticated(ctx, metadata, credential, path)
 	}
-	return provider.SyncMain(ctx, repository.URL, path)
+	if clone {
+		legacy, ok := provider.(LegacyRepositoryCheckout)
+		if !ok {
+			return errors.New("legacy repository checkout is unavailable")
+		}
+		return legacy.ClonePublic(ctx, repository.URL, path)
+	}
+	legacy, ok := provider.(LegacyRepositoryCheckout)
+	if !ok {
+		return errors.New("legacy repository checkout is unavailable")
+	}
+	return legacy.SyncPublic(ctx, repository.URL, path)
 }
 
 func repositoryPath(dataRoot, organizationID, workspaceID, providerName, repositoryID string) (string, error) {

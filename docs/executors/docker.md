@@ -31,7 +31,10 @@ platform user. The agentctl state directory must remain on persistent storage.
 
 No provider credentials are passed into containers in this first implementation.
 Model requests requiring credentials will fail until a credential integration
-is added. The GitHub repository provider currently supports public HTTPS remotes.
+is added. The GitHub coding provider resolves the integration credential in the
+platform immediately before checkout and passes it only through a temporary Git
+credential helper. Existing registrations without integration references keep
+using the legacy public checkout adapter.
 
 The container does not restart automatically. Agentctl session restoration is
 not implemented, so automatically restarting it after a daemon restart could

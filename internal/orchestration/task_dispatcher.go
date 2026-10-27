@@ -125,6 +125,8 @@ func (d *TaskDispatcher) StartTask(ctx context.Context, userID, organizationID s
 		for _, repository := range repositories {
 			config.Repositories = append(config.Repositories, runconfig.WorkspaceRepository{
 				ID: repository.ID, ProviderName: repository.ProviderName, URL: repository.URL,
+				IntegrationID: repository.IntegrationID, ProviderRepositoryID: repository.ProviderRepositoryID,
+				DefaultBranch: repository.DefaultBranch, Name: repository.Name,
 			})
 		}
 	}

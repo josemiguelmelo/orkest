@@ -42,18 +42,21 @@ type EngineClient interface {
 }
 
 type Config struct {
-	DataRoot                string
-	Image                   string
-	AgentctlPort            int
-	ContainerUser           string
-	ProviderEnv             []string
-	CodeRepositoryProviders []coderepository.CodeRepositoryProvider
+	DataRoot                 string
+	Image                    string
+	AgentctlPort             int
+	ContainerUser            string
+	ProviderEnv              []string
+	CodingProviders          []coderepository.CodingProvider
+	CodingCredentialResolver interface {
+		CodingCredential(context.Context, string, string) (coderepository.Credentials, error)
+	}
 }
 
 type Executor struct {
 	client              EngineClient
 	config              Config
-	repositoryProviders map[string]coderepository.CodeRepositoryProvider
+	repositoryProviders map[string]coderepository.CodingProvider
 }
 
 func New(ctx context.Context, config Config) (*Executor, error) {
@@ -103,8 +106,8 @@ func NewWithClient(ctx context.Context, config Config, client EngineClient) (*Ex
 		return nil, err
 	}
 	config.DataRoot, config.Image, config.AgentctlPort, config.ContainerUser = root, image, port, containerUser
-	providers := make(map[string]coderepository.CodeRepositoryProvider, len(config.CodeRepositoryProviders))
-	for _, provider := range config.CodeRepositoryProviders {
+	providers := make(map[string]coderepository.CodingProvider, len(config.CodingProviders))
+	for _, provider := range config.CodingProviders {
 		if provider == nil || strings.TrimSpace(provider.ProviderName()) == "" {
 			return nil, errors.New("code repository provider name is required")
 		}
@@ -229,8 +232,26 @@ func (e *Executor) prepareRepositories(ctx context.Context, workDir string, conf
 			return fmt.Errorf("create repository directory: %w", err)
 		}
 		branch := "orkest/task-" + config.TaskID
-		if err := provider.PrepareTaskCheckout(ctx, repository.URL, path, branch); err != nil {
-			return fmt.Errorf("prepare repository %q: %w", repository.ID, err)
+		var checkoutErr error
+		if repository.IntegrationID != "" {
+			if e.config.CodingCredentialResolver == nil {
+				return errors.New("coding credential resolver is unavailable")
+			}
+			credential, resolveErr := e.config.CodingCredentialResolver.CodingCredential(ctx, config.WorkspaceID, repository.IntegrationID)
+			if resolveErr != nil {
+				return fmt.Errorf("resolve coding integration credential: %w", resolveErr)
+			}
+			metadata := coderepository.RepositoryMetadata{ID: repository.ProviderRepositoryID, Name: repository.Name, CloneURL: repository.URL, DefaultBranch: repository.DefaultBranch}
+			checkoutErr = provider.PrepareAuthenticatedTaskCheckout(ctx, metadata, credential, path, branch)
+		} else {
+			legacy, ok := provider.(coderepository.LegacyRepositoryCheckout)
+			if !ok {
+				return errors.New("legacy repository checkout is unavailable")
+			}
+			checkoutErr = legacy.PreparePublicTaskCheckout(ctx, repository.URL, path, branch)
+		}
+		if checkoutErr != nil {
+			return fmt.Errorf("prepare repository %q: %w", repository.ID, checkoutErr)
 		}
 	}
 	return nil

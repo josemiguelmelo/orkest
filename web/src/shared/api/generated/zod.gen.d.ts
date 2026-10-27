@@ -212,12 +212,52 @@ export declare const zCodeRepository: z.ZodObject<{
         github: "github";
     }>;
     url: z.ZodURL;
+    integrationId: z.ZodOptional<z.ZodString>;
+    providerRepositoryId: z.ZodOptional<z.ZodString>;
+    defaultBranch: z.ZodString;
+    name: z.ZodOptional<z.ZodString>;
+    private: z.ZodBoolean;
+}, z.core.$strip>;
+export declare const zCodingIntegrationInput: z.ZodObject<{
+    name: z.ZodString;
+    providerName: z.ZodString;
+    providerConfig: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnknown>>;
+}, z.core.$strip>;
+export declare const zCodingIntegration: z.ZodObject<{
+    id: z.ZodString;
+    workspaceId: z.ZodString;
+    name: z.ZodString;
+    providerName: z.ZodString;
+    providerConfig: z.ZodRecord<z.ZodString, z.ZodUnknown>;
+    updatedAt: z.ZodOptional<z.ZodString>;
+}, z.core.$strip>;
+export declare const zCodingProvider: z.ZodObject<{
+    providerName: z.ZodString;
+    configSchema: z.ZodRecord<z.ZodString, z.ZodUnknown>;
+}, z.core.$strip>;
+export declare const zCodingRepository: z.ZodObject<{
+    id: z.ZodString;
+    name: z.ZodString;
+    cloneUrl: z.ZodURL;
+    private: z.ZodBoolean;
+    defaultBranch: z.ZodString;
+}, z.core.$strip>;
+export declare const zCodingRepositoryPage: z.ZodObject<{
+    repositories: z.ZodArray<z.ZodObject<{
+        id: z.ZodString;
+        name: z.ZodString;
+        cloneUrl: z.ZodURL;
+        private: z.ZodBoolean;
+        defaultBranch: z.ZodString;
+    }, z.core.$strip>>;
+    nextPage: z.ZodOptional<z.ZodInt>;
+}, z.core.$strip>;
+export declare const zCodingIntegrationValidation: z.ZodObject<{
+    connected: z.ZodBoolean;
 }, z.core.$strip>;
 export declare const zCodeRepositoryCreate: z.ZodObject<{
-    providerName: z.ZodEnum<{
-        github: "github";
-    }>;
-    url: z.ZodURL;
+    integrationId: z.ZodString;
+    providerRepositoryId: z.ZodString;
 }, z.core.$strip>;
 /**
  * Provider-defined config. Retrieve allowed fields and constraints from GET /api/task-integration-providers.
@@ -271,6 +311,12 @@ export declare const zCurrentUserWritable: z.ZodObject<{
         }>>;
     }, z.core.$strip>>;
 }, z.core.$strip>;
+export declare const zCodingIntegrationInputWritable: z.ZodObject<{
+    name: z.ZodString;
+    providerName: z.ZodString;
+    providerConfig: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnknown>>;
+    credential: z.ZodOptional<z.ZodString>;
+}, z.core.$strip>;
 export declare const zTaskIntegrationInputWritable: z.ZodObject<{
     provider: z.ZodString;
     name: z.ZodString;
@@ -315,10 +361,8 @@ export declare const zMcpServerInput: z.ZodObject<{
     headers: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
 }, z.core.$strip>;
 export declare const zCodeRepositoryCreate2: z.ZodObject<{
-    providerName: z.ZodEnum<{
-        github: "github";
-    }>;
-    url: z.ZodURL;
+    integrationId: z.ZodString;
+    providerRepositoryId: z.ZodString;
 }, z.core.$strip>;
 export declare const zTaskIntegration2: z.ZodObject<{
     provider: z.ZodString;
@@ -328,6 +372,106 @@ export declare const zTaskIntegration2: z.ZodObject<{
     labels: z.ZodOptional<z.ZodArray<z.ZodString>>;
     interval: z.ZodOptional<z.ZodString>;
     credential: z.ZodOptional<z.ZodString>;
+}, z.core.$strip>;
+/**
+ * Coding provider catalog
+ */
+export declare const zListCodingProvidersResponse: z.ZodArray<z.ZodObject<{
+    providerName: z.ZodString;
+    configSchema: z.ZodRecord<z.ZodString, z.ZodUnknown>;
+}, z.core.$strip>>;
+export declare const zListCodingIntegrationsPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+}, z.core.$strip>;
+/**
+ * Workspace coding integrations
+ */
+export declare const zListCodingIntegrationsResponse: z.ZodArray<z.ZodObject<{
+    id: z.ZodString;
+    workspaceId: z.ZodString;
+    name: z.ZodString;
+    providerName: z.ZodString;
+    providerConfig: z.ZodRecord<z.ZodString, z.ZodUnknown>;
+    updatedAt: z.ZodOptional<z.ZodString>;
+}, z.core.$strip>>;
+export declare const zCreateCodingIntegrationBody: z.ZodObject<{
+    name: z.ZodString;
+    providerName: z.ZodString;
+    providerConfig: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnknown>>;
+    credential: z.ZodOptional<z.ZodString>;
+}, z.core.$strip>;
+export declare const zCreateCodingIntegrationPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+}, z.core.$strip>;
+/**
+ * Coding integration created
+ */
+export declare const zCreateCodingIntegrationResponse: z.ZodObject<{
+    id: z.ZodString;
+    workspaceId: z.ZodString;
+    name: z.ZodString;
+    providerName: z.ZodString;
+    providerConfig: z.ZodRecord<z.ZodString, z.ZodUnknown>;
+    updatedAt: z.ZodOptional<z.ZodString>;
+}, z.core.$strip>;
+export declare const zDeleteCodingIntegrationPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+    integrationID: z.ZodString;
+}, z.core.$strip>;
+/**
+ * Coding integration deleted
+ */
+export declare const zDeleteCodingIntegrationResponse: z.ZodVoid;
+export declare const zUpdateCodingIntegrationBody: z.ZodObject<{
+    name: z.ZodString;
+    providerName: z.ZodString;
+    providerConfig: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnknown>>;
+    credential: z.ZodOptional<z.ZodString>;
+}, z.core.$strip>;
+export declare const zUpdateCodingIntegrationPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+    integrationID: z.ZodString;
+}, z.core.$strip>;
+/**
+ * Coding integration updated
+ */
+export declare const zUpdateCodingIntegrationResponse: z.ZodVoid;
+export declare const zValidateCodingIntegrationPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+    integrationID: z.ZodString;
+}, z.core.$strip>;
+/**
+ * Saved connection validation succeeded
+ */
+export declare const zValidateCodingIntegrationResponse: z.ZodObject<{
+    connected: z.ZodBoolean;
+}, z.core.$strip>;
+export declare const zBrowseCodingRepositoriesPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+    integrationID: z.ZodString;
+}, z.core.$strip>;
+export declare const zBrowseCodingRepositoriesQuery: z.ZodObject<{
+    page: z.ZodDefault<z.ZodOptional<z.ZodInt>>;
+    perPage: z.ZodDefault<z.ZodOptional<z.ZodInt>>;
+}, z.core.$strip>;
+/**
+ * Provider repository page
+ */
+export declare const zBrowseCodingRepositoriesResponse: z.ZodObject<{
+    repositories: z.ZodArray<z.ZodObject<{
+        id: z.ZodString;
+        name: z.ZodString;
+        cloneUrl: z.ZodURL;
+        private: z.ZodBoolean;
+        defaultBranch: z.ZodString;
+    }, z.core.$strip>>;
+    nextPage: z.ZodOptional<z.ZodInt>;
 }, z.core.$strip>;
 /**
  * HTTP process is running
@@ -653,12 +797,15 @@ export declare const zListCodeRepositoriesResponse: z.ZodArray<z.ZodObject<{
         github: "github";
     }>;
     url: z.ZodURL;
+    integrationId: z.ZodOptional<z.ZodString>;
+    providerRepositoryId: z.ZodOptional<z.ZodString>;
+    defaultBranch: z.ZodString;
+    name: z.ZodOptional<z.ZodString>;
+    private: z.ZodBoolean;
 }, z.core.$strip>>;
 export declare const zCreateCodeRepositoryBody: z.ZodObject<{
-    providerName: z.ZodEnum<{
-        github: "github";
-    }>;
-    url: z.ZodURL;
+    integrationId: z.ZodString;
+    providerRepositoryId: z.ZodString;
 }, z.core.$strip>;
 export declare const zCreateCodeRepositoryPath: z.ZodObject<{
     orgID: z.ZodString;
@@ -674,6 +821,11 @@ export declare const zCreateCodeRepositoryResponse: z.ZodObject<{
         github: "github";
     }>;
     url: z.ZodURL;
+    integrationId: z.ZodOptional<z.ZodString>;
+    providerRepositoryId: z.ZodOptional<z.ZodString>;
+    defaultBranch: z.ZodString;
+    name: z.ZodOptional<z.ZodString>;
+    private: z.ZodBoolean;
 }, z.core.$strip>;
 export declare const zDeleteCodeRepositoryPath: z.ZodObject<{
     orgID: z.ZodString;
@@ -699,6 +851,11 @@ export declare const zGetCodeRepositoryResponse: z.ZodObject<{
         github: "github";
     }>;
     url: z.ZodURL;
+    integrationId: z.ZodOptional<z.ZodString>;
+    providerRepositoryId: z.ZodOptional<z.ZodString>;
+    defaultBranch: z.ZodString;
+    name: z.ZodOptional<z.ZodString>;
+    private: z.ZodBoolean;
 }, z.core.$strip>;
 export declare const zCloneCodeRepositoryPath: z.ZodObject<{
     orgID: z.ZodString;
@@ -709,15 +866,15 @@ export declare const zCloneCodeRepositoryPath: z.ZodObject<{
  * Repository cloned
  */
 export declare const zCloneCodeRepositoryResponse: z.ZodVoid;
-export declare const zSyncCodeRepositoryMainPath: z.ZodObject<{
+export declare const zSyncCodeRepositoryPath: z.ZodObject<{
     orgID: z.ZodString;
     workspaceID: z.ZodString;
     repositoryID: z.ZodString;
 }, z.core.$strip>;
 /**
- * Checkout reset to the latest remote main branch
+ * Shared checkout synced to the registered repository default branch
  */
-export declare const zSyncCodeRepositoryMainResponse: z.ZodVoid;
+export declare const zSyncCodeRepositoryResponse: z.ZodVoid;
 export declare const zListTaskIntegrationsPath: z.ZodObject<{
     orgID: z.ZodString;
     workspaceID: z.ZodString;

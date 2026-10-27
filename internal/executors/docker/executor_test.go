@@ -2,6 +2,7 @@ package docker
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/netip"
 	"os"
@@ -82,7 +83,7 @@ func TestStartAgentctlCreatesIsolatedContainerAndReturnsLoopbackEndpoint(t *test
 
 func TestPrepareRepositoriesUsesProviderAndTaskWorkspacePaths(t *testing.T) {
 	provider := &checkoutProviderStub{}
-	executor := &Executor{repositoryProviders: map[string]coderepository.CodeRepositoryProvider{"test": provider}}
+	executor := &Executor{repositoryProviders: map[string]coderepository.CodingProvider{"test": provider}}
 	workDir := t.TempDir()
 	config := runConfig()
 	config.Repositories = []runconfig.WorkspaceRepository{{ID: "repo-id", ProviderName: "test", URL: "https://example.test/repo.git"}}
@@ -257,14 +258,74 @@ type fakeEngine struct {
 	running      bool
 }
 
-type checkoutProviderStub struct{ url, path, branch string }
+type checkoutProviderStub struct {
+	url, path, branch string
+	credential        coderepository.Credentials
+	metadata          coderepository.RepositoryMetadata
+}
 
-func (*checkoutProviderStub) ProviderName() string                           { return "test" }
-func (*checkoutProviderStub) Clone(context.Context, string, string) error    { return nil }
-func (*checkoutProviderStub) SyncMain(context.Context, string, string) error { return nil }
-func (p *checkoutProviderStub) PrepareTaskCheckout(_ context.Context, url, path, branch string) error {
+func (*checkoutProviderStub) ProviderName() string                              { return "test" }
+func (*checkoutProviderStub) ClonePublic(context.Context, string, string) error { return nil }
+func (*checkoutProviderStub) SyncPublic(context.Context, string, string) error  { return nil }
+func (p *checkoutProviderStub) PreparePublicTaskCheckout(_ context.Context, url, path, branch string) error {
 	p.url, p.path, p.branch = url, path, branch
 	return nil
+}
+func (*checkoutProviderStub) ConfigSchema() json.RawMessage        { return json.RawMessage(`{}`) }
+func (*checkoutProviderStub) ValidateConfig(json.RawMessage) error { return nil }
+func (*checkoutProviderStub) ValidateAuthentication(context.Context, json.RawMessage, coderepository.Credentials) error {
+	return nil
+}
+
+func (*checkoutProviderStub) DiscoverRepositories(context.Context, json.RawMessage, coderepository.Credentials, int, int) (coderepository.RepositoryPage, error) {
+	return coderepository.RepositoryPage{}, nil
+}
+
+func (*checkoutProviderStub) ResolveRepository(context.Context, json.RawMessage, coderepository.Credentials, string) (coderepository.RepositoryMetadata, error) {
+	return coderepository.RepositoryMetadata{}, nil
+}
+
+func (*checkoutProviderStub) NormalizeRepositoryURL(value string) (string, error) { return value, nil }
+
+func (*checkoutProviderStub) CloneAuthenticated(context.Context, coderepository.RepositoryMetadata, coderepository.Credentials, string) error {
+	return nil
+}
+
+func (*checkoutProviderStub) SyncAuthenticated(context.Context, coderepository.RepositoryMetadata, coderepository.Credentials, string) error {
+	return nil
+}
+
+func (p *checkoutProviderStub) PrepareAuthenticatedTaskCheckout(_ context.Context, metadata coderepository.RepositoryMetadata, credential coderepository.Credentials, path, branch string) error {
+	p.metadata = metadata
+	p.credential = credential
+	p.path = path
+	p.branch = branch
+	return nil
+}
+
+type credentialResolverStub struct{ workspaceID, integrationID string }
+
+func (r *credentialResolverStub) CodingCredential(_ context.Context, workspaceID, integrationID string) (coderepository.Credentials, error) {
+	r.workspaceID = workspaceID
+	r.integrationID = integrationID
+	return coderepository.Credentials{Token: "secret-token"}, nil
+}
+
+func TestTaskCheckoutResolvesCredentialFromScopedIntegrationReference(t *testing.T) {
+	provider := &checkoutProviderStub{}
+	resolver := &credentialResolverStub{}
+	executor := &Executor{repositoryProviders: map[string]coderepository.CodingProvider{"github": provider}, config: Config{CodingCredentialResolver: resolver}}
+	run := runConfig()
+	run.Repositories = []runconfig.WorkspaceRepository{{ID: "repo", ProviderName: "github", URL: "https://github.com/acme/project.git", IntegrationID: "integration", ProviderRepositoryID: "42", DefaultBranch: "trunk", Name: "acme/project"}}
+	if err := executor.prepareRepositories(context.Background(), t.TempDir(), run); err != nil {
+		t.Fatal(err)
+	}
+	if resolver.workspaceID != run.WorkspaceID || resolver.integrationID != "integration" || provider.credential.Token != "secret-token" {
+		t.Fatalf("resolver=%+v provider credential=%+v", resolver, provider.credential)
+	}
+	if provider.metadata.DefaultBranch != "trunk" || provider.metadata.ID != "42" || provider.branch != "orkest/task-"+run.TaskID {
+		t.Fatalf("metadata=%+v branch=%q", provider.metadata, provider.branch)
+	}
 }
 
 func (f *fakeEngine) ContainerCreate(_ context.Context, options mobyclient.ContainerCreateOptions) (mobyclient.ContainerCreateResult, error) {

@@ -162,10 +162,52 @@ export type CodeRepository = {
     workspaceId: string;
     providerName: 'github';
     url: string;
+    integrationId?: string;
+    providerRepositoryId?: string;
+    defaultBranch: string;
+    name?: string;
+    private: boolean;
+};
+export type CodingIntegrationInput = {
+    name: string;
+    providerName: string;
+    providerConfig?: {
+        [key: string]: unknown;
+    };
+};
+export type CodingIntegration = {
+    id: string;
+    workspaceId: string;
+    name: string;
+    providerName: string;
+    providerConfig: {
+        [key: string]: unknown;
+    };
+    updatedAt?: string;
+};
+export type CodingProvider = {
+    providerName: string;
+    configSchema: {
+        [key: string]: unknown;
+    };
+};
+export type CodingRepository = {
+    id: string;
+    name: string;
+    cloneUrl: string;
+    private: boolean;
+    defaultBranch: string;
+};
+export type CodingRepositoryPage = {
+    repositories: Array<CodingRepository>;
+    nextPage?: number;
+};
+export type CodingIntegrationValidation = {
+    connected: boolean;
 };
 export type CodeRepositoryCreate = {
-    providerName: 'github';
-    url: string;
+    integrationId: string;
+    providerRepositoryId: string;
 };
 export type TaskIntegrationInput = {
     provider: string;
@@ -214,6 +256,14 @@ export type CurrentUserWritable = {
     user: User;
     organizations: Array<Organization>;
 };
+export type CodingIntegrationInputWritable = {
+    name: string;
+    providerName: string;
+    providerConfig?: {
+        [key: string]: unknown;
+    };
+    credential?: string;
+};
 export type TaskIntegrationInputWritable = {
     provider: string;
     name: string;
@@ -251,6 +301,243 @@ export type McpServerInput = {
 };
 export type CodeRepositoryCreate2 = CodeRepositoryCreate;
 export type TaskIntegration2 = TaskIntegrationInputWritable;
+export type ListCodingProvidersData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/coding-providers';
+};
+export type ListCodingProvidersErrors = {
+    /**
+     * Missing or invalid credentials
+     */
+    401: Error;
+};
+export type ListCodingProvidersError = ListCodingProvidersErrors[keyof ListCodingProvidersErrors];
+export type ListCodingProvidersResponses = {
+    /**
+     * Coding provider catalog
+     */
+    200: Array<CodingProvider>;
+};
+export type ListCodingProvidersResponse = ListCodingProvidersResponses[keyof ListCodingProvidersResponses];
+export type ListCodingIntegrationsData = {
+    body?: never;
+    path: {
+        orgID: string;
+        workspaceID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/coding-integrations';
+};
+export type ListCodingIntegrationsErrors = {
+    /**
+     * Missing or invalid credentials
+     */
+    401: Error;
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+};
+export type ListCodingIntegrationsError = ListCodingIntegrationsErrors[keyof ListCodingIntegrationsErrors];
+export type ListCodingIntegrationsResponses = {
+    /**
+     * Workspace coding integrations
+     */
+    200: Array<CodingIntegration>;
+};
+export type ListCodingIntegrationsResponse = ListCodingIntegrationsResponses[keyof ListCodingIntegrationsResponses];
+export type CreateCodingIntegrationData = {
+    body: CodingIntegrationInputWritable;
+    path: {
+        orgID: string;
+        workspaceID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/coding-integrations';
+};
+export type CreateCodingIntegrationErrors = {
+    /**
+     * Request body or role is invalid
+     */
+    400: Error;
+    /**
+     * Missing or invalid credentials
+     */
+    401: Error;
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+    /**
+     * Operation conflicts with membership invariants
+     */
+    409: Error;
+    /**
+     * Coding provider rejected the connection or failed to respond
+     */
+    502: Error;
+};
+export type CreateCodingIntegrationError = CreateCodingIntegrationErrors[keyof CreateCodingIntegrationErrors];
+export type CreateCodingIntegrationResponses = {
+    /**
+     * Coding integration created
+     */
+    201: CodingIntegration;
+};
+export type CreateCodingIntegrationResponse = CreateCodingIntegrationResponses[keyof CreateCodingIntegrationResponses];
+export type DeleteCodingIntegrationData = {
+    body?: never;
+    path: {
+        orgID: string;
+        workspaceID: string;
+        integrationID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/coding-integrations/{integrationID}';
+};
+export type DeleteCodingIntegrationErrors = {
+    /**
+     * Missing or invalid credentials
+     */
+    401: Error;
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+    /**
+     * Resource is absent or inaccessible
+     */
+    404: Error;
+    /**
+     * Operation conflicts with membership invariants
+     */
+    409: Error;
+};
+export type DeleteCodingIntegrationError = DeleteCodingIntegrationErrors[keyof DeleteCodingIntegrationErrors];
+export type DeleteCodingIntegrationResponses = {
+    /**
+     * Coding integration deleted
+     */
+    204: void;
+};
+export type DeleteCodingIntegrationResponse = DeleteCodingIntegrationResponses[keyof DeleteCodingIntegrationResponses];
+export type UpdateCodingIntegrationData = {
+    body: CodingIntegrationInputWritable;
+    path: {
+        orgID: string;
+        workspaceID: string;
+        integrationID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/coding-integrations/{integrationID}';
+};
+export type UpdateCodingIntegrationErrors = {
+    /**
+     * Request body or role is invalid
+     */
+    400: Error;
+    /**
+     * Missing or invalid credentials
+     */
+    401: Error;
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+    /**
+     * Resource is absent or inaccessible
+     */
+    404: Error;
+    /**
+     * Coding provider rejected the connection or failed to respond
+     */
+    502: Error;
+};
+export type UpdateCodingIntegrationError = UpdateCodingIntegrationErrors[keyof UpdateCodingIntegrationErrors];
+export type UpdateCodingIntegrationResponses = {
+    /**
+     * Coding integration updated
+     */
+    204: void;
+};
+export type UpdateCodingIntegrationResponse = UpdateCodingIntegrationResponses[keyof UpdateCodingIntegrationResponses];
+export type ValidateCodingIntegrationData = {
+    body?: never;
+    path: {
+        orgID: string;
+        workspaceID: string;
+        integrationID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/coding-integrations/{integrationID}/validate';
+};
+export type ValidateCodingIntegrationErrors = {
+    /**
+     * Missing or invalid credentials
+     */
+    401: Error;
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+    /**
+     * Resource is absent or inaccessible
+     */
+    404: Error;
+    /**
+     * Coding provider rejected the connection or failed to respond
+     */
+    502: Error;
+};
+export type ValidateCodingIntegrationError = ValidateCodingIntegrationErrors[keyof ValidateCodingIntegrationErrors];
+export type ValidateCodingIntegrationResponses = {
+    /**
+     * Saved connection validation succeeded
+     */
+    200: CodingIntegrationValidation;
+};
+export type ValidateCodingIntegrationResponse = ValidateCodingIntegrationResponses[keyof ValidateCodingIntegrationResponses];
+export type BrowseCodingRepositoriesData = {
+    body?: never;
+    path: {
+        orgID: string;
+        workspaceID: string;
+        integrationID: string;
+    };
+    query?: {
+        page?: number;
+        perPage?: number;
+    };
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/coding-integrations/{integrationID}/repositories';
+};
+export type BrowseCodingRepositoriesErrors = {
+    /**
+     * Missing or invalid credentials
+     */
+    401: Error;
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+    /**
+     * Resource is absent or inaccessible
+     */
+    404: Error;
+    /**
+     * Coding provider rejected the connection or failed to respond
+     */
+    502: Error;
+};
+export type BrowseCodingRepositoriesError = BrowseCodingRepositoriesErrors[keyof BrowseCodingRepositoriesErrors];
+export type BrowseCodingRepositoriesResponses = {
+    /**
+     * Provider repository page
+     */
+    200: CodingRepositoryPage;
+};
+export type BrowseCodingRepositoriesResponse = BrowseCodingRepositoriesResponses[keyof BrowseCodingRepositoriesResponses];
 export type GetHealthData = {
     body?: never;
     path?: never;
@@ -1220,7 +1507,7 @@ export type CloneCodeRepositoryResponses = {
     204: void;
 };
 export type CloneCodeRepositoryResponse = CloneCodeRepositoryResponses[keyof CloneCodeRepositoryResponses];
-export type SyncCodeRepositoryMainData = {
+export type SyncCodeRepositoryData = {
     body?: never;
     path: {
         orgID: string;
@@ -1228,9 +1515,9 @@ export type SyncCodeRepositoryMainData = {
         repositoryID: string;
     };
     query?: never;
-    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/code-repositories/{repositoryID}/sync-main';
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/code-repositories/{repositoryID}/sync';
 };
-export type SyncCodeRepositoryMainErrors = {
+export type SyncCodeRepositoryErrors = {
     /**
      * Request body or role is invalid
      */
@@ -1252,14 +1539,14 @@ export type SyncCodeRepositoryMainErrors = {
      */
     500: Error;
 };
-export type SyncCodeRepositoryMainError = SyncCodeRepositoryMainErrors[keyof SyncCodeRepositoryMainErrors];
-export type SyncCodeRepositoryMainResponses = {
+export type SyncCodeRepositoryError = SyncCodeRepositoryErrors[keyof SyncCodeRepositoryErrors];
+export type SyncCodeRepositoryResponses = {
     /**
-     * Checkout reset to the latest remote main branch
+     * Shared checkout synced to the registered repository default branch
      */
     204: void;
 };
-export type SyncCodeRepositoryMainResponse = SyncCodeRepositoryMainResponses[keyof SyncCodeRepositoryMainResponses];
+export type SyncCodeRepositoryResponse = SyncCodeRepositoryResponses[keyof SyncCodeRepositoryResponses];
 export type ListTaskIntegrationsData = {
     body?: never;
     path: {

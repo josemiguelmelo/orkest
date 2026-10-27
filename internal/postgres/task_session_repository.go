@@ -11,9 +11,9 @@ import (
 	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
 	modelerrors "github.com/josemiguelmelo/orkest/internal/core/model/errors"
+	"github.com/josemiguelmelo/orkest/internal/core/secretbox"
 	"github.com/josemiguelmelo/orkest/internal/orchestration"
 	"github.com/josemiguelmelo/orkest/internal/postgres/sqlc"
-	"github.com/josemiguelmelo/orkest/internal/taskintegration"
 )
 
 func (r *AgentLaunchPostgresRepository) CurrentSession(ctx context.Context, orgID, workspaceID, taskID string) (runconfig.RunConfig, bool, error) {
@@ -30,7 +30,7 @@ func (r *AgentLaunchPostgresRepository) CurrentSession(ctx context.Context, orgI
 	}
 	if config.EncryptedEnvironment != "" {
 		if r.secretBox == nil {
-			return config, false, taskintegration.ErrEncryptionKeyUnavailable
+			return config, false, secretbox.ErrKeyUnavailable
 		}
 		plain, err := r.secretBox.Open([]byte(config.EncryptedEnvironment))
 		if err != nil {
@@ -107,7 +107,7 @@ func (r *AgentLaunchPostgresRepository) sessionSnapshot(config runconfig.RunConf
 	}
 	if len(snapshot.Environment) > 0 {
 		if r.secretBox == nil {
-			return nil, taskintegration.ErrEncryptionKeyUnavailable
+			return nil, secretbox.ErrKeyUnavailable
 		}
 		encoded, err := json.Marshal(snapshot.Environment)
 		if err != nil {

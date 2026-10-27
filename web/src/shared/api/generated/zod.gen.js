@@ -168,11 +168,47 @@ export const zCodeRepository = z.object({
     id: z.string(),
     workspaceId: z.string(),
     providerName: z.enum(['github']),
-    url: z.url()
+    url: z.url(),
+    integrationId: z.string().optional(),
+    providerRepositoryId: z.string().optional(),
+    defaultBranch: z.string(),
+    name: z.string().optional(),
+    private: z.boolean()
+});
+export const zCodingIntegrationInput = z.object({
+    name: z.string().min(1).max(200),
+    providerName: z.string(),
+    providerConfig: z.record(z.string(), z.unknown()).optional()
+});
+export const zCodingIntegration = z.object({
+    id: z.string(),
+    workspaceId: z.string(),
+    name: z.string(),
+    providerName: z.string(),
+    providerConfig: z.record(z.string(), z.unknown()),
+    updatedAt: z.string().optional()
+});
+export const zCodingProvider = z.object({
+    providerName: z.string(),
+    configSchema: z.record(z.string(), z.unknown())
+});
+export const zCodingRepository = z.object({
+    id: z.string(),
+    name: z.string(),
+    cloneUrl: z.url(),
+    private: z.boolean(),
+    defaultBranch: z.string()
+});
+export const zCodingRepositoryPage = z.object({
+    repositories: z.array(zCodingRepository),
+    nextPage: z.int().optional()
+});
+export const zCodingIntegrationValidation = z.object({
+    connected: z.boolean()
 });
 export const zCodeRepositoryCreate = z.object({
-    providerName: z.enum(['github']),
-    url: z.url()
+    integrationId: z.string(),
+    providerRepositoryId: z.string()
 });
 /**
  * Provider-defined config. Retrieve allowed fields and constraints from GET /api/task-integration-providers.
@@ -213,6 +249,12 @@ export const zOperationStatus = z.object({
 export const zCurrentUserWritable = z.object({
     user: zUser,
     organizations: z.array(zOrganization)
+});
+export const zCodingIntegrationInputWritable = z.object({
+    name: z.string().min(1).max(200),
+    providerName: z.string(),
+    providerConfig: z.record(z.string(), z.unknown()).optional(),
+    credential: z.string().optional()
 });
 export const zTaskIntegrationInputWritable = z.object({
     provider: z.string(),
@@ -257,6 +299,68 @@ export const zMcpServerInput = z.object({
 });
 export const zCodeRepositoryCreate2 = zCodeRepositoryCreate;
 export const zTaskIntegration2 = zTaskIntegrationInputWritable;
+/**
+ * Coding provider catalog
+ */
+export const zListCodingProvidersResponse = z.array(zCodingProvider);
+export const zListCodingIntegrationsPath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string()
+});
+/**
+ * Workspace coding integrations
+ */
+export const zListCodingIntegrationsResponse = z.array(zCodingIntegration);
+export const zCreateCodingIntegrationBody = zCodingIntegrationInputWritable;
+export const zCreateCodingIntegrationPath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string()
+});
+/**
+ * Coding integration created
+ */
+export const zCreateCodingIntegrationResponse = zCodingIntegration;
+export const zDeleteCodingIntegrationPath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string(),
+    integrationID: z.string()
+});
+/**
+ * Coding integration deleted
+ */
+export const zDeleteCodingIntegrationResponse = z.void();
+export const zUpdateCodingIntegrationBody = zCodingIntegrationInputWritable;
+export const zUpdateCodingIntegrationPath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string(),
+    integrationID: z.string()
+});
+/**
+ * Coding integration updated
+ */
+export const zUpdateCodingIntegrationResponse = z.void();
+export const zValidateCodingIntegrationPath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string(),
+    integrationID: z.string()
+});
+/**
+ * Saved connection validation succeeded
+ */
+export const zValidateCodingIntegrationResponse = zCodingIntegrationValidation;
+export const zBrowseCodingRepositoriesPath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string(),
+    integrationID: z.string()
+});
+export const zBrowseCodingRepositoriesQuery = z.object({
+    page: z.int().gte(1).optional().default(1),
+    perPage: z.int().gte(1).lte(100).optional().default(50)
+});
+/**
+ * Provider repository page
+ */
+export const zBrowseCodingRepositoriesResponse = zCodingRepositoryPage;
 /**
  * HTTP process is running
  */
@@ -464,15 +568,15 @@ export const zCloneCodeRepositoryPath = z.object({
  * Repository cloned
  */
 export const zCloneCodeRepositoryResponse = z.void();
-export const zSyncCodeRepositoryMainPath = z.object({
+export const zSyncCodeRepositoryPath = z.object({
     orgID: z.string(),
     workspaceID: z.string(),
     repositoryID: z.string()
 });
 /**
- * Checkout reset to the latest remote main branch
+ * Shared checkout synced to the registered repository default branch
  */
-export const zSyncCodeRepositoryMainResponse = z.void();
+export const zSyncCodeRepositoryResponse = z.void();
 export const zListTaskIntegrationsPath = z.object({
     orgID: z.string(),
     workspaceID: z.string()

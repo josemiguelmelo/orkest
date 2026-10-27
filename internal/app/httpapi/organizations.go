@@ -8,8 +8,10 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/josemiguelmelo/orkest/internal/coderepository"
 	"github.com/josemiguelmelo/orkest/internal/core/httplog"
 	modelerrors "github.com/josemiguelmelo/orkest/internal/core/model/errors"
+	"github.com/josemiguelmelo/orkest/internal/core/secretbox"
 	"github.com/josemiguelmelo/orkest/internal/organization"
 	"github.com/josemiguelmelo/orkest/internal/task"
 	"github.com/josemiguelmelo/orkest/internal/taskintegration"
@@ -172,8 +174,9 @@ func respond(w http.ResponseWriter, value any, err error, success int) {
 		var dispatchError *task.DispatchError
 		var integrationValidationError *taskintegration.ValidationError
 		var integrationConfigurationError *taskintegration.ConfigurationError
+		var codingProviderError *coderepository.ProviderError
 		switch {
-		case errors.Is(err, taskintegration.ErrEncryptionKeyUnavailable):
+		case errors.Is(err, secretbox.ErrKeyUnavailable):
 			status, code = http.StatusServiceUnavailable, "integration_encryption_not_configured"
 		case errors.As(err, &integrationValidationError):
 			status, code = http.StatusBadGateway, integrationValidationError.Code
@@ -182,6 +185,14 @@ func respond(w http.ResponseWriter, value any, err error, success int) {
 			}
 		case errors.As(err, &integrationConfigurationError):
 			status, code = http.StatusBadRequest, integrationConfigurationError.Code
+		case errors.As(err, &codingProviderError):
+			status, code = codingProviderError.Status, codingProviderError.Code
+			if status == 0 {
+				status = http.StatusBadGateway
+			}
+			if code == "" {
+				code = "coding_provider_request_failed"
+			}
 		case errors.As(err, &dispatchError):
 			status, code = http.StatusBadGateway, "agent_dispatch_failed"
 		case errors.Is(err, modelerrors.ErrInvalid):

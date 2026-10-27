@@ -43,6 +43,14 @@ Organization Owners manage the organization and all memberships. Organization Ad
 
 Users register repositories in a workspace before tasks may use them. A task may involve one or more registered repositories. A task must not access repositories from another workspace through task configuration.
 
+GitHub Cloud with a PAT is the initial coding provider. Workspace-scoped
+integration management, write-only encrypted credential storage and rotation,
+connection validation, paginated repository discovery, selection-based
+registration, and task checkout credential resolution are implemented. Additional
+coding providers remain future support. Repository credentials remain separate
+from repository metadata and agent run configuration; Git access tokens are
+used only by the platform during checkout operations.
+
 Repository configuration must identify the remote repository and the credentials or integration used to access it. The agent determines which workspace repositories need changes from the task context. Each changed repository uses a branch dedicated to the task; review iterations reuse that branch. Agents autonomously create and update pull requests and perform the repository operations needed to complete the task, within configured permissions and approval policies. Base branch selection and discovery mechanics remain open.
 
 ### 3.3 Task

@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/josemiguelmelo/orkest/internal/taskintegration"
+	"github.com/josemiguelmelo/orkest/internal/core/secretbox"
 	"github.com/josemiguelmelo/orkest/internal/workspace"
 )
 
@@ -41,7 +41,7 @@ func (w workspaceStub) GetWorkspace(context.Context, string, string, string) (wo
 }
 
 func TestCreateEncryptsHeadersAndResolveDecryptsThem(t *testing.T) {
-	box, err := taskintegration.NewSecretBox("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	box, err := secretbox.New("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +64,7 @@ func TestCreateEncryptsHeadersAndResolveDecryptsThem(t *testing.T) {
 }
 
 func TestUpdatePreservesOmittedHeadersAndRejectsUnsafeValues(t *testing.T) {
-	box, _ := taskintegration.NewSecretBox("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	box, _ := secretbox.New("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 	repository := &repositoryStub{server: Server{ID: "server", WorkspaceID: "workspace", Name: "Remote", URL: "https://example.test/mcp"}}
 	sealed, _ := box.Seal(`{"Authorization":"Bearer private"}`)
 	repository.secret = string(sealed)
@@ -97,7 +97,7 @@ func TestMutationRequiresWorkspacePermissionAndEncryptionKey(t *testing.T) {
 		t.Fatalf("URL-only MCP server should not require encryption: %v", err)
 	}
 	input.Headers = map[string]string{"Authorization": "Bearer private"}
-	if _, err := service.Create(context.Background(), "user", "org", "workspace", input); !errors.Is(err, taskintegration.ErrEncryptionKeyUnavailable) {
+	if _, err := service.Create(context.Background(), "user", "org", "workspace", input); !errors.Is(err, secretbox.ErrKeyUnavailable) {
 		t.Fatalf("unexpected key error: %v", err)
 	}
 }

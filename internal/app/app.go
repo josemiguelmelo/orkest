@@ -17,6 +17,7 @@ import (
 	githubprovider "github.com/josemiguelmelo/orkest/internal/coderepository/providers/github"
 	"github.com/josemiguelmelo/orkest/internal/core/httplog"
 	"github.com/josemiguelmelo/orkest/internal/core/httpserver"
+	"github.com/josemiguelmelo/orkest/internal/core/secretbox"
 	"github.com/josemiguelmelo/orkest/internal/executors/docker"
 	"github.com/josemiguelmelo/orkest/internal/identity"
 	"github.com/josemiguelmelo/orkest/internal/mcpserver"
@@ -60,9 +61,9 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 	organizations := organization.NewOrganizationService(postgres.NewOrganizationPostgresRepository(database))
 	workspaces := workspace.NewWorkspaceService(postgres.NewWorkspacePostgresRepository(database), organizations)
 	skillCatalog := skill.NewCatalogService(postgres.NewSkillCatalogPostgresRepository(database), organizations, workspaces, users)
-	var secretBox *taskintegration.SecretBox
+	var secretBox *secretbox.Box
 	if key := os.Getenv("ORKEST_INTEGRATION_ENCRYPTION_KEY"); key != "" {
-		secretBox, err = taskintegration.NewSecretBox(key)
+		secretBox, err = secretbox.New(key)
 		if err != nil {
 			return err
 		}
@@ -70,13 +71,15 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 	mcpServerService := mcpserver.NewMCPServerService(postgres.NewMCPServerPostgresRepository(database), secretBox, workspaces)
 	workspaceEnvironment := workspaceenv.NewService(postgres.NewWorkspaceEnvironmentPostgresRepository(database), workspaces, secretBox)
 	agents := agent.NewService(postgres.NewAgentPostgresRepository(database), workspaces, mcpServerService, skillCatalog)
-	codeRepositories := coderepository.NewService(postgres.NewCodeReposPostgresRepository(database), workspaces, dataRoot, githubprovider.NewGitHubCodeRepositoryProvider())
+	codeRepositories := coderepository.NewService(postgres.NewCodeReposPostgresRepository(database), workspaces, dataRoot, githubprovider.NewGitHubProvider())
+	codeRepositories.SetSecretBox(secretBox)
 	launchRepo := postgres.NewAgentLaunchPostgresRepository(database, secretBox)
 	client := orchestration.NewHTTPAgentctlClient(httplog.PropagatingHTTPClient(&http.Client{Timeout: 10 * time.Second}))
 	executor, executorErr := docker.New(ctx, docker.Config{
-		DataRoot:                filepath.Join(dataRoot, "agent-executions"),
-		ProviderEnv:             splitEnvironmentNames(os.Getenv("ORKEST_AGENT_PROVIDER_ENV")),
-		CodeRepositoryProviders: []coderepository.CodeRepositoryProvider{githubprovider.NewGitHubCodeRepositoryProvider()},
+		DataRoot:                 filepath.Join(dataRoot, "agent-executions"),
+		ProviderEnv:              splitEnvironmentNames(os.Getenv("ORKEST_AGENT_PROVIDER_ENV")),
+		CodingProviders:          []coderepository.CodingProvider{githubprovider.NewGitHubProvider()},
+		CodingCredentialResolver: codeRepositories,
 	})
 	if executorErr != nil {
 		return fmt.Errorf("initialize Docker agent executor: %w", executorErr)
