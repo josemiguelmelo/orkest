@@ -11,6 +11,7 @@ import (
 
 type sessionCallbacks struct {
 	mu             sync.Mutex
+	secrets        []string
 	observer       *agentruntime.PromptObserver
 	cancelObserver context.CancelFunc
 	promptContext  context.Context
@@ -25,6 +26,9 @@ func (c *sessionCallbacks) Update(update interaction.Update) error {
 	c.mu.Unlock()
 	if observer == nil || observer.Update == nil {
 		return nil
+	}
+	if update.Kind == "tool_call" || update.Kind == "tool_call_update" {
+		update = interaction.BoundToolUpdate(interaction.RedactToolUpdate(update, c.secrets))
 	}
 	err := observer.Update(update)
 	if err != nil && cancel != nil {

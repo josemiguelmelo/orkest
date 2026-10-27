@@ -91,3 +91,29 @@ func TestPermissionSelectionIsBoundToSessionAndOfferedOptions(t *testing.T) {
 		})
 	}
 }
+
+func TestToolDetailsReachCallbacks(t *testing.T) {
+	callbacks := &recordedCallbacks{}
+	client := &client{sessionID: "session", callbacks: callbacks}
+	packets := []string{
+		`{"sessionId":"session","update":{"sessionUpdate":"tool_call","toolCallId":"read-1","title":"read","kind":"read","rawInput":{"filePath":"/workspace/README.md"},"locations":[{"path":"/workspace/README.md","line":1}],"status":"pending"}}`,
+		`{"sessionId":"session","update":{"sessionUpdate":"tool_call_update","toolCallId":"read-1","status":"completed","rawOutput":"file contents","content":[{"type":"content","content":{"type":"text","text":"file contents"}}]}}`,
+	}
+	for _, packet := range packets {
+		var n sdk.SessionNotification
+		if err := json.Unmarshal([]byte(packet), &n); err != nil {
+			t.Fatal(err)
+		}
+		if err := client.SessionUpdate(context.Background(), n); err != nil {
+			t.Fatal(err)
+		}
+	}
+	first := callbacks.updates[0]
+	if first.ToolKind != "read" || first.Input != `{"filePath":"/workspace/README.md"}` || len(first.Locations) != 1 || first.Locations[0].Path != "/workspace/README.md" {
+		t.Fatalf("missing tool details: %+v", first)
+	}
+	last := callbacks.updates[1]
+	if last.Output != `"file contents"` || len(last.Content) != 1 || last.Content[0].Text != "file contents" {
+		t.Fatalf("missing result: %+v", last)
+	}
+}

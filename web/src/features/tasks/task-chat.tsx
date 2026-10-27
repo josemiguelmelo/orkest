@@ -11,7 +11,6 @@ import {
   MessageSquare,
   ShieldCheck,
   Terminal,
-  X,
 } from 'lucide-react';
 import { useApp } from '../../app/context';
 import { command, data } from '../../shared/api/client';
@@ -22,7 +21,14 @@ import { Button } from '../../shared/ui/button';
 import { ErrorState } from '../../shared/ui/common';
 import { Markdown } from '../../shared/ui/markdown';
 import { useAction } from '../../shared/use-action';
-import { chatExecution, conversationTurns, pendingPermissions, type ChatTurn } from './chat-model';
+import {
+  chatExecution,
+  conversationTurns,
+  pendingPermissions,
+  toolLabel,
+  type ChatTurn,
+} from './chat-model';
+import { ToolCard } from './tool-card';
 import type { SessionMode } from './session-choice';
 
 export function TaskChat({ task }: { task: Task }) {
@@ -520,24 +526,14 @@ function ConversationTurn({ turn }: { turn: ChatTurn }) {
                     <Terminal size={13} />
                     <span>
                       {block.tools.length === 1
-                        ? block.tools[0]?.title
+                        ? block.tools[0] && toolLabel(block.tools[0])
                         : `${block.tools.length} tool actions`}
                     </span>
                     <ChevronDown size={12} />
                   </summary>
                   <div>
                     {block.tools.map((tool) => (
-                      <div className="agent-tool-row" key={tool.id}>
-                        {tool.status === 'failed' ? (
-                          <X size={12} />
-                        ) : tool.status === 'completed' ? (
-                          <Check size={12} />
-                        ) : (
-                          <span className="agent-tool-dot" />
-                        )}
-                        <span>{tool.title}</span>
-                        <small>{tool.status.replaceAll('_', ' ')}</small>
-                      </div>
+                      <ToolCard key={tool.id} tool={tool} />
                     ))}
                   </div>
                 </details>

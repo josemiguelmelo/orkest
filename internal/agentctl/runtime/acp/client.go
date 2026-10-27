@@ -3,6 +3,7 @@ package acp
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -150,7 +151,7 @@ func (c *client) SessionUpdate(_ context.Context, notification sdk.SessionNotifi
 	case update.ToolCall != nil:
 		call := update.ToolCall
 		callbacks.Observation(agentruntime.HistoryObservation{Kind: agentruntime.HistoryToolActivity})
-		return callbacks.Update(interaction.Update{Kind: "tool_call", ToolCallID: string(call.ToolCallId), Title: call.Title, Status: string(call.Status)})
+		return callbacks.Update(toolUpdate("tool_call", string(call.ToolCallId), call.Title, string(call.Status), string(call.Kind), call.RawInput, call.RawOutput, call.Locations, call.Content))
 	case update.ToolCallUpdate != nil:
 		call := update.ToolCallUpdate
 		callbacks.Observation(agentruntime.HistoryObservation{Kind: agentruntime.HistoryToolActivity})
@@ -161,11 +162,91 @@ func (c *client) SessionUpdate(_ context.Context, notification sdk.SessionNotifi
 		if call.Status != nil {
 			value.Status = string(*call.Status)
 		}
+		if call.Kind != nil {
+			value.ToolKind = string(*call.Kind)
+		}
+		if call.RawInput != nil {
+			value.Input, value.Truncated = bounded(call.RawInput, value.Truncated)
+		}
+		if call.RawOutput != nil {
+			value.Output, value.Truncated = bounded(call.RawOutput, value.Truncated)
+		}
+		if call.Locations != nil {
+			value.Locations = locations(call.Locations)
+		}
+		if call.Content != nil {
+			value.Content, value.Truncated = contents(call.Content)
+		}
 		return callbacks.Update(value)
 	default:
 		callbacks.Observation(agentruntime.HistoryObservation{Kind: agentruntime.HistoryUnknown})
 	}
 	return nil
+}
+
+// Raw values stay intact until the host redacts credentials and then bounds previews.
+func bounded(v any, already bool) (string, bool) {
+	if v == nil {
+		return "", already
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		return "[unavailable]", already
+	}
+	return string(b), already
+}
+
+func locations(in []sdk.ToolCallLocation) []interaction.ToolLocation {
+	if in == nil {
+		return nil
+	}
+	out := make([]interaction.ToolLocation, 0, len(in))
+	for _, l := range in {
+		line := 0
+		if l.Line != nil {
+			line = int(*l.Line)
+		}
+		out = append(out, interaction.ToolLocation{Path: l.Path, Line: line})
+	}
+	return out
+}
+
+func contents(in []sdk.ToolCallContent) ([]interaction.ToolContent, bool) {
+	if in == nil {
+		return nil, false
+	}
+	out := make([]interaction.ToolContent, 0, len(in))
+	truncated := false
+	for _, c := range in {
+		if c.Diff != nil {
+			old := ""
+			if c.Diff.OldText != nil {
+				old = *c.Diff.OldText
+			}
+			n := false
+			out = append(out, interaction.ToolContent{Kind: "diff", Path: c.Diff.Path, OldText: old, NewText: c.Diff.NewText, Truncated: n})
+			truncated = truncated || n
+		} else if c.Content != nil && c.Content.Content.Text != nil {
+			s := c.Content.Content.Text.Text
+			n := false
+			out = append(out, interaction.ToolContent{Kind: "text", Text: s, Truncated: n})
+			truncated = truncated || n
+		} else {
+			out = append(out, interaction.ToolContent{Kind: "unsupported"})
+		}
+	}
+	return out, truncated
+}
+
+func toolUpdate(kind, id, title, status, toolKind string, input, output any, loc []sdk.ToolCallLocation, content []sdk.ToolCallContent) interaction.Update {
+	u := interaction.Update{Kind: kind, ToolCallID: id, Title: title, Status: status, ToolKind: toolKind, Locations: locations(loc)}
+	u.Input, u.Truncated = bounded(input, u.Truncated)
+	var t bool
+	u.Output, t = bounded(output, u.Truncated)
+	u.Truncated = u.Truncated || t
+	u.Content, t = contents(content)
+	u.Truncated = u.Truncated || t
+	return u
 }
 
 func protocolError(message string, cause error) error {

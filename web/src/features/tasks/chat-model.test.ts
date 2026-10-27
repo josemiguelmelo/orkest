@@ -95,3 +95,90 @@ describe('task conversation', () => {
     expect(pendingPermissions([...history, ...events({ type: 'runtime_stopped' })])).toEqual([]);
   });
 });
+
+it('merges tool details and timestamps while replacing explicit collections', () => {
+  const turns = conversationTurns(
+    events(
+      { type: 'prompt_accepted' },
+      {
+        type: 'update',
+        at: '2026-01-01T00:00:00Z',
+        update: {
+          kind: 'tool_call',
+          toolCallId: 't',
+          title: 'Read',
+          input: 'file',
+          locations: [{ path: 'a' }],
+          content: [{ kind: 'text', text: 'first' }],
+        },
+      },
+      {
+        type: 'update',
+        at: '2026-01-01T00:00:02Z',
+        update: {
+          kind: 'tool_call_update',
+          toolCallId: 't',
+          status: 'completed',
+          output: 'done',
+          locations: [],
+          content: [],
+        },
+      },
+      { type: 'prompt_completed' },
+    ),
+  );
+  const block = turns[0]!.blocks[0]!;
+  expect(block.kind).toBe('tools');
+  if (block.kind !== 'tools') throw new Error('missing tool');
+  expect(block.tools[0]).toMatchObject({
+    title: 'Read',
+    input: 'file',
+    output: 'done',
+    locations: [],
+    content: [],
+    status: 'completed',
+    startedAt: Date.parse('2026-01-01T00:00:00Z'),
+    endedAt: Date.parse('2026-01-01T00:00:02Z'),
+  });
+});
+
+it('does not infer success for unfinished tools or accept malformed detail fields', () => {
+  const turns = conversationTurns(
+    events(
+      { type: 'prompt_accepted' },
+      {
+        type: 'update',
+        update: {
+          kind: 'tool_call',
+          toolCallId: 't',
+          input: {},
+          content: [null, { kind: 'text', text: 4 }],
+          locations: [null],
+        },
+      },
+      { type: 'prompt_interrupted' },
+    ),
+  );
+  const block = turns[0]!.blocks[0]!;
+  if (block.kind !== 'tools') throw new Error('missing tool');
+  expect(block.tools[0]?.status).toBe('interrupted');
+  expect(block.tools[0]?.input).toBeUndefined();
+  expect(block.tools[0]?.locations).toEqual([]);
+});
+
+it('shows a useful label for file reads even when locations are omitted', async () => {
+  const { toolLabel } = await import('./chat-model');
+  expect(
+    toolLabel({ id: 't', title: 'read', status: 'pending', input: '{"filePath":"src/app.ts"}' }),
+  ).toBe('read · src/app.ts');
+  expect(
+    toolLabel({
+      id: 't',
+      title: 'read',
+      status: 'pending',
+      input: '{"path":"fallback"}',
+      locations: [{ path: 'preferred' }],
+    }),
+  ).toBe('read · preferred');
+  expect(toolLabel({ id: 't', title: 'read', status: 'pending', input: '{broken' })).toBe('read');
+});

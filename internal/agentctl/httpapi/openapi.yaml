@@ -570,6 +570,28 @@ components:
             toolCallId: { type: string }
             title: { type: string }
             status: { type: string }
+            toolKind: { type: string }
+            input: { type: string, description: Bounded input preview }
+            output: { type: string, description: Bounded output preview }
+            truncated: { type: boolean }
+            locations:
+              type: array
+              items:
+                type: object
+                properties:
+                  path: { type: string }
+                  line: { type: integer }
+            content:
+              type: array
+              items:
+                type: object
+                properties:
+                  kind: { enum: [text, diff, unsupported] }
+                  path: { type: string }
+                  text: { type: string }
+                  oldText: { type: string }
+                  newText: { type: string }
+                  truncated: { type: boolean }
     ServerMessage:
       type: object
       required: [type]

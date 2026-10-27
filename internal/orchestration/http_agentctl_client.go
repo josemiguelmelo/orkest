@@ -179,6 +179,7 @@ func (c *HTTPAgentctlClient) Connect(ctx context.Context, endpoint string, curso
 		return fmt.Errorf("connect agentctl stream: %w", err)
 	}
 	defer func() { _ = conn.CloseNow() }()
+	conn.SetReadLimit(1 << 20)
 	connected := false
 	for {
 		var frame streamFrame
