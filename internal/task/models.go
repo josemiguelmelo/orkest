@@ -3,6 +3,9 @@ package task
 import "time"
 
 type Task struct {
+	SessionMode     string      `json:"-"`
+	PromptText      string      `json:"-"`
+	CommandID       string      `json:"-"`
 	ID              string      `json:"id"`
 	WorkspaceID     string      `json:"workspaceId"`
 	Title           string      `json:"title"`
@@ -39,6 +42,10 @@ type Comment struct {
 }
 
 type TaskInput struct {
+	StartWork       bool     `json:"startWork,omitempty"`
+	SessionMode     string   `json:"sessionMode,omitempty"`
+	PromptText      string   `json:"promptText,omitempty"`
+	CommandID       string   `json:"commandId,omitempty"`
 	Title           string   `json:"title"`
 	Description     string   `json:"description"`
 	Status          string   `json:"status"`

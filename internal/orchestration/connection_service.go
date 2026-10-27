@@ -8,7 +8,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/josemiguelmelo/orkest/internal/agentctl"
+	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
+	agentrun "github.com/josemiguelmelo/orkest/internal/agentctl/run"
 )
 
 type AgentCommunication interface {
@@ -22,14 +23,14 @@ type connectionRun struct {
 
 type ConnectionService struct {
 	ctx        context.Context
-	client     AgentctlClient
-	repo       LaunchRepository
+	client     AgentConnectionClient
+	repo       ConnectionRepository
 	completion *LaunchCompletionService
 	mu         sync.Mutex
 	runs       map[string]connectionRun
 }
 
-func NewConnectionService(ctx context.Context, client AgentctlClient, repo LaunchRepository, completion ...*LaunchCompletionService) (*ConnectionService, error) {
+func NewConnectionService(ctx context.Context, client AgentConnectionClient, repo ConnectionRepository, completion ...*LaunchCompletionService) (*ConnectionService, error) {
 	if ctx == nil || client == nil || repo == nil {
 		return nil, errors.New("agentctl client and launch repository are required")
 	}
@@ -42,7 +43,15 @@ func NewConnectionService(ctx context.Context, client AgentctlClient, repo Launc
 
 // Start performs an initial WebSocket handshake, then reconnects in the background.
 func (s *ConnectionService) Start(launch Launch) error {
-	return s.start(launch, true, false)
+	if err := s.start(launch, true, false); err != nil {
+		return err
+	}
+	if s.completion != nil {
+		if runCtx := s.runContext(launch.RunID); runCtx != nil {
+			go s.monitorLaunch(runCtx, launch)
+		}
+	}
+	return nil
 }
 
 // ReconnectRecorded resumes event streams for persisted active launches. It never
@@ -58,7 +67,7 @@ func (s *ConnectionService) ReconnectRecorded() error {
 		}
 		if s.completion != nil && (launch.Status == LaunchStarting || launch.Status == LaunchFailed) {
 			pendingStatus := LaunchFailedPendingClose
-			if launch.LastEventType == string(agentctl.EventPromptCompleted) {
+			if launch.LastEventType == string(interaction.EventRunCompleted) || (launch.TaskSessionID == "" && launch.LastEventType == string(interaction.EventPromptCompleted)) {
 				pendingStatus = LaunchCompletedPendingClose
 			}
 			go s.completion.CloseAbandoned(s.ctx, launch, pendingStatus)
@@ -82,17 +91,20 @@ func (s *ConnectionService) ReconnectRecorded() error {
 }
 
 func (s *ConnectionService) reconcileAndReconnect(launch Launch) {
-	if launch.LastEventType == string(agentctl.EventPromptCompleted) {
+	if launch.LastEventType == string(interaction.EventRunCompleted) || (launch.TaskSessionID == "" && launch.LastEventType == string(interaction.EventPromptCompleted)) {
 		s.completion.CloseAbandoned(s.ctx, launch, LaunchCompletedPendingClose)
 		return
 	}
-	if launch.LastEventType == string(agentctl.EventPromptFailed) {
+	if launch.LastEventType == string(interaction.EventRunFailed) || (launch.TaskSessionID == "" && launch.LastEventType == string(interaction.EventPromptFailed)) {
 		s.completion.CloseAbandoned(s.ctx, launch, LaunchFailedPendingClose)
 		return
 	}
 	statusCtx, cancel := context.WithTimeout(s.ctx, 5*time.Second)
 	status, err := s.client.Status(statusCtx, launch.Endpoint)
 	cancel()
+	if err == nil && launch.TaskSessionID != "" && !matchesExecution(launch, status) {
+		return
+	}
 	if err == nil && agentctlProcessHasEnded(status) {
 		s.completion.CloseAbandoned(s.ctx, launch, LaunchFailedPendingClose)
 		return
@@ -101,6 +113,7 @@ func (s *ConnectionService) reconcileAndReconnect(launch Launch) {
 		s.completion.CloseAbandoned(s.ctx, launch, LaunchFailedPendingClose)
 		return
 	}
+	s.reconcilePrompts(s.ctx, launch)
 	if s.start(launch, false, true) == nil {
 		if runCtx := s.runContext(launch.RunID); runCtx != nil {
 			go s.monitorLaunch(runCtx, launch)
@@ -108,14 +121,17 @@ func (s *ConnectionService) reconcileAndReconnect(launch Launch) {
 	}
 }
 
-func agentctlProcessHasEnded(status agentctl.Status) bool {
+func agentctlProcessHasEnded(status agentrun.RunStatus) bool {
 	if !status.Configured {
 		return true
 	}
-	if status.State == agentctl.StateFailed || status.State == agentctl.StateInterrupted || status.State == agentctl.StateExited {
+	if status.TaskSessionID != "" {
+		return false
+	}
+	if status.State == agentrun.StateFailed || status.State == agentrun.StateInterrupted || status.State == agentrun.StateExited {
 		return true
 	}
-	if status.State == agentctl.StateStarting {
+	if status.State == agentrun.StateStarting {
 		return false
 	}
 	return status.Configured && (!status.ProcessAlive || !status.ExecutionAvailable)
@@ -141,7 +157,11 @@ func (s *ConnectionService) monitorLaunch(ctx context.Context, launch Launch) {
 			}
 			continue
 		}
+		if launch.TaskSessionID != "" && !matchesExecution(launch, status) {
+			continue
+		}
 		if !agentctlProcessHasEnded(status) {
+			s.reconcilePrompts(ctx, launch)
 			continue
 		}
 		s.cancelRun(launch.RunID)
@@ -194,7 +214,10 @@ func (s *ConnectionService) start(launch Launch, waitForConnection, retryInitial
 					}
 					first = false
 				}
-			}, func(event agentctl.Event) error {
+			}, func(event interaction.Event) error {
+				if launch.TaskSessionID != "" && (event.TaskSessionID != launch.TaskSessionID || event.OrganizationID != launch.OrganizationID || event.WorkspaceID != launch.WorkspaceID || event.TaskID != launch.TaskID) {
+					return errors.New("agentctl event scope mismatch")
+				}
 				if event.RunID != launch.RunID {
 					return errors.New("agentctl event run identity mismatch")
 				}
@@ -271,5 +294,29 @@ func waitForRetry(ctx context.Context) bool {
 		return false
 	case <-timer.C:
 		return true
+	}
+}
+
+func (s *ConnectionService) reconcilePrompts(ctx context.Context, launch Launch) {
+	if launch.TaskSessionID != "" {
+		status, err := s.client.Status(ctx, launch.Endpoint)
+		if err != nil || !matchesExecution(launch, status) {
+			return
+		}
+	}
+	outbox := s.repo
+	prompts, err := outbox.PendingPrompts(ctx, launch.RunID)
+	if err != nil {
+		return
+	}
+	for _, prompt := range prompts {
+		// Same identity and text are idempotent even if acceptance was recorded
+		// before the previous connection disappeared.
+		if err := s.client.Prompt(ctx, launch.Endpoint, prompt.CommandID, prompt.Text); err != nil {
+			return
+		}
+		if err := outbox.PromptDelivered(ctx, launch.RunID, prompt.CommandID); err != nil {
+			return
+		}
 	}
 }

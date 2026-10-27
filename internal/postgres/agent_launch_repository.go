@@ -5,15 +5,20 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/josemiguelmelo/orkest/internal/agentctl"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
 	"github.com/josemiguelmelo/orkest/internal/orchestration"
 	"github.com/josemiguelmelo/orkest/internal/postgres/sqlc"
 )
 
-type AgentLaunchPostgresRepository struct{ queries *sqlc.Queries }
+type AgentLaunchPostgresRepository struct {
+	queries *sqlc.Queries
+	pool    *pgxpool.Pool
+}
 
 func NewAgentLaunchPostgresRepository(database *PostgresDatabase) *AgentLaunchPostgresRepository {
-	return &AgentLaunchPostgresRepository{queries: sqlc.New(database.pool)}
+	return &AgentLaunchPostgresRepository{queries: sqlc.New(database.pool), pool: database.pool}
 }
 
 var (
@@ -22,7 +27,7 @@ var (
 )
 
 func (r *AgentLaunchPostgresRepository) CreateLaunch(ctx context.Context, launch orchestration.Launch) error {
-	return r.queries.InsertAgentLaunch(ctx, sqlc.InsertAgentLaunchParams{RunID: launch.RunID, OrganizationID: launch.OrganizationID, WorkspaceID: launch.WorkspaceID, TaskID: launch.TaskID, Status: string(launch.Status)})
+	return r.queries.InsertAgentLaunch(ctx, sqlc.InsertAgentLaunchParams{RunID: launch.RunID, OrganizationID: launch.OrganizationID, WorkspaceID: launch.WorkspaceID, TaskID: launch.TaskID, Status: string(launch.Status), TaskSessionID: pgtype.Text{String: launch.TaskSessionID, Valid: launch.TaskSessionID != ""}})
 }
 
 func (r *AgentLaunchPostgresRepository) UpdateLaunch(ctx context.Context, launch orchestration.Launch) error {
@@ -38,6 +43,7 @@ func (r *AgentLaunchPostgresRepository) ListReconnectableLaunches(ctx context.Co
 	for _, row := range rows {
 		launches = append(launches, orchestration.Launch{
 			RunID:          row.RunID,
+			TaskSessionID:  row.TaskSessionID.String,
 			OrganizationID: row.OrganizationID,
 			WorkspaceID:    row.WorkspaceID,
 			TaskID:         row.TaskID,
@@ -59,6 +65,16 @@ func (r *AgentLaunchPostgresRepository) SaveEvent(ctx context.Context, event orc
 	if err != nil {
 		return fmt.Errorf("encode agent event: %w", err)
 	}
+	if event.Payload.Type == interaction.EventPromptAccepted && event.Payload.CommandID != "" {
+		if err := r.PromptDelivered(ctx, event.RunID, event.Payload.CommandID); err != nil {
+			return err
+		}
+	}
+	if event.Payload.TaskSessionID != "" && event.Payload.SessionID != "" {
+		if err := r.queries.SetRuntimeSessionID(ctx, sqlc.SetRuntimeSessionIDParams{ID: event.Payload.TaskSessionID, RuntimeSessionID: event.Payload.SessionID}); err != nil {
+			return err
+		}
+	}
 	_, err = r.queries.SaveAgentLaunchEvent(ctx, sqlc.SaveAgentLaunchEventParams{RunID: event.RunID, LastSequence: int64(event.Sequence), Event: payload})
 	return err
 }
@@ -74,7 +90,21 @@ func (r *AgentLaunchPostgresRepository) SaveTerminalEvent(ctx context.Context, e
 }
 
 func (r *AgentLaunchPostgresRepository) SetLaunchStatus(ctx context.Context, runID string, status orchestration.LaunchStatus) error {
-	return r.queries.SetAgentLaunchStatus(ctx, sqlc.SetAgentLaunchStatusParams{RunID: runID, Status: string(status)})
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := r.queries.WithTx(tx)
+	if err := q.SetAgentLaunchStatus(ctx, sqlc.SetAgentLaunchStatusParams{RunID: runID, Status: string(status)}); err != nil {
+		return err
+	}
+	if status == orchestration.LaunchCompleted {
+		if err := q.CompleteTaskForRun(ctx, runID); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
 }
 
 func (r *AgentLaunchPostgresRepository) ListTaskLaunches(ctx context.Context, orgID, workspaceID, taskID string) ([]orchestration.Launch, error) {
@@ -84,7 +114,7 @@ func (r *AgentLaunchPostgresRepository) ListTaskLaunches(ctx context.Context, or
 	}
 	items := make([]orchestration.Launch, 0, len(rows))
 	for _, row := range rows {
-		items = append(items, orchestration.Launch{RunID: row.RunID, OrganizationID: row.OrganizationID, WorkspaceID: row.WorkspaceID, TaskID: row.TaskID, Status: orchestration.LaunchStatus(row.Status), Endpoint: row.Endpoint, FailureStage: row.FailureStage, FailureReason: row.FailureReason, LastSequence: uint64(row.LastSequence), UpdatedAt: row.UpdatedAt.Time})
+		items = append(items, orchestration.Launch{RunID: row.RunID, TaskSessionID: row.TaskSessionID.String, OrganizationID: row.OrganizationID, WorkspaceID: row.WorkspaceID, TaskID: row.TaskID, Status: orchestration.LaunchStatus(row.Status), Endpoint: row.Endpoint, FailureStage: row.FailureStage, FailureReason: row.FailureReason, LastSequence: uint64(row.LastSequence), UpdatedAt: row.UpdatedAt.Time})
 	}
 	return items, nil
 }
@@ -96,7 +126,7 @@ func (r *AgentLaunchPostgresRepository) ListTaskLaunchEvents(ctx context.Context
 	}
 	items := make([]orchestration.Event, 0, len(rows))
 	for _, row := range rows {
-		var payload agentctl.Event
+		var payload interaction.Event
 		if err := json.Unmarshal(row.Event, &payload); err != nil {
 			return nil, fmt.Errorf("decode task agent event: %w", err)
 		}

@@ -1,0 +1,52 @@
+name: Runtime conformance
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  runtime-conformance:
+    name: Runtime conformance
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: runtime-qualification
+    steps:
+      - uses: actions/checkout@v4.2.2
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5.5.0
+        with:
+          go-version-file: go.mod
+      - name: Deterministic contract and recovery tests
+        run: make test-runtime-conformance
+      - name: Identify versions requiring live qualification
+        id: qualification
+        env:
+          BASE_REVISION: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: python3 tools/runtime/runtime-qualification.py "$BASE_REVISION"
+      - name: Install pinned runtime
+        if: steps.qualification.outputs.required == 'true'
+        env:
+          RUNTIMES: ${{ steps.qualification.outputs.runtimes }}
+        run: |
+          test "$RUNTIMES" = opencode || { echo 'Add an explicit pinned installer for each new runtime'; exit 1; }
+          VERSION=$(python3 -c 'import json; print(json.load(open("internal/core/runtime/versions.json"))["opencode"].removeprefix("opencode v"))')
+          npm install --global "@opencode/cli@$VERSION"
+      - name: Strict live qualification (missing settings fail)
+        if: steps.qualification.outputs.required == 'true'
+        env:
+          ORKEST_OPENCODE_BINARY: opencode
+          ORKEST_TEST_MODEL_PROVIDER: ${{ vars.ORKEST_TEST_MODEL_PROVIDER }}
+          ORKEST_TEST_MODEL_ID: ${{ vars.ORKEST_TEST_MODEL_ID }}
+          ORKEST_TEST_PROVIDER_ENV: ${{ vars.ORKEST_TEST_PROVIDER_ENV }}
+          ORKEST_TEST_APPROVAL_PROMPT: ${{ vars.ORKEST_TEST_APPROVAL_PROMPT }}
+          ORKEST_TEST_RECOVERY_PROMPT: ${{ vars.ORKEST_TEST_RECOVERY_PROMPT }}
+          ORKEST_TEST_CANCELLATION_PROMPT: ${{ vars.ORKEST_TEST_CANCELLATION_PROMPT }}
+          ORKEST_TEST_MCP_URL: ${{ vars.ORKEST_TEST_MCP_URL }}
+          ORKEST_TEST_MCP_PROMPT: ${{ vars.ORKEST_TEST_MCP_PROMPT }}
+          ORKEST_TEST_MCP_EXPECTED: ${{ vars.ORKEST_TEST_MCP_EXPECTED }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        run: make qualify-runtime

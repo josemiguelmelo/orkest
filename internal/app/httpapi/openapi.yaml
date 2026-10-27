@@ -1084,6 +1084,38 @@ paths:
       operationId: deleteWorkspaceSkill
       security: [{bearerAuth: []}, {cookieAuth: []}]
       responses: {"204": {description: Deleted skill}, "403": {$ref: "#/components/responses/Forbidden"}, "401": {$ref: "#/components/responses/Unauthorized"}, "404": {$ref: "#/components/responses/NotFound"}, "500": {$ref: "#/components/responses/InternalServerError"}}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/tasks/{taskID}/runs/{runID}/queue/resume:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+      - {name: taskID, in: path, required: true, schema: {type: string}}
+      - {name: runID, in: path, required: true, schema: {type: string}}
+    post:
+      tags: [Tasks]
+      operationId: resumeTaskRunQueue
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      responses:
+        "200": {description: Queue updated}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {description: Queue unavailable, content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/tasks/{taskID}/runs/{runID}/queue/discard:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+      - {name: taskID, in: path, required: true, schema: {type: string}}
+      - {name: runID, in: path, required: true, schema: {type: string}}
+    post:
+      tags: [Tasks]
+      operationId: discardTaskRunQueue
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      responses:
+        "200": {description: Queue updated}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {description: Queue unavailable, content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}}
 components:
   requestBodies:
     NamedResource:
@@ -1217,6 +1249,10 @@ components:
       type: object
       required: [title]
       properties:
+        startWork: {type: boolean, description: Explicitly start another work step after a failed run; active execution conflicts.}
+        sessionMode: {type: string, enum: [continue, new], description: Session choice when explicitly starting work. Defaults to continue when a session exists.}
+        promptText: {type: string, maxLength: 262144, description: Optional initial prompt for a user-started work step.}
+        commandId: {type: string, maxLength: 200}
         title: {type: string, minLength: 1, maxLength: 500}
         description: {type: string, maxLength: 100000}
         status: {type: string, enum: [todo, in_progress, in_review, done]}
@@ -1257,7 +1293,12 @@ components:
       type: object
       required: [runId, taskId, status, lastSequence, updatedAt]
       properties:
+        recoveryBlocked: {type: boolean}
+        executionState: {type: string}
+        queuePaused: {type: boolean}
+        queueDepth: {type: integer, minimum: 0}
         runId: {type: string}
+        taskSessionId: {type: string}
         taskId: {type: string}
         status: {type: string}
         failureStage: {type: string}

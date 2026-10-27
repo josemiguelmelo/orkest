@@ -1,6 +1,6 @@
 -- name: InsertAgentLaunch :exec
-INSERT INTO agent_launches (run_id, organization_id, workspace_id, task_id, status)
-VALUES ($1, $2, $3, $4, $5);
+INSERT INTO agent_launches (run_id, organization_id, workspace_id, task_id, status, task_session_id)
+VALUES ($1, $2, $3, $4, $5, $6);
 
 -- name: UpdateAgentLaunch :exec
 UPDATE agent_launches
@@ -9,7 +9,7 @@ SET status = $2, process_id = $3, endpoint = $4, failure_stage = $5,
 WHERE run_id = $1;
 
 -- name: ListReconnectableAgentLaunches :many
-SELECT launch.run_id, launch.organization_id, launch.workspace_id, launch.task_id,
+SELECT launch.run_id, launch.task_session_id, launch.organization_id, launch.workspace_id, launch.task_id,
        launch.status, launch.process_id, launch.endpoint, launch.failure_stage,
        launch.failure_reason, launch.last_sequence,
        COALESCE(latest.event->>'type', '')::text AS last_event_type, launch.updated_at
@@ -26,7 +26,7 @@ WHERE launch.status IN (
 ORDER BY launch.created_at;
 
 -- name: ListTaskAgentLaunches :many
-SELECT run_id, organization_id, workspace_id, task_id, status, endpoint, failure_stage,
+SELECT run_id, task_session_id, organization_id, workspace_id, task_id, status, endpoint, failure_stage,
        failure_reason, last_sequence, created_at, updated_at
 FROM agent_launches
 WHERE organization_id = $1 AND workspace_id = $2 AND task_id = $3
@@ -47,10 +47,10 @@ WITH inserted AS (
 UPDATE agent_launches AS launch
 SET status = $4, last_sequence = GREATEST(launch.last_sequence, $2), updated_at = now()
 WHERE launch.run_id = $1
-  AND EXISTS (
+  AND (EXISTS (SELECT 1 FROM inserted) OR EXISTS (
       SELECT 1 FROM agent_launch_events AS event
       WHERE event.run_id = $1 AND event.sequence = $2
-  );
+  ));
 
 -- name: SetAgentLaunchStatus :exec
 UPDATE agent_launches

@@ -7,7 +7,26 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
+
+	agentrun "github.com/josemiguelmelo/orkest/internal/agentctl/run"
 )
+
+func TestSnapshotMapsRunScope(t *testing.T) {
+	status := agentrun.RunStatus{
+		OrganizationID: "org-1",
+		WorkspaceID:    "workspace-2",
+		TaskID:         "task-3",
+		RunID:          "run-4",
+	}
+	got := Snapshot(status, time.Time{})
+	if got.OrganizationID != status.OrganizationID || got.WorkspaceID != status.WorkspaceID ||
+		got.TaskID != status.TaskID || got.RunID != status.RunID {
+		t.Fatalf("Snapshot() scope = (%q, %q, %q, %q), want (%q, %q, %q, %q)",
+			got.OrganizationID, got.WorkspaceID, got.TaskID, got.RunID,
+			status.OrganizationID, status.WorkspaceID, status.TaskID, status.RunID)
+	}
+}
 
 type failingBody struct{}
 

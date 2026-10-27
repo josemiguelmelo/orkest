@@ -14,7 +14,9 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
-	"github.com/josemiguelmelo/orkest/internal/agentctl"
+	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
+	agentrun "github.com/josemiguelmelo/orkest/internal/agentctl/run"
 )
 
 // HTTPAgentctlClient implements the agentctl REST and activity WebSocket APIs.
@@ -61,36 +63,48 @@ func (c *HTTPAgentctlClient) WaitHealthy(ctx context.Context, endpoint string) e
 	}
 }
 
-func (c *HTTPAgentctlClient) Status(ctx context.Context, endpoint string) (agentctl.Status, error) {
+func (c *HTTPAgentctlClient) Status(ctx context.Context, endpoint string) (agentrun.RunStatus, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(endpoint, "/")+"/info", nil)
 	if err != nil {
-		return agentctl.Status{}, fmt.Errorf("create agentctl status request: %w", err)
+		return agentrun.RunStatus{}, fmt.Errorf("create agentctl status request: %w", err)
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return agentctl.Status{}, fmt.Errorf("read agentctl status: %w", err)
+		return agentrun.RunStatus{}, fmt.Errorf("read agentctl status: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return agentctl.Status{}, fmt.Errorf("agentctl status endpoint returned HTTP %d", resp.StatusCode)
+		return agentrun.RunStatus{}, fmt.Errorf("agentctl status endpoint returned HTTP %d", resp.StatusCode)
 	}
 	var status struct {
-		Configured         bool           `json:"configured"`
-		ExecutionAvailable bool           `json:"executionAvailable"`
-		ProcessAlive       bool           `json:"processAlive"`
-		State              agentctl.State `json:"state"`
-		SessionID          string         `json:"sessionId"`
+		OrganizationID     string                  `json:"organizationId"`
+		WorkspaceID        string                  `json:"workspaceId"`
+		TaskID             string                  `json:"taskId"`
+		RunID              string                  `json:"runId"`
+		Configured         bool                    `json:"configured"`
+		ExecutionAvailable bool                    `json:"executionAvailable"`
+		ProcessAlive       bool                    `json:"processAlive"`
+		State              agentrun.ExecutionState `json:"state"`
+		SessionID          string                  `json:"sessionId"`
+		TaskSessionID      string                  `json:"taskSessionId"`
+		ActiveCommandID    string                  `json:"activeCommand"`
+		QueuePaused        bool                    `json:"queuePaused"`
+		QueueDepth         int                     `json:"queueDepth"`
+		RunEnded           bool                    `json:"runEnded"`
+		RecoveryBlocked    bool                    `json:"recoveryBlocked"`
 	}
 	if err = json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&status); err != nil {
-		return agentctl.Status{}, fmt.Errorf("decode agentctl status: %w", err)
+		return agentrun.RunStatus{}, fmt.Errorf("decode agentctl status: %w", err)
 	}
-	return agentctl.Status{
-		Configured: status.Configured, ExecutionAvailable: status.ExecutionAvailable,
+	return agentrun.RunStatus{
+		OrganizationID: status.OrganizationID, WorkspaceID: status.WorkspaceID, TaskID: status.TaskID, RunID: status.RunID,
+		RecoveryBlocked: status.RecoveryBlocked, Configured: status.Configured, ExecutionAvailable: status.ExecutionAvailable,
 		ProcessAlive: status.ProcessAlive, State: status.State, SessionID: status.SessionID,
+		TaskSessionID: status.TaskSessionID, ActiveCommandID: status.ActiveCommandID, QueuePaused: status.QueuePaused, QueueDepth: status.QueueDepth, RunEnded: status.RunEnded,
 	}, nil
 }
 
-func (c *HTTPAgentctlClient) Configure(ctx context.Context, endpoint string, config agentctl.RunConfig) error {
+func (c *HTTPAgentctlClient) Configure(ctx context.Context, endpoint string, config runconfig.RunConfig) error {
 	return c.post(ctx, endpoint, "/agent/configure", config)
 }
 
@@ -111,7 +125,7 @@ func (c *HTTPAgentctlClient) CancelPrompt(ctx context.Context, endpoint, command
 	}{CommandID: commandID})
 }
 
-func (c *HTTPAgentctlClient) RespondPermission(ctx context.Context, endpoint string, response agentctl.PermissionResponse) error {
+func (c *HTTPAgentctlClient) RespondPermission(ctx context.Context, endpoint string, response interaction.PermissionResponse) error {
 	return c.post(ctx, endpoint, "/agent/permissions/respond", response)
 }
 
@@ -137,11 +151,11 @@ func (c *HTTPAgentctlClient) post(ctx context.Context, endpoint, path string, pa
 }
 
 type streamFrame struct {
-	Type  string          `json:"type"`
-	Event *agentctl.Event `json:"event,omitempty"`
+	Type  string             `json:"type"`
+	Event *interaction.Event `json:"event,omitempty"`
 }
 
-func (c *HTTPAgentctlClient) Connect(ctx context.Context, endpoint string, cursor uint64, onConnected func(), onEvent func(agentctl.Event) error) error {
+func (c *HTTPAgentctlClient) Connect(ctx context.Context, endpoint string, cursor uint64, onConnected func(), onEvent func(interaction.Event) error) error {
 	u, err := url.Parse(endpoint)
 	if err != nil {
 		return fmt.Errorf("parse agentctl endpoint: %w", err)
@@ -185,4 +199,16 @@ func (c *HTTPAgentctlClient) Connect(ctx context.Context, endpoint string, curso
 			}
 		}
 	}
+}
+
+func (c *HTTPAgentctlClient) RestoreAgent(ctx context.Context, endpoint string) error {
+	return c.post(ctx, endpoint, "/agent/restore", struct{}{})
+}
+
+func (c *HTTPAgentctlClient) Queue(ctx context.Context, endpoint string, discard bool) error {
+	path := "/agent/queue/resume"
+	if discard {
+		path = "/agent/queue/discard"
+	}
+	return c.post(ctx, endpoint, path, struct{}{})
 }

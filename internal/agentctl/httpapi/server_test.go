@@ -11,18 +11,18 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
-	"github.com/josemiguelmelo/orkest/internal/agentctl"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/httpapi/protocol"
+	agentrun "github.com/josemiguelmelo/orkest/internal/agentctl/run"
 )
 
 func TestTransportModulesShareState(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	server, err := NewServer(ctx, agentctl.NewRunController())
+	server, err := NewServer(ctx, agentrun.NewRunController(context.Background(), nil, "", nil))
 	if err != nil {
 		t.Fatal(err)
 	}
-	handler := server.Handler()
+	handler := server.Handler(nil)
 	response := httptest.NewRecorder()
 	handler.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/agent/stream", nil))
 	if response.Code != http.StatusConflict {

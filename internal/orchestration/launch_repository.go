@@ -2,8 +2,6 @@ package orchestration
 
 import (
 	"context"
-
-	"github.com/josemiguelmelo/orkest/internal/agentctl"
 )
 
 // LaunchRepository persists launch lifecycle state and ordered agent activity.
@@ -21,8 +19,16 @@ type TaskLaunchReader interface {
 	ListTaskLaunchEvents(context.Context, string, uint64) ([]Event, error)
 }
 
-type InteractiveAgentctlClient interface {
-	Prompt(context.Context, string, string, string) error
-	CancelPrompt(context.Context, string, string) error
-	RespondPermission(context.Context, string, agentctl.PermissionResponse) error
+// TaskExecutionRepository explicitly supplies the durable features consumed by task starts.
+type TaskExecutionRepository interface {
+	LaunchRepository
+	TaskLaunchReader
+	SessionRepository
+	PromptOutbox
+	TaskCommand(context.Context, string, string, string, string, string) (bool, error)
+}
+
+type ConnectionRepository interface {
+	LaunchRepository
+	PromptOutbox
 }

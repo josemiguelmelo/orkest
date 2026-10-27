@@ -15,14 +15,20 @@ member slot before configuring or launching a run.
 | `GET /health` | Check process liveness. |
 | `GET /info` | Read provider, process, and conversation status. |
 | `POST /agent/configure` | Bind this process to one run; does not start work. |
+| `POST /agent/restore` | Load the configured durable session. |
+| `GET /agent/commands/{commandID}` | Reconcile durable command status. |
+| `POST /agent/queue/resume` | Explicitly resume paused pending prompts. |
+| `POST /agent/queue/discard` | Discard paused pending prompts and end the step. |
 | `POST /agent/launch` | Explicitly start the configured provider. No body. |
 | `POST /agent/prompt` | Submit a prompt with a stable `commandId`. |
 | `POST /agent/cancel` | Request cancellation of the active prompt. |
 | `POST /agent/permissions/respond` | Answer a pending permission request. |
 | `GET /agent/stream` | Receive readiness and activity events. |
 
-Each process serves one run. Configuration is in memory, and launch is a single
-attempt per process. Submit a new prompt only after the previous prompt finishes.
+Each process serves one run. Supply `taskSessionId` to enable durable session
+restoration and FIFO follow-up prompts. Several runs can reuse the session.
+Creation remains a single attempt; restoration is explicit and never falls back
+to a fresh conversation. See [task sessions](task-sessions.md).
 Prompt text is limited to 256 KiB; JSON bodies are limited to 1 MiB.
 
 Example configuration:
@@ -62,12 +68,14 @@ Connect to `ws://127.0.0.1:8081/agent/stream`. The server sends a `ready` frame,
 then `event` frames. The stream accepts no application messages. Events include
 sequence, timestamp, run identities, and command ID. Types include:
 
-- `prompt_accepted`, `update`, `prompt_completed`, `prompt_failed`
+- `prompt_accepted`, `prompt_started`, `prompt_continued`, `update`, `prompt_completed`, `prompt_failed`, `prompt_interrupted`
+- `session_restored`, `runtime_stopped`, `queue_paused`, `queue_resumed`, `queue_discarded`, `run_completed`, `run_failed`
 - `permission_requested`, `permission_response`, `cancel_requested`
 
 Reconnect with `?afterSequence=LAST_PROCESSED_SEQUENCE` to receive later events.
-Without a cursor, the stream replays retained events. Replay retains up to 4096
-events; invalid, expired, or future cursors return `400 invalid_cursor`. Slow
+Durable sessions replay older committed events from disk when the cursor precedes
+the 4096-event memory window. Legacy configurations reject expired cursors; future
+or otherwise invalid cursors return `400 invalid_cursor`. Slow
 subscribers are disconnected and can reconnect. Client or platform disconnects do
 not stop accepted work while `agentctl` remains alive.
 
