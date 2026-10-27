@@ -22,7 +22,7 @@ export class ApiError extends Error {
 const messages: Record<string, string> = {
   invalid_request: 'Some values are invalid. Check the form and try again.',
   conflict:
-    'This change conflicts with the current state. The last owner cannot be removed, and done tasks cannot reopen.',
+    'This item is still in use, or its current state prevents this change. Remove dependent resources and try again.',
   integration_encryption_not_configured: 'Credential encryption is not configured on the server.',
   integration_credential_required: 'A credential is required to validate this connection.',
   github_project_not_found_or_not_accessible:

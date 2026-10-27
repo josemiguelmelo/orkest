@@ -171,6 +171,9 @@ func TestPostgresRepositories(t *testing.T) {
 	if err != nil || component.Identifier != "API" || component.RepositoryID != codeRepositoryID {
 		t.Fatalf("create component: component=%+v err=%v", component, err)
 	}
+	if err = codeRepositoryRepository.DeleteCodeRepository(ctx, org.ID, workspaceID, codeRepositoryID); !errors.Is(err, modelerrors.ErrConflict) {
+		t.Fatalf("expected referenced repository deletion conflict, got %v", err)
+	}
 	if _, err = taskRepository.CreateComponent(ctx, "duplicate-component", workspaceID, task.ComponentInput{Identifier: "API", Name: "Duplicate", RepositoryID: codeRepositoryID}); !errors.Is(err, modelerrors.ErrConflict) {
 		t.Fatalf("expected duplicate component identifier conflict, got %v", err)
 	}

@@ -56,10 +56,17 @@ func mapCodeRepository(id, workspaceID, providerName, url string, integrationID,
 
 func (r *CodeReposPostgresRepository) DeleteCodeRepository(ctx context.Context, orgID, workspaceID, id string) error {
 	count, err := r.queries.DeleteCodeRepository(ctx, sqlc.DeleteCodeRepositoryParams{OrganizationID: orgID, WorkspaceID: workspaceID, ID: id})
-	if err == nil && count == 0 {
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23503" {
+			return modelerrors.ErrConflict
+		}
+		return mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
+	}
+	if count == 0 {
 		return modelerrors.ErrNotFound
 	}
-	return err
+	return nil
 }
 
 var _ coderepository.CodingIntegrationRepository = (*CodeReposPostgresRepository)(nil)
