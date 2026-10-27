@@ -3,13 +3,13 @@ package orchestration
 import (
 	"context"
 
-	"github.com/josemiguelmelo/orkest/internal/agentctl"
+	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
 )
 
 // SessionRepository owns task session selection and atomic run reservation.
 type SessionRepository interface {
-	CurrentSession(context.Context, string, string, string) (agentctl.RunConfig, bool, error)
-	ReserveSessionRun(context.Context, agentctl.RunConfig) error
+	CurrentSession(context.Context, string, string, string) (runconfig.RunConfig, bool, error)
+	ReserveSessionRun(context.Context, runconfig.RunConfig) error
 }
 
 type PromptDelivery struct{ CommandID, Text string }

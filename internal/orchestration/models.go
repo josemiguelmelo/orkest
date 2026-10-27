@@ -4,7 +4,8 @@ package orchestration
 import (
 	"time"
 
-	"github.com/josemiguelmelo/orkest/internal/agentctl"
+	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
+	agentrun "github.com/josemiguelmelo/orkest/internal/agentctl/run"
 )
 
 type LaunchStatus string
@@ -26,7 +27,7 @@ type Process struct {
 
 type Launch struct {
 	RecoveryBlocked bool
-	ExecutionState  agentctl.State
+	ExecutionState  agentrun.ExecutionState
 	QueuePaused     bool
 	QueueDepth      int
 	RunID           string
@@ -45,7 +46,7 @@ type Launch struct {
 }
 
 type Event struct {
-	RunID    string         `json:"runId"`
-	Sequence uint64         `json:"sequence"`
-	Payload  agentctl.Event `json:"payload"`
+	RunID    string            `json:"runId"`
+	Sequence uint64            `json:"sequence"`
+	Payload  interaction.Event `json:"payload"`
 }

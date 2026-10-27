@@ -8,11 +8,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/josemiguelmelo/orkest/internal/agentctl"
+	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
+	agentrun "github.com/josemiguelmelo/orkest/internal/agentctl/run"
 )
 
-func validConfig() agentctl.RunConfig {
-	return agentctl.RunConfig{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", RunID: "run", Runtime: "opencode", Model: agentctl.ModelSelection{Provider: "provider", ID: "model"}, Agent: agentctl.AgentDefinition{Name: "Work", Description: "Work", Instructions: "work"}}
+func validConfig() runconfig.RunConfig {
+	return runconfig.RunConfig{RuntimeConfig: runconfig.RuntimeConfig{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", RunID: "run", Runtime: "opencode", Model: runconfig.ModelSelection{Provider: "provider", ID: "model"}, Agent: runconfig.AgentDefinition{Name: "Work", Description: "Work", Instructions: "work"}}}
 }
 
 type launchRepoFake struct {
@@ -75,7 +77,7 @@ type launcherFake struct {
 	err     error
 }
 
-func (l launcherFake) LaunchAgentctl(context.Context, agentctl.RunConfig) (Process, error) {
+func (l launcherFake) LaunchAgentctl(context.Context, runconfig.RunConfig) (Process, error) {
 	return l.process, l.err
 }
 
@@ -90,11 +92,11 @@ func (c *agentctlFake) WaitHealthy(context.Context, string) error {
 	return nil
 }
 
-func (*agentctlFake) Status(context.Context, string) (agentctl.Status, error) {
-	return agentctl.Status{Configured: true, ExecutionAvailable: true, ProcessAlive: true, State: agentctl.StateReady}, nil
+func (*agentctlFake) Status(context.Context, string) (agentrun.RunStatus, error) {
+	return agentrun.RunStatus{Configured: true, ExecutionAvailable: true, ProcessAlive: true, State: agentrun.StateReady}, nil
 }
 
-func (c *agentctlFake) Configure(context.Context, string, agentctl.RunConfig) error {
+func (c *agentctlFake) Configure(context.Context, string, runconfig.RunConfig) error {
 	c.calls = append(c.calls, "configure")
 	return c.configureErr
 }
@@ -109,7 +111,7 @@ func (c *agentctlFake) Prompt(context.Context, string, string, string) error {
 	return nil
 }
 
-func (c *agentctlFake) Connect(ctx context.Context, _ string, _ uint64, onConnected func(), onEvent func(agentctl.Event) error) error {
+func (c *agentctlFake) Connect(ctx context.Context, _ string, _ uint64, onConnected func(), onEvent func(interaction.Event) error) error {
 	c.calls = append(c.calls, "connect")
 	onConnected()
 	if c.connectErr != nil {
@@ -176,7 +178,7 @@ func TestLaunchFailureRetainsProcessIdentityAndSanitizesReason(t *testing.T) {
 
 func TestConnectionServicePersistsEventAndReconnectsFromCursor(t *testing.T) {
 	repo := &launchRepoFake{}
-	client := &eventClientFake{event: agentctl.Event{RunID: "run", Sequence: 7}, cursors: make(chan uint64, 2)}
+	client := &eventClientFake{event: interaction.Event{RunID: "run", Sequence: 7}, cursors: make(chan uint64, 2)}
 	ctx, cancel := context.WithCancel(context.Background())
 	service, err := NewConnectionService(ctx, client, repo)
 	if err != nil {
@@ -212,20 +214,20 @@ func TestConnectionServicePersistsEventAndReconnectsFromCursor(t *testing.T) {
 }
 
 type eventClientFake struct {
-	event    agentctl.Event
+	event    interaction.Event
 	cursors  chan uint64
 	connects int
 	mu       sync.Mutex
 }
 
 func (*eventClientFake) WaitHealthy(context.Context, string) error { return nil }
-func (*eventClientFake) Status(context.Context, string) (agentctl.Status, error) {
-	return agentctl.Status{Configured: true, ExecutionAvailable: true, ProcessAlive: true, State: agentctl.StateReady}, nil
+func (*eventClientFake) Status(context.Context, string) (agentrun.RunStatus, error) {
+	return agentrun.RunStatus{Configured: true, ExecutionAvailable: true, ProcessAlive: true, State: agentrun.StateReady}, nil
 }
-func (*eventClientFake) Configure(context.Context, string, agentctl.RunConfig) error { return nil }
-func (*eventClientFake) StartAgent(context.Context, string) error                    { return nil }
-func (*eventClientFake) Prompt(context.Context, string, string, string) error        { return nil }
-func (c *eventClientFake) Connect(ctx context.Context, _ string, cursor uint64, onConnected func(), onEvent func(agentctl.Event) error) error {
+func (*eventClientFake) Configure(context.Context, string, runconfig.RunConfig) error { return nil }
+func (*eventClientFake) StartAgent(context.Context, string) error                     { return nil }
+func (*eventClientFake) Prompt(context.Context, string, string, string) error         { return nil }
+func (c *eventClientFake) Connect(ctx context.Context, _ string, cursor uint64, onConnected func(), onEvent func(interaction.Event) error) error {
 	c.cursors <- cursor
 	onConnected()
 	c.mu.Lock()
@@ -240,4 +242,36 @@ func (c *eventClientFake) Connect(ctx context.Context, _ string, cursor uint64, 
 	}
 	<-ctx.Done()
 	return ctx.Err()
+}
+
+func (c *agentctlFake) RestoreAgent(context.Context, string) error         { return nil }
+func (c *agentctlFake) CancelPrompt(context.Context, string, string) error { return nil }
+func (c *agentctlFake) RespondPermission(context.Context, string, interaction.PermissionResponse) error {
+	return nil
+}
+func (c *agentctlFake) Queue(context.Context, string, bool) error { return nil }
+func (r *launchRepoFake) ListTaskLaunches(context.Context, string, string, string) ([]Launch, error) {
+	return nil, nil
+}
+
+func (r *launchRepoFake) ListTaskLaunchEvents(context.Context, string, uint64) ([]Event, error) {
+	return nil, nil
+}
+
+func (r *launchRepoFake) CurrentSession(context.Context, string, string, string) (runconfig.RunConfig, bool, error) {
+	return runconfig.RunConfig{}, false, nil
+}
+
+func (r *launchRepoFake) ReserveSessionRun(context.Context, runconfig.RunConfig) error { return nil }
+
+func (r *launchRepoFake) RecordPrompt(context.Context, string, string, string) (bool, error) {
+	return false, nil
+}
+func (r *launchRepoFake) PromptDelivered(context.Context, string, string) error { return nil }
+func (r *launchRepoFake) PendingPrompts(context.Context, string) ([]PromptDelivery, error) {
+	return nil, nil
+}
+
+func (r *launchRepoFake) TaskCommand(context.Context, string, string, string, string, string) (bool, error) {
+	return false, nil
 }

@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help setup dev dev-once dev-agentctl dev-web db-up db-down db-logs auth-up lint-install lint fmt sqlc check build test-integration test-postgres test-recovery test-recovery-unit docker-agentctl-base docker-agentctl-opencode docker-agentctl-images test-docker
+.PHONY: help setup dev dev-once dev-agentctl dev-web db-up db-down db-logs auth-up lint-install lint fmt sqlc check build test-integration test-postgres test-recovery test-recovery-unit docker-agentctl-base docker-agentctl-opencode docker-agentctl-images test-docker check-runtime-boundaries
 
 GOLANGCI_LINT_VERSION := v2.15.0
 GOLANGCI_LINT := bin/tools/$(GOLANGCI_LINT_VERSION)/golangci-lint
@@ -22,6 +22,9 @@ help:
 	@echo "sqlc              Regenerate PostgreSQL query code"
 	@echo "check             Check lint, tests, frontend types, builds"
 	@echo "build             Build both Go binaries and frontend"
+	@echo "test-runtime-conformance Run shared provider and recovery contracts with race detection"
+	@echo "qualify-runtime   Run strict live provider qualification (requires credentials/test endpoints)"
+	@echo "check-runtime-boundaries Enforce runtime profile and communication dependencies"
 	@echo "test-recovery-unit Run deterministic session/queue/recovery tests with race detection"
 	@echo "test-recovery      Also verify real OpenCode continuation (requires explicit model and credentials)"
 	@echo "test-postgres     Test PostgreSQL repositories (requires DATABASE_URL or all POSTGRES_* settings)"
@@ -71,7 +74,7 @@ fmt: $(GOLANGCI_LINT)
 sqlc:
 	go run github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION) generate
 
-check: lint
+check: check-runtime-boundaries lint
 	go test ./cmd/... ./internal/... ./db/...
 	npm --prefix web run check:generated
 	npm --prefix web run lint
@@ -83,6 +86,9 @@ build:
 	go build -o bin/orkest ./cmd/orkest
 	go build -o bin/agentctl ./cmd/agentctl
 	npm --prefix web run build
+
+check-runtime-boundaries:
+	python3 tools/runtime/check_runtime_boundaries.py
 
 test-integration:
 	go test -tags=integration ./tests/integration -count=1
@@ -108,3 +114,14 @@ test-recovery-unit:
 test-recovery: test-recovery-unit
 	@{ test -n "$$ORKEST_OPENCODE_BINARY" && test -n "$$ORKEST_TEST_MODEL_PROVIDER" && test -n "$$ORKEST_TEST_MODEL_ID"; } || (echo "Set ORKEST_OPENCODE_BINARY, ORKEST_TEST_MODEL_PROVIDER, ORKEST_TEST_MODEL_ID and grant credentials with ORKEST_TEST_PROVIDER_ENV; real continuation is unverified without them"; exit 1)
 	go test -tags=integration ./tests/integration -run 'TestOpenCodeHandshake|TestOpenCodeContinuation' -count=1 -v
+
+.PHONY: test-runtime-conformance qualify-runtime
+test-runtime-conformance:
+	python3 -m unittest discover -s tools/runtime -p '*_test.py'
+	$(MAKE) check-runtime-boundaries
+	go test -race ./internal/agentctl/... ./internal/orchestration ./internal/core/runtime -count=1 -timeout=3m
+
+# Intentionally strict: credentials, test prompts, and external MCP evidence are
+# prerequisites; this target never substitutes fixture tests or skips a runtime.
+qualify-runtime:
+	ORKEST_RUNTIME_CONFORMANCE=live go test ./internal/agentctl/runtime -run '^TestRuntimeConformance$$' -count=1 -timeout=5m -v

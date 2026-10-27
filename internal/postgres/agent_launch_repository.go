@@ -7,8 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
-
-	"github.com/josemiguelmelo/orkest/internal/agentctl"
+	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
 	"github.com/josemiguelmelo/orkest/internal/orchestration"
 	"github.com/josemiguelmelo/orkest/internal/postgres/sqlc"
 )
@@ -66,7 +65,7 @@ func (r *AgentLaunchPostgresRepository) SaveEvent(ctx context.Context, event orc
 	if err != nil {
 		return fmt.Errorf("encode agent event: %w", err)
 	}
-	if event.Payload.Type == agentctl.EventPromptAccepted && event.Payload.CommandID != "" {
+	if event.Payload.Type == interaction.EventPromptAccepted && event.Payload.CommandID != "" {
 		if err := r.PromptDelivered(ctx, event.RunID, event.Payload.CommandID); err != nil {
 			return err
 		}
@@ -127,7 +126,7 @@ func (r *AgentLaunchPostgresRepository) ListTaskLaunchEvents(ctx context.Context
 	}
 	items := make([]orchestration.Event, 0, len(rows))
 	for _, row := range rows {
-		var payload agentctl.Event
+		var payload interaction.Event
 		if err := json.Unmarshal(row.Event, &payload); err != nil {
 			return nil, fmt.Errorf("decode task agent event: %w", err)
 		}

@@ -7,20 +7,21 @@ import (
 	"sync"
 	"time"
 
-	"github.com/josemiguelmelo/orkest/internal/agentctl"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/httpapi"
+	agentrun "github.com/josemiguelmelo/orkest/internal/agentctl/run"
+	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
 	"github.com/josemiguelmelo/orkest/internal/core/httpserver"
 )
 
 // RunAgentctl owns a standalone control server, independent of the platform.
-func RunAgentctl(ctx context.Context, logger *slog.Logger, address string, provider agentctl.RuntimeProvider, stateDir string, expectedRuns ...string) error {
+func RunAgentctl(ctx context.Context, logger *slog.Logger, address string, host agentruntime.RuntimeHost, stateDir string, expectedRunID string) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	controller := agentctl.NewRunControllerWithRuntimeProvider(ctx, provider, stateDir, logger)
+	controller := agentrun.NewRunController(ctx, host, stateDir, logger)
 	var supervisor sync.WaitGroup
 	defer func() { cancel(); supervisor.Wait(); _ = controller.Close() }()
-	if err := controller.Recover(expectedRuns...); err != nil {
+	if err := controller.RecoverFromCheckpoint(expectedRunID); err != nil {
 		logger.Error("agent session recovery requires reconciliation", "reason", "restore_failed")
 	}
 
@@ -33,9 +34,8 @@ func RunAgentctl(ctx context.Context, logger *slog.Logger, address string, provi
 				return
 			case <-ticker.C:
 			}
-			status := controller.Status()
-			if !status.RecoveryBlocked && status.TaskSessionID != "" && status.SessionID != "" && !status.ProcessAlive && (status.State == agentctl.StateExited || status.State == agentctl.StateFailed || status.State == agentctl.StateInterrupted) {
-				if err := controller.Restore(); err != nil {
+			if controller.CanAutoRestore() {
+				if err := controller.RestoreSession(); err != nil {
 					logger.Error("runtime restoration requires reconciliation", "reason", "restore_failed")
 				}
 			}

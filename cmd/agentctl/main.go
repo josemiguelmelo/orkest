@@ -9,7 +9,9 @@ import (
 	"syscall"
 
 	"github.com/josemiguelmelo/orkest/internal/agentctl/daemon"
+	sharedacp "github.com/josemiguelmelo/orkest/internal/agentctl/runtime/acp"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/runtime/opencode"
+	"github.com/josemiguelmelo/orkest/internal/agentctl/runtimehost"
 	"github.com/josemiguelmelo/orkest/internal/core/environment"
 )
 
@@ -38,7 +40,8 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	if err := daemon.RunAgentctl(ctx, logger, *address, &opencode.OpenCodeProvider{Binary: *binary, WorkDir: *workDir, StateDir: *stateDir, Env: env, Logger: logger}, *stateDir, *runID); err != nil {
+	host := runtimehost.New(opencode.Profile{Binary: *binary}, sharedacp.Factory{}, runtimehost.Environment{WorkDir: *workDir, StateDir: *stateDir, GrantedEnv: env})
+	if err := daemon.RunAgentctl(ctx, logger, *address, host, *stateDir, *runID); err != nil {
 		logger.Error("agentctl stopped", "error", err)
 		os.Exit(1)
 	}

@@ -8,7 +8,8 @@ import (
 	"strings"
 
 	"github.com/josemiguelmelo/orkest/internal/agent"
-	"github.com/josemiguelmelo/orkest/internal/agentctl"
+	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
 	"github.com/josemiguelmelo/orkest/internal/coderepository"
 	"github.com/josemiguelmelo/orkest/internal/core/ids"
 	"github.com/josemiguelmelo/orkest/internal/mcpserver"
@@ -78,11 +79,11 @@ func (d *TaskDispatcher) StartTask(ctx context.Context, userID, organizationID s
 			return err
 		}
 	}
-	var config agentctl.RunConfig
+	var config runconfig.RunConfig
 	var definition agent.Agent
 	var continuing bool
-	sessions, durable := d.launches.repo.(SessionRepository)
-	if durable && value.SessionMode != "new" {
+	sessions := d.launches.repo
+	if value.SessionMode != "new" {
 		config, continuing, err = sessions.CurrentSession(ctx, organizationID, value.WorkspaceID, value.ID)
 		if err != nil {
 			return err
@@ -93,11 +94,9 @@ func (d *TaskDispatcher) StartTask(ctx context.Context, userID, organizationID s
 		if err != nil {
 			return err
 		}
-		if durable {
-			config.TaskSessionID, err = ids.NewUUID()
-			if err != nil {
-				return err
-			}
+		config.TaskSessionID, err = ids.NewUUID()
+		if err != nil {
+			return err
 		}
 	}
 	config.RunID, config.RestoreSession = runID, continuing
@@ -107,7 +106,7 @@ func (d *TaskDispatcher) StartTask(ctx context.Context, userID, organizationID s
 			return fmt.Errorf("resolve workspace repositories: %w", resolveErr)
 		}
 		for _, repository := range repositories {
-			config.Repositories = append(config.Repositories, agentctl.WorkspaceRepository{
+			config.Repositories = append(config.Repositories, runconfig.WorkspaceRepository{
 				ID: repository.ID, ProviderName: repository.ProviderName, URL: repository.URL,
 			})
 		}
@@ -122,7 +121,7 @@ func (d *TaskDispatcher) StartTask(ctx context.Context, userID, organizationID s
 				return fmt.Errorf("resolve agent skills: %w", resolveErr)
 			}
 			for _, item := range resolved {
-				config.Skills = append(config.Skills, agentctl.Skill{ID: item.ID, SkillMD: item.SkillMD})
+				config.Skills = append(config.Skills, runconfig.Skill{ID: item.ID, SkillMD: item.SkillMD})
 			}
 			if len(config.Skills) != len(definition.SkillIDs) {
 				return errors.New("one or more selected agent skills are unavailable")
@@ -137,7 +136,7 @@ func (d *TaskDispatcher) StartTask(ctx context.Context, userID, organizationID s
 				return fmt.Errorf("resolve agent MCP servers: %w", resolveErr)
 			}
 			for _, server := range servers {
-				config.MCPServers = append(config.MCPServers, agentctl.MCPServer{ID: server.ID, Name: server.Name, URL: server.URL, Headers: server.Headers})
+				config.MCPServers = append(config.MCPServers, runconfig.MCPServer{ID: server.ID, Name: server.Name, URL: server.URL, Headers: server.Headers})
 			}
 		}
 	} else if len(config.MCPServers) > 0 {
@@ -173,23 +172,21 @@ func (d *TaskDispatcher) StartTask(ctx context.Context, userID, organizationID s
 	if err := config.Validate(); err != nil {
 		return err
 	}
-	if strings.TrimSpace(commandID) == "" || len(commandID) > 200 || strings.TrimSpace(prompt) == "" || len(prompt) > agentctl.MaxPromptBytes {
-		return agentctl.ErrCommand
+	if strings.TrimSpace(commandID) == "" || len(commandID) > 200 || strings.TrimSpace(prompt) == "" || len(prompt) > interaction.MaxPromptBytes {
+		return interaction.ErrCommand
 	}
 	config.InitialCommandID, config.InitialPrompt = commandID, prompt
-	if durable {
-		if err := sessions.ReserveSessionRun(ctx, config); err != nil {
-			return err
-		}
-		config.ReservedRun = true
+	if err := sessions.ReserveSessionRun(ctx, config); err != nil {
+		return err
 	}
+	config.ReservedRun = true
 	if _, err = d.launches.StartWithPrompt(ctx, config, commandID, prompt); err != nil {
 		return fmt.Errorf("start agent run: %w", err)
 	}
 	return nil
 }
 
-func taskPrompt(value task.Task, repositories []agentctl.WorkspaceRepository) (string, error) {
+func taskPrompt(value task.Task, repositories []runconfig.WorkspaceRepository) (string, error) {
 	snapshot := struct {
 		Title        string           `json:"title"`
 		Description  string           `json:"description"`
@@ -213,10 +210,10 @@ func taskPrompt(value task.Task, repositories []agentctl.WorkspaceRepository) (s
 	return "Work on the following Orkest task. Use this task snapshot as the source of truth for the requested work. Workspace repositories are checked out under the listed paths on task-specific branches; inspect the repositories relevant to the task and make changes in those checkouts:\n\n" + string(encoded), nil
 }
 
-func (d *TaskDispatcher) freshConfiguration(ctx context.Context, userID, organizationID string, value task.Task) (agentctl.RunConfig, agent.Agent, error) {
+func (d *TaskDispatcher) freshConfiguration(ctx context.Context, userID, organizationID string, value task.Task) (runconfig.RunConfig, agent.Agent, error) {
 	definition, err := d.agents.Get(ctx, userID, organizationID, value.WorkspaceID, value.AssigneeAgentID)
 	if err != nil {
-		return agentctl.RunConfig{}, agent.Agent{}, fmt.Errorf("get assigned agent: %w", err)
+		return runconfig.RunConfig{}, agent.Agent{}, fmt.Errorf("get assigned agent: %w", err)
 	}
 	systemPrompt := strings.TrimSpace(definition.SystemPrompt)
 	if systemPrompt == "" {
@@ -225,28 +222,24 @@ func (d *TaskDispatcher) freshConfiguration(ctx context.Context, userID, organiz
 	if systemPrompt == "" {
 		systemPrompt = "Complete the provided task."
 	}
-	config := agentctl.RunConfig{
-		OrganizationID: organizationID,
-		WorkspaceID:    value.WorkspaceID,
-		TaskID:         value.ID,
+	config := runconfig.RunConfig{
+		RuntimeConfig: runconfig.RuntimeConfig{
+			OrganizationID: organizationID,
+			WorkspaceID:    value.WorkspaceID,
+			TaskID:         value.ID,
 
-		Runtime: definition.Runtime,
-		Agent: agentctl.AgentDefinition{
-			Name:         definition.Name,
-			Description:  definition.Description,
-			Instructions: systemPrompt,
+			Runtime: definition.Runtime,
+			Agent: runconfig.AgentDefinition{
+				Name:         definition.Name,
+				Description:  definition.Description,
+				Instructions: systemPrompt,
+			},
+			Model: runconfig.ModelSelection{Provider: definition.Provider, ID: definition.Model},
 		},
-		Model: agentctl.ModelSelection{Provider: definition.Provider, ID: definition.Model},
 	}
 	return config, definition, nil
 }
 
 func (d *TaskDispatcher) TaskCommandAccepted(ctx context.Context, orgID, workspaceID, taskID, commandID, prompt string) (bool, error) {
-	finder, ok := d.launches.repo.(interface {
-		TaskCommand(context.Context, string, string, string, string, string) (bool, error)
-	})
-	if !ok {
-		return false, nil
-	}
-	return finder.TaskCommand(ctx, orgID, workspaceID, taskID, commandID, prompt)
+	return d.launches.repo.TaskCommand(ctx, orgID, workspaceID, taskID, commandID, prompt)
 }

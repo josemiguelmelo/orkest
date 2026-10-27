@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/containerd/errdefs"
-	"github.com/josemiguelmelo/orkest/internal/agentctl"
+	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
 	"github.com/josemiguelmelo/orkest/internal/coderepository"
 	"github.com/josemiguelmelo/orkest/internal/orchestration"
 	"github.com/moby/moby/api/types/container"
@@ -118,7 +118,7 @@ var (
 	_ orchestration.AgentProcessController = (*Executor)(nil)
 )
 
-func (e *Executor) StartAgentctl(ctx context.Context, config agentctl.RunConfig) (orchestration.Process, error) {
+func (e *Executor) StartAgentctl(ctx context.Context, config runconfig.RunConfig) (orchestration.Process, error) {
 	if err := config.Validate(); err != nil {
 		return orchestration.Process{}, err
 	}
@@ -215,7 +215,7 @@ func (e *Executor) StartAgentctl(ctx context.Context, config agentctl.RunConfig)
 	return process, nil
 }
 
-func (e *Executor) prepareRepositories(ctx context.Context, workDir string, config agentctl.RunConfig) error {
+func (e *Executor) prepareRepositories(ctx context.Context, workDir string, config runconfig.RunConfig) error {
 	for _, repository := range config.Repositories {
 		provider, ok := e.repositoryProviders[repository.ProviderName]
 		if !ok {
@@ -325,7 +325,7 @@ func (e *Executor) AgentctlRunningByRunID(ctx context.Context, runID string) (bo
 	return e.AgentctlRunning(ctx, containerName(runID))
 }
 
-func (e *Executor) taskDirectories(config agentctl.RunConfig) (string, string, error) {
+func (e *Executor) taskDirectories(config runconfig.RunConfig) (string, string, error) {
 	scope, err := json.Marshal([]string{config.OrganizationID, config.WorkspaceID, config.TaskID})
 	if err != nil {
 		return "", "", fmt.Errorf("encode task storage scope: %w", err)
@@ -352,7 +352,7 @@ func (e *Executor) removeAfterFailure(ctx context.Context, containerID string, c
 	return cause
 }
 
-func labelsFor(config agentctl.RunConfig) (map[string]string, error) {
+func labelsFor(config runconfig.RunConfig) (map[string]string, error) {
 	values := []string{config.OrganizationID, config.WorkspaceID, config.TaskID, config.RunID}
 	labels := make(map[string]string, len(values)+1)
 	for i, key := range []string{"organization", "workspace", "task", "run"} {

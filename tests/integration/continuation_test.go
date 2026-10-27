@@ -3,17 +3,20 @@
 package integration
 
 import (
-	"context"
-	"errors"
-	"os"
-	"path/filepath"
-	"strings"
-	"testing"
-	"time"
-
-	"github.com/josemiguelmelo/orkest/internal/agentctl"
-	"github.com/josemiguelmelo/orkest/internal/agentctl/runtime/opencode"
-	"github.com/josemiguelmelo/orkest/internal/core/ids"
+"context"
+"errors"
+"github.com/josemiguelmelo/orkest/internal/agentctl/runtime/opencode"
+"github.com/josemiguelmelo/orkest/internal/agentctl/runtimehost"
+"github.com/josemiguelmelo/orkest/internal/core/ids"
+"os"
+"path/filepath"
+"strings"
+"testing"
+"time"
+agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
+"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
+runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+sharedacp "github.com/josemiguelmelo/orkest/internal/agentctl/runtime/acp"
 )
 
 func TestOpenCodeContinuation(t *testing.T) {
@@ -31,11 +34,12 @@ func TestOpenCodeContinuation(t *testing.T) {
 			env = append(env, name+"="+value)
 		}
 	}
-	provider := &opencode.OpenCodeProvider{Binary: binary, WorkDir: t.TempDir(), StateDir: t.TempDir(), Env: env}
-	config := agentctl.RunConfig{OrganizationID: "test-org", WorkspaceID: "test-workspace", TaskID: "test-task", TaskSessionID: "test-session", RunID: "first", Runtime: "opencode", Agent: agentctl.AgentDefinition{Name: "Integration", Instructions: "Follow the user's instructions. Do not use tools for these memory tests."}, Model: agentctl.ModelSelection{Provider: modelProvider, ID: model}}
+	workDir, stateDir := t.TempDir(), t.TempDir()
+	host := runtimehost.New(opencode.Profile{Binary: binary}, sharedacp.Factory{}, runtimehost.Environment{WorkDir: workDir, StateDir: stateDir, GrantedEnv: env})
+	config := runconfig.RunConfig{RuntimeConfig: runconfig.RuntimeConfig{OrganizationID: "test-org", WorkspaceID: "test-workspace", TaskID: "test-task", TaskSessionID: "test-session", RunID: "first", Runtime: "opencode", Agent: runconfig.AgentDefinition{Name: "Integration", Instructions: "Follow the user's instructions. Do not use tools for these memory tests."}, Model: runconfig.ModelSelection{Provider: modelProvider, ID: model}}}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	first, err := provider.Launch(ctx, config)
+	first, err := host.Launch(ctx, config.ForRuntime())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,26 +48,26 @@ func TestOpenCodeContinuation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	observer := agentctl.Observer{Update: func(agentctl.Update) error { return nil }, Permission: func(context.Context, agentctl.Permission) (string, error) {
+	observer := agentruntime.PromptObserver{Update: func(interaction.Update) error { return nil }, Permission: func(context.Context, interaction.Permission) (string, error) {
 		return "", errors.New("unexpected permission in memory test")
 	}}
-	if _, err := first.(agentctl.RuntimeConversation).Prompt(ctx, "Remember this private test marker for our next turn: "+token+". Reply only acknowledged.", observer); err != nil {
+	if _, err := first.Prompt(ctx, interaction.Command{ID: "remember", Text: "Remember this private test marker for our next turn: " + token + ". Reply only acknowledged."}, observer); err != nil {
 		t.Fatal(err)
 	}
-	path := filepath.Join(provider.WorkDir, "untracked.txt")
+	path := filepath.Join(workDir, "untracked.txt")
 	if err := os.WriteFile(path, []byte("preserved"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	_ = first.Close()
 	config.RunID = "second"
-	restored, err := provider.Restore(ctx, config)
+	restored, err := host.Restore(ctx, config.ForRuntime())
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = restored.Close() }()
 	var answer strings.Builder
-	observer.Update = func(update agentctl.Update) error { answer.WriteString(update.Text); return nil }
-	if _, err := restored.(agentctl.RuntimeConversation).Prompt(ctx, "What exact private test marker did I ask you to remember? Reply with only the marker.", observer); err != nil {
+	observer.Update = func(update interaction.Update) error { answer.WriteString(update.Text); return nil }
+	if _, err := restored.Prompt(ctx, interaction.Command{ID: "test-command", Text: "What exact private test marker did I ask you to remember? Reply with only the marker."}, observer); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(answer.String(), token) {

@@ -7,7 +7,8 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/josemiguelmelo/orkest/internal/agentctl"
+	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
+	agentrun "github.com/josemiguelmelo/orkest/internal/agentctl/run"
 	"github.com/josemiguelmelo/orkest/internal/orchestration"
 	"github.com/josemiguelmelo/orkest/internal/task"
 )
@@ -32,7 +33,7 @@ func (a taskRunAPI) routes(r chi.Router) {
 
 type taskRunView struct {
 	RecoveryBlocked bool                       `json:"recoveryBlocked"`
-	ExecutionState  agentctl.State             `json:"executionState,omitempty"`
+	ExecutionState  agentrun.ExecutionState    `json:"executionState,omitempty"`
 	QueuePaused     bool                       `json:"queuePaused"`
 	QueueDepth      int                        `json:"queueDepth"`
 	RunID           string                     `json:"runId"`
@@ -102,7 +103,7 @@ func (a taskRunAPI) prompt(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	body.Text = strings.TrimSpace(body.Text)
-	if body.Text == "" || len([]byte(body.Text)) > agentctl.MaxPromptBytes || strings.TrimSpace(body.CommandID) == "" || len(body.CommandID) > 200 {
+	if body.Text == "" || len([]byte(body.Text)) > interaction.MaxPromptBytes || strings.TrimSpace(body.CommandID) == "" || len(body.CommandID) > 200 {
 		writeError(w, http.StatusBadRequest, "invalid_prompt")
 		return
 	}
@@ -158,7 +159,7 @@ func (a taskRunAPI) respondPermission(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_permission")
 		return
 	}
-	response := agentctl.PermissionResponse{TaskID: taskID, RunID: chi.URLParam(r, "runID"), SessionID: body.SessionID, RequestID: body.RequestID, OptionID: body.OptionID}
+	response := interaction.PermissionResponse{TaskID: taskID, RunID: chi.URLParam(r, "runID"), SessionID: body.SessionID, RequestID: body.RequestID, OptionID: body.OptionID}
 	if err := a.launches.RespondTaskPermission(r.Context(), orgID, workspaceID, taskID, response.RunID, response); err != nil {
 		writeError(w, http.StatusConflict, "permission_unavailable")
 		return

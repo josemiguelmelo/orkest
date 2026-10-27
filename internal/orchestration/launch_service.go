@@ -8,11 +8,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/josemiguelmelo/orkest/internal/agentctl"
+	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
+	agentrun "github.com/josemiguelmelo/orkest/internal/agentctl/run"
 )
 
 type LaunchService struct {
-	repo          LaunchRepository
+	repo          TaskExecutionRepository
 	launcher      AgentLauncher
 	client        AgentctlClient
 	communication AgentCommunication
@@ -21,7 +23,7 @@ type LaunchService struct {
 
 var ErrTaskRunNotFound = errors.New("task run not found")
 
-func NewLaunchService(repo LaunchRepository, launcher AgentLauncher, client AgentctlClient, communication AgentCommunication, completions ...*LaunchCompletionService) (*LaunchService, error) {
+func NewLaunchService(repo TaskExecutionRepository, launcher AgentLauncher, client AgentctlClient, communication AgentCommunication, completions ...*LaunchCompletionService) (*LaunchService, error) {
 	if repo == nil || launcher == nil || client == nil || communication == nil {
 		return nil, errors.New("launch dependencies are required")
 	}
@@ -34,7 +36,7 @@ func NewLaunchService(repo LaunchRepository, launcher AgentLauncher, client Agen
 
 // Start persists each lifecycle transition. The communication context should be the
 // platform lifecycle context; canceling it disconnects without stopping agentctl.
-func (s *LaunchService) Start(ctx context.Context, config agentctl.RunConfig) (Launch, error) {
+func (s *LaunchService) Start(ctx context.Context, config runconfig.RunConfig) (Launch, error) {
 	if err := config.Validate(); err != nil {
 		return Launch{}, err
 	}
@@ -83,13 +85,7 @@ func (s *LaunchService) Start(ctx context.Context, config agentctl.RunConfig) (L
 		return fail("connect", err)
 	}
 	if config.RestoreSession {
-		restorer, ok := s.client.(interface {
-			RestoreAgent(context.Context, string) error
-		})
-		if !ok {
-			return fail("agent_restore", errors.New("agent restoration unavailable"))
-		}
-		err = restorer.RestoreAgent(ctx, launch.Endpoint)
+		err = s.client.RestoreAgent(ctx, launch.Endpoint)
 	} else {
 		err = s.client.StartAgent(ctx, launch.Endpoint)
 	}
@@ -104,7 +100,7 @@ func (s *LaunchService) Start(ctx context.Context, config agentctl.RunConfig) (L
 }
 
 // StartWithPrompt creates or restores the configured session and submits the initial prompt.
-func (s *LaunchService) StartWithPrompt(ctx context.Context, config agentctl.RunConfig, commandID, prompt string) (Launch, error) {
+func (s *LaunchService) StartWithPrompt(ctx context.Context, config runconfig.RunConfig, commandID, prompt string) (Launch, error) {
 	if strings.TrimSpace(commandID) == "" || strings.TrimSpace(prompt) == "" {
 		return Launch{}, errors.New("command ID and prompt are required")
 	}
@@ -119,10 +115,7 @@ func (s *LaunchService) StartWithPrompt(ctx context.Context, config agentctl.Run
 }
 
 func (s *LaunchService) TaskLaunches(ctx context.Context, orgID, workspaceID, taskID string) ([]Launch, error) {
-	reader, ok := s.repo.(TaskLaunchReader)
-	if !ok {
-		return nil, errors.New("task launch history is unavailable")
-	}
+	reader := s.repo
 	launches, err := reader.ListTaskLaunches(ctx, orgID, workspaceID, taskID)
 	if err != nil {
 		return nil, err
@@ -139,10 +132,7 @@ func (s *LaunchService) TaskLaunches(ctx context.Context, orgID, workspaceID, ta
 }
 
 func (s *LaunchService) TaskEvents(ctx context.Context, orgID, workspaceID, taskID, runID string, after uint64) ([]Event, error) {
-	reader, ok := s.repo.(TaskLaunchReader)
-	if !ok {
-		return nil, errors.New("task activity history is unavailable")
-	}
+	reader := s.repo
 	launches, err := reader.ListTaskLaunches(ctx, orgID, workspaceID, taskID)
 	if err != nil {
 		return nil, err
@@ -176,14 +166,11 @@ func (s *LaunchService) CancelTaskPrompt(ctx context.Context, orgID, workspaceID
 	if err != nil {
 		return err
 	}
-	client, ok := s.client.(InteractiveAgentctlClient)
-	if !ok {
-		return errors.New("agent interaction is unavailable")
-	}
+	client := s.client
 	return client.CancelPrompt(ctx, launch.Endpoint, commandID)
 }
 
-func (s *LaunchService) RespondTaskPermission(ctx context.Context, orgID, workspaceID, taskID, runID string, response agentctl.PermissionResponse) error {
+func (s *LaunchService) RespondTaskPermission(ctx context.Context, orgID, workspaceID, taskID, runID string, response interaction.PermissionResponse) error {
 	launch, err := s.taskLaunch(ctx, orgID, workspaceID, taskID, runID)
 	if err != nil {
 		return err
@@ -194,7 +181,7 @@ func (s *LaunchService) RespondTaskPermission(ctx context.Context, orgID, worksp
 	}
 	valid := false
 	for _, event := range events {
-		if event.Payload.Type == agentctl.EventPermissionRequested && event.Payload.RequestID == response.RequestID && event.Payload.SessionID == response.SessionID {
+		if event.Payload.Type == interaction.EventPermissionRequested && event.Payload.RequestID == response.RequestID && event.Payload.SessionID == response.SessionID {
 			if event.Payload.Permission != nil {
 				for _, option := range event.Payload.Permission.Options {
 					if option.ID == response.OptionID {
@@ -203,25 +190,19 @@ func (s *LaunchService) RespondTaskPermission(ctx context.Context, orgID, worksp
 				}
 			}
 		}
-		if event.Payload.Type == agentctl.EventPermissionResponse && event.Payload.RequestID == response.RequestID {
+		if event.Payload.Type == interaction.EventPermissionResponse && event.Payload.RequestID == response.RequestID {
 			valid = false
 		}
 	}
 	if !valid {
 		return errors.New("permission request is no longer pending")
 	}
-	client, ok := s.client.(InteractiveAgentctlClient)
-	if !ok {
-		return errors.New("agent interaction is unavailable")
-	}
+	client := s.client
 	return client.RespondPermission(ctx, launch.Endpoint, response)
 }
 
 func (s *LaunchService) taskLaunch(ctx context.Context, orgID, workspaceID, taskID, runID string) (Launch, error) {
-	reader, ok := s.repo.(TaskLaunchReader)
-	if !ok {
-		return Launch{}, errors.New("task launch history is unavailable")
-	}
+	reader := s.repo
 	launches, err := reader.ListTaskLaunches(ctx, orgID, workspaceID, taskID)
 	if err != nil {
 		return Launch{}, err
@@ -251,15 +232,13 @@ func validEndpoint(endpoint string) bool {
 func sanitizedFailure(stage string) string { return "launch step failed: " + stage }
 
 func (s *LaunchService) deliverPrompt(ctx context.Context, launch Launch, commandID, prompt string) error {
-	outbox, durable := s.repo.(PromptOutbox)
-	if durable {
-		delivered, err := outbox.RecordPrompt(ctx, launch.RunID, commandID, prompt)
-		if err != nil {
-			return err
-		}
-		if delivered {
-			return nil
-		}
+	outbox := s.repo
+	delivered, err := outbox.RecordPrompt(ctx, launch.RunID, commandID, prompt)
+	if err != nil {
+		return err
+	}
+	if delivered {
+		return nil
 	}
 	if launch.TaskSessionID != "" {
 		status, err := s.client.Status(ctx, launch.Endpoint)
@@ -273,10 +252,7 @@ func (s *LaunchService) deliverPrompt(ctx context.Context, launch Launch, comman
 	if err := s.client.Prompt(ctx, launch.Endpoint, commandID, prompt); err != nil {
 		return err
 	}
-	if durable {
-		return outbox.PromptDelivered(ctx, launch.RunID, commandID)
-	}
-	return nil
+	return outbox.PromptDelivered(ctx, launch.RunID, commandID)
 }
 
 func (s *LaunchService) TaskQueue(ctx context.Context, orgID, workspaceID, taskID, runID string, discard bool) error {
@@ -296,15 +272,10 @@ func (s *LaunchService) TaskQueue(ctx context.Context, orgID, workspaceID, taskI
 			return s.completion.ClosePending(ctx, launch)
 		}
 	}
-	client, ok := s.client.(interface {
-		Queue(context.Context, string, bool) error
-	})
-	if !ok {
-		return errors.New("queue control unavailable")
-	}
+	client := s.client
 	return client.Queue(ctx, launch.Endpoint, discard)
 }
 
-func matchesExecution(launch Launch, status agentctl.Status) bool {
+func matchesExecution(launch Launch, status agentrun.RunStatus) bool {
 	return status.OrganizationID == launch.OrganizationID && status.WorkspaceID == launch.WorkspaceID && status.TaskID == launch.TaskID && status.RunID == launch.RunID && status.TaskSessionID == launch.TaskSessionID
 }

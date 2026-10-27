@@ -75,7 +75,7 @@ Agents create and update pull requests through their permitted runtime capabilit
 - **Independent `agentctl` process** is implemented as a separate binary and can be packaged into the Docker OpenCode runtime image; task-start APIs and platform wiring are implemented.
 - **Go code organization** stays in one root Go module, with logical package areas rather than nested Go modules:
   - `internal/app` owns platform wiring and lifecycle; platform features belong under `internal/` packages such as `identity`, `organization`, `workspace`, `task`, and `orchestration`.
-  - `internal/agentctl` owns agentctl run state, provider contracts, transport APIs, daemon lifecycle (`internal/agentctl/daemon`), and runtime adapters (`internal/agentctl/runtime`). It runs independently of platform lifecycle.
+  - `internal/agentctl` is organized into domain subpackages: `config` for resolved settings, `interaction` for commands/approvals/activity, `runtime` for normalized contracts, and `run` for execution and recovery. Concrete hosting lives in `runtimehost`; transports, daemon lifecycle, and runtime adapters remain in `httpapi`, `daemon`, and `runtime/acp`/`runtime/opencode`. It runs independently of platform lifecycle.
   - `internal/core` holds only concrete code shared by platform and agentctl, including environment loading (`internal/core/environment`), graceful HTTP server lifecycle (`internal/core/httpserver`), and OpenAPI serving/validation (`internal/core/openapi`).
   - `internal/postgres` owns the shared PostgreSQL database lifecycle and separate per-domain adapters; repository interfaces remain in their domain packages.
   - `cmd/orkest` and `cmd/agentctl` remain thin executable wiring; platform HTTP lives in `internal/app/httpapi` and agentctl HTTP lives in `internal/agentctl/httpapi`. `internal/core/openapi` owns shared serving and validation code.
@@ -123,3 +123,19 @@ reopenable JSONL journals for runtime restoration and FIFO prompt execution.
 OpenCode 2.1.4 / ACP v1 remains pinned. See [task sessions](task-sessions.md) for
 implemented behavior, migration effects, verification commands, and recovery
 limitations. Team-member capacity allocation remains unimplemented.
+
+Agentctl's `runtimehost.Host` in `internal/agentctl/runtimehost` owns provisioning
+application, process and pipe
+lifecycle, session storage, ACP setup, recovery evidence, and partial-failure
+cleanup. Run execution lives in `internal/agentctl/run` and depends on normalized
+contracts in `internal/agentctl/runtime`, resolved configuration in `config`, and
+command/approval/event definitions in `interaction`. Executable wiring
+selects the concrete host. Checkpoints and session manifests share
+`internal/core/durablefile` for atomic durable writes. Runtime profiles render
+native configuration plans; compatible
+protocols use the shared ACP implementation in `internal/agentctl/runtime/acp`.
+The OpenCode 2.1.4 profile remains the only production profile. History coverage
+is not qualified for safe interrupted-turn continuation, so restoration pauses
+when the journal cannot establish the outcome. See [runtime host and ACP
+architecture](runtime-providers.md) for compatibility, qualification, and
+verification limits.

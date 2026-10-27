@@ -8,21 +8,22 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/josemiguelmelo/orkest/internal/agentctl"
+	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
 	modelerrors "github.com/josemiguelmelo/orkest/internal/core/model/errors"
 	"github.com/josemiguelmelo/orkest/internal/orchestration"
 	"github.com/josemiguelmelo/orkest/internal/postgres/sqlc"
 )
 
-func (r *AgentLaunchPostgresRepository) CurrentSession(ctx context.Context, orgID, workspaceID, taskID string) (agentctl.RunConfig, bool, error) {
+func (r *AgentLaunchPostgresRepository) CurrentSession(ctx context.Context, orgID, workspaceID, taskID string) (runconfig.RunConfig, bool, error) {
 	row, err := r.queries.CurrentTaskAgentSession(ctx, sqlc.CurrentTaskAgentSessionParams{OrganizationID: orgID, WorkspaceID: workspaceID, TaskID: taskID})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return agentctl.RunConfig{}, false, nil
+		return runconfig.RunConfig{}, false, nil
 	}
 	if err != nil {
-		return agentctl.RunConfig{}, false, fmt.Errorf("read current task session: %w", err)
+		return runconfig.RunConfig{}, false, fmt.Errorf("read current task session: %w", err)
 	}
-	var config agentctl.RunConfig
+	var config runconfig.RunConfig
 	if err := json.Unmarshal(row.Configuration, &config); err != nil {
 		return config, false, fmt.Errorf("decode session configuration: %w", err)
 	}
@@ -30,7 +31,7 @@ func (r *AgentLaunchPostgresRepository) CurrentSession(ctx context.Context, orgI
 	return config, true, nil
 }
 
-func (r *AgentLaunchPostgresRepository) ReserveSessionRun(ctx context.Context, config agentctl.RunConfig) error {
+func (r *AgentLaunchPostgresRepository) ReserveSessionRun(ctx context.Context, config runconfig.RunConfig) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -56,7 +57,7 @@ func (r *AgentLaunchPostgresRepository) ReserveSessionRun(ctx context.Context, c
 		}
 	} else {
 		snapshot := config
-		snapshot.MCPServers = append([]agentctl.MCPServer(nil), config.MCPServers...)
+		snapshot.MCPServers = append([]runconfig.MCPServer(nil), config.MCPServers...)
 		for i := range snapshot.MCPServers {
 			snapshot.MCPServers[i].Headers = nil
 		}
@@ -91,7 +92,7 @@ func (r *AgentLaunchPostgresRepository) RecordPrompt(ctx context.Context, runID,
 		return false, err
 	}
 	if previous.Prompt != prompt {
-		return false, agentctl.ErrCommand
+		return false, interaction.ErrCommand
 	}
 	return previous.Delivered, nil
 }
@@ -121,7 +122,7 @@ func (r *AgentLaunchPostgresRepository) TaskCommand(ctx context.Context, orgID, 
 		return false, err
 	}
 	if prompt != "" && prompt != previous {
-		return false, agentctl.ErrCommand
+		return false, interaction.ErrCommand
 	}
 	return true, nil
 }

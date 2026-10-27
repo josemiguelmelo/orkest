@@ -6,7 +6,8 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/josemiguelmelo/orkest/internal/agentctl"
+	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
 	"github.com/josemiguelmelo/orkest/internal/core/ids"
 	"github.com/josemiguelmelo/orkest/internal/orchestration"
 )
@@ -22,8 +23,8 @@ func testTaskSessions(t *testing.T, database *PostgresDatabase, orgID, workspace
 		}
 		return id
 	}
-	configs := []agentctl.RunConfig{
-		{OrganizationID: orgID, WorkspaceID: workspaceID, TaskID: taskID, TaskSessionID: newID(), RunID: newID(), Runtime: "opencode", Agent: agentctl.AgentDefinition{Name: "original", Instructions: "original"}, Model: agentctl.ModelSelection{Provider: "test", ID: "model"}, MCPServers: []agentctl.MCPServer{{ID: "mcp", Name: "mcp", URL: "https://example.test/mcp", Headers: map[string]string{"Authorization": "private"}}}, InitialCommandID: "initial", InitialPrompt: "hello"},
+	configs := []runconfig.RunConfig{
+		{RuntimeConfig: runconfig.RuntimeConfig{OrganizationID: orgID, WorkspaceID: workspaceID, TaskID: taskID, TaskSessionID: newID(), RunID: newID(), Runtime: "opencode", Agent: runconfig.AgentDefinition{Name: "original", Instructions: "original"}, Model: runconfig.ModelSelection{Provider: "test", ID: "model"}, MCPServers: []runconfig.MCPServer{{ID: "mcp", Name: "mcp", URL: "https://example.test/mcp", Headers: map[string]string{"Authorization": "private"}}}}, InitialCommandID: "initial", InitialPrompt: "hello"},
 	}
 	second := configs[0]
 	second.TaskSessionID, second.RunID = newID(), newID()
@@ -60,7 +61,7 @@ func testTaskSessions(t *testing.T, database *PostgresDatabase, orgID, workspace
 	if _, exists, err := repo.CurrentSession(ctx, "other-org", workspaceID, taskID); err != nil || exists {
 		t.Fatal("session crossed organization boundary", err)
 	}
-	if _, err := repo.RecordPrompt(ctx, config.RunID, "initial", "changed"); !errors.Is(err, agentctl.ErrCommand) {
+	if _, err := repo.RecordPrompt(ctx, config.RunID, "initial", "changed"); !errors.Is(err, interaction.ErrCommand) {
 		t.Fatal("outbox accepted changed command", err)
 	}
 	pending, err := repo.PendingPrompts(ctx, config.RunID)

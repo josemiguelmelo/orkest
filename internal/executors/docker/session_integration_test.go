@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/containerd/errdefs"
-	"github.com/josemiguelmelo/orkest/internal/agentctl"
+	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
 	"github.com/josemiguelmelo/orkest/internal/orchestration"
 	mobyclient "github.com/moby/moby/client"
 )
@@ -48,7 +48,7 @@ func TestDockerSessionRestore(t *testing.T) {
 	}
 	defer func() { _ = executor.Close() }()
 	httpClient := orchestration.NewHTTPAgentctlClient(&http.Client{Timeout: 35 * time.Second})
-	run := agentctl.RunConfig{OrganizationID: "restore-org", WorkspaceID: "restore-workspace", TaskID: "restore-task", TaskSessionID: "session-one", RunID: "run-one", Runtime: "opencode", Model: agentctl.ModelSelection{Provider: "anthropic", ID: "claude-sonnet-4-5"}, Agent: agentctl.AgentDefinition{Name: "Test", Instructions: "test"}}
+	run := runconfig.RunConfig{RuntimeConfig: runconfig.RuntimeConfig{OrganizationID: "restore-org", WorkspaceID: "restore-workspace", TaskID: "restore-task", TaskSessionID: "session-one", RunID: "run-one", Runtime: "opencode", Model: runconfig.ModelSelection{Provider: "anthropic", ID: "claude-sonnet-4-5"}, Agent: runconfig.AgentDefinition{Name: "Test", Instructions: "test"}}}
 	start := func() orchestration.Process {
 		t.Helper()
 		process, err := executor.StartAgentctl(ctx, run)

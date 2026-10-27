@@ -1,32 +1,23 @@
 package opencode
 
 import (
-	"os"
-	"path/filepath"
 	"testing"
 
-	"github.com/josemiguelmelo/orkest/internal/agentctl"
+	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
 )
 
-func TestMaterializeSkills(t *testing.T) {
-	directory := filepath.Join(t.TempDir(), "opencode", "skills")
+func TestProfileRendersSkillsWithoutFilesystemIO(t *testing.T) {
 	content := "---\nname: go-review\ndescription: Review Go code\n---\n\nReview the change."
-	if err := materializeSkills(directory, []agentctl.Skill{{ID: "go-review", SkillMD: content}}); err != nil {
-		t.Fatal(err)
-	}
-	path := filepath.Join(directory, "go-review", "SKILL.md")
-	got, err := os.ReadFile(path)
+	plan, err := (Profile{}).BuildProvisioningPlan(agentruntime.ResolvedRuntimeSettings{Skills: []runconfig.Skill{{ID: "go-review", SkillMD: content}}}, agentruntime.ProvisioningPaths{RuntimeRoot: t.TempDir(), WorkDir: t.TempDir(), ConfigSubdir: "config-run"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(got) != content+"\n" {
-		t.Fatalf("materialized skill = %q", got)
+	got, ok := plan.Files["config-run/opencode/skills/go-review/SKILL.md"]
+	if !ok || string(got) != content+"\n" {
+		t.Fatalf("profile skill output = %q, present=%v", got, ok)
 	}
-	info, err := os.Stat(path)
-	if err != nil || info.Mode().Perm() != 0o600 {
-		t.Fatalf("skill file permissions = %v, err=%v", info, err)
-	}
-	if err := materializeSkills(directory, []agentctl.Skill{{ID: "../escape", SkillMD: content}}); err == nil {
+	if _, err := (Profile{}).BuildProvisioningPlan(agentruntime.ResolvedRuntimeSettings{Skills: []runconfig.Skill{{ID: "../escape", SkillMD: content}}}, agentruntime.ProvisioningPaths{RuntimeRoot: t.TempDir(), WorkDir: t.TempDir(), ConfigSubdir: "config-run"}); err == nil {
 		t.Fatal("invalid skill ID was accepted")
 	}
 }

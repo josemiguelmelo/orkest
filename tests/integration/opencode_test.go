@@ -3,13 +3,14 @@
 package integration
 
 import (
-	"context"
-	"os"
-	"testing"
-	"time"
-
-	"github.com/josemiguelmelo/orkest/internal/agentctl"
-	"github.com/josemiguelmelo/orkest/internal/agentctl/runtime/opencode"
+"context"
+"github.com/josemiguelmelo/orkest/internal/agentctl/runtime/opencode"
+"github.com/josemiguelmelo/orkest/internal/agentctl/runtimehost"
+"os"
+"testing"
+"time"
+runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+sharedacp "github.com/josemiguelmelo/orkest/internal/agentctl/runtime/acp"
 )
 
 // TestOpenCodeHandshake needs the pinned executable but makes no model request.
@@ -18,11 +19,12 @@ func TestOpenCodeHandshake(t *testing.T) {
 	if binary == "" {
 		t.Fatal("set ORKEST_OPENCODE_BINARY to the pinned OpenCode executable")
 	}
-	provider := &opencode.OpenCodeProvider{Binary: binary, WorkDir: t.TempDir(), StateDir: t.TempDir(), Env: []string{"PATH=" + os.Getenv("PATH")}}
+	workDir, stateDir := t.TempDir(), t.TempDir()
+	host := runtimehost.New(opencode.Profile{Binary: binary}, sharedacp.Factory{}, runtimehost.Environment{WorkDir: workDir, StateDir: stateDir, GrantedEnv: []string{"PATH=" + os.Getenv("PATH")}})
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	config := agentctl.RunConfig{OrganizationID: "integration-org", WorkspaceID: "integration-workspace", TaskID: "integration-task", TaskSessionID: "integration-session", RunID: "integration-run", Runtime: "opencode", Agent: agentctl.AgentDefinition{Name: "Integration", Description: "Integration test", Instructions: "You are a test agent."}, Model: agentctl.ModelSelection{Provider: "anthropic", ID: "claude-sonnet-4-5"}}
-	process, err := provider.Launch(ctx, config)
+	config := runconfig.RunConfig{RuntimeConfig: runconfig.RuntimeConfig{OrganizationID: "integration-org", WorkspaceID: "integration-workspace", TaskID: "integration-task", TaskSessionID: "integration-session", RunID: "integration-run", Runtime: "opencode", Agent: runconfig.AgentDefinition{Name: "Integration", Description: "Integration test", Instructions: "You are a test agent."}, Model: runconfig.ModelSelection{Provider: "anthropic", ID: "claude-sonnet-4-5"}}}
+	process, err := host.Launch(ctx, config.ForRuntime())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -34,7 +36,7 @@ func TestOpenCodeHandshake(t *testing.T) {
 		t.Fatal(err)
 	}
 	config.RunID = "integration-revision"
-	restored, err := provider.Restore(ctx, config)
+	restored, err := host.Restore(ctx, config.ForRuntime())
 	if err != nil {
 		t.Fatalf("restore real OpenCode session: %v", err)
 	}

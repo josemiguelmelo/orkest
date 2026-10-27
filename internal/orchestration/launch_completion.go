@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/josemiguelmelo/orkest/internal/agentctl"
+	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
 )
 
 var ErrAgentRunClosed = errors.New("agent run completed and process closed")
@@ -36,16 +36,16 @@ func (s *LaunchCompletionService) AgentctlRunning(ctx context.Context, launch La
 func (s *LaunchCompletionService) HandleEvent(ctx context.Context, launch Launch, event Event) error {
 	var pendingStatus LaunchStatus
 	switch event.Payload.Type {
-	case agentctl.EventRunFailed:
+	case interaction.EventRunFailed:
 		pendingStatus = LaunchFailedPendingClose
-	case agentctl.EventRunCompleted:
+	case interaction.EventRunCompleted:
 		pendingStatus = LaunchCompletedPendingClose
-	case agentctl.EventPromptCompleted:
+	case interaction.EventPromptCompleted:
 		if event.Payload.TaskSessionID != "" {
 			return s.repo.SaveEvent(ctx, event)
 		}
 		pendingStatus = LaunchCompletedPendingClose
-	case agentctl.EventPromptFailed:
+	case interaction.EventPromptFailed:
 		if event.Payload.TaskSessionID != "" {
 			return s.repo.SaveEvent(ctx, event)
 		}

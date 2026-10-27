@@ -19,6 +19,7 @@ type Service struct {
 
 type TaskDispatcher interface {
 	StartTask(context.Context, string, string, Task) error
+	TaskCommandAccepted(context.Context, string, string, string, string, string) (bool, error)
 }
 
 type DispatchError struct{ Cause error }
@@ -89,10 +90,8 @@ func (s *Service) Update(ctx context.Context, userID, orgID, workspaceID, taskID
 		return Task{}, err
 	}
 	if input.CommandID != "" && input.Status == "in_progress" {
-		if finder, ok := s.dispatcher.(interface {
-			TaskCommandAccepted(context.Context, string, string, string, string, string) (bool, error)
-		}); ok {
-			accepted, err := finder.TaskCommandAccepted(ctx, orgID, workspaceID, taskID, input.CommandID, input.PromptText)
+		if s.dispatcher != nil {
+			accepted, err := s.dispatcher.TaskCommandAccepted(ctx, orgID, workspaceID, taskID, input.CommandID, input.PromptText)
 			if err != nil {
 				return Task{}, err
 			}

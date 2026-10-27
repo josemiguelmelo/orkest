@@ -22,8 +22,10 @@ go run ./cmd/agentctl -listen 127.0.0.1:8081 \
 
 ## Runtime and recovery
 
-- Providers implement the [agentctl provider interface](../internal/agentctl/provider.go).
-  [OpenCode](providers/opencode.md) is the currently wired provider.
+- The [runtime host contracts](../internal/agentctl/runtime/contracts.go) separate
+  execution from native profiles and ACP. [OpenCode](providers/opencode.md) is the
+  currently wired profile. See the [domain map](runtime-providers.md) to navigate
+  configuration, interactions, run execution, and runtime implementations.
 - Activity is synced to private JSONL files under
   `AGENTCTL_STATE_DIR/conversations` before publication. These files contain task
   content; retain them with task storage. Existing journals are not overwritten.

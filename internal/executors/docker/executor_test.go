@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/josemiguelmelo/orkest/internal/agentctl"
+	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
 	"github.com/josemiguelmelo/orkest/internal/coderepository"
 	"github.com/josemiguelmelo/orkest/internal/orchestration"
 	"github.com/moby/moby/api/types/container"
@@ -85,7 +85,7 @@ func TestPrepareRepositoriesUsesProviderAndTaskWorkspacePaths(t *testing.T) {
 	executor := &Executor{repositoryProviders: map[string]coderepository.CodeRepositoryProvider{"test": provider}}
 	workDir := t.TempDir()
 	config := runConfig()
-	config.Repositories = []agentctl.WorkspaceRepository{{ID: "repo-id", ProviderName: "test", URL: "https://example.test/repo.git"}}
+	config.Repositories = []runconfig.WorkspaceRepository{{ID: "repo-id", ProviderName: "test", URL: "https://example.test/repo.git"}}
 	if err := executor.prepareRepositories(context.Background(), workDir, config); err != nil {
 		t.Fatalf("prepare repositories: %v", err)
 	}
@@ -239,8 +239,8 @@ func TestNewWithClientRejectsInvalidSettings(t *testing.T) {
 	}
 }
 
-func runConfig() agentctl.RunConfig {
-	return agentctl.RunConfig{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", RunID: "run", Runtime: "opencode", Model: agentctl.ModelSelection{Provider: "provider", ID: "model"}, Agent: agentctl.AgentDefinition{Name: "Work", Description: "Work", Instructions: "work"}}
+func runConfig() runconfig.RunConfig {
+	return runconfig.RunConfig{RuntimeConfig: runconfig.RuntimeConfig{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", RunID: "run", Runtime: "opencode", Model: runconfig.ModelSelection{Provider: "provider", ID: "model"}, Agent: runconfig.AgentDefinition{Name: "Work", Description: "Work", Instructions: "work"}}}
 }
 
 type fakeEngine struct {
