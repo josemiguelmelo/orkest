@@ -10,6 +10,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/josemiguelmelo/orkest/internal/core/secretbox"
+
 	"github.com/josemiguelmelo/orkest/internal/core/ids"
 	modelerrors "github.com/josemiguelmelo/orkest/internal/core/model/errors"
 	"github.com/josemiguelmelo/orkest/internal/workspace"
@@ -17,7 +19,7 @@ import (
 
 type TaskIntegrationService struct {
 	repo          TaskIntegrationRepository
-	box           *SecretBox
+	box           *secretbox.Box
 	providers     map[TaskIntegrationSourceProvider]SourceIntegrationProvider
 	workspaces    WorkspaceAccess
 	organizations OrganizationAccess
@@ -33,7 +35,7 @@ type OrganizationAccess interface {
 	RoleForUser(context.Context, string, string) (string, error)
 }
 
-func NewTaskIntegrationService(repo TaskIntegrationRepository, box *SecretBox, workspaces WorkspaceAccess, organizations OrganizationAccess, importer ImportedTaskRepository, providers ...SourceIntegrationProvider) *TaskIntegrationService {
+func NewTaskIntegrationService(repo TaskIntegrationRepository, box *secretbox.Box, workspaces WorkspaceAccess, organizations OrganizationAccess, importer ImportedTaskRepository, providers ...SourceIntegrationProvider) *TaskIntegrationService {
 	s := &TaskIntegrationService{repo: repo, box: box, workspaces: workspaces, organizations: organizations, importer: importer, providers: map[TaskIntegrationSourceProvider]SourceIntegrationProvider{}, inFlight: map[string]bool{}}
 	for _, p := range providers {
 		s.providers[p.Provider()] = p
@@ -65,7 +67,7 @@ func (s *TaskIntegrationService) Create(ctx context.Context, userID, orgID, work
 		return TaskIntegration{}, err
 	}
 	if s.box == nil {
-		return TaskIntegration{}, ErrEncryptionKeyUnavailable
+		return TaskIntegration{}, secretbox.ErrKeyUnavailable
 	}
 	in.Provider = TaskIntegrationSourceProvider(strings.ToLower(strings.TrimSpace(string(in.Provider))))
 	provider, ok := s.providers[in.Provider]
@@ -101,7 +103,7 @@ func (s *TaskIntegrationService) Update(ctx context.Context, userID, orgID, work
 		return TaskIntegration{}, err
 	}
 	if s.box == nil {
-		return TaskIntegration{}, ErrEncryptionKeyUnavailable
+		return TaskIntegration{}, secretbox.ErrKeyUnavailable
 	}
 	old, oldSecret, err := s.repo.Get(ctx, workspaceID, sourceID)
 	if err != nil {
@@ -248,7 +250,7 @@ func (s *TaskIntegrationService) sync(ctx context.Context, source TaskIntegratio
 	s.mu.Unlock()
 	defer func() { s.mu.Lock(); delete(s.inFlight, source.ID); s.mu.Unlock() }()
 	if s.box == nil {
-		return s.recordSyncError(ctx, source.ID, ErrEncryptionKeyUnavailable)
+		return s.recordSyncError(ctx, source.ID, secretbox.ErrKeyUnavailable)
 	}
 	credential, err := s.box.Open([]byte(encrypted))
 	if err != nil {

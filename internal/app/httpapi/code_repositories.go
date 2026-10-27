@@ -17,7 +17,7 @@ func (a codeRepositoryAPI) routes(r chi.Router) {
 			r.Get("/", a.get)
 			r.Delete("/", a.delete)
 			r.Post("/clone", a.clone)
-			r.Post("/sync-main", a.syncMain)
+			r.Post("/sync", a.sync)
 		})
 	})
 }
@@ -50,7 +50,7 @@ func (a codeRepositoryAPI) clone(w http.ResponseWriter, r *http.Request) {
 	respond(w, nil, err, http.StatusNoContent)
 }
 
-func (a codeRepositoryAPI) syncMain(w http.ResponseWriter, r *http.Request) {
-	err := a.repositories.SyncMain(r.Context(), currentUserID(r), chi.URLParam(r, "orgID"), chi.URLParam(r, "workspaceID"), chi.URLParam(r, "repositoryID"))
+func (a codeRepositoryAPI) sync(w http.ResponseWriter, r *http.Request) {
+	err := a.repositories.Sync(r.Context(), currentUserID(r), chi.URLParam(r, "orgID"), chi.URLParam(r, "workspaceID"), chi.URLParam(r, "repositoryID"))
 	respond(w, nil, err, http.StatusNoContent)
 }

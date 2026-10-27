@@ -8,18 +8,18 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
+	"github.com/josemiguelmelo/orkest/internal/core/secretbox"
 	"github.com/josemiguelmelo/orkest/internal/orchestration"
 	"github.com/josemiguelmelo/orkest/internal/postgres/sqlc"
-	"github.com/josemiguelmelo/orkest/internal/taskintegration"
 )
 
 type AgentLaunchPostgresRepository struct {
 	queries   *sqlc.Queries
 	pool      *pgxpool.Pool
-	secretBox *taskintegration.SecretBox
+	secretBox *secretbox.Box
 }
 
-func NewAgentLaunchPostgresRepository(database *PostgresDatabase, boxes ...*taskintegration.SecretBox) *AgentLaunchPostgresRepository {
+func NewAgentLaunchPostgresRepository(database *PostgresDatabase, boxes ...*secretbox.Box) *AgentLaunchPostgresRepository {
 	repo := &AgentLaunchPostgresRepository{queries: sqlc.New(database.pool), pool: database.pool}
 	if len(boxes) > 0 {
 		repo.secretBox = boxes[0]

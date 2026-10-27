@@ -10,14 +10,14 @@ import (
 	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
 	"github.com/josemiguelmelo/orkest/internal/core/ids"
+	"github.com/josemiguelmelo/orkest/internal/core/secretbox"
 	"github.com/josemiguelmelo/orkest/internal/orchestration"
-	"github.com/josemiguelmelo/orkest/internal/taskintegration"
 )
 
 func testTaskSessions(t *testing.T, database *PostgresDatabase, orgID, workspaceID, taskID string) {
 	t.Helper()
 	ctx := context.Background()
-	box, err := taskintegration.NewSecretBox("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	box, err := secretbox.New("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 	if err != nil {
 		t.Fatal(err)
 	}

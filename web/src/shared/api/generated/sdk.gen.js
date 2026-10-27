@@ -474,7 +474,7 @@ export const syncCodeRepositoryMain = (options) => (options.client ?? client).po
             name: 'orkest_session',
             type: 'apiKey'
         }],
-    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/code-repositories/{repositoryID}/sync-main',
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/code-repositories/{repositoryID}/sync',
     ...options
 });
 export const listTaskIntegrations = (options) => (options.client ?? client).get({

@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-func TestCloneAndSyncMain(t *testing.T) {
+func TestCloneAndSync(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git executable is unavailable")
 	}
@@ -26,7 +26,7 @@ func TestCloneAndSyncMain(t *testing.T) {
 	runTestGit(t, work, "add", "state.txt")
 	runTestGit(t, work, "commit", "-m", "first")
 	runTestGit(t, work, "push", "origin", "main")
-	provider := NewGitHubCodeRepositoryProvider()
+	provider := NewGitHubProvider()
 	if err := provider.Clone(ctx, bare, checkout); err != nil {
 		t.Fatalf("clone: %v", err)
 	}
@@ -34,7 +34,7 @@ func TestCloneAndSyncMain(t *testing.T) {
 	runTestGit(t, work, "commit", "-am", "second")
 	runTestGit(t, work, "push", "origin", "main")
 	writeTestFile(t, filepath.Join(checkout, "state.txt"), "local dirty state")
-	if err := provider.SyncMain(ctx, bare, checkout); err != nil {
+	if err := provider.Sync(ctx, bare, checkout); err != nil {
 		t.Fatalf("sync main: %v", err)
 	}
 	if got := readTestFile(t, filepath.Join(checkout, "state.txt")); got != "second" {
@@ -42,7 +42,7 @@ func TestCloneAndSyncMain(t *testing.T) {
 	}
 }
 
-func TestSyncMainRejectsDifferentOrigin(t *testing.T) {
+func TestSyncRejectsDifferentOrigin(t *testing.T) {
 	root := t.TempDir()
 	first := filepath.Join(root, "first.git")
 	second := filepath.Join(root, "second.git")
@@ -50,8 +50,8 @@ func TestSyncMainRejectsDifferentOrigin(t *testing.T) {
 	runTestGit(t, root, "init", "--bare", "--initial-branch=main", first)
 	runTestGit(t, root, "init", "--bare", "--initial-branch=main", second)
 	runTestGit(t, root, "clone", first, checkout)
-	if err := NewGitHubCodeRepositoryProvider().SyncMain(context.Background(), second, checkout); err == nil {
-		t.Fatal("SyncMain succeeded for a checkout with a different origin")
+	if err := NewGitHubProvider().Sync(context.Background(), second, checkout); err == nil {
+		t.Fatal("Sync succeeded for a checkout with a different origin")
 	}
 }
 
@@ -72,7 +72,7 @@ func TestPrepareTaskCheckoutCreatesAndReusesTaskBranch(t *testing.T) {
 	runTestGit(t, source, "commit", "-m", "initial")
 	runTestGit(t, source, "push", "origin", "main")
 
-	provider := NewGitHubCodeRepositoryProvider()
+	provider := NewGitHubProvider()
 	branch := "orkest/task-task-id"
 	if err := provider.PrepareTaskCheckout(context.Background(), remote, checkout, branch); err != nil {
 		t.Fatalf("prepare checkout: %v", err)

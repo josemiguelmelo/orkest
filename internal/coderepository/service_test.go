@@ -2,6 +2,7 @@ package coderepository
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"path/filepath"
 	"testing"
@@ -58,12 +59,40 @@ func (p *providerStub) Clone(_ context.Context, repositoryURL, path string) erro
 	return nil
 }
 
-func (p *providerStub) SyncMain(_ context.Context, repositoryURL, path string) error {
+func (p *providerStub) Sync(_ context.Context, repositoryURL, path string) error {
 	p.syncURL, p.syncPath = repositoryURL, path
 	return nil
 }
 
 func (*providerStub) PrepareTaskCheckout(context.Context, string, string, string) error { return nil }
+
+func (providerStub) ConfigSchema() json.RawMessage { return json.RawMessage(`{}`) }
+
+func (providerStub) ValidateConfig(json.RawMessage) error { return nil }
+
+func (providerStub) ValidateAuthentication(context.Context, json.RawMessage, Credentials) error {
+	return nil
+}
+
+func (providerStub) DiscoverRepositories(context.Context, json.RawMessage, Credentials, int, int) (RepositoryPage, error) {
+	return RepositoryPage{}, nil
+}
+
+func (providerStub) ResolveRepository(context.Context, json.RawMessage, Credentials, string) (RepositoryMetadata, error) {
+	return RepositoryMetadata{}, nil
+}
+func (providerStub) NormalizeRepositoryURL(value string) (string, error) { return value, nil }
+func (providerStub) CloneAuthenticated(context.Context, RepositoryMetadata, Credentials, string) error {
+	return nil
+}
+
+func (providerStub) SyncAuthenticated(context.Context, RepositoryMetadata, Credentials, string) error {
+	return nil
+}
+
+func (providerStub) PrepareAuthenticatedTaskCheckout(context.Context, RepositoryMetadata, Credentials, string, string) error {
+	return nil
+}
 
 func TestCreateNormalizesGitHubURLAndSetsProviderName(t *testing.T) {
 	repository := &repositoryStub{}
@@ -113,7 +142,7 @@ func TestCloneAndSyncUseRegisteredProviderAndRequestedPath(t *testing.T) {
 	if provider.cloneURL != repository.items[0].URL || provider.clonePath != expectedPath {
 		t.Fatalf("unexpected clone arguments: url=%q path=%q", provider.cloneURL, provider.clonePath)
 	}
-	if err := service.SyncMain(context.Background(), "user", "org", "workspace", "repo"); err != nil {
+	if err := service.Sync(context.Background(), "user", "org", "workspace", "repo"); err != nil {
 		t.Fatalf("sync main: %v", err)
 	}
 	if provider.syncURL != repository.items[0].URL || provider.syncPath != expectedPath {

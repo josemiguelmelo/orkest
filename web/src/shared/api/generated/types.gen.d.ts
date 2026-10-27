@@ -1228,7 +1228,7 @@ export type SyncCodeRepositoryMainData = {
         repositoryID: string;
     };
     query?: never;
-    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/code-repositories/{repositoryID}/sync-main';
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/code-repositories/{repositoryID}/sync';
 };
 export type SyncCodeRepositoryMainErrors = {
     /**

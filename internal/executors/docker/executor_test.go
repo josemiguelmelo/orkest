@@ -2,6 +2,7 @@ package docker
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/netip"
 	"os"
@@ -82,7 +83,7 @@ func TestStartAgentctlCreatesIsolatedContainerAndReturnsLoopbackEndpoint(t *test
 
 func TestPrepareRepositoriesUsesProviderAndTaskWorkspacePaths(t *testing.T) {
 	provider := &checkoutProviderStub{}
-	executor := &Executor{repositoryProviders: map[string]coderepository.CodeRepositoryProvider{"test": provider}}
+	executor := &Executor{repositoryProviders: map[string]coderepository.CodingProvider{"test": provider}}
 	workDir := t.TempDir()
 	config := runConfig()
 	config.Repositories = []runconfig.WorkspaceRepository{{ID: "repo-id", ProviderName: "test", URL: "https://example.test/repo.git"}}
@@ -259,11 +260,38 @@ type fakeEngine struct {
 
 type checkoutProviderStub struct{ url, path, branch string }
 
-func (*checkoutProviderStub) ProviderName() string                           { return "test" }
-func (*checkoutProviderStub) Clone(context.Context, string, string) error    { return nil }
-func (*checkoutProviderStub) SyncMain(context.Context, string, string) error { return nil }
+func (*checkoutProviderStub) ProviderName() string                        { return "test" }
+func (*checkoutProviderStub) Clone(context.Context, string, string) error { return nil }
+func (*checkoutProviderStub) Sync(context.Context, string, string) error  { return nil }
 func (p *checkoutProviderStub) PrepareTaskCheckout(_ context.Context, url, path, branch string) error {
 	p.url, p.path, p.branch = url, path, branch
+	return nil
+}
+func (*checkoutProviderStub) ConfigSchema() json.RawMessage        { return json.RawMessage(`{}`) }
+func (*checkoutProviderStub) ValidateConfig(json.RawMessage) error { return nil }
+func (*checkoutProviderStub) ValidateAuthentication(context.Context, json.RawMessage, coderepository.Credentials) error {
+	return nil
+}
+
+func (*checkoutProviderStub) DiscoverRepositories(context.Context, json.RawMessage, coderepository.Credentials, int, int) (coderepository.RepositoryPage, error) {
+	return coderepository.RepositoryPage{}, nil
+}
+
+func (*checkoutProviderStub) ResolveRepository(context.Context, json.RawMessage, coderepository.Credentials, string) (coderepository.RepositoryMetadata, error) {
+	return coderepository.RepositoryMetadata{}, nil
+}
+
+func (*checkoutProviderStub) NormalizeRepositoryURL(value string) (string, error) { return value, nil }
+
+func (*checkoutProviderStub) CloneAuthenticated(context.Context, coderepository.RepositoryMetadata, coderepository.Credentials, string) error {
+	return nil
+}
+
+func (*checkoutProviderStub) SyncAuthenticated(context.Context, coderepository.RepositoryMetadata, coderepository.Credentials, string) error {
+	return nil
+}
+
+func (*checkoutProviderStub) PrepareAuthenticatedTaskCheckout(context.Context, coderepository.RepositoryMetadata, coderepository.Credentials, string, string) error {
 	return nil
 }
 

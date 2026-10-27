@@ -11,7 +11,7 @@ import (
 
 	"github.com/josemiguelmelo/orkest/internal/core/ids"
 	modelerrors "github.com/josemiguelmelo/orkest/internal/core/model/errors"
-	"github.com/josemiguelmelo/orkest/internal/taskintegration"
+	"github.com/josemiguelmelo/orkest/internal/core/secretbox"
 	"github.com/josemiguelmelo/orkest/internal/workspace"
 )
 
@@ -23,11 +23,11 @@ type WorkspaceAccess interface {
 
 type MCPServerService struct {
 	repository MCPServerRepository
-	box        *taskintegration.SecretBox
+	box        *secretbox.Box
 	workspaces WorkspaceAccess
 }
 
-func NewMCPServerService(repository MCPServerRepository, box *taskintegration.SecretBox, workspaces WorkspaceAccess) *MCPServerService {
+func NewMCPServerService(repository MCPServerRepository, box *secretbox.Box, workspaces WorkspaceAccess) *MCPServerService {
 	return &MCPServerService{repository: repository, box: box, workspaces: workspaces}
 }
 
@@ -90,7 +90,7 @@ func (s *MCPServerService) seal(headers map[string]string) (string, error) {
 		return "", nil
 	}
 	if s.box == nil {
-		return "", taskintegration.ErrEncryptionKeyUnavailable
+		return "", secretbox.ErrKeyUnavailable
 	}
 	encoded, err := json.Marshal(headers)
 	if err != nil {
@@ -162,7 +162,7 @@ func (s *MCPServerService) decrypt(encrypted string) (map[string]string, error) 
 		return map[string]string{}, nil
 	}
 	if s.box == nil {
-		return nil, taskintegration.ErrEncryptionKeyUnavailable
+		return nil, secretbox.ErrKeyUnavailable
 	}
 	plain, err := s.box.Open([]byte(encrypted))
 	if err != nil {

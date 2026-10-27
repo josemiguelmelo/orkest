@@ -1,4 +1,4 @@
-package taskintegration
+package secretbox
 
 import (
 	"crypto/aes"
@@ -12,19 +12,19 @@ import (
 	"strings"
 )
 
-var ErrEncryptionKeyUnavailable = errors.New("integration encryption key is not configured")
+var ErrKeyUnavailable = errors.New("integration encryption key is not configured")
 
-type SecretBox struct{ key []byte }
+type Box struct{ key []byte }
 
-func NewSecretBox(hexKey string) (*SecretBox, error) {
+func New(hexKey string) (*Box, error) {
 	key, err := hex.DecodeString(strings.TrimSpace(hexKey))
 	if err != nil || len(key) != 32 {
 		return nil, fmt.Errorf("ORKEST_INTEGRATION_ENCRYPTION_KEY must be 64 hexadecimal characters")
 	}
-	return &SecretBox{key: key}, nil
+	return &Box{key: key}, nil
 }
 
-func (b *SecretBox) Seal(plain string) ([]byte, error) {
+func (b *Box) Seal(plain string) ([]byte, error) {
 	block, err := aes.NewCipher(b.key)
 	if err != nil {
 		return nil, err
@@ -40,10 +40,10 @@ func (b *SecretBox) Seal(plain string) ([]byte, error) {
 	return []byte(base64.StdEncoding.EncodeToString(gcm.Seal(nonce, nonce, []byte(plain), nil))), nil
 }
 
-func (b *SecretBox) Open(ciphertext []byte) (string, error) {
+func (b *Box) Open(ciphertext []byte) (string, error) {
 	decoded, err := base64.StdEncoding.DecodeString(string(ciphertext))
 	if err != nil {
-		return "", fmt.Errorf("invalid encrypted credential")
+		return "", errors.New("invalid encrypted credential")
 	}
 	block, err := aes.NewCipher(b.key)
 	if err != nil {
@@ -54,12 +54,11 @@ func (b *SecretBox) Open(ciphertext []byte) (string, error) {
 		return "", err
 	}
 	if len(decoded) < gcm.NonceSize() {
-		return "", fmt.Errorf("invalid encrypted credential")
+		return "", errors.New("invalid encrypted credential")
 	}
-	nonce, body := decoded[:gcm.NonceSize()], decoded[gcm.NonceSize():]
-	plain, err := gcm.Open(nil, nonce, body, nil)
+	plain, err := gcm.Open(nil, decoded[:gcm.NonceSize()], decoded[gcm.NonceSize():], nil)
 	if err != nil {
-		return "", fmt.Errorf("decrypt integration credential")
+		return "", errors.New("decrypt integration credential")
 	}
 	return string(plain), nil
 }

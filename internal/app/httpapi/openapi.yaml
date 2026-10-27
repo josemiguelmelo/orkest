@@ -490,7 +490,7 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "500":
           $ref: "#/components/responses/InternalServerError"
-  /api/organizations/{orgID}/workspaces/{workspaceID}/code-repositories/{repositoryID}/sync-main:
+  /api/organizations/{orgID}/workspaces/{workspaceID}/code-repositories/{repositoryID}/sync:
     parameters:
       - {name: orgID, in: path, required: true, schema: {type: string}}
       - {name: workspaceID, in: path, required: true, schema: {type: string}}

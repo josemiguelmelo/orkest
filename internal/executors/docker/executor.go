@@ -42,18 +42,18 @@ type EngineClient interface {
 }
 
 type Config struct {
-	DataRoot                string
-	Image                   string
-	AgentctlPort            int
-	ContainerUser           string
-	ProviderEnv             []string
-	CodeRepositoryProviders []coderepository.CodeRepositoryProvider
+	DataRoot        string
+	Image           string
+	AgentctlPort    int
+	ContainerUser   string
+	ProviderEnv     []string
+	CodingProviders []coderepository.CodingProvider
 }
 
 type Executor struct {
 	client              EngineClient
 	config              Config
-	repositoryProviders map[string]coderepository.CodeRepositoryProvider
+	repositoryProviders map[string]coderepository.CodingProvider
 }
 
 func New(ctx context.Context, config Config) (*Executor, error) {
@@ -103,8 +103,8 @@ func NewWithClient(ctx context.Context, config Config, client EngineClient) (*Ex
 		return nil, err
 	}
 	config.DataRoot, config.Image, config.AgentctlPort, config.ContainerUser = root, image, port, containerUser
-	providers := make(map[string]coderepository.CodeRepositoryProvider, len(config.CodeRepositoryProviders))
-	for _, provider := range config.CodeRepositoryProviders {
+	providers := make(map[string]coderepository.CodingProvider, len(config.CodingProviders))
+	for _, provider := range config.CodingProviders {
 		if provider == nil || strings.TrimSpace(provider.ProviderName()) == "" {
 			return nil, errors.New("code repository provider name is required")
 		}

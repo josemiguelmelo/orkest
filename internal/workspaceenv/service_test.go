@@ -6,7 +6,7 @@ import (
 	"testing"
 
 	modelerrors "github.com/josemiguelmelo/orkest/internal/core/model/errors"
-	"github.com/josemiguelmelo/orkest/internal/taskintegration"
+	"github.com/josemiguelmelo/orkest/internal/core/secretbox"
 	"github.com/josemiguelmelo/orkest/internal/workspace"
 )
 
@@ -44,7 +44,7 @@ func (w workspaceStub) GetWorkspace(context.Context, string, string, string) (wo
 }
 
 func TestSecretsAreWriteOnlyAndResolveForRuns(t *testing.T) {
-	box, err := taskintegration.NewSecretBox("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	box, err := secretbox.New("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,7 +84,7 @@ func TestManageRequiresAdminAndValidNames(t *testing.T) {
 }
 
 func TestEnvironmentSnapshotIsEncrypted(t *testing.T) {
-	box, err := taskintegration.NewSecretBox("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	box, err := secretbox.New("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
 	if err != nil {
 		t.Fatal(err)
 	}

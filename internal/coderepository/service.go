@@ -21,11 +21,11 @@ type Service struct {
 	repository CodeReposRepository
 	workspaces WorkspaceAccess
 	dataRoot   string
-	providers  map[string]CodeRepositoryProvider
+	providers  map[string]CodingProvider
 }
 
-func NewService(repository CodeReposRepository, workspaces WorkspaceAccess, dataRoot string, providers ...CodeRepositoryProvider) *Service {
-	providerMap := make(map[string]CodeRepositoryProvider, len(providers))
+func NewService(repository CodeReposRepository, workspaces WorkspaceAccess, dataRoot string, providers ...CodingProvider) *Service {
+	providerMap := make(map[string]CodingProvider, len(providers))
 	for _, provider := range providers {
 		providerMap[provider.ProviderName()] = provider
 	}
@@ -81,7 +81,7 @@ func (s *Service) Clone(ctx context.Context, userID, orgID, workspaceID, id stri
 	return s.runOperation(ctx, userID, orgID, workspaceID, id, true)
 }
 
-func (s *Service) SyncMain(ctx context.Context, userID, orgID, workspaceID, id string) error {
+func (s *Service) Sync(ctx context.Context, userID, orgID, workspaceID, id string) error {
 	return s.runOperation(ctx, userID, orgID, workspaceID, id, false)
 }
 
@@ -110,7 +110,7 @@ func (s *Service) runOperation(ctx context.Context, userID, orgID, workspaceID, 
 	if clone {
 		return provider.Clone(ctx, repository.URL, path)
 	}
-	return provider.SyncMain(ctx, repository.URL, path)
+	return provider.Sync(ctx, repository.URL, path)
 }
 
 func repositoryPath(dataRoot, organizationID, workspaceID, providerName, repositoryID string) (string, error) {
