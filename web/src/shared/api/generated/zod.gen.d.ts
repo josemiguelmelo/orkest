@@ -70,6 +70,15 @@ export declare const zWorkspace: z.ZodObject<{
         viewer: "viewer";
     }>>;
 }, z.core.$strip>;
+export declare const zWorkspaceEnvironmentInput: z.ZodObject<{
+    value: z.ZodString;
+    secret: z.ZodDefault<z.ZodOptional<z.ZodBoolean>>;
+}, z.core.$strip>;
+export declare const zWorkspaceEnvironmentValue: z.ZodObject<{
+    name: z.ZodString;
+    secret: z.ZodBoolean;
+    value: z.ZodOptional<z.ZodString>;
+}, z.core.$strip>;
 export declare const zMembership: z.ZodObject<{
     user: z.ZodObject<{
         id: z.ZodString;
@@ -567,6 +576,42 @@ export declare const zListWorkspaceMembersResponse: z.ZodArray<z.ZodObject<{
         viewer: "viewer";
     }>;
 }, z.core.$strip>>;
+export declare const zListWorkspaceEnvironmentPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+}, z.core.$strip>;
+/**
+ * Variables are returned with values; secrets return only their names and secret status
+ */
+export declare const zListWorkspaceEnvironmentResponse: z.ZodArray<z.ZodObject<{
+    name: z.ZodString;
+    secret: z.ZodBoolean;
+    value: z.ZodOptional<z.ZodString>;
+}, z.core.$strip>>;
+export declare const zDeleteWorkspaceEnvironmentPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+    name: z.ZodString;
+}, z.core.$strip>;
+/**
+ * Value deleted
+ */
+export declare const zDeleteWorkspaceEnvironmentResponse: z.ZodVoid;
+export declare const zPutWorkspaceEnvironmentBody: z.ZodObject<{
+    value: z.ZodString;
+    secret: z.ZodDefault<z.ZodOptional<z.ZodBoolean>>;
+}, z.core.$strip>;
+export declare const zPutWorkspaceEnvironmentPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+    name: z.ZodString;
+}, z.core.$strip>;
+/**
+ * Value updated
+ */
+export declare const zPutWorkspaceEnvironmentResponse: z.ZodObject<{
+    status: z.ZodString;
+}, z.core.$strip>;
 export declare const zRemoveWorkspaceMemberPath: z.ZodObject<{
     orgID: z.ZodString;
     workspaceID: z.ZodString;

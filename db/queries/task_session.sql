@@ -9,6 +9,10 @@ WHERE organization_id = $1 AND workspace_id = $2 AND task_id = $3 AND is_current
 UPDATE task_agent_sessions SET is_current = false
 WHERE organization_id = $1 AND workspace_id = $2 AND task_id = $3 AND is_current;
 
+-- name: UpdateTaskAgentSessionConfiguration :execrows
+UPDATE task_agent_sessions SET configuration = sqlc.arg(configuration)::jsonb
+WHERE organization_id = $1 AND workspace_id = $2 AND task_id = $3 AND is_current;
+
 -- name: InsertTaskAgentSession :exec
 INSERT INTO task_agent_sessions(id, organization_id, workspace_id, task_id, configuration)
 VALUES ($1, $2, $3, $4, $5);

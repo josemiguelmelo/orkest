@@ -38,6 +38,18 @@ export type Workspace = {
     name: string;
     role?: 'owner' | 'admin' | 'member' | 'viewer';
 };
+export type WorkspaceEnvironmentInput = {
+    value: string;
+    secret?: boolean;
+};
+export type WorkspaceEnvironmentValue = {
+    name: string;
+    secret: boolean;
+    /**
+     * Omitted for secrets
+     */
+    value?: string;
+};
 export type Membership = {
     user: User;
     role: 'owner' | 'admin' | 'member' | 'viewer';
@@ -827,6 +839,121 @@ export type ListWorkspaceMembersResponses = {
     200: Array<Membership>;
 };
 export type ListWorkspaceMembersResponse = ListWorkspaceMembersResponses[keyof ListWorkspaceMembersResponses];
+export type ListWorkspaceEnvironmentData = {
+    body?: never;
+    path: {
+        orgID: string;
+        workspaceID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/environment';
+};
+export type ListWorkspaceEnvironmentErrors = {
+    /**
+     * Missing or invalid credentials
+     */
+    401: Error;
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+    /**
+     * Resource is absent or inaccessible
+     */
+    404: Error;
+    /**
+     * Internal server error
+     */
+    500: Error;
+};
+export type ListWorkspaceEnvironmentError = ListWorkspaceEnvironmentErrors[keyof ListWorkspaceEnvironmentErrors];
+export type ListWorkspaceEnvironmentResponses = {
+    /**
+     * Variables are returned with values; secrets return only their names and secret status
+     */
+    200: Array<WorkspaceEnvironmentValue>;
+};
+export type ListWorkspaceEnvironmentResponse = ListWorkspaceEnvironmentResponses[keyof ListWorkspaceEnvironmentResponses];
+export type DeleteWorkspaceEnvironmentData = {
+    body?: never;
+    path: {
+        orgID: string;
+        workspaceID: string;
+        name: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/environment/{name}';
+};
+export type DeleteWorkspaceEnvironmentErrors = {
+    /**
+     * Missing or invalid credentials
+     */
+    401: Error;
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+    /**
+     * Resource is absent or inaccessible
+     */
+    404: Error;
+    /**
+     * Internal server error
+     */
+    500: Error;
+};
+export type DeleteWorkspaceEnvironmentError = DeleteWorkspaceEnvironmentErrors[keyof DeleteWorkspaceEnvironmentErrors];
+export type DeleteWorkspaceEnvironmentResponses = {
+    /**
+     * Value deleted
+     */
+    204: void;
+};
+export type DeleteWorkspaceEnvironmentResponse = DeleteWorkspaceEnvironmentResponses[keyof DeleteWorkspaceEnvironmentResponses];
+export type PutWorkspaceEnvironmentData = {
+    body: WorkspaceEnvironmentInput;
+    path: {
+        orgID: string;
+        workspaceID: string;
+        name: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/environment/{name}';
+};
+export type PutWorkspaceEnvironmentErrors = {
+    /**
+     * Request body or role is invalid
+     */
+    400: Error;
+    /**
+     * Missing or invalid credentials
+     */
+    401: Error;
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+    /**
+     * Resource is absent or inaccessible
+     */
+    404: Error;
+    /**
+     * Internal server error
+     */
+    500: Error;
+    /**
+     * Secret encryption key is unavailable
+     */
+    503: Error;
+};
+export type PutWorkspaceEnvironmentError = PutWorkspaceEnvironmentErrors[keyof PutWorkspaceEnvironmentErrors];
+export type PutWorkspaceEnvironmentResponses = {
+    /**
+     * Value updated
+     */
+    200: OperationStatus;
+};
+export type PutWorkspaceEnvironmentResponse = PutWorkspaceEnvironmentResponses[keyof PutWorkspaceEnvironmentResponses];
 export type RemoveWorkspaceMemberData = {
     body?: never;
     path: {

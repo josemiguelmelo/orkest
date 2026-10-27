@@ -9,7 +9,8 @@ import (
 // It is separate from reusable agent definitions and process startup options.
 type RunConfig struct {
 	RuntimeConfig
-	RestoreSession bool `json:"restoreSession,omitempty"`
+	RestoreSession       bool   `json:"restoreSession,omitempty"`
+	EncryptedEnvironment string `json:"encryptedEnvironment,omitempty"`
 	// Repositories are executor-only checkout inputs and are intentionally
 	// excluded from the agentctl HTTP configuration payload.
 	Repositories     []WorkspaceRepository `json:"-"`

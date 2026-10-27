@@ -93,6 +93,12 @@ export const mcpQuery = (s: WorkspaceScope) =>
     queryKey: [...keys.workspace(s), 'mcp'],
     queryFn: ({ signal }) => data(sdk.listMcpServers({ ...command, path: path(s), signal })),
   });
+export const workspaceEnvironmentQuery = (s: WorkspaceScope) =>
+  queryOptions({
+    queryKey: [...keys.workspace(s), 'environment'],
+    queryFn: ({ signal }) =>
+      data(sdk.listWorkspaceEnvironment({ ...command, path: path(s), signal })),
+  });
 export const integrationsQuery = (s: WorkspaceScope) =>
   queryOptions({
     queryKey: [...keys.workspace(s), 'integrations'],

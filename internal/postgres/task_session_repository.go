@@ -13,6 +13,7 @@ import (
 	modelerrors "github.com/josemiguelmelo/orkest/internal/core/model/errors"
 	"github.com/josemiguelmelo/orkest/internal/orchestration"
 	"github.com/josemiguelmelo/orkest/internal/postgres/sqlc"
+	"github.com/josemiguelmelo/orkest/internal/taskintegration"
 )
 
 func (r *AgentLaunchPostgresRepository) CurrentSession(ctx context.Context, orgID, workspaceID, taskID string) (runconfig.RunConfig, bool, error) {
@@ -26,6 +27,19 @@ func (r *AgentLaunchPostgresRepository) CurrentSession(ctx context.Context, orgI
 	var config runconfig.RunConfig
 	if err := json.Unmarshal(row.Configuration, &config); err != nil {
 		return config, false, fmt.Errorf("decode session configuration: %w", err)
+	}
+	if config.EncryptedEnvironment != "" {
+		if r.secretBox == nil {
+			return config, false, taskintegration.ErrEncryptionKeyUnavailable
+		}
+		plain, err := r.secretBox.Open([]byte(config.EncryptedEnvironment))
+		if err != nil {
+			return config, false, errors.New("decrypt task session environment")
+		}
+		if err := json.Unmarshal([]byte(plain), &config.Environment); err != nil {
+			return config, false, errors.New("decode task session environment")
+		}
+		config.EncryptedEnvironment = ""
 	}
 	config.TaskSessionID = row.ID
 	return config, true, nil
@@ -55,13 +69,15 @@ func (r *AgentLaunchPostgresRepository) ReserveSessionRun(ctx context.Context, c
 		if current.ID != config.TaskSessionID {
 			return modelerrors.ErrConflict
 		}
-	} else {
-		snapshot := config
-		snapshot.MCPServers = append([]runconfig.MCPServer(nil), config.MCPServers...)
-		for i := range snapshot.MCPServers {
-			snapshot.MCPServers[i].Headers = nil
+		data, err := r.sessionSnapshot(config)
+		if err != nil {
+			return err
 		}
-		data, err := json.Marshal(snapshot)
+		if _, err := q.UpdateTaskAgentSessionConfiguration(ctx, sqlc.UpdateTaskAgentSessionConfigurationParams{OrganizationID: config.OrganizationID, WorkspaceID: config.WorkspaceID, TaskID: config.TaskID, Configuration: data}); err != nil {
+			return err
+		}
+	} else {
+		data, err := r.sessionSnapshot(config)
 		if err != nil {
 			return err
 		}
@@ -81,6 +97,30 @@ func (r *AgentLaunchPostgresRepository) ReserveSessionRun(ctx context.Context, c
 		}
 	}
 	return tx.Commit(ctx)
+}
+
+func (r *AgentLaunchPostgresRepository) sessionSnapshot(config runconfig.RunConfig) ([]byte, error) {
+	snapshot := config
+	snapshot.MCPServers = append([]runconfig.MCPServer(nil), config.MCPServers...)
+	for i := range snapshot.MCPServers {
+		snapshot.MCPServers[i].Headers = nil
+	}
+	if len(snapshot.Environment) > 0 {
+		if r.secretBox == nil {
+			return nil, taskintegration.ErrEncryptionKeyUnavailable
+		}
+		encoded, err := json.Marshal(snapshot.Environment)
+		if err != nil {
+			return nil, err
+		}
+		sealed, err := r.secretBox.Seal(string(encoded))
+		if err != nil {
+			return nil, err
+		}
+		snapshot.EncryptedEnvironment = string(sealed)
+		snapshot.Environment = nil
+	}
+	return json.Marshal(snapshot)
 }
 
 func (r *AgentLaunchPostgresRepository) RecordPrompt(ctx context.Context, runID, commandID, prompt string) (bool, error) {

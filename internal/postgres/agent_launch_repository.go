@@ -10,15 +10,21 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
 	"github.com/josemiguelmelo/orkest/internal/orchestration"
 	"github.com/josemiguelmelo/orkest/internal/postgres/sqlc"
+	"github.com/josemiguelmelo/orkest/internal/taskintegration"
 )
 
 type AgentLaunchPostgresRepository struct {
-	queries *sqlc.Queries
-	pool    *pgxpool.Pool
+	queries   *sqlc.Queries
+	pool      *pgxpool.Pool
+	secretBox *taskintegration.SecretBox
 }
 
-func NewAgentLaunchPostgresRepository(database *PostgresDatabase) *AgentLaunchPostgresRepository {
-	return &AgentLaunchPostgresRepository{queries: sqlc.New(database.pool), pool: database.pool}
+func NewAgentLaunchPostgresRepository(database *PostgresDatabase, boxes ...*taskintegration.SecretBox) *AgentLaunchPostgresRepository {
+	repo := &AgentLaunchPostgresRepository{queries: sqlc.New(database.pool), pool: database.pool}
+	if len(boxes) > 0 {
+		repo.secretBox = boxes[0]
+	}
+	return repo
 }
 
 var (

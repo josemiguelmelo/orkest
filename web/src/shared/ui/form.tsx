@@ -50,18 +50,25 @@ export function Form<T extends FieldValues>({
   children,
   error,
   label = 'Save changes',
+  onCancel,
 }: {
   form: UseFormReturn<T>;
   onSubmit: (values: T) => Promise<void>;
   children: ReactNode;
   error: unknown;
   label?: string;
+  onCancel?: () => void;
 }) {
   return (
     <form className="form" onSubmit={form.handleSubmit(onSubmit)}>
       {children}
       {error !== undefined && error !== null && <ErrorState error={error} />}
       <div className="form-actions">
+        {onCancel && (
+          <Button variant="outline" disabled={form.formState.isSubmitting} onClick={onCancel}>
+            Cancel
+          </Button>
+        )}
         <Button type="submit" disabled={form.formState.isSubmitting}>
           {form.formState.isSubmitting ? 'Saving…' : label}
         </Button>

@@ -29,6 +29,7 @@ import (
 	githubcloud "github.com/josemiguelmelo/orkest/internal/taskintegration/providers/githubcloud"
 	jiraserver "github.com/josemiguelmelo/orkest/internal/taskintegration/providers/jiraserver"
 	"github.com/josemiguelmelo/orkest/internal/workspace"
+	"github.com/josemiguelmelo/orkest/internal/workspaceenv"
 )
 
 // Run owns the platform HTTP lifecycle; it does not own agent processes.
@@ -67,9 +68,10 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 		}
 	}
 	mcpServerService := mcpserver.NewMCPServerService(postgres.NewMCPServerPostgresRepository(database), secretBox, workspaces)
+	workspaceEnvironment := workspaceenv.NewService(postgres.NewWorkspaceEnvironmentPostgresRepository(database), workspaces, secretBox)
 	agents := agent.NewService(postgres.NewAgentPostgresRepository(database), workspaces, mcpServerService, skillCatalog)
 	codeRepositories := coderepository.NewService(postgres.NewCodeReposPostgresRepository(database), workspaces, dataRoot, githubprovider.NewGitHubCodeRepositoryProvider())
-	launchRepo := postgres.NewAgentLaunchPostgresRepository(database)
+	launchRepo := postgres.NewAgentLaunchPostgresRepository(database, secretBox)
 	client := orchestration.NewHTTPAgentctlClient(httplog.PropagatingHTTPClient(&http.Client{Timeout: 10 * time.Second}))
 	executor, executorErr := docker.New(ctx, docker.Config{
 		DataRoot:                filepath.Join(dataRoot, "agent-executions"),
@@ -108,13 +110,14 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 	}
 	dispatcher.SetRepositoryResolver(codeRepositories)
 	dispatcher.SetSkillResolver(skillCatalog)
+	dispatcher.SetEnvironmentResolver(workspaceEnvironment)
 	tasks := task.NewService(postgres.NewTaskPostgresRepository(database), workspaces, dispatcher)
 	integrations := taskintegration.NewTaskIntegrationService(postgres.NewPostgresTaskIntegrationRepository(database), secretBox, workspaces, organizations, postgres.NewPostgresImportedTaskRepository(database), githubcloud.NewGitHubCloudProvider(), jiraserver.NewJiraServerProvider())
 	runnerCtx, stopRunner := context.WithCancel(ctx)
 	var runnerWG sync.WaitGroup
 	runnerWG.Add(1)
 	go func() { defer runnerWG.Done(); integrations.Run(runnerCtx) }()
-	router, err := httpapi.NewRouter(users, organizations, workspaces, agents, codeRepositories, tasks, integrations, mcpServerService, skillCatalog, launchService)
+	router, err := httpapi.NewRouter(users, organizations, workspaces, agents, codeRepositories, tasks, integrations, mcpServerService, skillCatalog, launchService, workspaceEnvironment)
 	if err != nil {
 		stopRunner()
 		runnerWG.Wait()

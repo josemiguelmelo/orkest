@@ -1,19 +1,30 @@
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { useQuery } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { ArrowUpRight, Folder, Layers, Users } from 'lucide-react';
+import {
+  ArrowUpRight,
+  Braces,
+  Eye,
+  EyeOff,
+  Folder,
+  KeyRound,
+  Layers,
+  LockKeyhole,
+  Users,
+} from 'lucide-react';
 import { useApp } from '../../app/context';
 import { command, data } from '../../shared/api/client';
 import * as sdk from '../../shared/api/generated/sdk.gen';
-import type { Membership } from '../../shared/api/generated/types.gen';
+import type { Membership, WorkspaceEnvironmentValue } from '../../shared/api/generated/types.gen';
 import {
   membersQuery,
   organizationsQuery,
   path,
   useRefresh,
+  workspaceEnvironmentQuery,
   workspacesQuery,
 } from '../../shared/api/queries';
 import {
@@ -31,6 +42,23 @@ import { Field, Form } from '../../shared/ui/form';
 import { useAction } from '../../shared/use-action';
 
 const nameSchema = z.object({ name: z.string().trim().min(1, 'Enter a name.').max(200) });
+const environmentSchema = z
+  .object({
+    name: z
+      .string()
+      .regex(/^[A-Za-z_][A-Za-z0-9_]*$/, 'Use a valid environment variable name.')
+      .refine(
+        (name) => name !== 'HOME' && !/^(ORKEST_|OPENCODE_|XDG_)/.test(name),
+        'This name is reserved by the runner.',
+      ),
+    value: z.string().max(65536, 'Values must be 64 KB or less.'),
+    secret: z.boolean(),
+  })
+  .superRefine((values, context) => {
+    if (values.secret && !values.value) {
+      context.addIssue({ code: 'custom', path: ['value'], message: 'Enter a secret value.' });
+    }
+  });
 function NameDialog({
   title,
   name = '',
@@ -247,6 +275,7 @@ export function WorkspaceSettingsPage() {
           </Button>
         )}
       </PageHeader>
+      <WorkspaceEnvironmentPanel />
       <Members workspace />
       {permissions.workspaceAdmin && (
         <section className="panel">
@@ -278,6 +307,264 @@ export function WorkspaceSettingsPage() {
         />
       )}
     </>
+  );
+}
+
+function WorkspaceEnvironmentPanel() {
+  const { scope, permissions } = useApp();
+  const values = useQuery(workspaceEnvironmentQuery(scope));
+  const refresh = useRefresh();
+  const [editing, setEditing] = useState<WorkspaceEnvironmentValue | null | undefined>();
+  return (
+    <section className="panel">
+      <div className="panel-heading">
+        <div>
+          <h2>Environment variables &amp; secrets</h2>
+          <p className="muted">
+            Available to agents and their tools in future runs. Secret values are encrypted and
+            cannot be viewed after saving.
+          </p>
+        </div>
+        {permissions.workspaceAdmin && (
+          <CreateButton onClick={() => setEditing(null)}>Add value</CreateButton>
+        )}
+      </div>
+      {values.isPending ? (
+        <Loading />
+      ) : values.isError ? (
+        <ErrorState error={values.error} retry={() => void values.refetch()} />
+      ) : values.data.length ? (
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Type</th>
+                <th>Value</th>
+                {permissions.workspaceAdmin && <th>Actions</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {values.data.map((item) => (
+                <tr key={item.name}>
+                  <td>
+                    <code>{item.name}</code>
+                  </td>
+                  <td>
+                    <Badge>{item.secret ? 'Secret' : 'Variable'}</Badge>
+                  </td>
+                  <td>
+                    {item.secret ? (
+                      <span className="muted">Stored · hidden</span>
+                    ) : (
+                      <code className="env-value">{item.value}</code>
+                    )}
+                  </td>
+                  {permissions.workspaceAdmin && (
+                    <td>
+                      <div className="actions">
+                        <Button variant="outline" size="sm" onClick={() => setEditing(item)}>
+                          {item.secret ? 'Replace' : 'Edit'}
+                        </Button>
+                        <ConfirmButton
+                          title={`Delete ${item.name}?`}
+                          description="This removes the value from future runs. Active runs keep their existing environment."
+                          onConfirm={async () => {
+                            await data(
+                              sdk.deleteWorkspaceEnvironment({
+                                ...command,
+                                path: { ...path(scope), name: item.name },
+                              }),
+                            );
+                            await refresh(scope);
+                          }}
+                        />
+                      </div>
+                    </td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <Empty title="No environment values configured">
+          Add variables and secrets that your workspace agents need at runtime.
+        </Empty>
+      )}
+      {editing !== undefined && (
+        <EnvironmentEditor
+          key={editing?.name ?? 'new'}
+          item={editing}
+          onClose={() => setEditing(undefined)}
+        />
+      )}
+    </section>
+  );
+}
+
+function EnvironmentEditor({
+  item,
+  onClose,
+}: {
+  item: WorkspaceEnvironmentValue | null;
+  onClose: () => void;
+}) {
+  const { scope } = useApp();
+  const refresh = useRefresh();
+  const action = useAction();
+  const [reveal, setReveal] = useState(false);
+  const valueID = useId();
+  const form = useForm({
+    resolver: zodResolver(environmentSchema),
+    defaultValues: {
+      name: item?.name ?? '',
+      value: item?.secret ? '' : (item?.value ?? ''),
+      secret: item?.secret ?? false,
+    },
+  });
+  const isSecret = form.watch('secret');
+  return (
+    <Dialog
+      title={
+        item
+          ? item.secret
+            ? 'Replace secret'
+            : 'Edit environment variable'
+          : 'Add environment value'
+      }
+      {...(item?.secret
+        ? { description: 'Enter a new value. The stored secret cannot be retrieved.' }
+        : {})}
+      open
+      onOpenChange={(open) => {
+        if (!open && !action.pending) onClose();
+      }}
+    >
+      <Form
+        form={form}
+        error={action.error}
+        label={
+          item?.secret && isSecret ? 'Replace secret' : isSecret ? 'Save secret' : 'Save variable'
+        }
+        onCancel={onClose}
+        onSubmit={async (input) => {
+          if (
+            await action.run(async () => {
+              await data(
+                sdk.putWorkspaceEnvironment({
+                  ...command,
+                  path: { ...path(scope), name: item?.name ?? input.name },
+                  body: { value: input.value, secret: input.secret },
+                }),
+              );
+              await refresh(scope);
+            })
+          )
+            onClose();
+        }}
+      >
+        <fieldset className="env-type-picker">
+          <legend>What are you adding?</legend>
+          <div className="env-type-options">
+            <button
+              type="button"
+              className={`env-type-card ${!isSecret ? 'is-selected' : ''}`}
+              aria-pressed={!isSecret}
+              onClick={() =>
+                form.setValue('secret', false, { shouldDirty: true, shouldValidate: true })
+              }
+            >
+              <span className="env-type-icon">
+                <Braces size={18} />
+              </span>
+              <span className="env-type-copy">
+                <strong>Variable</strong>
+                <small>Visible to workspace members</small>
+              </span>
+            </button>
+            <button
+              type="button"
+              className={`env-type-card ${isSecret ? 'is-selected is-secret' : ''}`}
+              aria-pressed={isSecret}
+              onClick={() =>
+                form.setValue('secret', true, { shouldDirty: true, shouldValidate: true })
+              }
+            >
+              <span className="env-type-icon">
+                <KeyRound size={18} />
+              </span>
+              <span className="env-type-copy">
+                <strong>Secret</strong>
+                <small>Encrypted and hidden after saving</small>
+              </span>
+            </button>
+          </div>
+        </fieldset>
+        <Field
+          label="Variable name"
+          hint="Use letters, numbers, and underscores; start with a letter or underscore."
+          error={form.formState.errors.name?.message}
+        >
+          <input
+            {...form.register('name')}
+            readOnly={!!item}
+            autoFocus={!item}
+            autoCapitalize="none"
+            autoCorrect="off"
+            autoComplete="off"
+            spellCheck={false}
+            placeholder="e.g. API_BASE_URL"
+          />
+        </Field>
+        {isSecret && (
+          <div className="env-secret-note">
+            <LockKeyhole size={17} />
+            <p>
+              Secret values are encrypted at rest and never shown again. You can replace or delete a
+              secret later.
+            </p>
+          </div>
+        )}
+        <div className="field">
+          <label htmlFor={valueID}>{isSecret ? 'Secret value' : 'Variable value'}</label>
+          <div className="env-value-control">
+            <input
+              id={valueID}
+              type={isSecret && !reveal ? 'password' : 'text'}
+              autoComplete="new-password"
+              autoCapitalize="none"
+              spellCheck={false}
+              placeholder={isSecret ? 'Enter the secret value' : 'Enter the value'}
+              aria-invalid={!!form.formState.errors.value}
+              aria-describedby={form.formState.errors.value ? `${valueID}-error` : undefined}
+              {...form.register('value')}
+            />
+            {isSecret && (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="env-reveal"
+                aria-label={reveal ? 'Hide secret value' : 'Show secret value'}
+                title={reveal ? 'Hide value' : 'Show value'}
+                onClick={() => setReveal((current) => !current)}
+              >
+                {reveal ? <EyeOff size={17} /> : <Eye size={17} />}
+              </Button>
+            )}
+          </div>
+          {item?.secret && (
+            <small className="muted">The existing secret is hidden. Saving replaces it.</small>
+          )}
+          {form.formState.errors.value?.message && (
+            <span id={`${valueID}-error`} className="field-error" role="alert">
+              {form.formState.errors.value.message}
+            </span>
+          )}
+        </div>
+      </Form>
+    </Dialog>
   );
 }
 const memberSchema = z.object({

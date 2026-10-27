@@ -13,6 +13,8 @@ tags:
     description: Organizations and organization memberships.
   - name: Workspaces
     description: Workspaces and workspace memberships.
+  - name: WorkspaceEnvironment
+    description: Workspace-scoped environment variables and secrets.
   - name: Agents
     description: Workspace-scoped reusable agent definitions.
   - name: Skills
@@ -323,6 +325,48 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "500":
           $ref: "#/components/responses/InternalServerError"
+  /api/organizations/{orgID}/workspaces/{workspaceID}/environment:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [WorkspaceEnvironment]
+      operationId: listWorkspaceEnvironment
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      responses:
+        "200": {description: Variables are returned with values; secrets return only their names and secret status, content: {application/json: {schema: {type: array, items: {$ref: "#/components/schemas/WorkspaceEnvironmentValue"}}}}}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "500": {$ref: "#/components/responses/InternalServerError"}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/environment/{name}:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+      - {name: name, in: path, required: true, schema: {type: string, pattern: '^[A-Za-z_][A-Za-z0-9_]*$'}}
+    put:
+      tags: [WorkspaceEnvironment]
+      operationId: putWorkspaceEnvironment
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/WorkspaceEnvironmentInput"}}}}
+      responses:
+        "200": {description: Value updated, content: {application/json: {schema: {$ref: "#/components/schemas/OperationStatus"}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "503": {description: Secret encryption key is unavailable, content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}}
+        "500": {$ref: "#/components/responses/InternalServerError"}
+    delete:
+      tags: [WorkspaceEnvironment]
+      operationId: deleteWorkspaceEnvironment
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      responses:
+        "204": {description: Value deleted}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "500": {$ref: "#/components/responses/InternalServerError"}
   /api/organizations/{orgID}/workspaces/{workspaceID}/members/{userID}:
     parameters:
       - {name: orgID, in: path, required: true, schema: {type: string}}
@@ -1239,6 +1283,19 @@ components:
         organizationId: {type: string}
         name: {type: string}
         role: {type: string, enum: [owner, admin, member, viewer]}
+    WorkspaceEnvironmentInput:
+      type: object
+      required: [value]
+      properties:
+        value: {type: string, maxLength: 65536}
+        secret: {type: boolean, default: false}
+    WorkspaceEnvironmentValue:
+      type: object
+      required: [name, secret]
+      properties:
+        name: {type: string}
+        secret: {type: boolean}
+        value: {type: string, description: Omitted for secrets}
     Membership:
       type: object
       required: [user, role]

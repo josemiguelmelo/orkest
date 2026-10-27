@@ -39,7 +39,10 @@ type Skill struct {
 	SkillMD string `json:"skillMD"`
 }
 
-var skillIDPattern = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
+var (
+	skillIDPattern         = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
+	environmentNamePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+)
 
 // ValidationError describes a rejected field without retaining its value.
 type ValidationError struct {
@@ -67,6 +70,7 @@ type RuntimeConfig struct {
 	Model          ModelSelection      `json:"model"`
 	MCPServers     []MCPServer         `json:"mcpServers,omitempty"`
 	Skills         []Skill             `json:"skills,omitempty"`
+	Environment    map[string]string   `json:"environment,omitempty"`
 }
 
 func (c RuntimeConfig) Clone() RuntimeConfig {
@@ -75,6 +79,7 @@ func (c RuntimeConfig) Clone() RuntimeConfig {
 		c.MCPServers[i].Headers = maps.Clone(c.MCPServers[i].Headers)
 	}
 	c.Skills = slices.Clone(c.Skills)
+	c.Environment = maps.Clone(c.Environment)
 	return c
 }
 
@@ -100,7 +105,15 @@ func (c RuntimeConfig) Validate() error {
 	if err := validateMCPServers(c.MCPServers); err != nil {
 		return err
 	}
-	return validateSkills(c.Skills)
+	if err := validateSkills(c.Skills); err != nil {
+		return err
+	}
+	for name, value := range c.Environment {
+		if !environmentNamePattern.MatchString(name) || strings.ContainsRune(value, '\x00') {
+			return &ValidationError{Field: "environment", Reason: "contains an invalid name or value"}
+		}
+	}
+	return nil
 }
 
 func validateMCPServers(servers []MCPServer) error {
