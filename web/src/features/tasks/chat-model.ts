@@ -2,7 +2,48 @@ import type { Task, TaskRun, TaskRunEvent } from '../../shared/api/generated/typ
 
 export type TurnStatus =
   'queued' | 'running' | 'completed' | 'failed' | 'interrupted' | 'cancelled' | 'discarded';
-export type ToolActivity = { id: string; title: string; status: string };
+export type ToolContent = {
+  kind: string;
+  text?: string;
+  path?: string;
+  oldText?: string;
+  newText?: string;
+  truncated?: boolean;
+};
+export type ToolActivity = {
+  id: string;
+  title: string;
+  status: string;
+  toolKind?: string;
+  input?: string;
+  output?: string;
+  truncated?: boolean;
+  locations?: { path: string; line?: number }[];
+  content?: ToolContent[];
+  startedAt?: number;
+  endedAt?: number;
+};
+// Prefer runtime locations, falling back to common tool input path fields.
+export function toolLabel(tool: ToolActivity): string {
+  let file = tool.locations?.[0]?.path;
+  if (!file && tool.input) {
+    try {
+      const input: unknown = JSON.parse(tool.input);
+      if (input && typeof input === 'object') {
+        const fields = input as Record<string, unknown>;
+        for (const key of ['filePath', 'file_path', 'path'])
+          if (typeof fields[key] === 'string') {
+            file = fields[key];
+            break;
+          }
+      }
+    } catch {
+      /* Truncated input may not be valid JSON. */
+    }
+  }
+  return file && !tool.title.includes(file) ? `${tool.title} · ${file}` : tool.title;
+}
+
 export type ChatBlock = { kind: 'text'; text: string } | { kind: 'tools'; tools: ToolActivity[] };
 export type ChatTurn = {
   id: string;
@@ -71,11 +112,13 @@ export function conversationTurns(events: TaskRunEvent[]): ChatTurn[] {
       const existing = turn.blocks
         .flatMap((block) => (block.kind === 'tools' ? block.tools : []))
         .find((tool) => tool.id === toolId);
+      let tool: ToolActivity;
       if (existing) {
+        tool = existing;
         if (update.title) existing.title = string(update.title);
         if (update.status) existing.status = string(update.status);
       } else {
-        const tool = {
+        tool = {
           id: toolId || `${event.sequence}`,
           title: string(update.title) || 'Tool activity',
           status: string(update.status) || 'pending',
@@ -84,8 +127,43 @@ export function conversationTurns(events: TaskRunEvent[]): ChatTurn[] {
         if (last?.kind === 'tools') last.tools.push(tool);
         else turn.blocks.push({ kind: 'tools', tools: [tool] });
       }
+      for (const key of ['toolKind', 'input', 'output'] as const)
+        if (typeof update[key] === 'string') tool[key] = update[key];
+      if (typeof update.truncated === 'boolean') tool.truncated = update.truncated;
+      if (Array.isArray(update.locations))
+        tool.locations = update.locations
+          .map(object)
+          .filter((l) => typeof l.path === 'string')
+          .map((l) => ({
+            path: string(l.path),
+            ...(typeof l.line === 'number' ? { line: l.line } : {}),
+          }));
+      if (Array.isArray(update.content))
+        tool.content = update.content
+          .map(object)
+          .filter((c) => typeof c.kind === 'string')
+          .map((c) => ({
+            kind: string(c.kind),
+            text: string(c.text),
+            path: string(c.path),
+            oldText: string(c.oldText),
+            newText: string(c.newText),
+            truncated: c.truncated === true,
+          }));
+      const at = Date.parse(string(payload.at));
+      if (Number.isFinite(at)) {
+        tool.startedAt ??= at;
+        if (['completed', 'failed'].includes(tool.status)) tool.endedAt ??= at;
+      }
     }
   }
+  for (const turn of turns)
+    if (turn.status !== 'running' && turn.status !== 'queued')
+      for (const block of turn.blocks)
+        if (block.kind === 'tools')
+          for (const tool of block.tools)
+            if (!['completed', 'failed'].includes(tool.status))
+              tool.status = turn.status === 'interrupted' ? 'interrupted' : 'outcome_unknown';
   return turns;
 }
 

@@ -82,3 +82,19 @@ not stop accepted work while `agentctl` remains alive.
 Application errors use `errorCode` and a sanitized `error` message; configuration
 validation may also return `field`. Use `errorCode` for client logic. The OpenAPI
 contract lists the possible codes.
+
+Tool activity can include `toolKind`, bounded `input`/`output` previews,
+`locations`, and text or before/after `content`. Task chat shows supplied file
+paths in tool summaries and expands the recorded previews. Older events that
+contain only a title and status cannot be enriched retroactively.
+
+For Docker execution, rebuild with `make docker-agentctl-images` after changing
+agentctl. The binary is baked into the runtime image; restarting the platform or
+refreshing the browser does not update it. Rebuilt images apply to newly created
+containers. Let active runs finish before starting a follow-up run to pick up
+the new binary.
+
+Restart the platform binary after changing the shared event types as well. An
+older platform process decodes only the fields it knows, so it can drop new tool
+details even when the agentctl image is current. Replacing an executable on disk
+does not update an already running process.

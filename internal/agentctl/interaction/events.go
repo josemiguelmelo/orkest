@@ -1,7 +1,9 @@
 // Package interaction defines durable commands, approvals, and activity records.
 package interaction
 
-import "time"
+import (
+	"time"
+)
 
 // EventType identifies the payload of an activity record. Values are stable wire names.
 type EventType string
@@ -28,11 +30,30 @@ const (
 )
 
 type Update struct {
-	Kind       string `json:"kind"`
-	Text       string `json:"text,omitempty"`
-	ToolCallID string `json:"toolCallId,omitempty"`
-	Title      string `json:"title,omitempty"`
-	Status     string `json:"status,omitempty"`
+	Kind       string         `json:"kind"`
+	Text       string         `json:"text,omitempty"`
+	ToolCallID string         `json:"toolCallId,omitempty"`
+	Title      string         `json:"title,omitempty"`
+	Status     string         `json:"status,omitempty"`
+	ToolKind   string         `json:"toolKind,omitempty"`
+	Input      string         `json:"input,omitempty"`
+	Output     string         `json:"output,omitempty"`
+	Truncated  bool           `json:"truncated,omitempty"`
+	Locations  []ToolLocation `json:"locations,omitzero"`
+	Content    []ToolContent  `json:"content,omitzero"`
+}
+
+type ToolLocation struct {
+	Path string `json:"path"`
+	Line int    `json:"line,omitempty"`
+}
+type ToolContent struct {
+	Kind      string `json:"kind"`
+	Path      string `json:"path,omitempty"`
+	OldText   string `json:"oldText,omitempty"`
+	NewText   string `json:"newText,omitempty"`
+	Text      string `json:"text,omitempty"`
+	Truncated bool   `json:"truncated,omitempty"`
 }
 
 // Event is sensitive task activity, persisted before subscribers are notified.

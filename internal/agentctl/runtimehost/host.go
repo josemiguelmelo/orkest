@@ -93,6 +93,18 @@ func (h *Host) start(ctx context.Context, config runconfig.RuntimeConfig, restor
 			_ = session.Close()
 		}
 	}()
+	for _, entry := range h.environment.GrantedEnv {
+		name, value, ok := strings.Cut(entry, "=")
+		name = strings.ToLower(name)
+		if ok && (strings.Contains(name, "key") || strings.Contains(name, "token") || strings.Contains(name, "secret") || strings.Contains(name, "password")) {
+			session.callbacks.secrets = append(session.callbacks.secrets, value)
+		}
+	}
+	for _, server := range config.MCPServers {
+		for _, value := range server.Headers {
+			session.callbacks.secrets = append(session.callbacks.secrets, value)
+		}
+	}
 	if err := h.initializeSession(ctx, session, settings, descriptor, nativeID, restoring); err != nil {
 		return nil, err
 	}

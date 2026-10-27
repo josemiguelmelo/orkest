@@ -12,6 +12,10 @@ Read [requirements](docs/requirements.md) and the
 Prerequisites: Go 1.26.2, Node.js 22.22.2 (npm 11), Docker Engine with Compose v2.
 Dependencies are pinned in `web/package.json` and `web/package-lock.json`.
 
+When using a named Docker context such as Colima, set `DOCKER_HOST` in `.env`
+to the endpoint printed by `docker context inspect --format '{{.Endpoints.docker.Host}}'`.
+The platform's Docker client reads this setting; it does not select the Docker CLI's active context.
+
 1. Copy `.env.example` to `.env` and set `POSTGRES_PASSWORD` to a local password. The app accepts either `DATABASE_URL` or all five `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USERNAME`, `POSTGRES_PASSWORD`, and `POSTGRES_DB` values; `DATABASE_URL` takes precedence.
 2. Run `make setup` to install frontend dependencies.
 3. Run `make db-up` to start PostgreSQL and wait for its health check.

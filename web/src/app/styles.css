@@ -1382,3 +1382,42 @@ input[type='checkbox'] {
     transition-duration: 0.001ms !important;
   }
 }
+
+.agent-tool-card {
+  min-width: 0;
+}
+.agent-tool-body {
+  padding: 8px 12px 14px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.agent-tool-preview {
+  min-width: 0;
+  margin-top: 10px;
+}
+.agent-tool-preview pre {
+  max-height: 320px;
+  overflow: auto;
+  padding: 10px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.agent-tool-diff {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.agent-tool-diff > :first-child pre {
+  border-left: 3px solid #b45353;
+}
+.agent-tool-diff > :last-child pre {
+  border-left: 3px solid #43835a;
+}
+@media (max-width: 640px) {
+  .agent-tool-diff {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
