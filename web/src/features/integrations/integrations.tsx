@@ -46,6 +46,34 @@ const schema = z.object({
     .refine((value) => !/^0(?:s|m|h)$/.test(value), 'Use a positive duration.'),
   credential: z.string(),
 });
+const syncErrorMessages: Record<string, string> = {
+  integration_sync_failed:
+    'The sync failed while saving imported tasks. Retry, and contact your administrator if it keeps failing.',
+  integration_validation_failed:
+    'GitHub could not validate the project connection. Check the token and project access.',
+  github_api_unavailable: 'Could not reach GitHub. Check the server network connection and retry.',
+  github_project_response_invalid: 'GitHub returned an unexpected response. Retry later.',
+  github_project_permission_denied:
+    'GitHub denied access to this project. Confirm the token can read Projects and has access to the project.',
+  github_project_not_found_or_not_accessible:
+    'The GitHub project is unavailable with this token. Check the project URL and token access.',
+  github_graphql_query_failed:
+    'GitHub could not read this project. Confirm the token permissions and project configuration.',
+  github_token_invalid: 'The GitHub token is invalid or revoked. Replace it in workspace settings.',
+  github_api_status_401:
+    'The GitHub token is invalid or revoked. Replace it in workspace settings.',
+  github_api_status_403:
+    'GitHub denied access or rate limited the request. Check token permissions and retry later.',
+  github_api_status_429: 'GitHub rate limited the request. Retry later.',
+  github_api_status_500: 'GitHub is temporarily unavailable. Retry later.',
+  github_api_status_502: 'GitHub is temporarily unavailable. Retry later.',
+  github_api_status_503: 'GitHub is temporarily unavailable. Retry later.',
+};
+
+function syncErrorMessage(code: string) {
+  return syncErrorMessages[code] ?? 'The source sync failed. Check the connection and retry.';
+}
+
 export function IntegrationsPage() {
   const { scope, permissions } = useApp();
   const integrations = useQuery(integrationsQuery(scope));
@@ -117,7 +145,7 @@ function IntegrationCard({ item, onEdit }: { item: TaskIntegration; onEdit: () =
       {item.lastError && (
         <div className="notice error" role="status">
           <strong>Last synchronization failed.</strong>
-          <p>{item.lastError}</p>
+          <p>{syncErrorMessage(item.lastError)}</p>
           <p className="muted">Correct the source configuration if needed, then sync again.</p>
         </div>
       )}

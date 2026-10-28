@@ -25,21 +25,40 @@ const messages: Record<string, string> = {
     'This item is still in use, or its current state prevents this change. Remove dependent resources and try again.',
   integration_encryption_not_configured: 'Credential encryption is not configured on the server.',
   integration_credential_required: 'A credential is required to validate this connection.',
+  integration_validation_failed:
+    'The source could not be reached or rejected the supplied connection details. Check the URL, credential, and project access, then retry.',
+  github_config_invalid: 'The GitHub source configuration is invalid. Check the project URL.',
+  github_project_url_required: 'Enter a GitHub Projects URL.',
+  github_project_url_invalid:
+    'Use a GitHub Projects v2 URL such as https://github.com/orgs/OWNER/projects/1.',
+  integration_sync_failed:
+    'The sync failed while saving imported tasks. Retry, and contact your administrator if it keeps failing.',
+  github_api_unavailable: 'Could not reach GitHub. Check the server network connection and retry.',
+  github_project_response_invalid: 'GitHub returned an unexpected response. Retry later.',
+  github_project_permission_denied:
+    'GitHub denied access to this project. Confirm the token can read Projects and has access to the project.',
+  github_graphql_query_failed:
+    'GitHub could not read this project. Confirm the token permissions and project configuration.',
+  github_token_invalid: 'The GitHub token is invalid or revoked. Replace it in workspace settings.',
+  github_api_status_401:
+    'The GitHub token is invalid or revoked. Replace it in workspace settings.',
+  github_api_status_403:
+    'GitHub denied access or rate limited the request. Check token permissions and retry later.',
+  github_api_status_429: 'GitHub rate limited the request. Retry later.',
+  github_api_status_500: 'GitHub is temporarily unavailable. Retry later.',
+  github_api_status_502: 'GitHub is temporarily unavailable. Retry later.',
+  github_api_status_503: 'GitHub is temporarily unavailable. Retry later.',
   github_project_not_found_or_not_accessible:
     'The GitHub project is unavailable with these credentials.',
-  github_token_invalid_or_revoked:
-    'The GitHub token is invalid or revoked. Rotate the credential in workspace settings.',
-  github_permission_denied_or_rate_limited:
-    'GitHub denied repository access or the API rate limit was reached. Check token permissions and try again later.',
   github_repository_unavailable:
     'This repository is no longer accessible to the selected integration.',
   github_connection_failed:
     'Could not validate the GitHub connection. Check the token and try again.',
   agent_dispatch_failed:
     'The task changed to in progress, but agent dispatch failed. Refresh to see its current state.',
-  run_not_found: 'This run is no longer available. Refresh the task to load its current run history.',
-  run_activity_unavailable:
-    'Agent activity could not be loaded right now. Try again in a moment.',
+  run_not_found:
+    'This run is no longer available. Refresh the task to load its current run history.',
+  run_activity_unavailable: 'Agent activity could not be loaded right now. Try again in a moment.',
 };
 const errorSchema = z.object({ error: z.string() });
 client.setConfig({ baseUrl: window.location.origin, credentials: 'same-origin' });
