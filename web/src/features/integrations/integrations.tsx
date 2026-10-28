@@ -82,8 +82,8 @@ export function IntegrationsPage() {
   return (
     <>
       <PageHeader
-        title="Integrations"
-        description="Import tasks and keep source-managed content synchronized."
+        title="Source integrations"
+        description="Connect task sources to import and sync issues automatically."
       >
         {permissions.workspaceAdmin && (
           <CreateButton onClick={() => setEditing(null)}>Connect source</CreateButton>
@@ -94,15 +94,34 @@ export function IntegrationsPage() {
       ) : integrations.isError ? (
         <ErrorState error={integrations.error} />
       ) : integrations.data.length ? (
-        <div className="grid">
-          {integrations.data.map((item) => (
-            <IntegrationCard key={item.id} item={item} onEdit={() => setEditing(item)} />
-          ))}
-        </div>
+        <>
+          <div className="repository-list-heading">
+            <span>
+              {integrations.data.length}{' '}
+              {integrations.data.length === 1 ? 'source integration' : 'source integrations'}
+            </span>
+            <span className="muted">Imported tasks stay in sync with their source</span>
+          </div>
+          <div className="grid">
+            {integrations.data.map((item) => (
+              <IntegrationCard key={item.id} item={item} onEdit={() => setEditing(item)} />
+            ))}
+          </div>
+        </>
       ) : (
-        <Empty title="No task sources connected">
-          Connect GitHub Projects or Jira Server to import tasks.
-        </Empty>
+        <div className="repository-empty">
+          <div className="repository-empty-icon">
+            <Plug size={24} />
+          </div>
+          <h2>Connect a task source</h2>
+          <p className="muted">
+            Connect GitHub Projects or Jira to import tasks and keep them synchronized with your
+            source of truth.
+          </p>
+          {permissions.workspaceAdmin && (
+            <CreateButton onClick={() => setEditing(null)}>Connect source</CreateButton>
+          )}
+        </div>
       )}
       {editing !== undefined &&
         (providers.isPending ? (
@@ -124,33 +143,43 @@ function IntegrationCard({ item, onEdit }: { item: TaskIntegration; onEdit: () =
   const { scope, permissions } = useApp();
   const refresh = useRefresh();
   const action = useAction();
+  const providerLabel = item.provider.replaceAll('_', ' ');
   return (
-    <article className="resource-card">
-      <div className="split">
-        <Plug size={22} className="card-icon" />
-        <Badge>{item.enabled ? 'Enabled' : 'Paused'}</Badge>
+    <article className="integration-card">
+      <div className="integration-card-top">
+        <div className="integration-provider-icon">
+          <Plug size={21} />
+        </div>
+        <div className="integration-card-title">
+          <h3>{item.name}</h3>
+          <p>
+            {providerLabel} · sync every {item.interval}
+          </p>
+        </div>
+        <Badge>
+          <span className={`status-dot ${item.enabled ? '' : 'status-paused'}`} />
+          {item.enabled ? 'Enabled' : 'Paused'}
+        </Badge>
       </div>
-      <h3>{item.name}</h3>
-      <p className="muted">
-        {item.provider} · every {item.interval}
-      </p>
-      <div className="tags">
-        {item.labels.map((label) => (
-          <Badge key={label}>{label}</Badge>
-        ))}
-      </div>
-      <p className="muted">
+      {item.labels.length > 0 && (
+        <div className="tags">
+          {item.labels.map((label) => (
+            <Badge key={label}>{label}</Badge>
+          ))}
+        </div>
+      )}
+      <p className="muted" style={{ fontSize: '11px' }}>
         Last synchronized: {item.lastSynced ? date(item.lastSynced) : 'Never'}
       </p>
       {item.lastError && (
         <div className="notice error" role="status">
-          <strong>Last synchronization failed.</strong>
+          <strong>Last synchronization failed</strong>
           <p>{syncErrorMessage(item.lastError)}</p>
           <p className="muted">Correct the source configuration if needed, then sync again.</p>
         </div>
       )}
       {permissions.workspaceAdmin && (
-        <div className="actions">
+        <div className="integration-card-actions">
           <Button variant="outline" size="sm" onClick={onEdit}>
             Edit
           </Button>
@@ -170,11 +199,11 @@ function IntegrationCard({ item, onEdit }: { item: TaskIntegration; onEdit: () =
               }, 'Synchronization completed.');
             }}
           >
-            <RefreshCw size={12} />
+            <RefreshCw size={14} />
             {item.lastError ? 'Retry sync' : 'Sync now'}
           </Button>
           <ConfirmButton
-            title="Delete integration?"
+            title="Delete source integration?"
             description="This permanently removes the source configuration and all tasks imported by this integration."
             onConfirm={async () => {
               await data(
@@ -190,7 +219,7 @@ function IntegrationCard({ item, onEdit }: { item: TaskIntegration; onEdit: () =
       )}
       {action.error !== undefined && <ErrorState error={action.error} />}{' '}
       {action.message && (
-        <p role="status" className="muted">
+        <p role="status" className="success-message">
           {action.message}
         </p>
       )}
@@ -242,7 +271,7 @@ function IntegrationEditor({
   }
   return (
     <Dialog
-      title={item ? 'Edit integration' : 'Connect task source'}
+      title={item ? 'Edit source integration' : 'Connect task source'}
       description="Credentials are write-only. Leave the credential blank when editing to preserve its stored value."
       open
       onOpenChange={(v) => {

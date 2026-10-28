@@ -251,7 +251,7 @@ function ShellContent({ session }: { session: CurrentUser }) {
                 params={workspaceParams}
               >
                 <Plug size={17} />
-                Integrations
+                Source integrations
               </Link>
               <Link
                 className="nav-link"
