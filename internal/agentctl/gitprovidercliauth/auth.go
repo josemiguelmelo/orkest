@@ -1,5 +1,5 @@
-// Package cliauth configures provider CLIs with credentials scoped to registered repositories.
-package cliauth
+// Package gitprovidercliauth configures provider CLIs with credentials scoped to registered repositories.
+package gitprovidercliauth
 
 import (
 	"github.com/josemiguelmelo/orkest/internal/agentctl/config"
