@@ -309,7 +309,11 @@ function IntegrationEditor({
         }}
       >
         <div className="form-grid">
-          <Field label="Provider" error={form.formState.errors.provider?.message}>
+          <Field
+            label="Provider"
+            hint={item ? 'Provider cannot be changed after creation' : undefined}
+            error={form.formState.errors.provider?.message}
+          >
             <select
               {...form.register('provider', { onChange: () => setConfig({}) })}
               disabled={!!item}
