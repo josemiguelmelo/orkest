@@ -1318,7 +1318,7 @@ components:
     Forbidden: {description: Insufficient role permissions, content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}}
     NotFound: {description: Resource is absent or inaccessible, content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}}
     BadRequest: {description: Request body or role is invalid, content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}}
-    Conflict: {description: Operation conflicts with membership invariants, content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}}
+    Conflict: {description: Operation conflicts with an existing resource or invariant, content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}}
     BadGateway: {description: Coding provider rejected the connection or failed to respond, content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}}
     InternalServerError:
       description: Internal server error

@@ -17,15 +17,16 @@ export function CodingIntegrationsPanel() {
   const items = useQuery(codingIntegrationsQuery(scope));
   const [editing, setEditing] = useState(false);
   const refresh = useRefresh();
+  const hasGitHubIntegration = items.data?.some((item) => item.providerName === 'github') ?? false;
   return (
     <section className="panel integration-panel">
       <div className="panel-heading">
         <div>
           <p className="eyebrow">REPOSITORY ACCESS</p>
           <h2>Coding integrations</h2>
-          <p className="muted">Connect GitHub once to browse and securely check out workspace repositories.</p>
+          <p className="muted">Connect one account per provider to browse and securely check out workspace repositories.</p>
         </div>
-        {permissions.workspaceAdmin && <Button onClick={() => setEditing(true)}><Plus size={16} /> Add connection</Button>}
+        {permissions.workspaceAdmin && items.isSuccess && !hasGitHubIntegration && <Button onClick={() => setEditing(true)}><Plus size={16} /> Add connection</Button>}
       </div>
       <div className="integration-trust-note"><ShieldCheck size={17} /><span>Credentials are encrypted and never shown again after saving.</span></div>
       {items.isPending ? <Loading /> : items.isError ? <ErrorState error={items.error} retry={() => void items.refetch()} /> : items.data.length ? (
