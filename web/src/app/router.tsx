@@ -18,9 +18,6 @@ const Agents = lazy(() =>
 const Skills = lazy(() =>
   import('../features/skills/skills').then((m) => ({ default: m.SkillsPage })),
 );
-const Components = lazy(() =>
-  import('../features/settings/components').then((m) => ({ default: m.ComponentsPage })),
-);
 const Repositories = lazy(() =>
   import('../features/settings/repositories').then((m) => ({ default: m.RepositoriesPage })),
 );
@@ -110,11 +107,6 @@ const skills = createRoute({
   path: 'skills',
   component: loading(Skills),
 });
-const components = createRoute({
-  getParentRoute: () => workspace,
-  path: 'components',
-  component: loading(Components),
-});
 const repositories = createRoute({
   getParentRoute: () => workspace,
   path: 'repositories',
@@ -147,7 +139,6 @@ const tree = root.addChildren([
       taskRoute,
       agents,
       skills,
-      components,
       repositories,
       mcp,
       integrations,

@@ -15,7 +15,7 @@ import type { Task } from '../../shared/api/generated/types.gen';
 import {
   agentsQuery,
   commentsQuery,
-  componentsQuery,
+  repositoriesQuery,
   path,
   taskQuery,
   taskRunsQuery,
@@ -236,7 +236,7 @@ export function TaskEditor({ task, onClose }: { task?: Task; onClose: () => void
   const sessionChoice = useSessionChoice();
   const runs = useQuery({ ...taskRunsQuery(scope, task?.id ?? ''), enabled: !!task });
   const agents = useQuery(agentsQuery(scope));
-  const components = useQuery(componentsQuery(scope));
+  const repositories = useQuery(repositoriesQuery(scope));
   const form = useForm({
     resolver: zodResolver(taskFormSchema),
     defaultValues: {
@@ -245,7 +245,7 @@ export function TaskEditor({ task, onClose }: { task?: Task; onClose: () => void
       status: task?.status ?? 'todo',
       assigneeAgentId: task?.assigneeAgentId ?? '',
       labels: task?.labels.join(', ') ?? '',
-      componentIds: task?.components.map((c) => c.id) ?? [],
+      repositoryIds: task?.repositories.map((repository) => repository.id) ?? [],
     },
   });
   const imported = !!task && task.sourceProvider !== 'manual';
@@ -254,7 +254,7 @@ export function TaskEditor({ task, onClose }: { task?: Task; onClose: () => void
       title={task ? 'Edit task' : 'New task'}
       description={
         imported
-          ? 'Imported content is managed at its source. Update assignment, components, or local workflow here.'
+          ? 'Imported content is managed at its source. Update assignment, repositories, or local workflow here.'
           : 'Organize the work and assign an agent definition. Assignment does not start execution.'
       }
       open
@@ -324,14 +324,19 @@ export function TaskEditor({ task, onClose }: { task?: Task; onClose: () => void
         <Field label="Labels" hint="Separate labels with commas.">
           <input {...form.register('labels')} readOnly={imported} />
         </Field>
-        {components.isError ? (
-          <ErrorState error={components.error} />
+        {repositories.isError ? (
+          <ErrorState error={repositories.error} />
         ) : (
           <Selection
-            label="Components"
-            options={components.data ?? []}
-            value={form.watch('componentIds')}
-            onChange={(ids) => form.setValue('componentIds', ids, { shouldDirty: true })}
+            label="Repositories"
+            options={
+              repositories.data?.map((repository) => ({
+                id: repository.id,
+                name: repository.name || repository.url,
+              })) ?? []
+            }
+            value={form.watch('repositoryIds')}
+            onChange={(ids) => form.setValue('repositoryIds', ids, { shouldDirty: true })}
           />
         )}
       </Form>
@@ -345,7 +350,7 @@ export function TaskPage(): JSX.Element {
   const { scope, permissions } = useApp();
   const task = useQuery(taskQuery(scope, taskId));
   const agents = useQuery(agentsQuery(scope));
-  const components = useQuery(componentsQuery(scope));
+  const repositories = useQuery(repositoriesQuery(scope));
   const [edit, setEdit] = useState(false);
   const startAction = useAction();
   const [startCommandID, setStartCommandID] = useState<string>();
@@ -397,7 +402,7 @@ export function TaskPage(): JSX.Element {
                             ...(sessionMode ? { sessionMode } : {}),
                             assigneeAgentId: item.assigneeAgentId ?? '',
                             labels: item.labels,
-                            componentIds: item.components.map((component) => component.id),
+                            repositoryIds: item.repositories.map((repository) => repository.id),
                           },
                         }),
                       );
@@ -450,9 +455,14 @@ export function TaskPage(): JSX.Element {
                 <TaskPropertyControls
                   task={item}
                   agents={agents.data ?? []}
-                  components={components.data ?? []}
+                  repositories={
+                    repositories.data?.map((repository) => ({
+                      id: repository.id,
+                      name: repository.name || repository.url,
+                    })) ?? []
+                  }
                   agentsLoading={agents.isPending || agents.isError}
-                  componentsLoading={components.isPending || components.isError}
+                  repositoriesLoading={repositories.isPending || repositories.isError}
                 />
               ) : (
                 <>
@@ -470,8 +480,10 @@ export function TaskPage(): JSX.Element {
                     </dd>
                   </div>
                   <div>
-                    <dt>Components</dt>
-                    <dd>{item.components.map((c) => c.name).join(', ') || 'None'}</dd>
+                    <dt>Repositories</dt>
+                    <dd>
+                      {item.repositories.map((repository) => repository.name).join(', ') || 'None'}
+                    </dd>
                   </div>
                 </>
               )}
@@ -513,15 +525,15 @@ export function TaskPage(): JSX.Element {
 function TaskPropertyControls({
   task,
   agents,
-  components,
+  repositories,
   agentsLoading,
-  componentsLoading,
+  repositoriesLoading,
 }: {
   task: Task;
   agents: { id: string; name: string }[];
-  components: { id: string; name: string }[];
+  repositories: { id: string; name: string }[];
   agentsLoading: boolean;
-  componentsLoading: boolean;
+  repositoriesLoading: boolean;
 }): JSX.Element {
   const { scope } = useApp();
   const refresh = useRefresh();
@@ -529,7 +541,7 @@ function TaskPropertyControls({
   async function update(patch: {
     status?: Task['status'];
     assigneeAgentId?: string;
-    componentIds?: string[];
+    repositoryIds?: string[];
   }) {
     await action.run(async () => {
       try {
@@ -543,7 +555,8 @@ function TaskPropertyControls({
               status: patch.status ?? task.status,
               assigneeAgentId: patch.assigneeAgentId ?? task.assigneeAgentId ?? '',
               labels: task.labels,
-              componentIds: patch.componentIds ?? task.components.map((component) => component.id),
+              repositoryIds:
+                patch.repositoryIds ?? task.repositories.map((repository) => repository.id),
             },
           }),
         );
@@ -590,38 +603,38 @@ function TaskPropertyControls({
         </dd>
       </div>
       <div>
-        <dt>Components</dt>
+        <dt>Repositories</dt>
         <dd>
-          {componentsLoading ? (
-            <span className="muted">Loading components…</span>
+          {repositoriesLoading ? (
+            <span className="muted">Loading repositories…</span>
           ) : (
-            <div className="component-chips" aria-label="Components">
-              {components.length ? (
-                components.map((component) => {
-                  const selected = task.components.some((item) => item.id === component.id);
+            <div className="repository-chips" aria-label="Repositories">
+              {repositories.length ? (
+                repositories.map((repository) => {
+                  const selected = task.repositories.some((item) => item.id === repository.id);
                   return (
                     <button
-                      className={`component-chip${selected ? ' is-selected' : ''}`}
+                      className={`repository-chip${selected ? ' is-selected' : ''}`}
                       type="button"
-                      key={component.id}
+                      key={repository.id}
                       aria-pressed={selected}
                       disabled={action.pending}
                       onClick={() =>
                         void update({
-                          componentIds: selected
-                            ? task.components
-                                .filter((item) => item.id !== component.id)
+                          repositoryIds: selected
+                            ? task.repositories
+                                .filter((item) => item.id !== repository.id)
                                 .map((item) => item.id)
-                            : [...task.components.map((item) => item.id), component.id],
+                            : [...task.repositories.map((item) => item.id), repository.id],
                         })
                       }
                     >
-                      {component.name}
+                      {repository.name}
                     </button>
                   );
                 })
               ) : (
-                <span className="muted">No components available.</span>
+                <span className="muted">No repositories available.</span>
               )}
             </div>
           )}

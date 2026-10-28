@@ -123,6 +123,7 @@ func (d *TaskDispatcher) StartTask(ctx context.Context, userID, organizationID s
 	config.RunID, config.RestoreSession = runID, continuing
 	config.GitCredentials = nil
 	config.GitCredentialsRequired = false
+	config.Repositories = nil
 	if d.environmentResolver != nil {
 		config.Environment, err = d.environmentResolver.Resolve(ctx, value.WorkspaceID)
 		if err != nil {
@@ -134,7 +135,14 @@ func (d *TaskDispatcher) StartTask(ctx context.Context, userID, organizationID s
 		if resolveErr != nil {
 			return fmt.Errorf("resolve workspace repositories: %w", resolveErr)
 		}
+		selectedRepositories := make(map[string]struct{}, len(value.Repositories))
+		for _, repository := range value.Repositories {
+			selectedRepositories[repository.ID] = struct{}{}
+		}
 		for _, repository := range repositories {
+			if _, selected := selectedRepositories[repository.ID]; !selected {
+				continue
+			}
 			config.Repositories = append(config.Repositories, runconfig.WorkspaceRepository{
 				ID: repository.ID, ProviderName: repository.ProviderName, URL: repository.URL,
 				IntegrationID: repository.IntegrationID, ProviderRepositoryID: repository.ProviderRepositoryID,
@@ -230,26 +238,31 @@ func (d *TaskDispatcher) StartTask(ctx context.Context, userID, organizationID s
 
 func taskPrompt(value task.Task, repositories []runconfig.WorkspaceRepository) (string, error) {
 	snapshot := struct {
-		Title        string           `json:"title"`
-		Description  string           `json:"description"`
-		Labels       []string         `json:"labels"`
-		Components   []task.Component `json:"components"`
+		Title        string   `json:"title"`
+		Description  string   `json:"description"`
+		Labels       []string `json:"labels"`
 		Repositories []struct {
-			ID   string `json:"id"`
-			Path string `json:"path"`
-		} `json:"repositories,omitempty"`
-	}{Title: value.Title, Description: value.Description, Labels: value.Labels, Components: value.Components}
+			ID           string `json:"id"`
+			ProviderName string `json:"providerName"`
+			Name         string `json:"name"`
+			URL          string `json:"url"`
+			Path         string `json:"path"`
+		} `json:"repositories"`
+	}{Title: value.Title, Description: value.Description, Labels: value.Labels}
 	for _, repository := range repositories {
 		snapshot.Repositories = append(snapshot.Repositories, struct {
-			ID   string `json:"id"`
-			Path string `json:"path"`
-		}{ID: repository.ID, Path: "repositories/" + repository.ProviderName + "/" + repository.ID})
+			ID           string `json:"id"`
+			ProviderName string `json:"providerName"`
+			Name         string `json:"name"`
+			URL          string `json:"url"`
+			Path         string `json:"path"`
+		}{ID: repository.ID, ProviderName: repository.ProviderName, Name: repository.Name, URL: repository.URL, Path: "repositories/" + repository.ProviderName + "/" + repository.ID})
 	}
 	encoded, err := json.MarshalIndent(snapshot, "", "  ")
 	if err != nil {
 		return "", fmt.Errorf("encode task context: %w", err)
 	}
-	return "Work on the following Orkest task. Use this task snapshot as the source of truth for the requested work. Workspace repositories are checked out under the listed paths on task-specific branches; inspect the repositories relevant to the task and make changes in those checkouts:\n\n" + string(encoded), nil
+	return "Work on the following Orkest task. Use this task snapshot as the source of truth for the requested work. The task's selected repositories are checked out under the listed paths on task-specific branches; inspect them and make changes in those checkouts:\n\n" + string(encoded), nil
 }
 
 func (d *TaskDispatcher) freshConfiguration(ctx context.Context, userID, organizationID string, value task.Task) (runconfig.RunConfig, agent.Agent, error) {

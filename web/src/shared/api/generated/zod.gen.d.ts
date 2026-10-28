@@ -110,7 +110,38 @@ export declare const zTaskInput: z.ZodObject<{
     }>>;
     assigneeAgentId: z.ZodOptional<z.ZodString>;
     labels: z.ZodOptional<z.ZodArray<z.ZodString>>;
-    componentIds: z.ZodOptional<z.ZodArray<z.ZodString>>;
+    repositoryIds: z.ZodOptional<z.ZodArray<z.ZodString>>;
+}, z.core.$strip>;
+export declare const zTaskRepository: z.ZodObject<{
+    id: z.ZodString;
+    providerName: z.ZodString;
+    name: z.ZodString;
+    url: z.ZodURL;
+}, z.core.$strip>;
+export declare const zTask: z.ZodObject<{
+    id: z.ZodString;
+    workspaceId: z.ZodString;
+    title: z.ZodString;
+    description: z.ZodString;
+    sourceProvider: z.ZodString;
+    sourceId: z.ZodOptional<z.ZodString>;
+    sourceUrl: z.ZodOptional<z.ZodString>;
+    status: z.ZodEnum<{
+        done: "done";
+        todo: "todo";
+        in_progress: "in_progress";
+        in_review: "in_review";
+    }>;
+    assigneeAgentId: z.ZodOptional<z.ZodString>;
+    labels: z.ZodArray<z.ZodString>;
+    repositories: z.ZodArray<z.ZodObject<{
+        id: z.ZodString;
+        providerName: z.ZodString;
+        name: z.ZodString;
+        url: z.ZodURL;
+    }, z.core.$strip>>;
+    createdAt: z.ZodISODateTime;
+    updatedAt: z.ZodISODateTime;
 }, z.core.$strip>;
 export declare const zTaskComment: z.ZodObject<{
     id: z.ZodString;
@@ -138,51 +169,6 @@ export declare const zTaskRunEvent: z.ZodObject<{
     runId: z.ZodString;
     sequence: z.ZodInt;
     payload: z.ZodRecord<z.ZodString, z.ZodUnknown>;
-}, z.core.$strip>;
-export declare const zComponentInput: z.ZodObject<{
-    identifier: z.ZodString;
-    name: z.ZodString;
-    repositoryId: z.ZodString;
-    description: z.ZodOptional<z.ZodString>;
-}, z.core.$strip>;
-export declare const zComponent: z.ZodObject<{
-    id: z.ZodString;
-    workspaceId: z.ZodString;
-    identifier: z.ZodString;
-    name: z.ZodString;
-    repositoryId: z.ZodString;
-    description: z.ZodString;
-    createdAt: z.ZodISODateTime;
-    updatedAt: z.ZodISODateTime;
-}, z.core.$strip>;
-export declare const zTask: z.ZodObject<{
-    id: z.ZodString;
-    workspaceId: z.ZodString;
-    title: z.ZodString;
-    description: z.ZodString;
-    sourceProvider: z.ZodString;
-    sourceId: z.ZodOptional<z.ZodString>;
-    sourceUrl: z.ZodOptional<z.ZodString>;
-    status: z.ZodEnum<{
-        done: "done";
-        todo: "todo";
-        in_progress: "in_progress";
-        in_review: "in_review";
-    }>;
-    assigneeAgentId: z.ZodOptional<z.ZodString>;
-    labels: z.ZodArray<z.ZodString>;
-    components: z.ZodArray<z.ZodObject<{
-        id: z.ZodString;
-        workspaceId: z.ZodString;
-        identifier: z.ZodString;
-        name: z.ZodString;
-        repositoryId: z.ZodString;
-        description: z.ZodString;
-        createdAt: z.ZodISODateTime;
-        updatedAt: z.ZodISODateTime;
-    }, z.core.$strip>>;
-    createdAt: z.ZodISODateTime;
-    updatedAt: z.ZodISODateTime;
 }, z.core.$strip>;
 export declare const zAgent: z.ZodObject<{
     id: z.ZodString;
@@ -1205,15 +1191,11 @@ export declare const zListTasksResponse: z.ZodArray<z.ZodObject<{
     }>;
     assigneeAgentId: z.ZodOptional<z.ZodString>;
     labels: z.ZodArray<z.ZodString>;
-    components: z.ZodArray<z.ZodObject<{
+    repositories: z.ZodArray<z.ZodObject<{
         id: z.ZodString;
-        workspaceId: z.ZodString;
-        identifier: z.ZodString;
+        providerName: z.ZodString;
         name: z.ZodString;
-        repositoryId: z.ZodString;
-        description: z.ZodString;
-        createdAt: z.ZodISODateTime;
-        updatedAt: z.ZodISODateTime;
+        url: z.ZodURL;
     }, z.core.$strip>>;
     createdAt: z.ZodISODateTime;
     updatedAt: z.ZodISODateTime;
@@ -1236,7 +1218,7 @@ export declare const zCreateTaskBody: z.ZodObject<{
     }>>;
     assigneeAgentId: z.ZodOptional<z.ZodString>;
     labels: z.ZodOptional<z.ZodArray<z.ZodString>>;
-    componentIds: z.ZodOptional<z.ZodArray<z.ZodString>>;
+    repositoryIds: z.ZodOptional<z.ZodArray<z.ZodString>>;
 }, z.core.$strip>;
 export declare const zCreateTaskPath: z.ZodObject<{
     orgID: z.ZodString;
@@ -1261,15 +1243,11 @@ export declare const zCreateTaskResponse: z.ZodObject<{
     }>;
     assigneeAgentId: z.ZodOptional<z.ZodString>;
     labels: z.ZodArray<z.ZodString>;
-    components: z.ZodArray<z.ZodObject<{
+    repositories: z.ZodArray<z.ZodObject<{
         id: z.ZodString;
-        workspaceId: z.ZodString;
-        identifier: z.ZodString;
+        providerName: z.ZodString;
         name: z.ZodString;
-        repositoryId: z.ZodString;
-        description: z.ZodString;
-        createdAt: z.ZodISODateTime;
-        updatedAt: z.ZodISODateTime;
+        url: z.ZodURL;
     }, z.core.$strip>>;
     createdAt: z.ZodISODateTime;
     updatedAt: z.ZodISODateTime;
@@ -1298,15 +1276,11 @@ export declare const zGetTaskResponse: z.ZodObject<{
     }>;
     assigneeAgentId: z.ZodOptional<z.ZodString>;
     labels: z.ZodArray<z.ZodString>;
-    components: z.ZodArray<z.ZodObject<{
+    repositories: z.ZodArray<z.ZodObject<{
         id: z.ZodString;
-        workspaceId: z.ZodString;
-        identifier: z.ZodString;
+        providerName: z.ZodString;
         name: z.ZodString;
-        repositoryId: z.ZodString;
-        description: z.ZodString;
-        createdAt: z.ZodISODateTime;
-        updatedAt: z.ZodISODateTime;
+        url: z.ZodURL;
     }, z.core.$strip>>;
     createdAt: z.ZodISODateTime;
     updatedAt: z.ZodISODateTime;
@@ -1329,7 +1303,7 @@ export declare const zUpdateTaskBody: z.ZodObject<{
     }>>;
     assigneeAgentId: z.ZodOptional<z.ZodString>;
     labels: z.ZodOptional<z.ZodArray<z.ZodString>>;
-    componentIds: z.ZodOptional<z.ZodArray<z.ZodString>>;
+    repositoryIds: z.ZodOptional<z.ZodArray<z.ZodString>>;
 }, z.core.$strip>;
 export declare const zUpdateTaskPath: z.ZodObject<{
     orgID: z.ZodString;
@@ -1355,15 +1329,11 @@ export declare const zUpdateTaskResponse: z.ZodObject<{
     }>;
     assigneeAgentId: z.ZodOptional<z.ZodString>;
     labels: z.ZodArray<z.ZodString>;
-    components: z.ZodArray<z.ZodObject<{
+    repositories: z.ZodArray<z.ZodObject<{
         id: z.ZodString;
-        workspaceId: z.ZodString;
-        identifier: z.ZodString;
+        providerName: z.ZodString;
         name: z.ZodString;
-        repositoryId: z.ZodString;
-        description: z.ZodString;
-        createdAt: z.ZodISODateTime;
-        updatedAt: z.ZodISODateTime;
+        url: z.ZodURL;
     }, z.core.$strip>>;
     createdAt: z.ZodISODateTime;
     updatedAt: z.ZodISODateTime;
@@ -1477,70 +1447,6 @@ export declare const zCreateTaskCommentResponse: z.ZodObject<{
     authorUserId: z.ZodString;
     body: z.ZodString;
     createdAt: z.ZodISODateTime;
-}, z.core.$strip>;
-export declare const zListComponentsPath: z.ZodObject<{
-    orgID: z.ZodString;
-    workspaceID: z.ZodString;
-}, z.core.$strip>;
-/**
- * Workspace components
- */
-export declare const zListComponentsResponse: z.ZodArray<z.ZodObject<{
-    id: z.ZodString;
-    workspaceId: z.ZodString;
-    identifier: z.ZodString;
-    name: z.ZodString;
-    repositoryId: z.ZodString;
-    description: z.ZodString;
-    createdAt: z.ZodISODateTime;
-    updatedAt: z.ZodISODateTime;
-}, z.core.$strip>>;
-export declare const zCreateComponentBody: z.ZodObject<{
-    identifier: z.ZodString;
-    name: z.ZodString;
-    repositoryId: z.ZodString;
-    description: z.ZodOptional<z.ZodString>;
-}, z.core.$strip>;
-export declare const zCreateComponentPath: z.ZodObject<{
-    orgID: z.ZodString;
-    workspaceID: z.ZodString;
-}, z.core.$strip>;
-/**
- * Created component
- */
-export declare const zCreateComponentResponse: z.ZodObject<{
-    id: z.ZodString;
-    workspaceId: z.ZodString;
-    identifier: z.ZodString;
-    name: z.ZodString;
-    repositoryId: z.ZodString;
-    description: z.ZodString;
-    createdAt: z.ZodISODateTime;
-    updatedAt: z.ZodISODateTime;
-}, z.core.$strip>;
-export declare const zUpdateComponentBody: z.ZodObject<{
-    identifier: z.ZodString;
-    name: z.ZodString;
-    repositoryId: z.ZodString;
-    description: z.ZodOptional<z.ZodString>;
-}, z.core.$strip>;
-export declare const zUpdateComponentPath: z.ZodObject<{
-    orgID: z.ZodString;
-    workspaceID: z.ZodString;
-    componentID: z.ZodString;
-}, z.core.$strip>;
-/**
- * Updated component
- */
-export declare const zUpdateComponentResponse: z.ZodObject<{
-    id: z.ZodString;
-    workspaceId: z.ZodString;
-    identifier: z.ZodString;
-    name: z.ZodString;
-    repositoryId: z.ZodString;
-    description: z.ZodString;
-    createdAt: z.ZodISODateTime;
-    updatedAt: z.ZodISODateTime;
 }, z.core.$strip>;
 /**
  * Global skills

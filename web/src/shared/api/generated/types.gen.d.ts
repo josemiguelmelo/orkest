@@ -73,7 +73,7 @@ export type TaskInput = {
     status?: 'todo' | 'in_progress' | 'in_review' | 'done';
     assigneeAgentId?: string;
     labels?: Array<string>;
-    componentIds?: Array<string>;
+    repositoryIds?: Array<string>;
 };
 export type Task = {
     id: string;
@@ -89,9 +89,15 @@ export type Task = {
     status: 'todo' | 'in_progress' | 'in_review' | 'done';
     assigneeAgentId?: string;
     labels: Array<string>;
-    components: Array<Component>;
+    repositories: Array<TaskRepository>;
     createdAt: string;
     updatedAt: string;
+};
+export type TaskRepository = {
+    id: string;
+    providerName: string;
+    name: string;
+    url: string;
 };
 export type TaskComment = {
     id: string;
@@ -121,22 +127,6 @@ export type TaskRunEvent = {
     payload: {
         [key: string]: unknown;
     };
-};
-export type ComponentInput = {
-    identifier: string;
-    name: string;
-    repositoryId: string;
-    description?: string;
-};
-export type Component = {
-    id: string;
-    workspaceId: string;
-    identifier: string;
-    name: string;
-    repositoryId: string;
-    description: string;
-    createdAt: string;
-    updatedAt: string;
 };
 export type Agent = {
     id: string;
@@ -371,7 +361,7 @@ export type CreateCodingIntegrationErrors = {
      */
     403: Error;
     /**
-     * Operation conflicts with membership invariants
+     * Operation conflicts with an existing resource or invariant
      */
     409: Error;
     /**
@@ -411,7 +401,7 @@ export type DeleteCodingIntegrationErrors = {
      */
     404: Error;
     /**
-     * Operation conflicts with membership invariants
+     * Operation conflicts with an existing resource or invariant
      */
     409: Error;
 };
@@ -851,7 +841,7 @@ export type RemoveOrganizationMemberErrors = {
      */
     404: Error;
     /**
-     * Operation conflicts with membership invariants
+     * Operation conflicts with an existing resource or invariant
      */
     409: Error;
     /**
@@ -894,7 +884,7 @@ export type SetOrganizationMemberErrors = {
      */
     404: Error;
     /**
-     * Operation conflicts with membership invariants
+     * Operation conflicts with an existing resource or invariant
      */
     409: Error;
     /**
@@ -1379,7 +1369,7 @@ export type CreateCodeRepositoryErrors = {
      */
     404: Error;
     /**
-     * Operation conflicts with membership invariants
+     * Operation conflicts with an existing resource or invariant
      */
     409: Error;
     /**
@@ -2306,7 +2296,7 @@ export type UpdateTaskErrors = {
      */
     404: Error;
     /**
-     * Operation conflicts with membership invariants
+     * Operation conflicts with an existing resource or invariant
      */
     409: Error;
     /**
@@ -2433,7 +2423,7 @@ export type SendTaskRunPromptErrors = {
      */
     404: Error;
     /**
-     * Operation conflicts with membership invariants
+     * Operation conflicts with an existing resource or invariant
      */
     409: Error;
 };
@@ -2478,7 +2468,7 @@ export type CancelTaskRunPromptErrors = {
      */
     404: Error;
     /**
-     * Operation conflicts with membership invariants
+     * Operation conflicts with an existing resource or invariant
      */
     409: Error;
 };
@@ -2522,7 +2512,7 @@ export type RespondTaskRunPermissionErrors = {
      */
     404: Error;
     /**
-     * Operation conflicts with membership invariants
+     * Operation conflicts with an existing resource or invariant
      */
     409: Error;
 };
@@ -2611,124 +2601,6 @@ export type CreateTaskCommentResponses = {
     201: TaskComment;
 };
 export type CreateTaskCommentResponse = CreateTaskCommentResponses[keyof CreateTaskCommentResponses];
-export type ListComponentsData = {
-    body?: never;
-    path: {
-        orgID: string;
-        workspaceID: string;
-    };
-    query?: never;
-    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/components';
-};
-export type ListComponentsErrors = {
-    /**
-     * Missing or invalid credentials
-     */
-    401: Error;
-    /**
-     * Insufficient role permissions
-     */
-    403: Error;
-    /**
-     * Resource is absent or inaccessible
-     */
-    404: Error;
-    /**
-     * Internal server error
-     */
-    500: Error;
-};
-export type ListComponentsError = ListComponentsErrors[keyof ListComponentsErrors];
-export type ListComponentsResponses = {
-    /**
-     * Workspace components
-     */
-    200: Array<Component>;
-};
-export type ListComponentsResponse = ListComponentsResponses[keyof ListComponentsResponses];
-export type CreateComponentData = {
-    body: ComponentInput;
-    path: {
-        orgID: string;
-        workspaceID: string;
-    };
-    query?: never;
-    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/components';
-};
-export type CreateComponentErrors = {
-    /**
-     * Request body or role is invalid
-     */
-    400: Error;
-    /**
-     * Missing or invalid credentials
-     */
-    401: Error;
-    /**
-     * Insufficient role permissions
-     */
-    403: Error;
-    /**
-     * Resource is absent or inaccessible
-     */
-    404: Error;
-    /**
-     * Operation conflicts with membership invariants
-     */
-    409: Error;
-    /**
-     * Internal server error
-     */
-    500: Error;
-};
-export type CreateComponentError = CreateComponentErrors[keyof CreateComponentErrors];
-export type CreateComponentResponses = {
-    /**
-     * Created component
-     */
-    201: Component;
-};
-export type CreateComponentResponse = CreateComponentResponses[keyof CreateComponentResponses];
-export type UpdateComponentData = {
-    body: ComponentInput;
-    path: {
-        orgID: string;
-        workspaceID: string;
-        componentID: string;
-    };
-    query?: never;
-    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/components/{componentID}';
-};
-export type UpdateComponentErrors = {
-    /**
-     * Missing or invalid credentials
-     */
-    401: Error;
-    /**
-     * Insufficient role permissions
-     */
-    403: Error;
-    /**
-     * Resource is absent or inaccessible
-     */
-    404: Error;
-    /**
-     * Operation conflicts with membership invariants
-     */
-    409: Error;
-    /**
-     * Internal server error
-     */
-    500: Error;
-};
-export type UpdateComponentError = UpdateComponentErrors[keyof UpdateComponentErrors];
-export type UpdateComponentResponses = {
-    /**
-     * Updated component
-     */
-    200: Component;
-};
-export type UpdateComponentResponse = UpdateComponentResponses[keyof UpdateComponentResponses];
 export type ListGlobalSkillsData = {
     body?: never;
     path?: never;

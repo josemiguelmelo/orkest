@@ -129,7 +129,7 @@ export function TaskChat({ task }: { task: Task }) {
               startWork: true,
               assigneeAgentId: task.assigneeAgentId ?? '',
               labels: task.labels,
-              componentIds: task.components.map((component) => component.id),
+              repositoryIds: task.repositories.map((repository) => repository.id),
               sessionMode: nextMode,
               promptText: prompt,
               commandId,

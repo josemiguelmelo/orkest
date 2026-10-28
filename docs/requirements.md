@@ -58,9 +58,7 @@ Agent-created commits use the fixed Git identity `Orkest Agent <agent@orkest.loc
 
 ### 3.3 Task
 
-A task contains a title, description, workflow status, freeform labels, comments, components, and timestamps. It belongs to a workspace and may be assigned to a workspace agent definition. Manual task management initially exposes workspace-scoped APIs; task UI and execution wiring are separate work.
-
-A component is a workspace-scoped entity with a user-supplied identifier unique within the workspace, a name, description, and one associated repository registered in that workspace. Tasks may reference multiple components. Identifiers serve as stable human-readable keys, similar to labels.
+A task contains a title, description, workflow status, freeform labels, comments, associated repositories, and timestamps. It belongs to a workspace and may be assigned to a workspace agent definition. Tasks associate directly with zero or more registered repositories in the same workspace; runs check out only those associated repositories. Workspace-scoped APIs and task UI manage these links.
 
 Deleting an assigned agent definition clears that task assignment while preserving the task. Task comment authors remain users.
 

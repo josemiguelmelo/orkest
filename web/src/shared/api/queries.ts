@@ -78,11 +78,6 @@ export const agentsQuery = (s: WorkspaceScope) =>
     queryKey: [...keys.workspace(s), 'agents'],
     queryFn: ({ signal }) => data(sdk.listAgents({ ...command, path: path(s), signal })),
   });
-export const componentsQuery = (s: WorkspaceScope) =>
-  queryOptions({
-    queryKey: [...keys.workspace(s), 'components'],
-    queryFn: ({ signal }) => data(sdk.listComponents({ ...command, path: path(s), signal })),
-  });
 export const repositoriesQuery = (s: WorkspaceScope) =>
   queryOptions({
     queryKey: [...keys.workspace(s), 'repositories'],
@@ -91,7 +86,8 @@ export const repositoriesQuery = (s: WorkspaceScope) =>
 export const codingIntegrationsQuery = (s: WorkspaceScope) =>
   queryOptions({
     queryKey: [...keys.workspace(s), 'coding-integrations'],
-    queryFn: ({ signal }) => data(sdk.listCodingIntegrations({ ...command, path: path(s), signal })),
+    queryFn: ({ signal }) =>
+      data(sdk.listCodingIntegrations({ ...command, path: path(s), signal })),
   });
 export const mcpQuery = (s: WorkspaceScope) =>
   queryOptions({

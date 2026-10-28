@@ -4,7 +4,6 @@ import { Link, Outlet, useNavigate, useParams } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Bot,
-  Boxes,
   ChevronRight,
   CircleHelp,
   FolderGit2,
@@ -228,14 +227,6 @@ function ShellContent({ session }: { session: CurrentUser }) {
               >
                 <Bot size={17} />
                 Agents
-              </Link>
-              <Link
-                className="nav-link"
-                to="/organizations/$orgId/workspaces/$workspaceId/components"
-                params={workspaceParams}
-              >
-                <Boxes size={17} />
-                Components
               </Link>
               <Link
                 className="nav-link"

@@ -88,17 +88,6 @@ type CodingIntegration struct {
 	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
 }
 
-type Component struct {
-	ID           string             `json:"id"`
-	WorkspaceID  string             `json:"workspace_id"`
-	Identifier   string             `json:"identifier"`
-	Name         string             `json:"name"`
-	RepositoryID string             `json:"repository_id"`
-	Description  string             `json:"description"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
-}
-
 type McpServer struct {
 	ID               string             `json:"id"`
 	WorkspaceID      string             `json:"workspace_id"`
@@ -168,12 +157,6 @@ type TaskComment struct {
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 }
 
-type TaskComponent struct {
-	WorkspaceID string `json:"workspace_id"`
-	TaskID      string `json:"task_id"`
-	ComponentID string `json:"component_id"`
-}
-
 type TaskIntegration struct {
 	ID                  string             `json:"id"`
 	WorkspaceID         string             `json:"workspace_id"`
@@ -188,6 +171,12 @@ type TaskIntegration struct {
 	CreatedAt           pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
 	ProviderConfig      []byte             `json:"provider_config"`
+}
+
+type TaskRepository struct {
+	WorkspaceID  string `json:"workspace_id"`
+	TaskID       string `json:"task_id"`
+	RepositoryID string `json:"repository_id"`
 }
 
 type User struct {

@@ -80,7 +80,33 @@ export const zTaskInput = z.object({
     ]).optional(),
     assigneeAgentId: z.string().optional(),
     labels: z.array(z.string()).optional(),
-    componentIds: z.array(z.string()).optional()
+    repositoryIds: z.array(z.string()).optional()
+});
+export const zTaskRepository = z.object({
+    id: z.string(),
+    providerName: z.string(),
+    name: z.string(),
+    url: z.url()
+});
+export const zTask = z.object({
+    id: z.string(),
+    workspaceId: z.string(),
+    title: z.string(),
+    description: z.string(),
+    sourceProvider: z.string(),
+    sourceId: z.string().optional(),
+    sourceUrl: z.string().optional(),
+    status: z.enum([
+        'todo',
+        'in_progress',
+        'in_review',
+        'done'
+    ]),
+    assigneeAgentId: z.string().optional(),
+    labels: z.array(z.string()),
+    repositories: z.array(zTaskRepository),
+    createdAt: z.iso.datetime(),
+    updatedAt: z.iso.datetime()
 });
 export const zTaskComment = z.object({
     id: z.string(),
@@ -108,42 +134,6 @@ export const zTaskRunEvent = z.object({
     runId: z.string(),
     sequence: z.int().gte(1),
     payload: z.record(z.string(), z.unknown())
-});
-export const zComponentInput = z.object({
-    identifier: z.string().min(1).max(100),
-    name: z.string().min(1).max(200),
-    repositoryId: z.string(),
-    description: z.string().max(2000).optional()
-});
-export const zComponent = z.object({
-    id: z.string(),
-    workspaceId: z.string(),
-    identifier: z.string(),
-    name: z.string(),
-    repositoryId: z.string(),
-    description: z.string(),
-    createdAt: z.iso.datetime(),
-    updatedAt: z.iso.datetime()
-});
-export const zTask = z.object({
-    id: z.string(),
-    workspaceId: z.string(),
-    title: z.string(),
-    description: z.string(),
-    sourceProvider: z.string(),
-    sourceId: z.string().optional(),
-    sourceUrl: z.string().optional(),
-    status: z.enum([
-        'todo',
-        'in_progress',
-        'in_review',
-        'done'
-    ]),
-    assigneeAgentId: z.string().optional(),
-    labels: z.array(z.string()),
-    components: z.array(zComponent),
-    createdAt: z.iso.datetime(),
-    updatedAt: z.iso.datetime()
 });
 export const zAgent = z.object({
     id: z.string(),
@@ -831,33 +821,6 @@ export const zCreateTaskCommentPath = z.object({
  * Created comment
  */
 export const zCreateTaskCommentResponse = zTaskComment;
-export const zListComponentsPath = z.object({
-    orgID: z.string(),
-    workspaceID: z.string()
-});
-/**
- * Workspace components
- */
-export const zListComponentsResponse = z.array(zComponent);
-export const zCreateComponentBody = zComponentInput;
-export const zCreateComponentPath = z.object({
-    orgID: z.string(),
-    workspaceID: z.string()
-});
-/**
- * Created component
- */
-export const zCreateComponentResponse = zComponent;
-export const zUpdateComponentBody = zComponentInput;
-export const zUpdateComponentPath = z.object({
-    orgID: z.string(),
-    workspaceID: z.string(),
-    componentID: z.string()
-});
-/**
- * Updated component
- */
-export const zUpdateComponentResponse = zComponent;
 /**
  * Global skills
  */

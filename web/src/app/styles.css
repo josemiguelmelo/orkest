@@ -1267,13 +1267,13 @@ input[type='checkbox'] {
     display: none;
   }
 }
-.component-chips {
+.repository-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   margin-top: 2px;
 }
-.component-chip {
+.repository-chip {
   display: inline-flex;
   align-items: center;
   border: 1px solid var(--border);
@@ -1288,17 +1288,17 @@ input[type='checkbox'] {
     border-color 120ms ease,
     color 120ms ease;
 }
-.component-chip:hover:not(:disabled) {
+.repository-chip:hover:not(:disabled) {
   border-color: var(--primary);
   color: var(--foreground);
 }
-.component-chip.is-selected {
+.repository-chip.is-selected {
   border-color: color-mix(in srgb, var(--primary) 35%, var(--border));
   background: color-mix(in srgb, var(--primary) 11%, var(--surface));
   color: var(--primary);
   font-weight: 600;
 }
-.component-chip:disabled {
+.repository-chip:disabled {
   cursor: wait;
   opacity: 0.65;
 }
