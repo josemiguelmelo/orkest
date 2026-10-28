@@ -12,11 +12,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 
 	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
-	"github.com/josemiguelmelo/orkest/internal/agentctl/gitprovidercliauth"
+	"github.com/josemiguelmelo/orkest/internal/agentctl/gitprovider"
 	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
 	coreruntime "github.com/josemiguelmelo/orkest/internal/core/runtime"
 )
@@ -34,11 +33,11 @@ type Host struct {
 	profile         agentruntime.RuntimeProfile
 	factory         agentruntime.ProtocolClientFactory
 	environment     Environment
-	cliAuthAdapters []gitprovidercliauth.Adapter
+	cliAuthAdapters []gitprovider.Adapter
 }
 
 // New binds runtime contracts to an explicitly granted execution environment.
-func New(profile agentruntime.RuntimeProfile, factory agentruntime.ProtocolClientFactory, environment Environment, cliAuthAdapters ...gitprovidercliauth.Adapter) *Host {
+func New(profile agentruntime.RuntimeProfile, factory agentruntime.ProtocolClientFactory, environment Environment, cliAuthAdapters ...gitprovider.Adapter) *Host {
 	environment.GrantedEnv = slices.Clone(environment.GrantedEnv)
 	return &Host{profile: profile, factory: factory, environment: environment, cliAuthAdapters: slices.Clone(cliAuthAdapters)}
 }
@@ -169,15 +168,14 @@ func (h *Host) prepareRuntime(ctx context.Context, config runconfig.RuntimeConfi
 	if err != nil {
 		return "", nil, err
 	}
-	if err := configureGit(ctx, h.environment.WorkDir, config.GitCredentials); err != nil {
+	environment, err = gitprovider.PrepareRuntime(ctx, gitprovider.Preparation{
+		RuntimeRoot: paths.RuntimeRoot,
+		WorkDir:     h.environment.WorkDir,
+		Environment: environment,
+		Credentials: config.GitCredentials,
+	}, h.cliAuthAdapters)
+	if err != nil {
 		return "", nil, err
-	}
-	if len(config.GitCredentials) > 0 {
-		environment = withGitCredentials(environment, config.GitCredentials)
-		environment, err = gitprovidercliauth.Configure(paths.RuntimeRoot, environment, config.GitCredentials, h.cliAuthAdapters)
-		if err != nil {
-			return "", nil, err
-		}
 	}
 	executable, err := exec.LookPath(descriptor.Executable)
 	if err != nil {
@@ -187,44 +185,6 @@ func (h *Host) prepareRuntime(ctx context.Context, config runconfig.RuntimeConfi
 		return "", nil, err
 	}
 	return executable, environment, nil
-}
-
-func configureGit(ctx context.Context, workDir string, credentials []runconfig.GitCredential) error {
-	for _, credential := range credentials {
-		if filepath.IsAbs(credential.RepositoryPath) || filepath.Clean(credential.RepositoryPath) != credential.RepositoryPath || strings.HasPrefix(credential.RepositoryPath, "..") {
-			return &agentruntime.RuntimeError{Kind: agentruntime.RuntimeFailure, Message: "configure Git identity failed", Cause: fmt.Errorf("invalid repository path")}
-		}
-		path := filepath.Join(workDir, credential.RepositoryPath)
-		for _, setting := range [][2]string{{"user.name", "Orkest Agent"}, {"user.email", "agent@orkest.local"}} {
-			cmd := exec.CommandContext(ctx, "git", "-C", path, "config", "--local", setting[0], setting[1])
-			cmd.Stdout, cmd.Stderr = io.Discard, io.Discard
-			if err := cmd.Run(); err != nil {
-				return &agentruntime.RuntimeError{Kind: agentruntime.RuntimeFailure, Message: "configure Git identity failed", Cause: err}
-			}
-		}
-	}
-	return nil
-}
-
-func withGitCredentials(environment []string, credentials []runconfig.GitCredential) []string {
-	values := make(map[string]string, len(environment)+1+len(credentials)*2)
-	for _, entry := range environment {
-		name, value, ok := strings.Cut(entry, "=")
-		if ok && name != "GIT_CONFIG_COUNT" && !strings.HasPrefix(name, "GIT_CONFIG_KEY_") && !strings.HasPrefix(name, "GIT_CONFIG_VALUE_") {
-			values[name] = value
-		}
-	}
-	values["GIT_CONFIG_COUNT"] = strconv.Itoa(len(credentials))
-	for i, credential := range credentials {
-		auth := base64.StdEncoding.EncodeToString([]byte("x-access-token:" + credential.Token))
-		values["GIT_CONFIG_KEY_"+strconv.Itoa(i)] = "http." + credential.RepositoryURL + ".extraheader"
-		values["GIT_CONFIG_VALUE_"+strconv.Itoa(i)] = "AUTHORIZATION: basic " + auth
-	}
-	result := make([]string, 0, len(values))
-	for key, value := range values {
-		result = append(result, key+"="+value)
-	}
-	return result
 }
 
 func environmentEntries(values map[string]string) []string {

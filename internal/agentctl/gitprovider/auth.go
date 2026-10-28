@@ -1,5 +1,5 @@
-// Package gitprovidercliauth configures provider CLIs with credentials scoped to registered repositories.
-package gitprovidercliauth
+// Package gitprovider prepares Git credentials and provider CLIs for a runtime.
+package gitprovider
 
 import (
 	"github.com/josemiguelmelo/orkest/internal/agentctl/config"
@@ -11,13 +11,12 @@ type Adapter interface {
 	Configure(string, []string, []config.GitCredential) ([]string, error)
 }
 
-// DefaultAdapters returns the CLI auth strategies shipped with agentctl.
+// DefaultAdapters returns the provider CLI strategies shipped with agentctl.
 func DefaultAdapters() []Adapter {
 	return []Adapter{GitHubAdapter{}, GitLabAdapter{}}
 }
 
-// Configure applies only adapters matching credentials present in the runtime config.
-func Configure(runtimeRoot string, environment []string, credentials []config.GitCredential, adapters []Adapter) ([]string, error) {
+func configureProviderCLIs(runtimeRoot string, environment []string, credentials []config.GitCredential, adapters []Adapter) ([]string, error) {
 	for _, adapter := range adapters {
 		matched := credentialsForProviders(credentials, adapter.ProviderNames())
 		if len(matched) == 0 {

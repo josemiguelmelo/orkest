@@ -1,4 +1,4 @@
-package gitprovidercliauth
+package gitprovider
 
 import (
 	"os"
@@ -28,7 +28,7 @@ func TestConfigureProviderCLIsSelectsCredentialsByProvider(t *testing.T) {
 	}
 	github := &recordingCLIAdapter{providers: []string{"github"}}
 	gitlab := &recordingCLIAdapter{providers: []string{"gitlab_cloud", "gitlab_server"}}
-	environment, err := Configure(t.TempDir(), []string{"PATH=/bin"}, credentials, []Adapter{github, gitlab})
+	environment, err := configureProviderCLIs(t.TempDir(), []string{"PATH=/bin"}, credentials, []Adapter{github, gitlab})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -56,7 +56,7 @@ func TestProviderCLIAdaptersScopeSecretsToMatchingCheckout(t *testing.T) {
 		{ProviderName: "github", RepositoryURL: "https://github.com/acme/project.git", Token: "github-secret"},
 		{ProviderName: "gitlab_server", ProviderConfig: []byte(`{"baseUrl":"https://gitlab.example/gitlab"}`), RepositoryURL: "https://gitlab.example/gitlab/group/project.git", Token: "gitlab-secret"},
 	}
-	environment, err := Configure(runtimeRoot, []string{"PATH=" + binDir, "GH_TOKEN=stale", "GITLAB_TOKEN=stale"}, credentials, DefaultAdapters())
+	environment, err := configureProviderCLIs(runtimeRoot, []string{"PATH=" + binDir, "GH_TOKEN=stale", "GITLAB_TOKEN=stale"}, credentials, DefaultAdapters())
 	if err != nil {
 		t.Fatal(err)
 	}

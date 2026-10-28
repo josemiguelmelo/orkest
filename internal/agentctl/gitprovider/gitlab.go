@@ -1,4 +1,4 @@
-package gitprovidercliauth
+package gitprovider
 
 import (
 	"encoding/json"
