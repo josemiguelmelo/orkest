@@ -7,7 +7,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useSessionChoice } from './session-choice';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { ArrowLeft, Bot, LayoutGrid, List, Search } from 'lucide-react';
+import { ArrowLeft, Bot, LayoutGrid, List, Search, X } from 'lucide-react';
 import { useApp } from '../../app/context';
 import { command, data } from '../../shared/api/client';
 import * as sdk from '../../shared/api/generated/sdk.gen';
@@ -40,10 +40,13 @@ import { filterTasks, statuses, statusNames, taskFormSchema, taskInput } from '.
 export function TasksPage(): JSX.Element {
   const { scope, permissions } = useApp();
   const tasks = useQuery(tasksQuery(scope));
+  const refreshTasks = useRefresh();
   const agents = useQuery(agentsQuery(scope));
   const search = useSearch({ strict: false });
   const navigate = useNavigate();
   const [create, setCreate] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<string>();
+  const [dragTarget, setDragTarget] = useState<string>();
   const state = {
     view: search.view ?? 'board',
     q: search.q ?? '',
@@ -71,7 +74,7 @@ export function TasksPage(): JSX.Element {
           <CreateButton onClick={() => setCreate(true)}>New task</CreateButton>
         )}
       </PageHeader>
-      <div className="toolbar">
+      <div className="toolbar task-toolbar">
         <Search size={16} className="muted" />
         <input
           aria-label="Search tasks"
@@ -147,43 +150,75 @@ export function TasksPage(): JSX.Element {
       ) : !visible.length ? (
         <Empty title="No matching tasks">Try another search or filter.</Empty>
       ) : state.view === 'board' ? (
-        <div className="board">
-          {statuses.map((status) => (
-            <section className="board-column" key={status}>
-              <h2 className="column-heading">
-                <span className={`status-dot status-${status}`} />
-                {statusNames[status]}
-                <Badge>{visible.filter((t) => t.status === status).length}</Badge>
-              </h2>
-              {visible
-                .filter((t) => t.status === status)
-                .map((task) => (
-                  <Link
-                    key={task.id}
-                    className="task-card"
-                    to="/organizations/$orgId/workspaces/$workspaceId/tasks/$taskId"
-                    params={{ ...params, taskId: task.id }}
-                  >
-                    <div className="task-meta">
-                      <span>{task.id.slice(0, 8)}</span>
-                      <span>{task.sourceProvider === 'manual' ? 'Manual' : 'Imported'}</span>
-                    </div>
-                    <h3>{task.title}</h3>
-                    <div className="tags">
-                      {task.labels.map((label) => (
-                        <Badge key={label}>{label}</Badge>
-                      ))}
-                    </div>
-                    <div className="task-agent">
-                      <Bot size={12} style={{ display: 'inline', marginRight: 5 }} />
-                      {agents.data?.find((a) => a.id === task.assigneeAgentId)?.name ??
-                        'Unassigned'}
-                    </div>
-                  </Link>
-                ))}
-            </section>
-          ))}
-        </div>
+        <>
+          <div className="board-hint">
+            <span>Move work through your workflow</span>
+            <span>Drag a card to change its lane</span>
+          </div>
+          <div className="board">
+            {statuses.map((status) => (
+              <section
+                className={`board-column${dragTarget === status ? ' is-drop-target' : ''}`}
+                data-status={status}
+                key={status}
+                onDragEnter={(event) => {
+                  if (permissions.editWorkspace) {
+                    event.preventDefault();
+                    setDragTarget(status);
+                  }
+                }}
+                onDragLeave={(event) => {
+                  if (event.currentTarget === event.target) setDragTarget(undefined);
+                }}
+                onDragOver={(event) => {
+                  if (permissions.editWorkspace) event.preventDefault();
+                }}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  setDragTarget(undefined);
+                  const id = event.dataTransfer.getData('text/task-id');
+                  const dragged = visible.find((item) => item.id === id);
+                  if (dragged && dragged.status !== status && dragged.status !== 'done')
+                    void updateTaskValues(scope, dragged, { status }).then(() =>
+                      refreshTasks(scope),
+                    );
+                }}
+              >
+                <h2 className="column-heading">
+                  <span className={`column-status-icon status-${status}`} />
+                  <span>{statusNames[status]}</span>
+                  <span className="column-count">
+                    {visible.filter((t) => t.status === status).length}
+                  </span>
+                </h2>
+                <p className="column-description">
+                  {
+                    {
+                      todo: 'Ready to pick up',
+                      in_progress: 'Work in progress',
+                      in_review: 'Ready for review',
+                      done: 'Completed work',
+                    }[status]
+                  }
+                </p>
+                {visible
+                  .filter((t) => t.status === status)
+                  .map((task) => (
+                    <TaskCard
+                      key={task.id}
+                      task={task}
+                      agents={agents.data ?? []}
+                      canEdit={permissions.editWorkspace}
+                      onOpen={() => setSelectedTask(task.id)}
+                    />
+                  ))}
+                {!visible.some((task) => task.status === status) && (
+                  <div className="column-empty">No tasks here yet</div>
+                )}
+              </section>
+            ))}
+          </div>
+        </>
       ) : (
         <div className="table-wrap">
           <table>
@@ -199,12 +234,12 @@ export function TasksPage(): JSX.Element {
               {visible.map((task) => (
                 <tr key={task.id}>
                   <td>
-                    <Link
-                      to="/organizations/$orgId/workspaces/$workspaceId/tasks/$taskId"
-                      params={{ ...params, taskId: task.id }}
+                    <button
+                      className="text-link task-title-button"
+                      onClick={() => setSelectedTask(task.id)}
                     >
                       {task.title}
-                    </Link>
+                    </button>
                   </td>
                   <td>
                     <Badge>{statusNames[task.status]}</Badge>
@@ -226,9 +261,193 @@ export function TasksPage(): JSX.Element {
         </div>
       )}
       {create && <TaskEditor onClose={() => setCreate(false)} />}
+      {selectedTask && (
+        <TaskDrawer taskId={selectedTask} onClose={() => setSelectedTask(undefined)} />
+      )}
     </>
   );
 }
+
+function TaskCard({
+  task,
+  agents,
+  canEdit,
+  onOpen,
+}: {
+  task: Task;
+  agents: { id: string; name: string }[];
+  canEdit: boolean;
+  onOpen: () => void;
+}): JSX.Element {
+  const { scope } = useApp();
+  const refresh = useRefresh();
+  const action = useAction();
+  const runs = useQuery(taskRunsQuery(scope, task.id));
+  const latest = runs.data?.[0];
+  const execution = latest?.executionState;
+  const badge =
+    latest?.queuePaused || latest?.recoveryBlocked
+      ? { label: 'On hold', color: 'blue' }
+      : execution === 'waiting_for_permission'
+        ? { label: 'Waiting for input', color: 'yellow' }
+        : execution === 'running' || latest?.status === 'ready'
+          ? { label: 'In progress', color: 'green' }
+          : undefined;
+  return (
+    <article
+      className="task-card"
+      draggable={canEdit && task.status !== 'done'}
+      onDragStart={(event) => event.dataTransfer.setData('text/task-id', task.id)}
+      onClick={onOpen}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter') onOpen();
+      }}
+      tabIndex={0}
+      aria-label={`Open task ${task.title}`}
+    >
+      <div className="task-meta">
+        <span>{task.id.slice(0, 8)}</span>
+        <span>{task.sourceProvider === 'manual' ? 'Manual' : 'Imported'}</span>
+      </div>
+      <div className="task-status-row">
+        <span className={`task-status-pill ${badge ? `is-${badge.color}` : ''}`}>
+          <span
+            className={`status-dot ${badge ? `status-${badge.color}` : `status-${task.status}`}`}
+          />
+          {badge?.label ?? statusNames[task.status]}
+        </span>
+      </div>
+      <h3>{task.title}</h3>
+      <div className="tags">
+        {task.labels.map((label) => (
+          <Badge key={label}>{label}</Badge>
+        ))}
+      </div>
+      <div className="task-agent">
+        <Bot size={12} style={{ display: 'inline', marginRight: 5 }} />
+        {canEdit ? (
+          <select
+            aria-label={`Assign ${task.title}`}
+            value={task.assigneeAgentId ?? ''}
+            onClick={(event) => event.stopPropagation()}
+            onChange={(event) =>
+              void action.run(async () => {
+                try {
+                  await data(
+                    sdk.updateTask({
+                      ...command,
+                      path: { ...path(scope), taskID: task.id },
+                      body: {
+                        title: task.title,
+                        description: task.description,
+                        status: task.status,
+                        assigneeAgentId: event.target.value,
+                        labels: task.labels,
+                        repositoryIds: task.repositories.map((r) => r.id),
+                      },
+                    }),
+                  );
+                } finally {
+                  await refresh(scope);
+                }
+              })
+            }
+          >
+            <option value="">Unassigned</option>
+            {agents.map((agent) => (
+              <option key={agent.id} value={agent.id}>
+                {agent.name}
+              </option>
+            ))}
+          </select>
+        ) : (
+          (agents.find((a) => a.id === task.assigneeAgentId)?.name ?? 'Unassigned')
+        )}
+      </div>
+    </article>
+  );
+}
+
+async function updateTaskValues(
+  scope: ReturnType<typeof useApp>['scope'],
+  task: Task,
+  patch: { status: Task['status'] },
+) {
+  await data(
+    sdk.updateTask({
+      ...command,
+      path: { ...path(scope), taskID: task.id },
+      body: {
+        title: task.title,
+        description: task.description,
+        status: patch.status,
+        assigneeAgentId: task.assigneeAgentId ?? '',
+        labels: task.labels,
+        repositoryIds: task.repositories.map((r) => r.id),
+      },
+    }),
+  );
+}
+
+function TaskDrawer({ taskId, onClose }: { taskId: string; onClose: () => void }): JSX.Element {
+  const { scope } = useApp();
+  const task = useQuery(taskQuery(scope, taskId));
+  const agents = useQuery(agentsQuery(scope));
+  return (
+    <div
+      className="task-drawer-backdrop"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <aside className="task-drawer" role="dialog" aria-modal="true" aria-label="Task details">
+        <button className="task-drawer-close" onClick={onClose} aria-label="Close task">
+          <X size={18} />
+        </button>
+        {task.isPending ? (
+          <Loading />
+        ) : task.isError ? (
+          <ErrorState error={task.error} />
+        ) : (
+          <>
+            <div className="task-drawer-heading">
+              <span className="muted">Task {task.data.id.slice(0, 8)}</span>
+              <h2>{task.data.title}</h2>
+            </div>
+            <Badge>{statusNames[task.data.status]}</Badge>
+            <div className="task-drawer-section">
+              <h3>Assigned agent</h3>
+              <p>
+                {agents.data?.find((a) => a.id === task.data.assigneeAgentId)?.name ?? 'Unassigned'}
+              </p>
+            </div>
+            <div className="task-drawer-section">
+              <h3>Description</h3>
+              {task.data.description ? (
+                <Markdown text={task.data.description} />
+              ) : (
+                <p className="muted">No description provided.</p>
+              )}
+            </div>
+            <div className="task-drawer-section">
+              <h3>Task chat</h3>
+              <TaskChat key={task.data.id} task={task.data} />
+            </div>
+            <Link
+              className="text-link"
+              to="/organizations/$orgId/workspaces/$workspaceId/tasks/$taskId"
+              params={{ orgId: scope.orgID, workspaceId: scope.workspaceID, taskId }}
+              onClick={onClose}
+            >
+              Open full task
+            </Link>
+          </>
+        )}
+      </aside>
+    </div>
+  );
+}
+
 export function TaskEditor({ task, onClose }: { task?: Task; onClose: () => void }) {
   const { scope } = useApp();
   const refresh = useRefresh();
