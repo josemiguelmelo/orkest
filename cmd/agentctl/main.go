@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/josemiguelmelo/orkest/internal/agentctl/cliauth"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/daemon"
 	sharedacp "github.com/josemiguelmelo/orkest/internal/agentctl/runtime/acp"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/runtime/opencode"
@@ -40,7 +41,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	host := runtimehost.New(opencode.Profile{Binary: *binary}, sharedacp.Factory{}, runtimehost.Environment{WorkDir: *workDir, StateDir: *stateDir, GrantedEnv: env}, runtimehost.DefaultCLIAuthAdapters()...)
+	host := runtimehost.New(opencode.Profile{Binary: *binary}, sharedacp.Factory{}, runtimehost.Environment{WorkDir: *workDir, StateDir: *stateDir, GrantedEnv: env}, cliauth.DefaultAdapters()...)
 	if err := daemon.RunAgentctl(ctx, logger, *address, host, *stateDir, *runID); err != nil {
 		logger.Error("agentctl stopped", "error", err)
 		os.Exit(1)

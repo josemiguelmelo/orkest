@@ -15,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/josemiguelmelo/orkest/internal/agentctl/cliauth"
 	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
 	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
 	coreruntime "github.com/josemiguelmelo/orkest/internal/core/runtime"
@@ -33,11 +34,11 @@ type Host struct {
 	profile         agentruntime.RuntimeProfile
 	factory         agentruntime.ProtocolClientFactory
 	environment     Environment
-	cliAuthAdapters []CLIAuthAdapter
+	cliAuthAdapters []cliauth.Adapter
 }
 
 // New binds runtime contracts to an explicitly granted execution environment.
-func New(profile agentruntime.RuntimeProfile, factory agentruntime.ProtocolClientFactory, environment Environment, cliAuthAdapters ...CLIAuthAdapter) *Host {
+func New(profile agentruntime.RuntimeProfile, factory agentruntime.ProtocolClientFactory, environment Environment, cliAuthAdapters ...cliauth.Adapter) *Host {
 	environment.GrantedEnv = slices.Clone(environment.GrantedEnv)
 	return &Host{profile: profile, factory: factory, environment: environment, cliAuthAdapters: slices.Clone(cliAuthAdapters)}
 }
@@ -173,7 +174,7 @@ func (h *Host) prepareRuntime(ctx context.Context, config runconfig.RuntimeConfi
 	}
 	if len(config.GitCredentials) > 0 {
 		environment = withGitCredentials(environment, config.GitCredentials)
-		environment, err = configureProviderCLIs(paths.RuntimeRoot, environment, config.GitCredentials, h.cliAuthAdapters)
+		environment, err = cliauth.Configure(paths.RuntimeRoot, environment, config.GitCredentials, h.cliAuthAdapters)
 		if err != nil {
 			return "", nil, err
 		}
