@@ -308,57 +308,102 @@ function IntegrationEditor({
             onClose();
         }}
       >
-        <Field label="Provider" error={form.formState.errors.provider?.message}>
-          <select
-            {...form.register('provider', { onChange: () => setConfig({}) })}
-            disabled={!!item}
-          >
-            {providers.map((p) => (
-              <option key={p.provider} value={p.provider}>
-                {p.provider.replaceAll('_', ' ')}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Connection name" hint="A name to help you identify this connection." error={form.formState.errors.name?.message}>
-          <input {...form.register('name')} placeholder="e.g., Team GitHub Projects" />
-        </Field>
-        {parsed.error !== undefined && <ErrorState error={parsed.error} />}{' '}
-        {parsed.fields && (
-          <>
-            <p style={{ fontSize: '12px', fontWeight: 600, marginTop: '8px' }}>Source configuration</p>
-            <ProviderConfig fields={parsed.fields} config={config} onChange={setConfig} />
-          </>
-        )}
-        <Field
-          label={item ? 'Replacement credential (optional)' : 'Credential *'}
-          hint={
-            item
-              ? 'Leave blank to keep your existing credential. Enter a new one to rotate it.'
-              : 'Your credential is stored securely and never displayed again.'
-          }
-        >
-          <input type="password" autoComplete="new-password" {...form.register('credential')} placeholder={item ? 'Paste new credential to rotate' : 'Enter credential'} />
-        </Field>
         <div className="form-grid">
-          <Field
-            label="Required labels"
-            hint="Only import tasks with these labels (comma-separated). Leave empty to import all."
-          >
-            <input {...form.register('labels')} placeholder="bug,feature" />
+          <Field label="Provider" error={form.formState.errors.provider?.message}>
+            <select
+              {...form.register('provider', { onChange: () => setConfig({}) })}
+              disabled={!!item}
+            >
+              {providers.map((p) => (
+                <option key={p.provider} value={p.provider}>
+                  {p.provider.replaceAll('_', ' ')}
+                </option>
+              ))}
+            </select>
           </Field>
-          <Field label="Sync interval" hint="How often to check for updates." error={form.formState.errors.interval?.message}>
-            <input {...form.register('interval')} placeholder="5m" />
+          <Field
+            label="Connection name"
+            hint="A friendly name for this source"
+            error={form.formState.errors.name?.message}
+          >
+            <input {...form.register('name')} placeholder="e.g., Team GitHub Projects" />
           </Field>
         </div>
-        <label className="actions" style={{ alignItems: 'center', gap: '8px' }}>
-          <input type="checkbox" {...form.register('enabled')} />
-          <span>Enable automatic syncing</span>
-        </label>
-        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+        {parsed.error !== undefined && <ErrorState error={parsed.error} />}{' '}
+        {parsed.fields && (
+          <section className="panel" style={{ padding: '16px', gap: '12px' }}>
+            <div>
+              <p style={{ fontSize: '12px', fontWeight: 600 }}>Source configuration</p>
+              <p className="muted" style={{ fontSize: '11px' }}>
+                Configure how tasks are imported from this source
+              </p>
+            </div>
+            <ProviderConfig fields={parsed.fields} config={config} onChange={setConfig} />
+          </section>
+        )}
+        <section className="panel" style={{ padding: '16px', gap: '12px' }}>
+          <div>
+            <p style={{ fontSize: '12px', fontWeight: 600 }}>Authentication</p>
+            <p className="muted" style={{ fontSize: '11px' }}>
+              Credentials are encrypted and never displayed after saving
+            </p>
+          </div>
+          <Field
+            label={item ? 'Replacement credential' : 'Credential *'}
+            hint={
+              item
+                ? 'Leave blank to keep existing credential. Paste a new one to rotate.'
+                : 'Personal access token or API key with read access to the project'
+            }
+          >
+            <input
+              type="password"
+              autoComplete="new-password"
+              {...form.register('credential')}
+              placeholder={item ? 'Paste new credential to rotate' : 'Enter your credential'}
+            />
+          </Field>
+        </section>
+        <section className="panel" style={{ padding: '16px', gap: '12px' }}>
+          <div>
+            <p style={{ fontSize: '12px', fontWeight: 600 }}>Sync settings</p>
+            <p className="muted" style={{ fontSize: '11px' }}>
+              Control which tasks are imported and how often
+            </p>
+          </div>
+          <div className="form-grid">
+            <Field
+              label="Filter by labels"
+              hint="Comma-separated. Leave empty to import all tasks."
+            >
+              <input {...form.register('labels')} placeholder="bug, enhancement" />
+            </Field>
+            <Field
+              label="Sync interval"
+              hint="e.g., 5m, 1h"
+              error={form.formState.errors.interval?.message}
+            >
+              <input {...form.register('interval')} placeholder="5m" />
+            </Field>
+          </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 0' }}>
+            <input type="checkbox" {...form.register('enabled')} />
+            <span style={{ fontSize: '12px' }}>Enable automatic synchronization</span>
+          </label>
+        </section>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            paddingTop: '8px',
+            borderTop: '1px solid var(--border)',
+            gap: '12px',
+            flexWrap: 'wrap',
+          }}
+        >
           <Button
             variant="outline"
-            size="sm"
             disabled={action.pending || !form.watch('credential') || !parsed.fields}
             onClick={() => {
               void form.handleSubmit(async (values) => {
@@ -374,14 +419,14 @@ function IntegrationEditor({
               })();
             }}
           >
-            Validate connection
+            Test connection
           </Button>
+          {action.message && (
+            <p role="status" className="success-message" style={{ margin: 0 }}>
+              {action.message}
+            </p>
+          )}
         </div>
-        {action.message && (
-          <p role="status" className="success-message">
-            {action.message}
-          </p>
-        )}
       </Form>
     </Dialog>
   );
