@@ -2,6 +2,7 @@
 package config
 
 import (
+	"encoding/json"
 	"fmt"
 	"maps"
 	"net/url"
@@ -42,9 +43,11 @@ type Skill struct {
 // GitCredential grants push access to one registered HTTPS repository for a run.
 // The token is sensitive and must never be included in logs or ordinary responses.
 type GitCredential struct {
-	RepositoryURL  string `json:"repositoryUrl"`
-	RepositoryPath string `json:"repositoryPath"`
-	Token          string `json:"token"`
+	ProviderName   string          `json:"providerName"`
+	ProviderConfig json.RawMessage `json:"providerConfig,omitempty"`
+	RepositoryURL  string          `json:"repositoryUrl"`
+	RepositoryPath string          `json:"repositoryPath"`
+	Token          string          `json:"token"`
 }
 
 var (
@@ -91,6 +94,9 @@ func (c RuntimeConfig) Clone() RuntimeConfig {
 	c.Skills = slices.Clone(c.Skills)
 	c.Environment = maps.Clone(c.Environment)
 	c.GitCredentials = slices.Clone(c.GitCredentials)
+	for i := range c.GitCredentials {
+		c.GitCredentials[i].ProviderConfig = slices.Clone(c.GitCredentials[i].ProviderConfig)
+	}
 	return c
 }
 
@@ -121,7 +127,7 @@ func (c RuntimeConfig) Validate() error {
 	}
 	for _, credential := range c.GitCredentials {
 		parsed, err := url.Parse(credential.RepositoryURL)
-		if strings.TrimSpace(credential.Token) == "" || strings.TrimSpace(credential.RepositoryPath) == "" || err != nil || parsed == nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil || strings.ContainsAny(credential.Token, "\x00\r\n") {
+		if strings.TrimSpace(credential.ProviderName) == "" || strings.TrimSpace(credential.Token) == "" || strings.TrimSpace(credential.RepositoryPath) == "" || err != nil || parsed == nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil || strings.ContainsAny(credential.Token, "\x00\r\n") || (len(credential.ProviderConfig) > 0 && !json.Valid(credential.ProviderConfig)) {
 			return &ValidationError{Field: "gitCredentials", Reason: "must contain valid HTTPS repository credentials"}
 		}
 	}
@@ -134,6 +140,9 @@ func (c RuntimeConfig) Validate() error {
 		}
 		if strings.HasPrefix(name, "ORKEST_GH_") {
 			return &ValidationError{Field: "environment", Reason: "contains a reserved GitHub CLI variable"}
+		}
+		if strings.HasPrefix(name, "ORKEST_GITLAB_") {
+			return &ValidationError{Field: "environment", Reason: "contains a reserved GitLab CLI variable"}
 		}
 	}
 	return nil

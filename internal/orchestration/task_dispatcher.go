@@ -156,7 +156,7 @@ func (d *TaskDispatcher) StartTask(ctx context.Context, userID, organizationID s
 				if credentialErr != nil {
 					return fmt.Errorf("resolve repository push credential: %w", credentialErr)
 				}
-				config.GitCredentials = append(config.GitCredentials, runconfig.GitCredential{RepositoryURL: repository.URL, RepositoryPath: "repositories/" + repository.ProviderName + "/" + repository.ID, Token: credential.Token})
+				config.GitCredentials = append(config.GitCredentials, runconfig.GitCredential{ProviderName: repository.ProviderName, ProviderConfig: credential.ProviderConfig, RepositoryURL: repository.URL, RepositoryPath: "repositories/" + repository.ProviderName + "/" + repository.ID, Token: credential.Token})
 				config.GitCredentialsRequired = true
 			}
 		}

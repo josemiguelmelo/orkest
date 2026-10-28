@@ -150,7 +150,7 @@ export type McpServer = {
 export type CodeRepository = {
     id: string;
     workspaceId: string;
-    providerName: 'github';
+    providerName: 'github' | 'gitlab_cloud' | 'gitlab_server';
     url: string;
     integrationId?: string;
     providerRepositoryId?: string;
@@ -160,7 +160,7 @@ export type CodeRepository = {
 };
 export type CodingIntegrationInput = {
     name: string;
-    providerName: string;
+    providerName: 'github' | 'gitlab_cloud' | 'gitlab_server';
     providerConfig?: {
         [key: string]: unknown;
     };
@@ -169,14 +169,14 @@ export type CodingIntegration = {
     id: string;
     workspaceId: string;
     name: string;
-    providerName: string;
+    providerName: 'github' | 'gitlab_cloud' | 'gitlab_server';
     providerConfig: {
         [key: string]: unknown;
     };
     updatedAt?: string;
 };
 export type CodingProvider = {
-    providerName: string;
+    providerName: 'github' | 'gitlab_cloud' | 'gitlab_server';
     configSchema: {
         [key: string]: unknown;
     };
@@ -248,7 +248,7 @@ export type CurrentUserWritable = {
 };
 export type CodingIntegrationInputWritable = {
     name: string;
-    providerName: string;
+    providerName: 'github' | 'gitlab_cloud' | 'gitlab_server';
     providerConfig?: {
         [key: string]: unknown;
     };

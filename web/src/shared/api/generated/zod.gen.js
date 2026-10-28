@@ -157,7 +157,11 @@ export const zMcpServer = z.object({
 export const zCodeRepository = z.object({
     id: z.string(),
     workspaceId: z.string(),
-    providerName: z.enum(['github']),
+    providerName: z.enum([
+        'github',
+        'gitlab_cloud',
+        'gitlab_server'
+    ]),
     url: z.url(),
     integrationId: z.string().optional(),
     providerRepositoryId: z.string().optional(),
@@ -167,19 +171,31 @@ export const zCodeRepository = z.object({
 });
 export const zCodingIntegrationInput = z.object({
     name: z.string().min(1).max(200),
-    providerName: z.string(),
+    providerName: z.enum([
+        'github',
+        'gitlab_cloud',
+        'gitlab_server'
+    ]),
     providerConfig: z.record(z.string(), z.unknown()).optional()
 });
 export const zCodingIntegration = z.object({
     id: z.string(),
     workspaceId: z.string(),
     name: z.string(),
-    providerName: z.string(),
+    providerName: z.enum([
+        'github',
+        'gitlab_cloud',
+        'gitlab_server'
+    ]),
     providerConfig: z.record(z.string(), z.unknown()),
     updatedAt: z.string().optional()
 });
 export const zCodingProvider = z.object({
-    providerName: z.string(),
+    providerName: z.enum([
+        'github',
+        'gitlab_cloud',
+        'gitlab_server'
+    ]),
     configSchema: z.record(z.string(), z.unknown())
 });
 export const zCodingRepository = z.object({
@@ -242,7 +258,11 @@ export const zCurrentUserWritable = z.object({
 });
 export const zCodingIntegrationInputWritable = z.object({
     name: z.string().min(1).max(200),
-    providerName: z.string(),
+    providerName: z.enum([
+        'github',
+        'gitlab_cloud',
+        'gitlab_server'
+    ]),
     providerConfig: z.record(z.string(), z.unknown()).optional(),
     credential: z.string().optional()
 });

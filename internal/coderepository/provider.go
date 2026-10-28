@@ -15,7 +15,10 @@ func (e *ProviderError) Error() string {
 	return fmt.Sprintf("coding provider request failed (%s)", e.Code)
 }
 
-type Credentials struct{ Token string }
+type Credentials struct {
+	Token          string
+	ProviderConfig json.RawMessage
+}
 
 type RepositoryPage struct {
 	Repositories []RepositoryMetadata `json:"repositories"`

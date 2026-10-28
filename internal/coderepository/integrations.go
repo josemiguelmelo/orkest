@@ -269,7 +269,7 @@ func (s *Service) CodingCredential(ctx context.Context, workspaceID, integration
 	if err != nil {
 		return Credentials{}, err
 	}
-	_, sealed, err := repo.GetCodingIntegration(ctx, workspaceID, integrationID)
+	integration, sealed, err := repo.GetCodingIntegration(ctx, workspaceID, integrationID)
 	if err != nil {
 		return Credentials{}, err
 	}
@@ -277,7 +277,7 @@ func (s *Service) CodingCredential(ctx context.Context, workspaceID, integration
 	if err != nil {
 		return Credentials{}, errors.New("stored integration credential is unavailable")
 	}
-	return Credentials{Token: token}, nil
+	return Credentials{Token: token, ProviderConfig: integration.ProviderConfig}, nil
 }
 
 func (s *Service) integrationRepository() (CodingIntegrationRepository, error) {

@@ -1448,7 +1448,7 @@ components:
       properties:
         id: {type: string}
         workspaceId: {type: string}
-        providerName: {type: string, enum: [github]}
+        providerName: {type: string, enum: [github, gitlab_cloud, gitlab_server]}
         url: {type: string, format: uri}
         integrationId: {type: string}
         providerRepositoryId: {type: string}
@@ -1460,7 +1460,7 @@ components:
       required: [name, providerName]
       properties:
         name: {type: string, minLength: 1, maxLength: 200}
-        providerName: {type: string}
+        providerName: {type: string, enum: [github, gitlab_cloud, gitlab_server]}
         providerConfig: {type: object, additionalProperties: true}
         credential: {type: string, writeOnly: true}
       additionalProperties: false
@@ -1471,14 +1471,14 @@ components:
         id: {type: string}
         workspaceId: {type: string}
         name: {type: string}
-        providerName: {type: string}
+        providerName: {type: string, enum: [github, gitlab_cloud, gitlab_server]}
         providerConfig: {type: object, additionalProperties: true}
         updatedAt: {type: string}
     CodingProvider:
       type: object
       required: [providerName, configSchema]
       properties:
-        providerName: {type: string}
+        providerName: {type: string, enum: [github, gitlab_cloud, gitlab_server]}
         configSchema: {type: object, additionalProperties: true}
     CodingRepository:
       type: object
