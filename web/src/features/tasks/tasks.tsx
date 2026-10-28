@@ -7,7 +7,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useSessionChoice } from './session-choice';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { ArrowLeft, Bot, LayoutGrid, List, Search, X } from 'lucide-react';
+import { ArrowLeft, Bot, GitBranch, LayoutGrid, List, Search, X } from 'lucide-react';
 import { useApp } from '../../app/context';
 import { command, data } from '../../shared/api/client';
 import * as sdk from '../../shared/api/generated/sdk.gen';
@@ -307,7 +307,14 @@ function TaskCard({
     >
       <div className="task-meta">
         <span>{task.id.slice(0, 8)}</span>
-        <span>{task.sourceProvider === 'manual' ? 'Manual' : 'Imported'}</span>
+        {task.sourceProvider === 'manual' ? (
+          <span>Manual</span>
+        ) : (
+          <span className="task-source">
+            <SourceProviderIcon provider={task.sourceProvider} />
+            {task.sourceId && <span>{task.sourceId}</span>}
+          </span>
+        )}
       </div>
       <div className="task-status-row">
         <span className={`task-status-pill ${badge ? `is-${badge.color}` : ''}`}>
@@ -415,6 +422,26 @@ function TaskDrawer({ taskId, onClose }: { taskId: string; onClose: () => void }
               <h2>{task.data.title}</h2>
             </div>
             <Badge>{statusNames[task.data.status]}</Badge>
+            {task.data.sourceProvider !== 'manual' && (
+              <div className="task-drawer-section">
+                <h3>External issue</h3>
+                <p className="task-source">
+                  <SourceProviderIcon provider={task.data.sourceProvider} />
+                  {task.data.sourceUrl && /^https?:\/\//i.test(task.data.sourceUrl) ? (
+                    <a
+                      className="text-link"
+                      href={task.data.sourceUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {task.data.sourceId || task.data.sourceProvider} ↗
+                    </a>
+                  ) : (
+                    task.data.sourceId || task.data.sourceProvider
+                  )}
+                </p>
+              </div>
+            )}
             <div className="task-drawer-section">
               <h3>Assigned agent</h3>
               <p>
@@ -717,10 +744,14 @@ export function TaskPage(): JSX.Element {
                 <dd>
                   {item.sourceUrl && /^https?:\/\//i.test(item.sourceUrl) ? (
                     <a className="text-link" href={item.sourceUrl} target="_blank" rel="noreferrer">
-                      {item.sourceProvider} ↗
+                      <SourceProviderIcon provider={item.sourceProvider} />
+                      {item.sourceId || item.sourceProvider} ↗
                     </a>
                   ) : (
-                    item.sourceProvider
+                    <>
+                      <SourceProviderIcon provider={item.sourceProvider} />{' '}
+                      {item.sourceId || item.sourceProvider}
+                    </>
                   )}
                 </dd>
               </div>
@@ -738,6 +769,21 @@ export function TaskPage(): JSX.Element {
       </div>
       {edit && <TaskEditor task={item} onClose={() => setEdit(false)} />}
     </>
+  );
+}
+
+function SourceProviderIcon({ provider }: { provider: string }): JSX.Element {
+  if (provider === 'github_cloud') return <GitBranch size={13} aria-label="GitHub" />;
+  if (provider === 'jira_server')
+    return (
+      <span className="task-source-jira" aria-label="Jira">
+        J
+      </span>
+    );
+  return (
+    <span className="task-source-generic" aria-label={provider}>
+      {provider.slice(0, 1).toUpperCase()}
+    </span>
   );
 }
 
