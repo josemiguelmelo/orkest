@@ -38,7 +38,7 @@ export const task: Task = {
   sourceProvider: 'manual',
   status: 'todo',
   labels: ['frontend'],
-  components: [],
+  repositories: [],
   createdAt: '2026-10-26T10:00:00Z',
   updatedAt: '2026-10-26T11:00:00Z',
   assigneeAgentId: agent.id,

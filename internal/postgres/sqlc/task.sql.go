@@ -11,17 +11,17 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const deleteTaskComponents = `-- name: DeleteTaskComponents :exec
-DELETE FROM task_components WHERE workspace_id = $1 AND task_id = $2
+const deleteTaskRepositories = `-- name: DeleteTaskRepositories :exec
+DELETE FROM task_repositories WHERE workspace_id = $1 AND task_id = $2
 `
 
-type DeleteTaskComponentsParams struct {
+type DeleteTaskRepositoriesParams struct {
 	WorkspaceID string `json:"workspace_id"`
 	TaskID      string `json:"task_id"`
 }
 
-func (q *Queries) DeleteTaskComponents(ctx context.Context, arg DeleteTaskComponentsParams) error {
-	_, err := q.db.Exec(ctx, deleteTaskComponents, arg.WorkspaceID, arg.TaskID)
+func (q *Queries) DeleteTaskRepositories(ctx context.Context, arg DeleteTaskRepositoriesParams) error {
+	_, err := q.db.Exec(ctx, deleteTaskRepositories, arg.WorkspaceID, arg.TaskID)
 	return err
 }
 
@@ -81,44 +81,6 @@ func (q *Queries) GetWorkspaceOrganization(ctx context.Context, id string) (stri
 	var organization_id string
 	err := row.Scan(&organization_id)
 	return organization_id, err
-}
-
-const insertComponent = `-- name: InsertComponent :one
-INSERT INTO components (id, workspace_id, identifier, name, repository_id, description)
-SELECT $1, w.id, $3, $4, $5, $6 FROM workspaces w WHERE w.id = $2
-RETURNING id, workspace_id, identifier, name, repository_id, description, created_at, updated_at
-`
-
-type InsertComponentParams struct {
-	ID           string `json:"id"`
-	ID_2         string `json:"id_2"`
-	Identifier   string `json:"identifier"`
-	Name         string `json:"name"`
-	RepositoryID string `json:"repository_id"`
-	Description  string `json:"description"`
-}
-
-func (q *Queries) InsertComponent(ctx context.Context, arg InsertComponentParams) (Component, error) {
-	row := q.db.QueryRow(ctx, insertComponent,
-		arg.ID,
-		arg.ID_2,
-		arg.Identifier,
-		arg.Name,
-		arg.RepositoryID,
-		arg.Description,
-	)
-	var i Component
-	err := row.Scan(
-		&i.ID,
-		&i.WorkspaceID,
-		&i.Identifier,
-		&i.Name,
-		&i.RepositoryID,
-		&i.Description,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
 }
 
 const insertTask = `-- name: InsertTask :one
@@ -217,60 +179,19 @@ func (q *Queries) InsertTaskComment(ctx context.Context, arg InsertTaskCommentPa
 	return i, err
 }
 
-const insertTaskComponent = `-- name: InsertTaskComponent :exec
-INSERT INTO task_components (workspace_id, task_id, component_id) VALUES ($1, $2, $3)
+const insertTaskRepository = `-- name: InsertTaskRepository :exec
+INSERT INTO task_repositories (workspace_id, task_id, repository_id) VALUES ($1, $2, $3)
 `
 
-type InsertTaskComponentParams struct {
-	WorkspaceID string `json:"workspace_id"`
-	TaskID      string `json:"task_id"`
-	ComponentID string `json:"component_id"`
+type InsertTaskRepositoryParams struct {
+	WorkspaceID  string `json:"workspace_id"`
+	TaskID       string `json:"task_id"`
+	RepositoryID string `json:"repository_id"`
 }
 
-func (q *Queries) InsertTaskComponent(ctx context.Context, arg InsertTaskComponentParams) error {
-	_, err := q.db.Exec(ctx, insertTaskComponent, arg.WorkspaceID, arg.TaskID, arg.ComponentID)
+func (q *Queries) InsertTaskRepository(ctx context.Context, arg InsertTaskRepositoryParams) error {
+	_, err := q.db.Exec(ctx, insertTaskRepository, arg.WorkspaceID, arg.TaskID, arg.RepositoryID)
 	return err
-}
-
-const listComponents = `-- name: ListComponents :many
-SELECT c.id, c.workspace_id, c.identifier, c.name, c.repository_id, c.description, c.created_at, c.updated_at
-FROM components c JOIN workspaces w ON w.id = c.workspace_id
-WHERE w.organization_id = $1 AND c.workspace_id = $2
-ORDER BY c.identifier, c.id
-`
-
-type ListComponentsParams struct {
-	OrganizationID string `json:"organization_id"`
-	WorkspaceID    string `json:"workspace_id"`
-}
-
-func (q *Queries) ListComponents(ctx context.Context, arg ListComponentsParams) ([]Component, error) {
-	rows, err := q.db.Query(ctx, listComponents, arg.OrganizationID, arg.WorkspaceID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []Component
-	for rows.Next() {
-		var i Component
-		if err := rows.Scan(
-			&i.ID,
-			&i.WorkspaceID,
-			&i.Identifier,
-			&i.Name,
-			&i.RepositoryID,
-			&i.Description,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }
 
 const listTaskComments = `-- name: ListTaskComments :many
@@ -313,36 +234,39 @@ func (q *Queries) ListTaskComments(ctx context.Context, arg ListTaskCommentsPara
 	return items, nil
 }
 
-const listTaskComponents = `-- name: ListTaskComponents :many
-SELECT c.id, c.workspace_id, c.identifier, c.name, c.repository_id, c.description, c.created_at, c.updated_at
-FROM components c JOIN task_components tc ON tc.component_id = c.id AND tc.workspace_id = c.workspace_id
-WHERE tc.workspace_id = $1 AND tc.task_id = $2
-ORDER BY c.identifier, c.id
+const listTaskRepositories = `-- name: ListTaskRepositories :many
+SELECT r.id, r.provider_name, COALESCE(NULLIF(r.display_name, ''), r.url) AS name, r.url
+FROM code_repositories r JOIN task_repositories tr ON tr.repository_id = r.id AND tr.workspace_id = r.workspace_id
+WHERE tr.workspace_id = $1 AND tr.task_id = $2
+ORDER BY r.provider_name, name, r.id
 `
 
-type ListTaskComponentsParams struct {
+type ListTaskRepositoriesParams struct {
 	WorkspaceID string `json:"workspace_id"`
 	TaskID      string `json:"task_id"`
 }
 
-func (q *Queries) ListTaskComponents(ctx context.Context, arg ListTaskComponentsParams) ([]Component, error) {
-	rows, err := q.db.Query(ctx, listTaskComponents, arg.WorkspaceID, arg.TaskID)
+type ListTaskRepositoriesRow struct {
+	ID           string `json:"id"`
+	ProviderName string `json:"provider_name"`
+	Name         string `json:"name"`
+	Url          string `json:"url"`
+}
+
+func (q *Queries) ListTaskRepositories(ctx context.Context, arg ListTaskRepositoriesParams) ([]ListTaskRepositoriesRow, error) {
+	rows, err := q.db.Query(ctx, listTaskRepositories, arg.WorkspaceID, arg.TaskID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []Component
+	var items []ListTaskRepositoriesRow
 	for rows.Next() {
-		var i Component
+		var i ListTaskRepositoriesRow
 		if err := rows.Scan(
 			&i.ID,
-			&i.WorkspaceID,
-			&i.Identifier,
+			&i.ProviderName,
 			&i.Name,
-			&i.RepositoryID,
-			&i.Description,
-			&i.CreatedAt,
-			&i.UpdatedAt,
+			&i.Url,
 		); err != nil {
 			return nil, err
 		}
@@ -412,47 +336,6 @@ func (q *Queries) ListTasks(ctx context.Context, arg ListTasksParams) ([]ListTas
 		return nil, err
 	}
 	return items, nil
-}
-
-const updateComponent = `-- name: UpdateComponent :one
-UPDATE components c SET identifier = $4, name = $5, repository_id = $6, description = $7, updated_at = now()
-FROM workspaces w
-WHERE w.organization_id = $1 AND c.workspace_id = w.id AND c.workspace_id = $2 AND c.id = $3
-RETURNING c.id, c.workspace_id, c.identifier, c.name, c.repository_id, c.description, c.created_at, c.updated_at
-`
-
-type UpdateComponentParams struct {
-	OrganizationID string `json:"organization_id"`
-	WorkspaceID    string `json:"workspace_id"`
-	ID             string `json:"id"`
-	Identifier     string `json:"identifier"`
-	Name           string `json:"name"`
-	RepositoryID   string `json:"repository_id"`
-	Description    string `json:"description"`
-}
-
-func (q *Queries) UpdateComponent(ctx context.Context, arg UpdateComponentParams) (Component, error) {
-	row := q.db.QueryRow(ctx, updateComponent,
-		arg.OrganizationID,
-		arg.WorkspaceID,
-		arg.ID,
-		arg.Identifier,
-		arg.Name,
-		arg.RepositoryID,
-		arg.Description,
-	)
-	var i Component
-	err := row.Scan(
-		&i.ID,
-		&i.WorkspaceID,
-		&i.Identifier,
-		&i.Name,
-		&i.RepositoryID,
-		&i.Description,
-		&i.CreatedAt,
-		&i.UpdatedAt,
-	)
-	return i, err
 }
 
 const updateTask = `-- name: UpdateTask :one

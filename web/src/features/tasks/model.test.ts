@@ -7,7 +7,7 @@ const values: TaskFormValues = {
   status: 'todo',
   assigneeAgentId: '',
   labels: 'new',
-  componentIds: [],
+  repositoryIds: [],
 };
 describe('task updates', () => {
   it('requires an existing task for a work-start transition', () => {

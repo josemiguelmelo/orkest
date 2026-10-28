@@ -14,9 +14,6 @@ type Repository interface {
 	UpdateTaskIfStatus(context.Context, string, string, string, string, TaskInput) (Task, error)
 	Comments(context.Context, string, string, string) ([]Comment, error)
 	CreateComment(context.Context, string, string, string, string, string) (Comment, error)
-	Components(context.Context, string, string) ([]Component, error)
-	CreateComponent(context.Context, string, string, ComponentInput) (Component, error)
-	UpdateComponent(context.Context, string, string, string, ComponentInput) (Component, error)
 }
 
 type WorkspaceAccess interface {

@@ -21,11 +21,6 @@ func (a taskAPI) routes(r chi.Router) {
 			r.Post("/comments", a.addComment)
 		})
 	})
-	r.Route(prefix+"/components", func(r chi.Router) {
-		r.Get("/", a.listComponents)
-		r.Post("/", a.createComponent)
-		r.Put("/{componentID}", a.updateComponent)
-	})
 }
 
 func (a taskAPI) listTasks(w http.ResponseWriter, r *http.Request) {
@@ -70,27 +65,4 @@ func (a taskAPI) addComment(w http.ResponseWriter, r *http.Request) {
 	}
 	v, e := a.tasks.AddComment(r.Context(), currentUserID(r), chi.URLParam(r, "orgID"), chi.URLParam(r, "workspaceID"), chi.URLParam(r, "taskID"), in.Body)
 	respond(w, v, e, http.StatusCreated)
-}
-
-func (a taskAPI) listComponents(w http.ResponseWriter, r *http.Request) {
-	v, e := a.tasks.Components(r.Context(), currentUserID(r), chi.URLParam(r, "orgID"), chi.URLParam(r, "workspaceID"))
-	respond(w, v, e, http.StatusOK)
-}
-
-func (a taskAPI) createComponent(w http.ResponseWriter, r *http.Request) {
-	var in task.ComponentInput
-	if !decodeBody(w, r, &in) {
-		return
-	}
-	v, e := a.tasks.CreateComponent(r.Context(), currentUserID(r), chi.URLParam(r, "orgID"), chi.URLParam(r, "workspaceID"), in)
-	respond(w, v, e, http.StatusCreated)
-}
-
-func (a taskAPI) updateComponent(w http.ResponseWriter, r *http.Request) {
-	var in task.ComponentInput
-	if !decodeBody(w, r, &in) {
-		return
-	}
-	v, e := a.tasks.UpdateComponent(r.Context(), currentUserID(r), chi.URLParam(r, "orgID"), chi.URLParam(r, "workspaceID"), chi.URLParam(r, "componentID"), in)
-	respond(w, v, e, http.StatusOK)
 }

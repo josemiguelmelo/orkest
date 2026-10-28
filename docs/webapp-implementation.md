@@ -2,7 +2,7 @@
 
 ## Implemented behavior
 
-The compact workbench covers organizations, workspaces and memberships; tasks, comments and components; agent definitions; global/organization/workspace skills; encrypted coding integration management and a paginated repository picker; task integrations; HTTP MCP connections; and task run activity, chat, approval responses, and cancellation. All screens use the authenticated platform API. The standalone agentctl API is not exposed.
+The compact workbench covers organizations, workspaces and memberships; tasks, comments and repository associations; agent definitions; global/organization/workspace skills; encrypted coding integration management and a paginated repository picker; task integrations; HTTP MCP connections; and task run activity, chat, approval responses, and cancellation. All screens use the authenticated platform API. The standalone agentctl API is not exposed.
 
 Users can create tasks in todo, assign agents, and explicitly start work. Task detail shows durable launch history and ordered runtime activity, polls for new activity, and supports chat, permission responses, and cancellation while a run is active. Agent chat remains separate from user comments. The run API checks task and workspace access, rejects viewer mutations, and does not expose executor endpoints or process identities. The platform currently closes the agent process when a prompt completes, so further chat is only available during that active work step. Team member slot allocation and supported session continuation are not implemented; the UI does not claim either capability. Done tasks cannot reopen. Imported title, description and labels stay source-managed.
 
@@ -42,7 +42,7 @@ Commands:
 - Desktop/mobile Chromium: 10 journeys passed, including task creation, deep-link refresh, URL filters, viewers, workspace switching, session expiry and dialog focus/Escape.
 - Real PostgreSQL repository suite: passed against an isolated local database.
 - Real local Keycloak and Go-served SPA: login/logout, organization/workspace creation, task/comment persistence after reload, agent and MCP creation verified.
-- Extended real-backend smoke: skills, repository registration, components and the actual GitHub/Jira provider catalog forms passed. Desktop/mobile screenshots were visually reviewed. Test organizations were removed.
+- Extended real-backend smoke: skills, repository registration and the actual GitHub/Jira provider catalog forms passed. Desktop/mobile screenshots were visually reviewed. Test organizations were removed.
 - Dependency audit: zero known vulnerabilities with the pinned transitive YAML fix. Checks ran on Node 26.0.0; the documented Node 22 baseline is updated to 22.22.2 to satisfy the test tooling.
 
 External GitHub/Jira synchronization with real credentials, private repositories, agent execution/approvals and OpenCode recovery are not claimed as verified. The existing recovery suite remains unimplemented. No migration is required by this change.

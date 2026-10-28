@@ -13,7 +13,7 @@ export const taskFormSchema = z.object({
   status: z.enum(statuses),
   assigneeAgentId: z.string(),
   labels: z.string(),
-  componentIds: z.array(z.string()),
+  repositoryIds: z.array(z.string()),
 });
 export type TaskFormValues = z.infer<typeof taskFormSchema>;
 export function taskInput(values: TaskFormValues, current?: Task): TaskInput {
@@ -33,7 +33,7 @@ export function taskInput(values: TaskFormValues, current?: Task): TaskInput {
             .split(',')
             .map((s) => s.trim())
             .filter(Boolean),
-    componentIds: values.componentIds,
+    repositoryIds: values.repositoryIds,
   };
 }
 export function filterTasks(

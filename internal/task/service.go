@@ -162,37 +162,6 @@ func (s *Service) AddComment(ctx context.Context, userID, orgID, workspaceID, ta
 	return s.repository.CreateComment(ctx, id, workspaceID, taskID, userID, body)
 }
 
-func (s *Service) Components(ctx context.Context, userID, orgID, workspaceID string) ([]Component, error) {
-	if _, err := s.workspaces.GetWorkspace(ctx, userID, orgID, workspaceID); err != nil {
-		return nil, err
-	}
-	return s.repository.Components(ctx, orgID, workspaceID)
-}
-
-func (s *Service) CreateComponent(ctx context.Context, userID, orgID, workspaceID string, input ComponentInput) (Component, error) {
-	if err := s.authorize(ctx, userID, orgID, workspaceID); err != nil {
-		return Component{}, err
-	}
-	if err := normalizeComponent(&input); err != nil {
-		return Component{}, err
-	}
-	id, err := ids.NewUUID()
-	if err != nil {
-		return Component{}, fmt.Errorf("generate component ID: %w", err)
-	}
-	return s.repository.CreateComponent(ctx, id, workspaceID, input)
-}
-
-func (s *Service) UpdateComponent(ctx context.Context, userID, orgID, workspaceID, componentID string, input ComponentInput) (Component, error) {
-	if err := s.authorize(ctx, userID, orgID, workspaceID); err != nil {
-		return Component{}, err
-	}
-	if err := normalizeComponent(&input); err != nil {
-		return Component{}, err
-	}
-	return s.repository.UpdateComponent(ctx, orgID, workspaceID, componentID, input)
-}
-
 func (s *Service) authorize(ctx context.Context, userID, orgID, workspaceID string) error {
 	w, err := s.workspaces.GetWorkspace(ctx, userID, orgID, workspaceID)
 	if err != nil {
@@ -226,18 +195,7 @@ func normalizeTask(input *TaskInput, creating bool) error {
 	}
 	input.AssigneeAgentID = strings.TrimSpace(input.AssigneeAgentID)
 	input.Labels = normalizeStrings(input.Labels)
-	input.ComponentIDs = normalizeStrings(input.ComponentIDs)
-	return nil
-}
-
-func normalizeComponent(input *ComponentInput) error {
-	input.Identifier = strings.TrimSpace(input.Identifier)
-	input.Name = strings.TrimSpace(input.Name)
-	input.RepositoryID = strings.TrimSpace(input.RepositoryID)
-	input.Description = strings.TrimSpace(input.Description)
-	if input.Identifier == "" || len(input.Identifier) > 100 || input.Name == "" || len(input.Name) > 200 || input.RepositoryID == "" || len(input.Description) > 2000 {
-		return modelerrors.ErrInvalid
-	}
+	input.RepositoryIDs = normalizeStrings(input.RepositoryIDs)
 	return nil
 }
 

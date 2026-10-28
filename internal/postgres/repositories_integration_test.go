@@ -163,27 +163,16 @@ func TestPostgresRepositories(t *testing.T) {
 		t.Fatalf("create agent: %v", err)
 	}
 	taskRepository := NewTaskPostgresRepository(database)
-	componentID, err := ids.NewUUID()
-	if err != nil {
-		t.Fatal(err)
-	}
-	component, err := taskRepository.CreateComponent(ctx, componentID, workspaceID, task.ComponentInput{Identifier: "API", Name: "API service", RepositoryID: codeRepositoryID, Description: "Public endpoints"})
-	if err != nil || component.Identifier != "API" || component.RepositoryID != codeRepositoryID {
-		t.Fatalf("create component: component=%+v err=%v", component, err)
-	}
-	if err = codeRepositoryRepository.DeleteCodeRepository(ctx, org.ID, workspaceID, codeRepositoryID); !errors.Is(err, modelerrors.ErrConflict) {
-		t.Fatalf("expected referenced repository deletion conflict, got %v", err)
-	}
-	if _, err = taskRepository.CreateComponent(ctx, "duplicate-component", workspaceID, task.ComponentInput{Identifier: "API", Name: "Duplicate", RepositoryID: codeRepositoryID}); !errors.Is(err, modelerrors.ErrConflict) {
-		t.Fatalf("expected duplicate component identifier conflict, got %v", err)
-	}
 	taskID, err := ids.NewUUID()
 	if err != nil {
 		t.Fatal(err)
 	}
-	createdTask, err := taskRepository.CreateTask(ctx, taskID, workspaceID, task.TaskInput{Title: "Add endpoint", Description: "Task body", Status: "todo", AssigneeAgentID: worker.ID, Labels: []string{"api"}, ComponentIDs: []string{componentID}})
-	if err != nil || createdTask.SourceProvider != "manual" || createdTask.AssigneeAgentID != worker.ID || len(createdTask.Components) != 1 || createdTask.Components[0].ID != componentID {
+	createdTask, err := taskRepository.CreateTask(ctx, taskID, workspaceID, task.TaskInput{Title: "Add endpoint", Description: "Task body", Status: "todo", AssigneeAgentID: worker.ID, Labels: []string{"api"}, RepositoryIDs: []string{codeRepositoryID}})
+	if err != nil || createdTask.SourceProvider != "manual" || createdTask.AssigneeAgentID != worker.ID || len(createdTask.Repositories) != 1 || createdTask.Repositories[0].ID != codeRepositoryID {
 		t.Fatalf("create task: task=%+v err=%v", createdTask, err)
+	}
+	if err = codeRepositoryRepository.DeleteCodeRepository(ctx, org.ID, workspaceID, codeRepositoryID); !errors.Is(err, modelerrors.ErrConflict) {
+		t.Fatalf("expected task-referenced repository deletion conflict, got %v", err)
 	}
 	t.Run("task sessions and prompt delivery", func(t *testing.T) { testTaskSessions(t, database, org.ID, workspaceID, taskID) })
 	commentID, err := ids.NewUUID()

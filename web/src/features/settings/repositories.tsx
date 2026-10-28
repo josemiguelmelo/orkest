@@ -36,7 +36,7 @@ function RepositoryCard({ item }: { item: CodeRepository }) {
     {permissions.editWorkspace && <div className="actions">
       <Button variant="outline" size="sm" disabled={action.pending} onClick={() => void action.run(() => data(sdk.cloneCodeRepository({ ...command, path: { ...path(scope), repositoryID: item.id } })), 'Repository cloned.')}>Clone checkout</Button>
       <ConfirmButton label="Sync" title={`Sync checkout to ${item.defaultBranch || 'GitHub default branch'}?`} description="Sync resets the shared checkout to the repository’s default branch and discards local changes in that shared checkout." pending={action.pending} onConfirm={async () => { await data(sdk.syncCodeRepository({ ...command, path: { ...path(scope), repositoryID: item.id } })); }} />
-      <ConfirmButton title="Remove repository?" description="This removes the repository registration. Referencing components may prevent removal." onConfirm={async () => { await data(sdk.deleteCodeRepository({ ...command, path: { ...path(scope), repositoryID: item.id } })); await refresh(scope); }} />
+      <ConfirmButton title="Remove repository?" description="This removes the repository registration. Tasks linked to it must be updated first." onConfirm={async () => { await data(sdk.deleteCodeRepository({ ...command, path: { ...path(scope), repositoryID: item.id } })); await refresh(scope); }} />
     </div>}
     {action.error !== undefined && <ErrorState error={action.error} />}{action.message && <p role="status" className="muted">{action.message}</p>}
   </article>;
