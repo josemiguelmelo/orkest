@@ -25,7 +25,7 @@ import { useAction } from '../../shared/use-action';
 const schema = z.object({
   name: z.string().trim().min(1).max(200),
   description: z.string().max(2000),
-  runtime: z.literal('opencode'),
+  runtime: z.enum(['opencode', 'claude-code']),
   provider: z.string().trim().min(1).max(200),
   model: z.string().trim().min(1).max(200),
   systemPrompt: z.string().max(100000),
@@ -54,7 +54,7 @@ export function AgentsPage() {
             <article className="resource-card" key={item.id}>
               <div className="split">
                 <Bot className="card-icon" size={24} />
-                <Badge>OpenCode</Badge>
+                <Badge>{item.runtime === 'claude-code' ? 'Claude Code' : 'OpenCode'}</Badge>
               </div>
               <h3>{item.name}</h3>
               <p className="muted">{item.description || 'No description'}</p>
@@ -118,7 +118,7 @@ function AgentEditor({ item, onClose }: { item: Agent | null; onClose: () => voi
     defaultValues: {
       name: item?.name ?? '',
       description: item?.description ?? '',
-      runtime: 'opencode' as const,
+      runtime: (item?.runtime as 'opencode' | 'claude-code') ?? ('opencode' as const),
       provider: item?.provider ?? '',
       model: item?.model ?? '',
       systemPrompt: item?.systemPrompt ?? '',
@@ -161,6 +161,7 @@ function AgentEditor({ item, onClose }: { item: Agent | null; onClose: () => voi
         <Field label="Runtime">
           <select {...form.register('runtime')}>
             <option value="opencode">OpenCode</option>
+            <option value="claude-code">Claude Code</option>
           </select>
         </Field>
         <div className="form-grid">

@@ -9,6 +9,8 @@ import (
 	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
 	sharedacp "github.com/josemiguelmelo/orkest/internal/agentctl/runtime/acp"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/runtime/conformance"
+	"github.com/josemiguelmelo/orkest/internal/agentctl/runtime/claudecode"
+	"github.com/josemiguelmelo/orkest/internal/agentctl/runtime/claudecode/claudecodetest"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/runtime/opencode"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/runtime/opencode/opencodetest"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/runtimehost"
@@ -16,7 +18,11 @@ import (
 	coreruntime "github.com/josemiguelmelo/orkest/internal/core/runtime"
 )
 
-func TestMain(m *testing.M) { opencodetest.Run(opencode.Version); os.Exit(m.Run()) }
+func TestMain(m *testing.M) {
+	opencodetest.Run(opencode.Version)
+	claudecodetest.Run(claudecode.Version)
+	os.Exit(m.Run())
+}
 
 // Every enabled runtime must register deterministic AND live profiles here.
 // Inventory changes therefore cannot silently omit the common behavioral suite.
@@ -41,6 +47,26 @@ func TestRuntimeConformance(t *testing.T) {
 				}
 			}
 			return runtimehost.New(opencode.Profile{Binary: binary}, sharedacp.Factory{}, runtimehost.Environment{WorkDir: work, StateDir: state, GrantedEnv: env})
+		},
+		coreruntime.ClaudeCode: func(t *testing.T, work, state string) agentruntime.RuntimeHost {
+			t.Helper()
+			binary, err := os.Executable()
+			if err != nil {
+				t.Fatal(err)
+			}
+			env := []string{"ORKEST_ACP_FIXTURE=1"}
+			if os.Getenv("ORKEST_RUNTIME_CONFORMANCE") == "live" {
+				binary = required(t, "ORKEST_CLAUDE_CODE_BINARY")
+				if binary == "" {
+					binary = required(t, "ORKEST_OPENCODE_BINARY")
+				}
+				env = []string{"PATH=" + os.Getenv("PATH")}
+				names := required(t, "ORKEST_TEST_PROVIDER_ENV")
+				for _, name := range strings.Split(names, ",") {
+					env = append(env, name+"="+required(t, name))
+				}
+			}
+			return runtimehost.New(claudecode.Profile{Binary: binary}, sharedacp.Factory{}, runtimehost.Environment{WorkDir: work, StateDir: state, GrantedEnv: env})
 		},
 	}
 	versions := coreruntime.Supported()

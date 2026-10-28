@@ -149,7 +149,7 @@ export const zAgent = z.object({
     id: z.string(),
     workspaceId: z.string(),
     name: z.string(),
-    runtime: z.enum(['opencode']),
+    runtime: z.enum(['opencode', 'claude-code']),
     provider: z.string(),
     model: z.string(),
     description: z.string(),
@@ -284,7 +284,7 @@ export const zWorkspaceRole = z.object({
 });
 export const zAgentDefinition = z.object({
     name: z.string().min(1).max(200),
-    runtime: z.enum(['opencode']),
+    runtime: z.enum(['opencode', 'claude-code']),
     provider: z.string().min(1).max(200),
     model: z.string().min(1).max(200),
     description: z.string().max(2000),

@@ -20,7 +20,10 @@ func Supported() map[Runtime]string {
 
 type Runtime string
 
-const OpenCode Runtime = "opencode"
+const (
+	OpenCode    Runtime = "opencode"
+	ClaudeCode  Runtime = "claude-code"
+)
 
 // Available reports whether the runtime is implemented by both the platform and agentctl.
 func (r Runtime) Available() bool {
