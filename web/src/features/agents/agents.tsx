@@ -32,6 +32,16 @@ const schema = z.object({
   mcpServerIds: z.array(z.string()),
   skillIds: z.array(z.string()),
 });
+type ModelCatalog = Record<string, { name?: string; models?: Record<string, { name?: string }> }>;
+const modelCatalogQuery = {
+  queryKey: ['runtime-model-catalog', 'opencode'],
+  queryFn: async (): Promise<ModelCatalog> => {
+    const response = await fetch('https://models.dev/api.json');
+    if (!response.ok) throw new Error('Model catalog is temporarily unavailable.');
+    return (await response.json()) as ModelCatalog;
+  },
+  staleTime: 60 * 60 * 1000,
+};
 export function AgentsPage() {
   const { scope, permissions } = useApp();
   const agents = useQuery(agentsQuery(scope));
@@ -113,6 +123,8 @@ function AgentEditor({ item, onClose }: { item: Agent | null; onClose: () => voi
   const action = useAction();
   const servers = useQuery(mcpQuery(scope));
   const skills = useQuery(skillsQuery(scope));
+  const catalog = useQuery(modelCatalogQuery);
+  const [customModel, setCustomModel] = useState(false);
   const form = useForm({
     resolver: zodResolver(schema),
     defaultValues: {
@@ -163,14 +175,75 @@ function AgentEditor({ item, onClose }: { item: Agent | null; onClose: () => voi
             <option value="opencode">OpenCode</option>
           </select>
         </Field>
-        <div className="form-grid">
-          <Field label="Model provider" error={form.formState.errors.provider?.message}>
-            <input {...form.register('provider')} placeholder="Provider identifier" />
-          </Field>
-          <Field label="Model identifier" error={form.formState.errors.model?.message}>
-            <input {...form.register('model')} />
-          </Field>
-        </div>
+        {customModel ? (
+          <div className="form-grid">
+            <Field label="Model provider" error={form.formState.errors.provider?.message}>
+              <input {...form.register('provider')} placeholder="Provider identifier" />
+            </Field>
+            <Field label="Model identifier" error={form.formState.errors.model?.message}>
+              <input {...form.register('model')} />
+            </Field>
+          </div>
+        ) : (
+          <>
+            <div className="form-grid">
+              <Field label="Model provider" error={form.formState.errors.provider?.message}>
+                <select
+                  value={form.watch('provider')}
+                  onChange={(event) => {
+                    form.setValue('provider', event.target.value, { shouldDirty: true });
+                    form.setValue('model', '', { shouldDirty: true });
+                  }}
+                >
+                  <option value="">Select a provider</option>
+                  {Object.entries(catalog.data ?? {}).map(([id, provider]) => (
+                    <option value={id} key={id}>
+                      {provider.name ?? id}
+                    </option>
+                  ))}
+                  {form.watch('provider') && !catalog.data?.[form.watch('provider')] && (
+                    <option value={form.watch('provider')}>
+                      {form.watch('provider')} (current)
+                    </option>
+                  )}
+                </select>
+              </Field>
+              <Field label="Model identifier" error={form.formState.errors.model?.message}>
+                <select
+                  value={form.watch('model')}
+                  onChange={(event) =>
+                    form.setValue('model', event.target.value, { shouldDirty: true })
+                  }
+                  disabled={!form.watch('provider')}
+                >
+                  <option value="">Select a model</option>
+                  {Object.entries(catalog.data?.[form.watch('provider')]?.models ?? {}).map(
+                    ([id, model]) => (
+                      <option value={id} key={id}>
+                        {model.name ?? id}
+                      </option>
+                    ),
+                  )}
+                  {form.watch('model') &&
+                    !catalog.data?.[form.watch('provider')]?.models?.[form.watch('model')] && (
+                      <option value={form.watch('model')}>{form.watch('model')} (current)</option>
+                    )}
+                </select>
+              </Field>
+            </div>
+            {catalog.isError && (
+              <p className="muted">Model catalog unavailable. You can enter a custom model.</p>
+            )}
+          </>
+        )}
+        <label className="muted">
+          <input
+            type="checkbox"
+            checked={customModel}
+            onChange={(event) => setCustomModel(event.target.checked)}
+          />
+          Enter a custom provider and model
+        </label>
         <Field label="System instructions" error={form.formState.errors.systemPrompt?.message}>
           <textarea rows={8} className="code-input" {...form.register('systemPrompt')} />
         </Field>
