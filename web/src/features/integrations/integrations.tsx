@@ -271,8 +271,12 @@ function IntegrationEditor({
   }
   return (
     <Dialog
-      title={item ? 'Edit source integration' : 'Connect task source'}
-      description="Credentials are write-only. Leave the credential blank when editing to preserve its stored value."
+      title={item ? 'Edit source integration' : 'Connect a task source'}
+      description={
+        item
+          ? 'Update your source connection settings. Credentials are write-only.'
+          : 'Connect GitHub Projects or Jira to import tasks automatically.'
+      }
       open
       onOpenChange={(v) => {
         if (!v && !action.pending) onClose();
@@ -316,49 +320,65 @@ function IntegrationEditor({
             ))}
           </select>
         </Field>
-        <Field label="Connection name" error={form.formState.errors.name?.message}>
-          <input {...form.register('name')} />
+        <Field label="Connection name" hint="A name to help you identify this connection." error={form.formState.errors.name?.message}>
+          <input {...form.register('name')} placeholder="e.g., Team GitHub Projects" />
         </Field>
         {parsed.error !== undefined && <ErrorState error={parsed.error} />}{' '}
         {parsed.fields && (
-          <ProviderConfig fields={parsed.fields} config={config} onChange={setConfig} />
+          <>
+            <p style={{ fontSize: '12px', fontWeight: 600, marginTop: '8px' }}>Source configuration</p>
+            <ProviderConfig fields={parsed.fields} config={config} onChange={setConfig} />
+          </>
         )}
-        <Field label={item ? 'Replacement credential (optional)' : 'Credential'}>
-          <input type="password" autoComplete="new-password" {...form.register('credential')} />
+        <Field
+          label={item ? 'Replacement credential (optional)' : 'Credential *'}
+          hint={
+            item
+              ? 'Leave blank to keep your existing credential. Enter a new one to rotate it.'
+              : 'Your credential is stored securely and never displayed again.'
+          }
+        >
+          <input type="password" autoComplete="new-password" {...form.register('credential')} placeholder={item ? 'Paste new credential to rotate' : 'Enter credential'} />
         </Field>
         <div className="form-grid">
-          <Field label="Required labels" hint="Comma-separated; source content stays read-only.">
-            <input {...form.register('labels')} />
+          <Field
+            label="Required labels"
+            hint="Only import tasks with these labels (comma-separated). Leave empty to import all."
+          >
+            <input {...form.register('labels')} placeholder="bug,feature" />
           </Field>
-          <Field label="Polling interval" error={form.formState.errors.interval?.message}>
-            <input {...form.register('interval')} />
+          <Field label="Sync interval" hint="How often to check for updates." error={form.formState.errors.interval?.message}>
+            <input {...form.register('interval')} placeholder="5m" />
           </Field>
         </div>
-        <label className="actions">
+        <label className="actions" style={{ alignItems: 'center', gap: '8px' }}>
           <input type="checkbox" {...form.register('enabled')} />
-          Enable polling
+          <span>Enable automatic syncing</span>
         </label>
-        <Button
-          variant="outline"
-          disabled={action.pending || !form.watch('credential') || !parsed.fields}
-          onClick={() => {
-            void form.handleSubmit(async (values) => {
-              await action.run(async () => {
-                await data(
-                  sdk.validateTaskIntegration({
-                    ...command,
-                    path: path(scope),
-                    body: body(values),
-                  }),
-                );
-              }, 'Connection validated.');
-            })();
-          }}
-        >
-          Validate connection
-        </Button>
+        <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={action.pending || !form.watch('credential') || !parsed.fields}
+            onClick={() => {
+              void form.handleSubmit(async (values) => {
+                await action.run(async () => {
+                  await data(
+                    sdk.validateTaskIntegration({
+                      ...command,
+                      path: path(scope),
+                      body: body(values),
+                    }),
+                  );
+                }, 'Connection validated successfully.');
+              })();
+            }}
+          >
+            Validate connection
+          </Button>
+        </div>
         {action.message && (
-          <p role="status" className="muted">
+          <p role="status" className="success-message">
             {action.message}
           </p>
         )}
