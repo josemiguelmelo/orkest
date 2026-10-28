@@ -9,14 +9,14 @@ import (
 	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
 )
 
-type recordingCLIAdapter struct {
+type recordingCLIAuthAdapter struct {
 	providers []string
 	seen      []runconfig.GitCredential
 }
 
-func (a *recordingCLIAdapter) ProviderNames() []string { return a.providers }
+func (a *recordingCLIAuthAdapter) ProviderNames() []string { return a.providers }
 
-func (a *recordingCLIAdapter) Configure(_ string, environment []string, credentials []runconfig.GitCredential) ([]string, error) {
+func (a *recordingCLIAuthAdapter) ConfigureCLI(_ string, environment []string, credentials []runconfig.GitCredential) ([]string, error) {
 	a.seen = credentials
 	return append(environment, "CLI_ADAPTER="+a.providers[0]), nil
 }
@@ -26,17 +26,17 @@ func TestConfigureProviderCLIsSelectsCredentialsByProvider(t *testing.T) {
 		{ProviderName: "github", RepositoryURL: "https://github.com/group/project.git", Token: "github-secret"},
 		{ProviderName: "gitlab_server", RepositoryURL: "https://gitlab.example/group/project.git", Token: "gitlab-secret"},
 	}
-	github := &recordingCLIAdapter{providers: []string{"github"}}
-	gitlab := &recordingCLIAdapter{providers: []string{"gitlab_cloud", "gitlab_server"}}
-	environment, err := configureProviderCLIs(t.TempDir(), []string{"PATH=/bin"}, credentials, []Adapter{github, gitlab})
+	github := &recordingCLIAuthAdapter{providers: []string{"github"}}
+	gitlab := &recordingCLIAuthAdapter{providers: []string{"gitlab_cloud", "gitlab_server"}}
+	environment, err := configureCLIs(t.TempDir(), []string{"PATH=/bin"}, credentials, []CLIAuthAdapter{github, gitlab})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(github.seen) != 1 || github.seen[0].ProviderName != "github" {
-		t.Fatalf("GitHub adapter credentials=%+v", github.seen)
+		t.Fatalf("GitHub CLI auth credentials=%+v", github.seen)
 	}
 	if len(gitlab.seen) != 1 || gitlab.seen[0].ProviderName != "gitlab_server" {
-		t.Fatalf("GitLab adapter credentials=%+v", gitlab.seen)
+		t.Fatalf("GitLab CLI auth credentials=%+v", gitlab.seen)
 	}
 	if !strings.Contains(strings.Join(environment, "\n"), "CLI_ADAPTER=gitlab_cloud") {
 		t.Fatalf("adapter environment was not applied: %v", environment)
@@ -56,7 +56,7 @@ func TestProviderCLIAdaptersScopeSecretsToMatchingCheckout(t *testing.T) {
 		{ProviderName: "github", RepositoryURL: "https://github.com/acme/project.git", Token: "github-secret"},
 		{ProviderName: "gitlab_server", ProviderConfig: []byte(`{"baseUrl":"https://gitlab.example/gitlab"}`), RepositoryURL: "https://gitlab.example/gitlab/group/project.git", Token: "gitlab-secret"},
 	}
-	environment, err := configureProviderCLIs(runtimeRoot, []string{"PATH=" + binDir, "GH_TOKEN=stale", "GITLAB_TOKEN=stale"}, credentials, DefaultAdapters())
+	environment, err := configureCLIs(runtimeRoot, []string{"PATH=" + binDir, "GH_TOKEN=stale", "GITLAB_TOKEN=stale"}, credentials, DefaultCLIAuthAdapters())
 	if err != nil {
 		t.Fatal(err)
 	}

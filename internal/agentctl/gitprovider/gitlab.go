@@ -15,12 +15,14 @@ import (
 	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
 )
 
-// GitLabAdapter configures glab for GitLab Cloud and self-managed installations.
-type GitLabAdapter struct{}
+// GitLabCLIAuthAdapter configures glab for GitLab Cloud and self-managed installations.
+type GitLabCLIAuthAdapter struct{}
 
-func (GitLabAdapter) ProviderNames() []string { return []string{"gitlab_cloud", "gitlab_server"} }
+func (GitLabCLIAuthAdapter) ProviderNames() []string {
+	return []string{"gitlab_cloud", "gitlab_server"}
+}
 
-func (GitLabAdapter) Configure(runtimeRoot string, environment []string, credentials []runconfig.GitCredential) ([]string, error) {
+func (GitLabCLIAuthAdapter) ConfigureCLI(runtimeRoot string, environment []string, credentials []runconfig.GitCredential) ([]string, error) {
 	glabPath, err := exec.LookPath("glab")
 	if err != nil {
 		return nil, &agentruntime.LaunchError{Message: "GitLab CLI is unavailable", Cause: err}

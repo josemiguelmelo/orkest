@@ -27,7 +27,7 @@ func TestPrepareRuntimeConfiguresGitForMultipleRepositories(t *testing.T) {
 		}
 	}
 
-	environment, err := PrepareRuntime(context.Background(), Preparation{
+	environment, err := PrepareRuntime(context.Background(), RuntimePreparation{
 		RuntimeRoot: t.TempDir(),
 		WorkDir:     workDir,
 		Environment: []string{"PATH=/bin", "KEEP=value", "GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=stale", "GIT_CONFIG_VALUE_0=stale"},

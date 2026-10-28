@@ -5,25 +5,25 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/agentctl/config"
 )
 
-// Adapter configures one or more provider CLIs for a runtime environment.
-type Adapter interface {
+// CLIAuthAdapter configures a provider CLI for credentials in the runtime.
+type CLIAuthAdapter interface {
 	ProviderNames() []string
-	Configure(string, []string, []config.GitCredential) ([]string, error)
+	ConfigureCLI(runtimeRoot string, environment []string, credentials []config.GitCredential) ([]string, error)
 }
 
-// DefaultAdapters returns the provider CLI strategies shipped with agentctl.
-func DefaultAdapters() []Adapter {
-	return []Adapter{GitHubAdapter{}, GitLabAdapter{}}
+// DefaultCLIAuthAdapters returns the CLI auth strategies shipped with agentctl.
+func DefaultCLIAuthAdapters() []CLIAuthAdapter {
+	return []CLIAuthAdapter{GitHubCLIAuthAdapter{}, GitLabCLIAuthAdapter{}}
 }
 
-func configureProviderCLIs(runtimeRoot string, environment []string, credentials []config.GitCredential, adapters []Adapter) ([]string, error) {
+func configureCLIs(runtimeRoot string, environment []string, credentials []config.GitCredential, adapters []CLIAuthAdapter) ([]string, error) {
 	for _, adapter := range adapters {
-		matched := credentialsForProviders(credentials, adapter.ProviderNames())
+		matched := credentialsFor(credentials, adapter.ProviderNames())
 		if len(matched) == 0 {
 			continue
 		}
 		var err error
-		environment, err = adapter.Configure(runtimeRoot, environment, matched)
+		environment, err = adapter.ConfigureCLI(runtimeRoot, environment, matched)
 		if err != nil {
 			return nil, err
 		}
@@ -31,7 +31,7 @@ func configureProviderCLIs(runtimeRoot string, environment []string, credentials
 	return environment, nil
 }
 
-func credentialsForProviders(credentials []config.GitCredential, providers []string) []config.GitCredential {
+func credentialsFor(credentials []config.GitCredential, providers []string) []config.GitCredential {
 	allowed := make(map[string]struct{}, len(providers))
 	for _, provider := range providers {
 		allowed[provider] = struct{}{}

@@ -14,12 +14,12 @@ import (
 	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
 )
 
-// GitHubAdapter scopes gh's token to the registered checkout origin.
-type GitHubAdapter struct{}
+// GitHubCLIAuthAdapter scopes gh's token to the registered checkout origin.
+type GitHubCLIAuthAdapter struct{}
 
-func (GitHubAdapter) ProviderNames() []string { return []string{"github"} }
+func (GitHubCLIAuthAdapter) ProviderNames() []string { return []string{"github"} }
 
-func (GitHubAdapter) Configure(runtimeRoot string, environment []string, credentials []runconfig.GitCredential) ([]string, error) {
+func (GitHubCLIAuthAdapter) ConfigureCLI(runtimeRoot string, environment []string, credentials []runconfig.GitCredential) ([]string, error) {
 	ghPath, err := exec.LookPath("gh")
 	if err != nil {
 		return nil, &agentruntime.LaunchError{Message: "GitHub CLI is unavailable", Cause: err}

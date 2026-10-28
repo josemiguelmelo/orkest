@@ -33,11 +33,11 @@ type Host struct {
 	profile         agentruntime.RuntimeProfile
 	factory         agentruntime.ProtocolClientFactory
 	environment     Environment
-	cliAuthAdapters []gitprovider.Adapter
+	cliAuthAdapters []gitprovider.CLIAuthAdapter
 }
 
 // New binds runtime contracts to an explicitly granted execution environment.
-func New(profile agentruntime.RuntimeProfile, factory agentruntime.ProtocolClientFactory, environment Environment, cliAuthAdapters ...gitprovider.Adapter) *Host {
+func New(profile agentruntime.RuntimeProfile, factory agentruntime.ProtocolClientFactory, environment Environment, cliAuthAdapters ...gitprovider.CLIAuthAdapter) *Host {
 	environment.GrantedEnv = slices.Clone(environment.GrantedEnv)
 	return &Host{profile: profile, factory: factory, environment: environment, cliAuthAdapters: slices.Clone(cliAuthAdapters)}
 }
@@ -168,7 +168,7 @@ func (h *Host) prepareRuntime(ctx context.Context, config runconfig.RuntimeConfi
 	if err != nil {
 		return "", nil, err
 	}
-	environment, err = gitprovider.PrepareRuntime(ctx, gitprovider.Preparation{
+	environment, err = gitprovider.PrepareRuntime(ctx, gitprovider.RuntimePreparation{
 		RuntimeRoot: paths.RuntimeRoot,
 		WorkDir:     h.environment.WorkDir,
 		Environment: environment,

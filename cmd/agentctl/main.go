@@ -41,7 +41,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	host := runtimehost.New(opencode.Profile{Binary: *binary}, sharedacp.Factory{}, runtimehost.Environment{WorkDir: *workDir, StateDir: *stateDir, GrantedEnv: env}, gitprovider.DefaultAdapters()...)
+	host := runtimehost.New(opencode.Profile{Binary: *binary}, sharedacp.Factory{}, runtimehost.Environment{WorkDir: *workDir, StateDir: *stateDir, GrantedEnv: env}, gitprovider.DefaultCLIAuthAdapters()...)
 	if err := daemon.RunAgentctl(ctx, logger, *address, host, *stateDir, *runID); err != nil {
 		logger.Error("agentctl stopped", "error", err)
 		os.Exit(1)

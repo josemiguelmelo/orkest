@@ -14,9 +14,9 @@ import (
 	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
 )
 
-// Preparation contains the runtime paths, environment, and repository credentials
+// RuntimePreparation contains the runtime paths, environment, and repository credentials
 // needed to prepare Git and its provider CLIs.
-type Preparation struct {
+type RuntimePreparation struct {
 	RuntimeRoot string
 	WorkDir     string
 	Environment []string
@@ -25,18 +25,18 @@ type Preparation struct {
 
 // PrepareRuntime configures repository identity, Git transport credentials, and
 // matching provider CLIs. It returns the environment the runtime should inherit.
-func PrepareRuntime(ctx context.Context, preparation Preparation, adapters []Adapter) ([]string, error) {
+func PrepareRuntime(ctx context.Context, preparation RuntimePreparation, adapters []CLIAuthAdapter) ([]string, error) {
 	if len(preparation.Credentials) == 0 {
 		return preparation.Environment, nil
 	}
-	if err := configureGit(ctx, preparation.WorkDir, preparation.Credentials); err != nil {
+	if err := configureRepositoryIdentity(ctx, preparation.WorkDir, preparation.Credentials); err != nil {
 		return nil, err
 	}
-	environment := withGitCredentials(preparation.Environment, preparation.Credentials)
-	return configureProviderCLIs(preparation.RuntimeRoot, environment, preparation.Credentials, adapters)
+	environment := withGitHTTPAuth(preparation.Environment, preparation.Credentials)
+	return configureCLIs(preparation.RuntimeRoot, environment, preparation.Credentials, adapters)
 }
 
-func configureGit(ctx context.Context, workDir string, credentials []runconfig.GitCredential) error {
+func configureRepositoryIdentity(ctx context.Context, workDir string, credentials []runconfig.GitCredential) error {
 	for _, credential := range credentials {
 		if filepath.IsAbs(credential.RepositoryPath) || filepath.Clean(credential.RepositoryPath) != credential.RepositoryPath || strings.HasPrefix(credential.RepositoryPath, "..") {
 			return &agentruntime.RuntimeError{Kind: agentruntime.RuntimeFailure, Message: "configure Git identity failed", Cause: fmt.Errorf("invalid repository path")}
@@ -53,7 +53,7 @@ func configureGit(ctx context.Context, workDir string, credentials []runconfig.G
 	return nil
 }
 
-func withGitCredentials(environment []string, credentials []runconfig.GitCredential) []string {
+func withGitHTTPAuth(environment []string, credentials []runconfig.GitCredential) []string {
 	values := make(map[string]string, len(environment)+1+len(credentials)*2)
 	for _, entry := range environment {
 		name, value, ok := strings.Cut(entry, "=")
