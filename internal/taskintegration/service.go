@@ -276,7 +276,7 @@ func (s *TaskIntegrationService) sync(ctx context.Context, source TaskIntegratio
 	}
 	message := ""
 	if err != nil {
-		message = "synchronization failed"
+		message = syncFailureCode(err)
 	}
 	if recordErr := s.repo.RecordSync(ctx, source.ID, time.Now().UTC(), message); err == nil {
 		err = recordErr
@@ -285,8 +285,20 @@ func (s *TaskIntegrationService) sync(ctx context.Context, source TaskIntegratio
 }
 
 func (s *TaskIntegrationService) recordSyncError(ctx context.Context, sourceID string, cause error) error {
-	_ = s.repo.RecordSync(ctx, sourceID, time.Now().UTC(), "synchronization failed")
+	_ = s.repo.RecordSync(ctx, sourceID, time.Now().UTC(), syncFailureCode(cause))
 	return cause
+}
+
+func syncFailureCode(err error) string {
+	var validationErr *ValidationError
+	if errors.As(err, &validationErr) && validationErr.Code != "" {
+		return validationErr.Code
+	}
+	var configurationErr *ConfigurationError
+	if errors.As(err, &configurationErr) && configurationErr.Code != "" {
+		return configurationErr.Code
+	}
+	return "integration_sync_failed"
 }
 
 func (s *TaskIntegrationService) authorize(ctx context.Context, userID, orgID, workspaceID string) error {
