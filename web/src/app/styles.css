@@ -697,6 +697,7 @@ input[type='checkbox'] {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 16px;
+  align-items: start;
 }
 .env-type-picker {
   border: 0;
@@ -1803,6 +1804,7 @@ input[type='checkbox'] {
 .integration-card-title p { color: var(--muted); font-size: 11px; margin-top: 2px; }
 .integration-card .badge { gap: 5px; color: #287856; border-color: color-mix(in srgb, #27916d 28%, var(--border)); background: color-mix(in srgb, #27916d 8%, var(--surface)); }
 .status-dot { width: 6px; height: 6px; border-radius: 50%; background: #27916d; }
+.status-paused { background: #8b95a7; }
 .integration-card-actions { display: flex; align-items: center; gap: 5px; border-top: 1px solid var(--border); margin-top: 15px; padding-top: 11px; }
 .integration-delete { margin-left: auto; color: var(--muted); }
 .integration-delete:hover { color: var(--danger); }

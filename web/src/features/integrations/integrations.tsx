@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Plug, RefreshCw } from 'lucide-react';
+import { KeyRound, Plug, RefreshCw } from 'lucide-react';
 import { useApp } from '../../app/context';
 import * as sdk from '../../shared/api/generated/sdk.gen';
 import type {
@@ -82,8 +82,8 @@ export function IntegrationsPage() {
   return (
     <>
       <PageHeader
-        title="Integrations"
-        description="Import tasks and keep source-managed content synchronized."
+        title="Source integrations"
+        description="Connect task sources to import and sync issues automatically."
       >
         {permissions.workspaceAdmin && (
           <CreateButton onClick={() => setEditing(null)}>Connect source</CreateButton>
@@ -94,15 +94,34 @@ export function IntegrationsPage() {
       ) : integrations.isError ? (
         <ErrorState error={integrations.error} />
       ) : integrations.data.length ? (
-        <div className="grid">
-          {integrations.data.map((item) => (
-            <IntegrationCard key={item.id} item={item} onEdit={() => setEditing(item)} />
-          ))}
-        </div>
+        <>
+          <div className="repository-list-heading">
+            <span>
+              {integrations.data.length}{' '}
+              {integrations.data.length === 1 ? 'source integration' : 'source integrations'}
+            </span>
+            <span className="muted">Imported tasks stay in sync with their source</span>
+          </div>
+          <div className="grid">
+            {integrations.data.map((item) => (
+              <IntegrationCard key={item.id} item={item} onEdit={() => setEditing(item)} />
+            ))}
+          </div>
+        </>
       ) : (
-        <Empty title="No task sources connected">
-          Connect GitHub Projects or Jira Server to import tasks.
-        </Empty>
+        <div className="repository-empty">
+          <div className="repository-empty-icon">
+            <Plug size={24} />
+          </div>
+          <h2>Connect a task source</h2>
+          <p className="muted">
+            Connect GitHub Projects or Jira to import tasks and keep them synchronized with your
+            source of truth.
+          </p>
+          {permissions.workspaceAdmin && (
+            <CreateButton onClick={() => setEditing(null)}>Connect source</CreateButton>
+          )}
+        </div>
       )}
       {editing !== undefined &&
         (providers.isPending ? (
@@ -120,37 +139,64 @@ export function IntegrationsPage() {
     </>
   );
 }
+function getProviderIcon(provider: string) {
+  const p = provider.toLowerCase();
+  if (p.includes('github')) {
+    return (
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
+      </svg>
+    );
+  }
+  if (p.includes('jira')) {
+    return (
+      <svg width="21" height="21" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M11.571 11.513H0a5.218 5.218 0 0 0 5.232 5.215h2.13v2.057A5.215 5.215 0 0 0 12.575 24V12.518a1.005 1.005 0 0 0-1.005-1.005zm5.723-5.756H5.736a5.215 5.215 0 0 0 5.215 5.214h2.129v2.058a5.218 5.218 0 0 0 5.215 5.214V6.758a1.001 1.001 0 0 0-1.001-1.001zM23.013 0H11.455a5.215 5.215 0 0 0 5.215 5.215h2.129v2.057A5.215 5.215 0 0 0 24 12.483V1.005A1.001 1.001 0 0 0 23.013 0Z" />
+      </svg>
+    );
+  }
+  return <Plug size={21} />;
+}
+
 function IntegrationCard({ item, onEdit }: { item: TaskIntegration; onEdit: () => void }) {
   const { scope, permissions } = useApp();
   const refresh = useRefresh();
   const action = useAction();
+  const providerLabel = item.provider.replaceAll('_', ' ');
   return (
-    <article className="resource-card">
-      <div className="split">
-        <Plug size={22} className="card-icon" />
-        <Badge>{item.enabled ? 'Enabled' : 'Paused'}</Badge>
+    <article className="integration-card">
+      <div className="integration-card-top">
+        <div className="integration-provider-icon">{getProviderIcon(item.provider)}</div>
+        <div className="integration-card-title">
+          <h3>{item.name}</h3>
+          <p>
+            {providerLabel} · sync every {item.interval}
+          </p>
+        </div>
+        <Badge>
+          <span className={`status-dot ${item.enabled ? '' : 'status-paused'}`} />
+          {item.enabled ? 'Enabled' : 'Paused'}
+        </Badge>
       </div>
-      <h3>{item.name}</h3>
-      <p className="muted">
-        {item.provider} · every {item.interval}
-      </p>
-      <div className="tags">
-        {item.labels.map((label) => (
-          <Badge key={label}>{label}</Badge>
-        ))}
-      </div>
-      <p className="muted">
+      {item.labels.length > 0 && (
+        <div className="tags">
+          {item.labels.map((label) => (
+            <Badge key={label}>{label}</Badge>
+          ))}
+        </div>
+      )}
+      <p className="muted" style={{ fontSize: '11px' }}>
         Last synchronized: {item.lastSynced ? date(item.lastSynced) : 'Never'}
       </p>
       {item.lastError && (
         <div className="notice error" role="status">
-          <strong>Last synchronization failed.</strong>
+          <strong>Last synchronization failed</strong>
           <p>{syncErrorMessage(item.lastError)}</p>
           <p className="muted">Correct the source configuration if needed, then sync again.</p>
         </div>
       )}
       {permissions.workspaceAdmin && (
-        <div className="actions">
+        <div className="integration-card-actions">
           <Button variant="outline" size="sm" onClick={onEdit}>
             Edit
           </Button>
@@ -170,11 +216,11 @@ function IntegrationCard({ item, onEdit }: { item: TaskIntegration; onEdit: () =
               }, 'Synchronization completed.');
             }}
           >
-            <RefreshCw size={12} />
+            <RefreshCw size={14} />
             {item.lastError ? 'Retry sync' : 'Sync now'}
           </Button>
           <ConfirmButton
-            title="Delete integration?"
+            title="Delete source integration?"
             description="This permanently removes the source configuration and all tasks imported by this integration."
             onConfirm={async () => {
               await data(
@@ -190,7 +236,7 @@ function IntegrationCard({ item, onEdit }: { item: TaskIntegration; onEdit: () =
       )}
       {action.error !== undefined && <ErrorState error={action.error} />}{' '}
       {action.message && (
-        <p role="status" className="muted">
+        <p role="status" className="success-message">
           {action.message}
         </p>
       )}
@@ -242,8 +288,12 @@ function IntegrationEditor({
   }
   return (
     <Dialog
-      title={item ? 'Edit integration' : 'Connect task source'}
-      description="Credentials are write-only. Leave the credential blank when editing to preserve its stored value."
+      title={item ? 'Edit source integration' : 'Connect a task source'}
+      description={
+        item
+          ? 'Update your source connection settings. Credentials are write-only.'
+          : 'Connect GitHub Projects or Jira to import tasks automatically.'
+      }
       open
       onOpenChange={(v) => {
         if (!v && !action.pending) onClose();
@@ -275,64 +325,226 @@ function IntegrationEditor({
             onClose();
         }}
       >
-        <Field label="Provider" error={form.formState.errors.provider?.message}>
-          <select
-            {...form.register('provider', { onChange: () => setConfig({}) })}
-            disabled={!!item}
-          >
-            {providers.map((p) => (
-              <option key={p.provider} value={p.provider}>
-                {p.provider.replaceAll('_', ' ')}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Connection name" error={form.formState.errors.name?.message}>
-          <input {...form.register('name')} />
-        </Field>
-        {parsed.error !== undefined && <ErrorState error={parsed.error} />}{' '}
-        {parsed.fields && (
-          <ProviderConfig fields={parsed.fields} config={config} onChange={setConfig} />
-        )}
-        <Field label={item ? 'Replacement credential (optional)' : 'Credential'}>
-          <input type="password" autoComplete="new-password" {...form.register('credential')} />
-        </Field>
         <div className="form-grid">
-          <Field label="Required labels" hint="Comma-separated; source content stays read-only.">
-            <input {...form.register('labels')} />
+          <Field
+            label="Provider"
+            hint={item ? undefined : 'Select the task source you want to connect'}
+            error={form.formState.errors.provider?.message}
+          >
+            {item ? (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  padding: '9px 11px',
+                  border: '1px solid var(--border)',
+                  borderRadius: '6px',
+                  background: 'var(--surface-muted)',
+                  minHeight: '38px',
+                }}
+              >
+                {getProviderIcon(item.provider)}
+                <span style={{ textTransform: 'capitalize' }}>
+                  {item.provider.replaceAll('_', ' ')}
+                </span>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {providers.map((p) => {
+                  const selected = form.watch('provider') === p.provider;
+                  return (
+                    <button
+                      type="button"
+                      key={p.provider}
+                      onClick={() => {
+                        form.setValue('provider', p.provider);
+                        setConfig({});
+                      }}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px',
+                        padding: '10px 12px',
+                        border: selected
+                          ? '1px solid color-mix(in srgb, var(--primary) 60%, var(--border))'
+                          : '1px solid var(--border)',
+                        borderRadius: '8px',
+                        background: selected
+                          ? 'color-mix(in srgb, var(--primary) 6%, var(--surface))'
+                          : 'var(--surface)',
+                        color: 'var(--foreground)',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        transition: 'all 140ms ease',
+                      }}
+                    >
+                      {getProviderIcon(p.provider)}
+                      <span style={{ textTransform: 'capitalize', fontSize: '13px' }}>
+                        {p.provider.replaceAll('_', ' ')}
+                      </span>
+                      {selected && (
+                        <span style={{ marginLeft: 'auto', color: 'var(--primary)', fontSize: '11px' }}>
+                          Selected
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </Field>
-          <Field label="Polling interval" error={form.formState.errors.interval?.message}>
-            <input {...form.register('interval')} />
+          <Field
+            label="Connection name"
+            hint="A friendly name for this source"
+            error={form.formState.errors.name?.message}
+          >
+            <input {...form.register('name')} placeholder="e.g., Team GitHub Projects" />
           </Field>
         </div>
-        <label className="actions">
-          <input type="checkbox" {...form.register('enabled')} />
-          Enable polling
-        </label>
-        <Button
-          variant="outline"
-          disabled={action.pending || !form.watch('credential') || !parsed.fields}
-          onClick={() => {
-            void form.handleSubmit(async (values) => {
-              await action.run(async () => {
-                await data(
-                  sdk.validateTaskIntegration({
-                    ...command,
-                    path: path(scope),
-                    body: body(values),
-                  }),
-                );
-              }, 'Connection validated.');
-            })();
+        {parsed.error !== undefined && <ErrorState error={parsed.error} />}{' '}
+        {parsed.fields && (
+          <section className="panel" style={{ padding: '16px', gap: '12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div
+                style={{
+                  display: 'grid',
+                  placeItems: 'center',
+                  width: '34px',
+                  height: '34px',
+                  borderRadius: '8px',
+                  background: 'color-mix(in srgb, var(--primary) 10%, var(--surface))',
+                  color: 'var(--primary)',
+                }}
+              >
+                <Plug size={18} />
+              </div>
+              <div>
+                <p style={{ fontSize: '12px', fontWeight: 600 }}>Source configuration</p>
+                <p className="muted" style={{ fontSize: '11px' }}>
+                  Configure how tasks are imported from this source
+                </p>
+              </div>
+            </div>
+            <ProviderConfig fields={parsed.fields} config={config} onChange={setConfig} />
+          </section>
+        )}
+        <section className="panel" style={{ padding: '16px', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div
+              style={{
+                display: 'grid',
+                placeItems: 'center',
+                width: '34px',
+                height: '34px',
+                borderRadius: '8px',
+                background: 'color-mix(in srgb, var(--primary) 10%, var(--surface))',
+                color: 'var(--primary)',
+              }}
+            >
+              <KeyRound size={18} />
+            </div>
+            <div>
+              <p style={{ fontSize: '12px', fontWeight: 600 }}>Authentication</p>
+              <p className="muted" style={{ fontSize: '11px' }}>
+                Credentials are encrypted and never displayed after saving
+              </p>
+            </div>
+          </div>
+          <Field
+            label={item ? 'Replacement credential' : 'Credential *'}
+            hint={
+              item
+                ? 'Leave blank to keep existing credential. Paste a new one to rotate.'
+                : 'Personal access token or API key with read access to the project'
+            }
+          >
+            <input
+              type="password"
+              autoComplete="new-password"
+              {...form.register('credential')}
+              placeholder={item ? 'Paste new credential to rotate' : 'Enter your credential'}
+            />
+          </Field>
+        </section>
+        <section className="panel" style={{ padding: '16px', gap: '12px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div
+              style={{
+                display: 'grid',
+                placeItems: 'center',
+                width: '34px',
+                height: '34px',
+                borderRadius: '8px',
+                background: 'color-mix(in srgb, var(--primary) 10%, var(--surface))',
+                color: 'var(--primary)',
+              }}
+            >
+              <RefreshCw size={18} />
+            </div>
+            <div>
+              <p style={{ fontSize: '12px', fontWeight: 600 }}>Sync settings</p>
+              <p className="muted" style={{ fontSize: '11px' }}>
+                Control which tasks are imported and how often
+              </p>
+            </div>
+          </div>
+          <div className="form-grid">
+            <Field
+              label="Filter by labels"
+              hint="Comma-separated. Leave empty to import all tasks."
+            >
+              <input {...form.register('labels')} placeholder="bug, enhancement" />
+            </Field>
+            <Field
+              label="Sync interval"
+              hint="e.g., 5m, 1h"
+              error={form.formState.errors.interval?.message}
+            >
+              <input {...form.register('interval')} placeholder="5m" />
+            </Field>
+          </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 0' }}>
+            <input type="checkbox" {...form.register('enabled')} />
+            <span style={{ fontSize: '12px' }}>Enable automatic synchronization</span>
+          </label>
+        </section>
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            paddingTop: '8px',
+            borderTop: '1px solid var(--border)',
+            gap: '12px',
+            flexWrap: 'wrap',
           }}
         >
-          Validate connection
-        </Button>
-        {action.message && (
-          <p role="status" className="muted">
-            {action.message}
-          </p>
-        )}
+          <Button
+            variant="outline"
+            disabled={action.pending || !form.watch('credential') || !parsed.fields}
+            onClick={() => {
+              void form.handleSubmit(async (values) => {
+                await action.run(async () => {
+                  await data(
+                    sdk.validateTaskIntegration({
+                      ...command,
+                      path: path(scope),
+                      body: body(values),
+                    }),
+                  );
+                }, 'Connection validated successfully.');
+              })();
+            }}
+          >
+            Test connection
+          </Button>
+          {action.message && (
+            <p role="status" className="success-message" style={{ margin: 0 }}>
+              {action.message}
+            </p>
+          )}
+        </div>
       </Form>
     </Dialog>
   );
