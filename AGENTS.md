@@ -11,6 +11,7 @@ Minimal Go and React/Vite scaffolding exists with PostgreSQL-only Compose and Ma
 ## Execution
 
 - Inspect context → implement within scope → verify → review diff. Deliver a complete, reviewable result; preserve unrelated user changes and avoid unrelated refactors.
+- Repository-specific skills live under `.agents/skills/`. The `.kiro/skills/`, `.claude/skills/`, and `.cursor/skills/` paths point there for each tool's native discovery. Read the relevant `SKILL.md` when a task matches its description.
 - Make routine, reversible choices autonomously; report consequential assumptions. Clarify open product decisions affecting correctness/acceptance, continuing independent work meanwhile.
 - Keep a short plan for substantial work; for cross-session tasks, record progress, verification, and blockers in the task document if present.
 - Merge/deploy/publish only with authorization. This file does not authorize messages or external resource creation.
