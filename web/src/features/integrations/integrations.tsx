@@ -350,13 +350,48 @@ function IntegrationEditor({
                 </span>
               </div>
             ) : (
-              <select {...form.register('provider', { onChange: () => setConfig({}) })}>
-                {providers.map((p) => (
-                  <option key={p.provider} value={p.provider}>
-                    {p.provider.replaceAll('_', ' ')}
-                  </option>
-                ))}
-              </select>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                {providers.map((p) => {
+                  const selected = form.watch('provider') === p.provider;
+                  return (
+                    <button
+                      type="button"
+                      key={p.provider}
+                      onClick={() => {
+                        form.setValue('provider', p.provider);
+                        setConfig({});
+                      }}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '10px',
+                        padding: '10px 12px',
+                        border: selected
+                          ? '1px solid color-mix(in srgb, var(--primary) 60%, var(--border))'
+                          : '1px solid var(--border)',
+                        borderRadius: '8px',
+                        background: selected
+                          ? 'color-mix(in srgb, var(--primary) 6%, var(--surface))'
+                          : 'var(--surface)',
+                        color: 'var(--foreground)',
+                        cursor: 'pointer',
+                        textAlign: 'left',
+                        transition: 'all 140ms ease',
+                      }}
+                    >
+                      {getProviderIcon(p.provider)}
+                      <span style={{ textTransform: 'capitalize', fontSize: '13px' }}>
+                        {p.provider.replaceAll('_', ' ')}
+                      </span>
+                      {selected && (
+                        <span style={{ marginLeft: 'auto', color: 'var(--primary)', fontSize: '11px' }}>
+                          Selected
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
             )}
           </Field>
           <Field
