@@ -1889,6 +1889,47 @@ input[type='checkbox'] {
 .agent-tool-diff > :last-child pre {
   border-left: 3px solid #43835a;
 }
+
+/* Agent form improvements */
+.agent-form-section {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+.agent-form-section-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 16px;
+  background: var(--surface-muted);
+  font-weight: 550;
+  font-size: 13px;
+}
+.agent-form-section-header svg {
+  color: var(--primary);
+}
+.agent-form-section-content {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 16px;
+}
+.agent-form-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 14px;
+  background: color-mix(in srgb, var(--surface-muted) 60%, transparent);
+  border-radius: 9px;
+  font-size: 12px;
+  color: var(--muted);
+  cursor: pointer;
+}
+.agent-form-toggle input {
+  cursor: pointer;
+}
+
 @media (max-width: 640px) {
   .agent-tool-diff {
     grid-template-columns: minmax(0, 1fr);

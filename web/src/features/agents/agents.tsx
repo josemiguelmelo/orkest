@@ -169,8 +169,8 @@ function AgentEditor({ item, onClose }: { item: Agent | null; onClose: () => voi
   });
   return (
     <Dialog
-      title={item ? 'Edit agent definition' : 'New agent definition'}
-      description="Definitions configure agents; they do not provide execution slots or start tasks."
+      title={item ? 'Edit agent definition' : 'Create new agent'}
+      description="Configure your agent's identity, model, tools, skills, and system instructions."
       open
       onOpenChange={(v) => {
         if (!v && !action.pending) onClose();
@@ -193,114 +193,146 @@ function AgentEditor({ item, onClose }: { item: Agent | null; onClose: () => voi
             onClose();
         }}
       >
-        <Field label="Name" error={form.formState.errors.name?.message}>
-          <input {...form.register('name')} />
-        </Field>
-        <Field label="Description" error={form.formState.errors.description?.message}>
-          <textarea {...form.register('description')} />
-        </Field>
-        <Field label="Runtime">
-          <select {...form.register('runtime')}>
-            <option value="opencode">OpenCode</option>
-          </select>
-        </Field>
-        {customModel ? (
-          <div className="form-grid">
-            <Field label="Model provider" error={form.formState.errors.provider?.message}>
-              <input {...form.register('provider')} placeholder="Provider identifier" />
+        <div className="agent-form-section">
+          <div className="agent-form-section-header">
+            <Bot size={16} />
+            <span>Basic Information</span>
+          </div>
+          <div className="agent-form-section-content">
+            <Field label="Name" error={form.formState.errors.name?.message}>
+              <input {...form.register('name')} placeholder="e.g., Code Reviewer" />
             </Field>
-            <Field label="Model identifier" error={form.formState.errors.model?.message}>
-              <input {...form.register('model')} />
+            <Field label="Description" error={form.formState.errors.description?.message}>
+              <textarea {...form.register('description')} placeholder="Describe this agent's purpose and capabilities..." />
             </Field>
           </div>
-        ) : (
-          <>
-            <div className="form-grid">
-              <Field label="Model provider" error={form.formState.errors.provider?.message}>
-                <select
-                  value={form.watch('provider')}
-                  onChange={(event) => {
-                    form.setValue('provider', event.target.value, { shouldDirty: true });
-                    form.setValue('model', '', { shouldDirty: true });
-                  }}
-                >
-                  <option value="">Select a provider</option>
-                  {Object.entries(catalog.data ?? {}).map(([id, provider]) => (
-                    <option value={id} key={id}>
-                      {provider.name ?? id}
-                    </option>
-                  ))}
-                  {form.watch('provider') && !catalog.data?.[form.watch('provider')] && (
-                    <option value={form.watch('provider')}>
-                      {form.watch('provider')} (current)
-                    </option>
-                  )}
-                </select>
-              </Field>
-              <Field label="Model identifier" error={form.formState.errors.model?.message}>
-                <select
-                  value={form.watch('model')}
-                  onChange={(event) =>
-                    form.setValue('model', event.target.value, { shouldDirty: true })
-                  }
-                  disabled={!form.watch('provider')}
-                >
-                  <option value="">Select a model</option>
-                  {Object.entries(catalog.data?.[form.watch('provider')]?.models ?? {}).map(
-                    ([id, model]) => (
-                      <option value={id} key={id}>
-                        {model.name ?? id}
-                      </option>
-                    ),
-                  )}
-                  {form.watch('model') &&
-                    !catalog.data?.[form.watch('provider')]?.models?.[form.watch('model')] && (
-                      <option value={form.watch('model')}>{form.watch('model')} (current)</option>
-                    )}
-                </select>
-              </Field>
-            </div>
-            {catalog.isError && (
-              <p className="muted">Model catalog unavailable. You can enter a custom model.</p>
+        </div>
+        <div className="agent-form-section">
+          <div className="agent-form-section-header">
+            <Cpu size={16} />
+            <span>Model Configuration</span>
+          </div>
+          <div className="agent-form-section-content">
+            <Field label="Runtime">
+              <select {...form.register('runtime')}>
+                <option value="opencode">OpenCode</option>
+              </select>
+            </Field>
+            {customModel ? (
+              <div className="form-grid">
+                <Field label="Model provider" error={form.formState.errors.provider?.message}>
+                  <input {...form.register('provider')} placeholder="e.g., anthropic" />
+                </Field>
+                <Field label="Model identifier" error={form.formState.errors.model?.message}>
+                  <input {...form.register('model')} placeholder="e.g., claude-sonnet-4" />
+                </Field>
+              </div>
+            ) : (
+              <>
+                <div className="form-grid">
+                  <Field label="Model provider" error={form.formState.errors.provider?.message}>
+                    <select
+                      value={form.watch('provider')}
+                      onChange={(event) => {
+                        form.setValue('provider', event.target.value, { shouldDirty: true });
+                        form.setValue('model', '', { shouldDirty: true });
+                      }}
+                    >
+                      <option value="">Select a provider</option>
+                      {Object.entries(catalog.data ?? {}).map(([id, provider]) => (
+                        <option value={id} key={id}>
+                          {provider.name ?? id}
+                        </option>
+                      ))}
+                      {form.watch('provider') && !catalog.data?.[form.watch('provider')] && (
+                        <option value={form.watch('provider')}>
+                          {form.watch('provider')} (current)
+                        </option>
+                      )}
+                    </select>
+                  </Field>
+                  <Field label="Model identifier" error={form.formState.errors.model?.message}>
+                    <select
+                      value={form.watch('model')}
+                      onChange={(event) =>
+                        form.setValue('model', event.target.value, { shouldDirty: true })
+                      }
+                      disabled={!form.watch('provider')}
+                    >
+                      <option value="">Select a model</option>
+                      {Object.entries(catalog.data?.[form.watch('provider')]?.models ?? {}).map(
+                        ([id, model]) => (
+                          <option value={id} key={id}>
+                            {model.name ?? id}
+                          </option>
+                        ),
+                      )}
+                      {form.watch('model') &&
+                        !catalog.data?.[form.watch('provider')]?.models?.[form.watch('model')] && (
+                          <option value={form.watch('model')}>{form.watch('model')} (current)</option>
+                        )}
+                    </select>
+                  </Field>
+                </div>
+                {catalog.isError && (
+                  <p className="muted">Model catalog unavailable. You can enter a custom model.</p>
+                )}
+              </>
             )}
-          </>
-        )}
-        <label className="muted">
-          <input
-            type="checkbox"
-            checked={customModel}
-            onChange={(event) => setCustomModel(event.target.checked)}
-          />
-          Enter a custom provider and model
-        </label>
-        <Field label="System instructions" error={form.formState.errors.systemPrompt?.message}>
-          <textarea rows={8} className="code-input" {...form.register('systemPrompt')} />
-        </Field>
-        {servers.isError ? (
-          <ErrorState error={servers.error} />
-        ) : (
-          <Selection
-            label="MCP servers"
-            options={servers.data ?? []}
-            value={form.watch('mcpServerIds')}
-            onChange={(ids) => form.setValue('mcpServerIds', ids, { shouldDirty: true })}
-          />
-        )}{' '}
-        {skills.isError ? (
-          <ErrorState error={skills.error} />
-        ) : (
-          <Selection
-            label="Skills visible to this workspace"
-            options={
-              skills.data?.map((skill) => ({
-                id: skill.id,
-                name: `${skill.id} (${skill.scope})`,
-              })) ?? []
-            }
-            value={form.watch('skillIds')}
-            onChange={(ids) => form.setValue('skillIds', ids, { shouldDirty: true })}
-          />
-        )}
+            <label className="agent-form-toggle">
+              <input
+                type="checkbox"
+                checked={customModel}
+                onChange={(event) => setCustomModel(event.target.checked)}
+              />
+              <span>Enter a custom provider and model</span>
+            </label>
+          </div>
+        </div>
+        <div className="agent-form-section">
+          <div className="agent-form-section-header">
+            <FileText size={16} />
+            <span>Instructions</span>
+          </div>
+          <div className="agent-form-section-content">
+            <Field label="System instructions" error={form.formState.errors.systemPrompt?.message} hint="Define how this agent should behave and approach tasks.">
+              <textarea rows={10} className="code-input" {...form.register('systemPrompt')} placeholder="You are an expert code reviewer. Focus on..." />
+            </Field>
+          </div>
+        </div>
+        <div className="agent-form-section">
+          <div className="agent-form-section-header">
+            <Wrench size={16} />
+            <span>Tools & Capabilities</span>
+          </div>
+          <div className="agent-form-section-content">
+            {servers.isError ? (
+              <ErrorState error={servers.error} />
+            ) : (
+              <Selection
+                label="MCP servers"
+                options={servers.data ?? []}
+                value={form.watch('mcpServerIds')}
+                onChange={(ids) => form.setValue('mcpServerIds', ids, { shouldDirty: true })}
+              />
+            )}
+            {skills.isError ? (
+              <ErrorState error={skills.error} />
+            ) : (
+              <Selection
+                label="Skills"
+                options={
+                  skills.data?.map((skill) => ({
+                    id: skill.id,
+                    name: `${skill.id} (${skill.scope})`,
+                  })) ?? []
+                }
+                value={form.watch('skillIds')}
+                onChange={(ids) => form.setValue('skillIds', ids, { shouldDirty: true })}
+              />
+            )}
+          </div>
+        </div>
       </Form>
     </Dialog>
   );
