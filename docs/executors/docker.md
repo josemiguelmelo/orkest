@@ -13,7 +13,7 @@ make docker-agentctl-base
 make docker-agentctl-opencode
 ```
 
-The base image contains the `agentctl` binary and Git. The runtime image extends that
+The base image contains the `agentctl` binary, Git, and GitHub CLI 2.103.2. The runtime image extends that
 base and installs pinned OpenCode 2.1.4. Override `AGENTCTL_BASE_IMAGE` or
 `AGENTCTL_OPENCODE_IMAGE` when building or running a differently tagged image.
 The platform-side executor reads `ORKEST_DATA_DIR` through its constructor and
@@ -29,12 +29,15 @@ out of host paths and container labels. The directories are mode 0700 and the
 container runs as the platform process UID/GID so files remain writable by the
 platform user. The agentctl state directory must remain on persistent storage.
 
-No provider credentials are passed into containers in this first implementation.
-Model requests requiring credentials will fail until a credential integration
-is added. The GitHub coding provider resolves the integration credential in the
-platform immediately before checkout and passes it only through a temporary Git
-credential helper. Existing registrations without integration references keep
-using the legacy public checkout adapter.
+The GitHub coding provider resolves each integration PAT on the platform. It uses a
+temporary credential helper for checkout, then sends the PAT to agentctl in the
+encrypted task-session configuration. Git receives URL-scoped HTTP authorization
+through process configuration. Agentctl also adds a `gh` wrapper to the runtime
+`PATH`; when run inside a registered checkout, it selects that repository's PAT
+through `GH_TOKEN` without writing credentials to gh's auth file. Run `gh pr create`
+from the repository checkout. Public repository registrations without an
+integration continue to use the legacy checkout adapter and have no authenticated
+push or `gh` access.
 
 The container does not restart automatically. Agentctl session restoration is
 not implemented, so automatically restarting it after a daemon restart could

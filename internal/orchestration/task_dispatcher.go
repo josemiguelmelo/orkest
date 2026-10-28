@@ -38,6 +38,9 @@ type TaskDispatcher struct {
 	repositories interface {
 		List(context.Context, string, string, string) ([]coderepository.CodeRepository, error)
 	}
+	codingCredentials interface {
+		CodingCredential(context.Context, string, string) (coderepository.Credentials, error)
+	}
 }
 
 func (d *TaskDispatcher) SetEnvironmentResolver(resolver interface {
@@ -52,6 +55,13 @@ func (d *TaskDispatcher) SetRepositoryResolver(resolver interface {
 },
 ) {
 	d.repositories = resolver
+}
+
+func (d *TaskDispatcher) SetCodingCredentialResolver(resolver interface {
+	CodingCredential(context.Context, string, string) (coderepository.Credentials, error)
+},
+) {
+	d.codingCredentials = resolver
 }
 
 func (d *TaskDispatcher) SetSkillResolver(resolver interface {
@@ -111,6 +121,8 @@ func (d *TaskDispatcher) StartTask(ctx context.Context, userID, organizationID s
 		}
 	}
 	config.RunID, config.RestoreSession = runID, continuing
+	config.GitCredentials = nil
+	config.GitCredentialsRequired = false
 	if d.environmentResolver != nil {
 		config.Environment, err = d.environmentResolver.Resolve(ctx, value.WorkspaceID)
 		if err != nil {
@@ -128,6 +140,17 @@ func (d *TaskDispatcher) StartTask(ctx context.Context, userID, organizationID s
 				IntegrationID: repository.IntegrationID, ProviderRepositoryID: repository.ProviderRepositoryID,
 				DefaultBranch: repository.DefaultBranch, Name: repository.Name,
 			})
+			if repository.IntegrationID != "" {
+				if d.codingCredentials == nil {
+					return errors.New("coding credential resolver is unavailable")
+				}
+				credential, credentialErr := d.codingCredentials.CodingCredential(ctx, value.WorkspaceID, repository.IntegrationID)
+				if credentialErr != nil {
+					return fmt.Errorf("resolve repository push credential: %w", credentialErr)
+				}
+				config.GitCredentials = append(config.GitCredentials, runconfig.GitCredential{RepositoryURL: repository.URL, RepositoryPath: "repositories/" + repository.ProviderName + "/" + repository.ID, Token: credential.Token})
+				config.GitCredentialsRequired = true
+			}
 		}
 	}
 	if !continuing {

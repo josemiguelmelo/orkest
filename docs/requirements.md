@@ -46,12 +46,15 @@ Users register repositories in a workspace before tasks may use them. A task may
 GitHub Cloud with a PAT is the initial coding provider. Workspace-scoped
 integration management, write-only encrypted credential storage and rotation,
 connection validation, paginated repository discovery, selection-based
-registration, and task checkout credential resolution are implemented. Additional
-coding providers remain future support. Repository credentials remain separate
-from repository metadata and agent run configuration; Git access tokens are
-used only by the platform during checkout operations.
+registration, and task checkout credential resolution are implemented. Integrated
+repository PATs are also supplied to agentctl for Git push authentication during a
+run. They are encrypted in the platform's task-session snapshot and omitted from
+agentctl's plaintext recovery checkpoint. Additional coding providers remain
+future support.
 
 Repository configuration must identify the remote repository and the credentials or integration used to access it. The agent determines which workspace repositories need changes from the task context. Each changed repository uses a branch dedicated to the task; review iterations reuse that branch. Agents autonomously create and update pull requests and perform the repository operations needed to complete the task, within configured permissions and approval policies. Base branch selection and discovery mechanics remain open.
+
+Agent-created commits use the fixed Git identity `Orkest Agent <agent@orkest.local>`. PATs authenticate HTTPS Git operations through agentctl-provided process configuration and must not be written to repository Git configuration, logs, task content, or ordinary API responses.
 
 ### 3.3 Task
 

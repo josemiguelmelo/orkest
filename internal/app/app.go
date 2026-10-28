@@ -112,6 +112,7 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 		return err
 	}
 	dispatcher.SetRepositoryResolver(codeRepositories)
+	dispatcher.SetCodingCredentialResolver(codeRepositories)
 	dispatcher.SetSkillResolver(skillCatalog)
 	dispatcher.SetEnvironmentResolver(workspaceEnvironment)
 	tasks := task.NewService(postgres.NewTaskPostgresRepository(database), workspaces, dispatcher)
