@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Plug, RefreshCw } from 'lucide-react';
+import { KeyRound, Plug, RefreshCw } from 'lucide-react';
 import { useApp } from '../../app/context';
 import * as sdk from '../../shared/api/generated/sdk.gen';
 import type {
@@ -311,19 +311,36 @@ function IntegrationEditor({
         <div className="form-grid">
           <Field
             label="Provider"
-            hint={item ? 'Provider cannot be changed after creation' : undefined}
+            hint={item ? undefined : 'Select the task source you want to connect'}
             error={form.formState.errors.provider?.message}
           >
-            <select
-              {...form.register('provider', { onChange: () => setConfig({}) })}
-              disabled={!!item}
-            >
-              {providers.map((p) => (
-                <option key={p.provider} value={p.provider}>
-                  {p.provider.replaceAll('_', ' ')}
-                </option>
-              ))}
-            </select>
+            {item ? (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px',
+                  padding: '9px 11px',
+                  border: '1px solid var(--border)',
+                  borderRadius: '6px',
+                  background: 'var(--surface-muted)',
+                  minHeight: '38px',
+                }}
+              >
+                <Plug size={16} />
+                <span style={{ textTransform: 'capitalize' }}>
+                  {item.provider.replaceAll('_', ' ')}
+                </span>
+              </div>
+            ) : (
+              <select {...form.register('provider', { onChange: () => setConfig({}) })}>
+                {providers.map((p) => (
+                  <option key={p.provider} value={p.provider}>
+                    {p.provider.replaceAll('_', ' ')}
+                  </option>
+                ))}
+              </select>
+            )}
           </Field>
           <Field
             label="Connection name"
@@ -336,21 +353,51 @@ function IntegrationEditor({
         {parsed.error !== undefined && <ErrorState error={parsed.error} />}{' '}
         {parsed.fields && (
           <section className="panel" style={{ padding: '16px', gap: '12px' }}>
-            <div>
-              <p style={{ fontSize: '12px', fontWeight: 600 }}>Source configuration</p>
-              <p className="muted" style={{ fontSize: '11px' }}>
-                Configure how tasks are imported from this source
-              </p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div
+                style={{
+                  display: 'grid',
+                  placeItems: 'center',
+                  width: '34px',
+                  height: '34px',
+                  borderRadius: '8px',
+                  background: 'color-mix(in srgb, var(--primary) 10%, var(--surface))',
+                  color: 'var(--primary)',
+                }}
+              >
+                <Plug size={18} />
+              </div>
+              <div>
+                <p style={{ fontSize: '12px', fontWeight: 600 }}>Source configuration</p>
+                <p className="muted" style={{ fontSize: '11px' }}>
+                  Configure how tasks are imported from this source
+                </p>
+              </div>
             </div>
             <ProviderConfig fields={parsed.fields} config={config} onChange={setConfig} />
           </section>
         )}
         <section className="panel" style={{ padding: '16px', gap: '12px' }}>
-          <div>
-            <p style={{ fontSize: '12px', fontWeight: 600 }}>Authentication</p>
-            <p className="muted" style={{ fontSize: '11px' }}>
-              Credentials are encrypted and never displayed after saving
-            </p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div
+              style={{
+                display: 'grid',
+                placeItems: 'center',
+                width: '34px',
+                height: '34px',
+                borderRadius: '8px',
+                background: 'color-mix(in srgb, var(--primary) 10%, var(--surface))',
+                color: 'var(--primary)',
+              }}
+            >
+              <KeyRound size={18} />
+            </div>
+            <div>
+              <p style={{ fontSize: '12px', fontWeight: 600 }}>Authentication</p>
+              <p className="muted" style={{ fontSize: '11px' }}>
+                Credentials are encrypted and never displayed after saving
+              </p>
+            </div>
           </div>
           <Field
             label={item ? 'Replacement credential' : 'Credential *'}
@@ -369,11 +416,26 @@ function IntegrationEditor({
           </Field>
         </section>
         <section className="panel" style={{ padding: '16px', gap: '12px' }}>
-          <div>
-            <p style={{ fontSize: '12px', fontWeight: 600 }}>Sync settings</p>
-            <p className="muted" style={{ fontSize: '11px' }}>
-              Control which tasks are imported and how often
-            </p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div
+              style={{
+                display: 'grid',
+                placeItems: 'center',
+                width: '34px',
+                height: '34px',
+                borderRadius: '8px',
+                background: 'color-mix(in srgb, var(--primary) 10%, var(--surface))',
+                color: 'var(--primary)',
+              }}
+            >
+              <RefreshCw size={18} />
+            </div>
+            <div>
+              <p style={{ fontSize: '12px', fontWeight: 600 }}>Sync settings</p>
+              <p className="muted" style={{ fontSize: '11px' }}>
+                Control which tasks are imported and how often
+              </p>
+            </div>
           </div>
           <div className="form-grid">
             <Field
