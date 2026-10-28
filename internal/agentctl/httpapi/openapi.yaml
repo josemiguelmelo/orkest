@@ -381,6 +381,18 @@ components:
         taskId: { type: string, pattern: '\S' }
         taskSessionId: { type: string }
         restoreSession: { type: boolean, default: false }
+        gitCredentialsRequired: { type: boolean, default: false }
+        gitCredentials:
+          type: array
+          description: Sensitive repository push credentials; never returned by the API.
+          items:
+            type: object
+            additionalProperties: false
+            required: [repositoryUrl, repositoryPath, token]
+            properties:
+              repositoryUrl: { type: string, format: uri }
+              repositoryPath: { type: string }
+              token: { type: string, writeOnly: true }
         runId: { type: string, pattern: '\S' }
         runtime: { type: string, enum: [opencode] }
         agent:

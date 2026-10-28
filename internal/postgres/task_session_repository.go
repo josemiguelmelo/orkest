@@ -36,9 +36,20 @@ func (r *AgentLaunchPostgresRepository) CurrentSession(ctx context.Context, orgI
 		if err != nil {
 			return config, false, errors.New("decrypt task session environment")
 		}
-		if err := json.Unmarshal([]byte(plain), &config.Environment); err != nil {
+		var secrets struct {
+			Environment    map[string]string         `json:"environment"`
+			GitCredentials []runconfig.GitCredential `json:"gitCredentials"`
+		}
+		if err := json.Unmarshal([]byte(plain), &secrets); err != nil {
 			return config, false, errors.New("decode task session environment")
 		}
+		if secrets.Environment == nil && secrets.GitCredentials == nil {
+			if err := json.Unmarshal([]byte(plain), &secrets.Environment); err != nil {
+				return config, false, errors.New("decode task session environment")
+			}
+		}
+		config.Environment = secrets.Environment
+		config.GitCredentials = secrets.GitCredentials
 		config.EncryptedEnvironment = ""
 	}
 	config.TaskSessionID = row.ID
@@ -105,11 +116,14 @@ func (r *AgentLaunchPostgresRepository) sessionSnapshot(config runconfig.RunConf
 	for i := range snapshot.MCPServers {
 		snapshot.MCPServers[i].Headers = nil
 	}
-	if len(snapshot.Environment) > 0 {
+	if len(snapshot.Environment) > 0 || len(snapshot.GitCredentials) > 0 {
 		if r.secretBox == nil {
 			return nil, secretbox.ErrKeyUnavailable
 		}
-		encoded, err := json.Marshal(snapshot.Environment)
+		encoded, err := json.Marshal(struct {
+			Environment    map[string]string         `json:"environment,omitempty"`
+			GitCredentials []runconfig.GitCredential `json:"gitCredentials,omitempty"`
+		}{snapshot.Environment, snapshot.GitCredentials})
 		if err != nil {
 			return nil, err
 		}
@@ -119,6 +133,7 @@ func (r *AgentLaunchPostgresRepository) sessionSnapshot(config runconfig.RunConf
 		}
 		snapshot.EncryptedEnvironment = string(sealed)
 		snapshot.Environment = nil
+		snapshot.GitCredentials = nil
 	}
 	return json.Marshal(snapshot)
 }

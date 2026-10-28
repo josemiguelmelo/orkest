@@ -38,13 +38,37 @@ func (s sessionStorage) Root(config runconfig.RuntimeConfig) string {
 }
 
 func configurationFingerprint(config runconfig.RuntimeConfig) string {
+	config = fingerprintableConfiguration(config)
+	data, _ := json.Marshal(config)
+	return fmt.Sprintf("%x", sha256.Sum256(data))
+}
+
+func fingerprintableConfiguration(config runconfig.RuntimeConfig) runconfig.RuntimeConfig {
 	config.RunID = ""
 	config.MCPServers = append([]runconfig.MCPServer(nil), config.MCPServers...)
 	for i := range config.MCPServers {
 		config.MCPServers[i].Headers = nil
 	}
-	data, _ := json.Marshal(config)
-	return fmt.Sprintf("%x", sha256.Sum256(data))
+	config.GitCredentials = nil
+	config.GitCredentialsRequired = false
+	return config
+}
+
+func legacyConfigurationFingerprints(config runconfig.RuntimeConfig) []string {
+	config.RunID = ""
+	config.MCPServers = append([]runconfig.MCPServer(nil), config.MCPServers...)
+	for i := range config.MCPServers {
+		config.MCPServers[i].Headers = nil
+	}
+	values := []runconfig.RuntimeConfig{config, config}
+	values[1].GitCredentials = nil
+	values[1].GitCredentialsRequired = false
+	fingerprints := make([]string, 0, len(values))
+	for _, value := range values {
+		data, _ := json.Marshal(value)
+		fingerprints = append(fingerprints, fmt.Sprintf("%x", sha256.Sum256(data)))
+	}
+	return fingerprints
 }
 
 func (s sessionStorage) acquire(config runconfig.RuntimeConfig) (*os.File, error) {
@@ -94,7 +118,11 @@ func (s sessionStorage) load(config runconfig.RuntimeConfig) (string, error) {
 	if err := json.Unmarshal(data, &manifest); err != nil {
 		return "", err
 	}
-	if manifest.Version != 1 || manifest.RuntimeVersion != s.RuntimeVersion || manifest.WorkDir != s.WorkDir || manifest.Configuration != configurationFingerprint(config) || manifest.SessionID == "" {
+	compatibleConfiguration := manifest.Configuration == configurationFingerprint(config)
+	for _, fingerprint := range legacyConfigurationFingerprints(config) {
+		compatibleConfiguration = compatibleConfiguration || manifest.Configuration == fingerprint
+	}
+	if manifest.Version != 1 || manifest.RuntimeVersion != s.RuntimeVersion || manifest.WorkDir != s.WorkDir || !compatibleConfiguration || manifest.SessionID == "" {
 		return "", errors.New("session manifest is incompatible with configuration or working path")
 	}
 	return manifest.SessionID, nil

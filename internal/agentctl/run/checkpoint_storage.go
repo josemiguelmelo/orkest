@@ -20,6 +20,8 @@ type runCheckpoint struct {
 }
 
 func (s checkpointStore) Save(config runconfig.RunConfig) error {
+	config = config.Clone()
+	config.GitCredentials = nil
 	data, err := json.Marshal(runCheckpoint{Version: 1, Config: config})
 	if err != nil {
 		return err

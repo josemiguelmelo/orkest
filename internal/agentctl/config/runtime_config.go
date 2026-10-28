@@ -39,6 +39,14 @@ type Skill struct {
 	SkillMD string `json:"skillMD"`
 }
 
+// GitCredential grants push access to one registered HTTPS repository for a run.
+// The token is sensitive and must never be included in logs or ordinary responses.
+type GitCredential struct {
+	RepositoryURL  string `json:"repositoryUrl"`
+	RepositoryPath string `json:"repositoryPath"`
+	Token          string `json:"token"`
+}
+
 var (
 	skillIDPattern         = regexp.MustCompile(`^[a-z0-9]+(-[a-z0-9]+)*$`)
 	environmentNamePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
@@ -60,17 +68,19 @@ func (e *ValidationError) Error() string {
 
 // RuntimeConfig contains only configuration consumed by a native runtime.
 type RuntimeConfig struct {
-	OrganizationID string              `json:"organizationId"`
-	WorkspaceID    string              `json:"workspaceId"`
-	TaskID         string              `json:"taskId"`
-	TaskSessionID  string              `json:"taskSessionId,omitempty"`
-	RunID          string              `json:"runId"`
-	Runtime        coreruntime.Runtime `json:"runtime"`
-	Agent          AgentDefinition     `json:"agent"`
-	Model          ModelSelection      `json:"model"`
-	MCPServers     []MCPServer         `json:"mcpServers,omitempty"`
-	Skills         []Skill             `json:"skills,omitempty"`
-	Environment    map[string]string   `json:"environment,omitempty"`
+	OrganizationID         string              `json:"organizationId"`
+	WorkspaceID            string              `json:"workspaceId"`
+	TaskID                 string              `json:"taskId"`
+	TaskSessionID          string              `json:"taskSessionId,omitempty"`
+	RunID                  string              `json:"runId"`
+	Runtime                coreruntime.Runtime `json:"runtime"`
+	Agent                  AgentDefinition     `json:"agent"`
+	Model                  ModelSelection      `json:"model"`
+	MCPServers             []MCPServer         `json:"mcpServers,omitempty"`
+	Skills                 []Skill             `json:"skills,omitempty"`
+	Environment            map[string]string   `json:"environment,omitempty"`
+	GitCredentials         []GitCredential     `json:"gitCredentials,omitempty"`
+	GitCredentialsRequired bool                `json:"gitCredentialsRequired,omitempty"`
 }
 
 func (c RuntimeConfig) Clone() RuntimeConfig {
@@ -80,6 +90,7 @@ func (c RuntimeConfig) Clone() RuntimeConfig {
 	}
 	c.Skills = slices.Clone(c.Skills)
 	c.Environment = maps.Clone(c.Environment)
+	c.GitCredentials = slices.Clone(c.GitCredentials)
 	return c
 }
 
@@ -108,9 +119,21 @@ func (c RuntimeConfig) Validate() error {
 	if err := validateSkills(c.Skills); err != nil {
 		return err
 	}
+	for _, credential := range c.GitCredentials {
+		parsed, err := url.Parse(credential.RepositoryURL)
+		if strings.TrimSpace(credential.Token) == "" || strings.TrimSpace(credential.RepositoryPath) == "" || err != nil || parsed == nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil || strings.ContainsAny(credential.Token, "\x00\r\n") {
+			return &ValidationError{Field: "gitCredentials", Reason: "must contain valid HTTPS repository credentials"}
+		}
+	}
 	for name, value := range c.Environment {
 		if !environmentNamePattern.MatchString(name) || strings.ContainsRune(value, '\x00') {
 			return &ValidationError{Field: "environment", Reason: "contains an invalid name or value"}
+		}
+		if strings.HasPrefix(name, "GIT_CONFIG_") {
+			return &ValidationError{Field: "environment", Reason: "contains a reserved Git configuration variable"}
+		}
+		if strings.HasPrefix(name, "ORKEST_GH_") {
+			return &ValidationError{Field: "environment", Reason: "contains a reserved GitHub CLI variable"}
 		}
 	}
 	return nil

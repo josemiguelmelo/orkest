@@ -5,12 +5,14 @@ package runtimehost
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 
 	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
@@ -105,6 +107,12 @@ func (h *Host) start(ctx context.Context, config runconfig.RuntimeConfig, restor
 			session.callbacks.secrets = append(session.callbacks.secrets, value)
 		}
 	}
+	for _, credential := range config.GitCredentials {
+		if credential.Token != "" {
+			session.callbacks.secrets = append(session.callbacks.secrets, credential.Token)
+			session.callbacks.secrets = append(session.callbacks.secrets, base64.StdEncoding.EncodeToString([]byte("x-access-token:"+credential.Token)))
+		}
+	}
 	for _, server := range config.MCPServers {
 		for _, value := range server.Headers {
 			session.callbacks.secrets = append(session.callbacks.secrets, value)
@@ -159,6 +167,16 @@ func (h *Host) prepareRuntime(ctx context.Context, config runconfig.RuntimeConfi
 	if err != nil {
 		return "", nil, err
 	}
+	if err := configureGit(ctx, h.environment.WorkDir, config.GitCredentials); err != nil {
+		return "", nil, err
+	}
+	if len(config.GitCredentials) > 0 {
+		environment = withGitCredentials(environment, config.GitCredentials)
+		environment, err = withGitHubCLI(paths.RuntimeRoot, environment, config.GitCredentials)
+		if err != nil {
+			return "", nil, err
+		}
+	}
 	executable, err := exec.LookPath(descriptor.Executable)
 	if err != nil {
 		return "", nil, &agentruntime.LaunchError{Message: "runtime executable unavailable", Cause: err}
@@ -167,6 +185,99 @@ func (h *Host) prepareRuntime(ctx context.Context, config runconfig.RuntimeConfi
 		return "", nil, err
 	}
 	return executable, environment, nil
+}
+
+func configureGit(ctx context.Context, workDir string, credentials []runconfig.GitCredential) error {
+	for _, credential := range credentials {
+		if filepath.IsAbs(credential.RepositoryPath) || filepath.Clean(credential.RepositoryPath) != credential.RepositoryPath || strings.HasPrefix(credential.RepositoryPath, "..") {
+			return &agentruntime.RuntimeError{Kind: agentruntime.RuntimeFailure, Message: "configure Git identity failed", Cause: fmt.Errorf("invalid repository path")}
+		}
+		path := filepath.Join(workDir, credential.RepositoryPath)
+		for _, setting := range [][2]string{{"user.name", "Orkest Agent"}, {"user.email", "agent@orkest.local"}} {
+			cmd := exec.CommandContext(ctx, "git", "-C", path, "config", "--local", setting[0], setting[1])
+			cmd.Stdout, cmd.Stderr = io.Discard, io.Discard
+			if err := cmd.Run(); err != nil {
+				return &agentruntime.RuntimeError{Kind: agentruntime.RuntimeFailure, Message: "configure Git identity failed", Cause: err}
+			}
+		}
+	}
+	return nil
+}
+
+func withGitCredentials(environment []string, credentials []runconfig.GitCredential) []string {
+	values := make(map[string]string, len(environment)+1+len(credentials)*2)
+	for _, entry := range environment {
+		name, value, ok := strings.Cut(entry, "=")
+		if ok && name != "GIT_CONFIG_COUNT" && !strings.HasPrefix(name, "GIT_CONFIG_KEY_") && !strings.HasPrefix(name, "GIT_CONFIG_VALUE_") {
+			values[name] = value
+		}
+	}
+	values["GIT_CONFIG_COUNT"] = strconv.Itoa(len(credentials))
+	for i, credential := range credentials {
+		auth := base64.StdEncoding.EncodeToString([]byte("x-access-token:" + credential.Token))
+		values["GIT_CONFIG_KEY_"+strconv.Itoa(i)] = "http." + credential.RepositoryURL + ".extraheader"
+		values["GIT_CONFIG_VALUE_"+strconv.Itoa(i)] = "AUTHORIZATION: basic " + auth
+	}
+	result := make([]string, 0, len(values))
+	for key, value := range values {
+		result = append(result, key+"="+value)
+	}
+	return result
+}
+
+func withGitHubCLI(runtimeRoot string, environment []string, credentials []runconfig.GitCredential) ([]string, error) {
+	ghPath, err := exec.LookPath("gh")
+	if err != nil {
+		return nil, &agentruntime.LaunchError{Message: "GitHub CLI is unavailable", Cause: err}
+	}
+	binDir := filepath.Join(runtimeRoot, "github-cli")
+	if err := os.MkdirAll(binDir, 0o700); err != nil {
+		return nil, &agentruntime.RuntimeError{Kind: agentruntime.RuntimeFailure, Message: "configure GitHub CLI authentication failed", Cause: err}
+	}
+	var script strings.Builder
+	script.WriteString("#!/bin/sh\nset -eu\nunset GH_TOKEN GITHUB_TOKEN GH_ENTERPRISE_TOKEN GITHUB_ENTERPRISE_TOKEN GH_HOST\n")
+	script.WriteString("repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || { echo 'gh requires a registered repository checkout' >&2; exit 1; }\n")
+	script.WriteString("remote=$(git -C \"$repo_root\" remote get-url origin 2>/dev/null) || { echo 'gh could not read this checkout origin' >&2; exit 1; }\n")
+	script.WriteString("case \"$remote\" in\n")
+	for index, credential := range credentials {
+		canonical := strings.TrimSuffix(credential.RepositoryURL, ".git")
+		fmt.Fprintf(&script, "  %s|%s) GH_TOKEN=\"${ORKEST_GH_TOKEN_%d:?GitHub credential unavailable}\"; export GH_TOKEN ;;\n", shellSingleQuote(canonical), shellSingleQuote(canonical+".git"), index)
+	}
+	script.WriteString("  *) echo 'gh has no credential for this checkout' >&2; exit 1 ;;\nesac\n")
+	fmt.Fprintf(&script, "exec %s \"$@\"\n", shellSingleQuote(ghPath))
+	wrapper := filepath.Join(binDir, "gh")
+	if err := os.WriteFile(wrapper, []byte(script.String()), 0o700); err != nil {
+		return nil, &agentruntime.RuntimeError{Kind: agentruntime.RuntimeFailure, Message: "configure GitHub CLI authentication failed", Cause: err}
+	}
+	if err := os.Chmod(wrapper, 0o700); err != nil {
+		return nil, &agentruntime.RuntimeError{Kind: agentruntime.RuntimeFailure, Message: "configure GitHub CLI authentication failed", Cause: err}
+	}
+	values := make(map[string]string, len(environment)+1+len(credentials))
+	for _, entry := range environment {
+		name, value, ok := strings.Cut(entry, "=")
+		if !ok || name == "GH_TOKEN" || name == "GITHUB_TOKEN" || strings.HasPrefix(name, "ORKEST_GH_") {
+			continue
+		}
+		values[name] = value
+	}
+	for index, credential := range credentials {
+		values["ORKEST_GH_TOKEN_"+strconv.Itoa(index)] = credential.Token
+	}
+	values["GH_PROMPT_DISABLED"] = "1"
+	runtimePath := values["PATH"]
+	if strings.TrimSpace(runtimePath) == "" {
+		runtimePath = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+	}
+	values["PATH"] = binDir + string(os.PathListSeparator) + runtimePath
+	result := make([]string, 0, len(values))
+	for key, value := range values {
+		result = append(result, key+"="+value)
+	}
+	return result, nil
+}
+
+func shellSingleQuote(value string) string {
+	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
 }
 
 func environmentEntries(values map[string]string) []string {

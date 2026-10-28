@@ -89,7 +89,17 @@ func (c *RunController) Configure(config runconfig.RunConfig) error {
 		return agentruntime.ErrRuntimeHostUnavailable
 	}
 	if c.runConfig != nil && !reflect.DeepEqual(*c.runConfig, config) {
-		return ErrConfigurationConflict
+		current := c.runConfig.Clone()
+		candidate := config.Clone()
+		current.GitCredentials, candidate.GitCredentials = nil, nil
+		if !reflect.DeepEqual(current, candidate) || len(c.runConfig.GitCredentials) != 0 || len(config.GitCredentials) == 0 {
+			return ErrConfigurationConflict
+		}
+		if err := c.checkpoints.Save(config); err != nil {
+			return errors.New("persist run configuration")
+		}
+		c.runConfig = &config
+		return nil
 	}
 	c.runConfig = &config
 	c.logger.Info("agent run configured", runLogAttrs(config)...)
@@ -130,7 +140,10 @@ func (c *RunController) Status() RunStatus {
 // only schedules periodic supervision.
 func (c *RunController) CanAutoRestore() bool {
 	status := c.Status()
-	return !status.RecoveryBlocked && status.RecoveryPermitted && !status.RunCancelled && !status.RunEnded && status.TaskSessionID != "" && status.SessionID != "" &&
+	c.mu.RLock()
+	credentialsReady := c.runConfig != nil && (!c.runConfig.GitCredentialsRequired || len(c.runConfig.GitCredentials) > 0)
+	c.mu.RUnlock()
+	return credentialsReady && !status.RecoveryBlocked && status.RecoveryPermitted && !status.RunCancelled && !status.RunEnded && status.TaskSessionID != "" && status.SessionID != "" &&
 		!status.ProcessAlive && (status.State == StateExited || status.State == StateFailed || status.State == StateInterrupted)
 }
 
@@ -141,6 +154,10 @@ func (c *RunController) RestoreSession() error {
 	}
 	defer c.restoreMu.Unlock()
 	c.mu.Lock()
+	if c.runConfig != nil && c.runConfig.GitCredentialsRequired && len(c.runConfig.GitCredentials) == 0 {
+		c.mu.Unlock()
+		return ErrNotConfigured
+	}
 	if c.closed || c.launchState == StateStarting {
 		c.mu.Unlock()
 		return ErrLaunchConflict
@@ -324,6 +341,9 @@ func (c *RunController) RecoverFromCheckpoint(expectedRunID string) error {
 	}
 	if err := c.Configure(config); err != nil {
 		return err
+	}
+	if config.GitCredentialsRequired && len(config.GitCredentials) == 0 {
+		return nil
 	}
 	if config.TaskSessionID != "" {
 		ended, err := journalRunEnded(c.stateDir, config)
