@@ -231,7 +231,6 @@ func (e *Executor) prepareRepositories(ctx context.Context, workDir string, conf
 		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 			return fmt.Errorf("create repository directory: %w", err)
 		}
-		branch := "orkest/task-" + config.TaskID
 		var checkoutErr error
 		if repository.IntegrationID != "" {
 			if e.config.CodingCredentialResolver == nil {
@@ -242,13 +241,13 @@ func (e *Executor) prepareRepositories(ctx context.Context, workDir string, conf
 				return fmt.Errorf("resolve coding integration credential: %w", resolveErr)
 			}
 			metadata := coderepository.RepositoryMetadata{ID: repository.ProviderRepositoryID, Name: repository.Name, CloneURL: repository.URL, DefaultBranch: repository.DefaultBranch}
-			checkoutErr = provider.PrepareAuthenticatedTaskCheckout(ctx, metadata, credential, path, branch)
+			checkoutErr = provider.PrepareAuthenticatedTaskCheckout(ctx, metadata, credential, path, "")
 		} else {
 			legacy, ok := provider.(coderepository.LegacyRepositoryCheckout)
 			if !ok {
 				return errors.New("legacy repository checkout is unavailable")
 			}
-			checkoutErr = legacy.PreparePublicTaskCheckout(ctx, repository.URL, path, branch)
+			checkoutErr = legacy.PreparePublicTaskCheckout(ctx, repository.URL, path, "")
 		}
 		if checkoutErr != nil {
 			return fmt.Errorf("prepare repository %q: %w", repository.ID, checkoutErr)

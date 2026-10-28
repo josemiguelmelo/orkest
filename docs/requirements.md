@@ -52,7 +52,7 @@ run. They are encrypted in the platform's task-session snapshot and omitted from
 agentctl's plaintext recovery checkpoint. Additional coding providers remain
 future support.
 
-Repository configuration must identify the remote repository and the credentials or integration used to access it. The agent determines which workspace repositories need changes from the task context. Each changed repository uses a branch dedicated to the task; review iterations reuse that branch. Agents autonomously create and update pull requests and perform the repository operations needed to complete the task, within configured permissions and approval policies. Base branch selection and discovery mechanics remain open.
+Repository configuration must identify the remote repository and the credentials or integration used to access it. The agent determines which workspace repositories need changes from the task context and creates a task branch only when changes are needed; review iterations reuse that branch. Imported task prompts use the external source reference as the main task ID and retain the Orkest ID for traceability. Agents autonomously create and update pull requests and perform the repository operations needed to complete the task, within configured permissions and approval policies. Base branch selection and discovery mechanics remain open.
 
 Agent-created commits use the fixed Git identity `Orkest Agent <agent@orkest.local>`. PATs authenticate HTTPS Git operations through agentctl-provided process configuration and must not be written to repository Git configuration, logs, task content, or ordinary API responses.
 
@@ -197,7 +197,7 @@ that doing so is safe; uncertain effects require intervention. See the
 2. A user assigns a specific team member. The agent receives workspace repository context and determines which repositories the task requires.
 3. A user explicitly moves the task into in progress.
 4. The platform validates access, repository configuration, and member availability, then reserves the member's slot atomically.
-5. The executor creates or restores the isolated task environment. Repository preparation supports discovery across workspace repositories and a branch per task in each changed repository.
+5. The executor creates or restores the isolated task environment and checks out selected repositories on their default or preserved branches. The agent creates a task branch in each repository only when the requested work needs changes.
 6. agentctl establishes the agent ACP session and the platform provides task context.
 7. The user monitors execution, chats, and responds to approval requests.
 8. The platform records the outcome and releases the slot when execution ends.

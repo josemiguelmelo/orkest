@@ -167,6 +167,9 @@ func (p GitHubProvider) SyncAuthenticated(ctx context.Context, repo codereposito
 }
 
 func (p GitHubProvider) PrepareAuthenticatedTaskCheckout(ctx context.Context, repo coderepository.RepositoryMetadata, credential coderepository.Credentials, path, branch string) error {
+	if strings.TrimSpace(branch) == "" {
+		return p.gitAuthenticated(ctx, repo, credential, path, "task")
+	}
 	return p.gitAuthenticated(ctx, repo, credential, path, "task", branch)
 }
 
@@ -216,7 +219,7 @@ func (p GitHubProvider) gitAuthenticated(ctx context.Context, repo coderepositor
 		}
 	}
 	if operation == "task" {
-		if len(branch) != 1 || strings.TrimSpace(branch[0]) == "" || strings.ContainsAny(branch[0], "\x00\r\n") {
+		if len(branch) > 1 || (len(branch) == 1 && (strings.TrimSpace(branch[0]) == "" || strings.ContainsAny(branch[0], "\x00\r\n"))) {
 			return errors.New("task branch is invalid")
 		}
 		if _, statErr := os.Stat(filepath.Join(path, ".git")); errors.Is(statErr, os.ErrNotExist) {
@@ -258,24 +261,32 @@ func (p GitHubProvider) gitAuthenticated(ctx context.Context, repo coderepositor
 		}
 		cmd = []string{"-C", path, "reset", "--hard", "FETCH_HEAD"}
 	case "task":
-		if err = runGitWithPrefix(ctx, args, "-C", path, "check-ref-format", "--branch", branch[0]); err != nil {
-			return errors.New("task branch is invalid")
-		}
-		if _, e := gitOutput(ctx, path, "show-ref", "--verify", "--quiet", "refs/heads/"+branch[0]); e == nil {
-			cmd = append(cmd, "-C", path, "checkout", branch[0])
-		} else {
-			cmd = append(cmd, "-C", path, "checkout", "-b", branch[0])
+		if len(branch) == 1 {
+			if err = runGitWithPrefix(ctx, args, "-C", path, "check-ref-format", "--branch", branch[0]); err != nil {
+				return errors.New("task branch is invalid")
+			}
+			if _, e := gitOutput(ctx, path, "show-ref", "--verify", "--quiet", "refs/heads/"+branch[0]); e == nil {
+				cmd = append(cmd, "-C", path, "checkout", branch[0])
+			} else {
+				cmd = append(cmd, "-C", path, "checkout", "-b", branch[0])
+			}
 		}
 	}
-	if err = runGitWithPrefix(ctx, args, cmd...); err != nil {
-		return errors.New("GitHub repository operation failed")
+	if len(cmd) > 0 {
+		if err = runGitWithPrefix(ctx, args, cmd...); err != nil {
+			return errors.New("GitHub repository operation failed")
+		}
 	}
 	if operation == "clone-task" {
-		if err = runGitWithPrefix(ctx, args, "-C", path, "check-ref-format", "--branch", branch[0]); err != nil {
-			return errors.New("task branch is invalid")
-		}
-		if err = runGitWithPrefix(ctx, args, "-C", path, "checkout", "-b", branch[0]); err != nil {
-			return errors.New("GitHub task checkout preparation failed")
+		// Keep a fresh checkout on its remote default branch. The agent creates
+		// a task branch only when the requested changes need one.
+		if len(branch) == 1 {
+			if err = runGitWithPrefix(ctx, args, "-C", path, "check-ref-format", "--branch", branch[0]); err != nil {
+				return errors.New("task branch is invalid")
+			}
+			if err = runGitWithPrefix(ctx, args, "-C", path, "checkout", "-b", branch[0]); err != nil {
+				return errors.New("GitHub task checkout preparation failed")
+			}
 		}
 	}
 	return nil
@@ -296,9 +307,6 @@ func (GitHubProvider) ClonePublic(ctx context.Context, repositoryURL, path strin
 }
 
 func (p GitHubProvider) PreparePublicTaskCheckout(ctx context.Context, repositoryURL, path, branch string) error {
-	if strings.TrimSpace(branch) == "" || strings.ContainsAny(branch, "\x00\r\n") {
-		return fmt.Errorf("task branch is invalid")
-	}
 	if _, err := os.Stat(filepath.Join(path, ".git")); errors.Is(err, os.ErrNotExist) {
 		if err = p.ClonePublic(ctx, repositoryURL, path); err != nil {
 			return err
@@ -313,6 +321,12 @@ func (p GitHubProvider) PreparePublicTaskCheckout(ctx context.Context, repositor
 		if canonicalURL(remoteURL) != canonicalURL(repositoryURL) {
 			return fmt.Errorf("task checkout origin does not match registered repository")
 		}
+	}
+	if strings.TrimSpace(branch) == "" {
+		return nil
+	}
+	if strings.ContainsAny(branch, "\x00\r\n") {
+		return errors.New("task branch is invalid")
 	}
 	if err := runGit(ctx, "-C", path, "check-ref-format", "--branch", branch); err != nil {
 		return fmt.Errorf("validate task branch: %w", err)

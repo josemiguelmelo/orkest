@@ -21,10 +21,11 @@ uses `orkest/agentctl-opencode:2.1.4` when no image is configured.
 
 For each organization/workspace/task scope, the executor creates durable
 `work` and `agentctl-state` directories beneath `ORKEST_DATA_DIR/tasks/<scope-hash>`
-and mounts them at `/workspace` and `/agentctl-state`. Every repository registered
-in the task workspace is checked out under `/workspace/repositories/<provider>/<repository-id>`
-on a task-specific branch before the container starts. Those checkouts persist across
-review iterations. The hash keeps identifiers
+and mounts them at `/workspace` and `/agentctl-state`. Every repository selected for
+the task is checked out under `/workspace/repositories/<provider>/<repository-id>`
+on its default branch for a new checkout. Existing checkouts retain their current
+branch and working tree. The agent creates a task-specific branch only when the
+requested work needs changes. Those checkouts persist across review iterations. The hash keeps identifiers
 out of host paths and container labels. The directories are mode 0700 and the
 container runs as the platform process UID/GID so files remain writable by the
 platform user. The agentctl state directory must remain on persistent storage.

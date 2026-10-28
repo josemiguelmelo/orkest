@@ -237,18 +237,26 @@ func (d *TaskDispatcher) StartTask(ctx context.Context, userID, organizationID s
 }
 
 func taskPrompt(value task.Task, repositories []runconfig.WorkspaceRepository) (string, error) {
+	taskID := value.ID
+	if strings.TrimSpace(value.SourceID) != "" {
+		taskID = value.SourceID
+	}
 	snapshot := struct {
-		Title        string   `json:"title"`
-		Description  string   `json:"description"`
-		Labels       []string `json:"labels"`
-		Repositories []struct {
+		ID             string   `json:"id"`
+		PlatformTaskID string   `json:"platformTaskId"`
+		SourceProvider string   `json:"sourceProvider,omitempty"`
+		SourceID       string   `json:"sourceId,omitempty"`
+		Title          string   `json:"title"`
+		Description    string   `json:"description"`
+		Labels         []string `json:"labels"`
+		Repositories   []struct {
 			ID           string `json:"id"`
 			ProviderName string `json:"providerName"`
 			Name         string `json:"name"`
 			URL          string `json:"url"`
 			Path         string `json:"path"`
 		} `json:"repositories"`
-	}{Title: value.Title, Description: value.Description, Labels: value.Labels}
+	}{ID: taskID, PlatformTaskID: value.ID, SourceProvider: value.SourceProvider, SourceID: value.SourceID, Title: value.Title, Description: value.Description, Labels: value.Labels}
 	for _, repository := range repositories {
 		snapshot.Repositories = append(snapshot.Repositories, struct {
 			ID           string `json:"id"`
@@ -262,7 +270,7 @@ func taskPrompt(value task.Task, repositories []runconfig.WorkspaceRepository) (
 	if err != nil {
 		return "", fmt.Errorf("encode task context: %w", err)
 	}
-	return "Work on the following Orkest task. Use this task snapshot as the source of truth for the requested work. The task's selected repositories are checked out under the listed paths on task-specific branches; inspect them and make changes in those checkouts:\n\n" + string(encoded), nil
+	return "Work on the following task. Use its external source reference as the main task ID when present; the Orkest platform ID is included for traceability. The selected repositories are checked out under the listed paths on their current default or preserved branches. Inspect them and create or switch to a task-specific branch only when the requested changes require one. Reuse an existing task branch for review iterations:\n\n" + string(encoded), nil
 }
 
 func (d *TaskDispatcher) freshConfiguration(ctx context.Context, userID, organizationID string, value task.Task) (runconfig.RunConfig, agent.Agent, error) {

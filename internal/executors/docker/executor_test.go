@@ -91,7 +91,7 @@ func TestPrepareRepositoriesUsesProviderAndTaskWorkspacePaths(t *testing.T) {
 		t.Fatalf("prepare repositories: %v", err)
 	}
 	wantPath := filepath.Join(workDir, "repositories", "test", "repo-id")
-	if provider.path != wantPath || provider.url != config.Repositories[0].URL || provider.branch != "orkest/task-"+config.TaskID {
+	if provider.path != wantPath || provider.url != config.Repositories[0].URL || provider.branch != "" {
 		t.Fatalf("unexpected checkout: %+v", provider)
 	}
 	if info, err := os.Stat(filepath.Dir(wantPath)); err != nil || !info.IsDir() {
@@ -323,7 +323,7 @@ func TestTaskCheckoutResolvesCredentialFromScopedIntegrationReference(t *testing
 	if resolver.workspaceID != run.WorkspaceID || resolver.integrationID != "integration" || provider.credential.Token != "secret-token" {
 		t.Fatalf("resolver=%+v provider credential=%+v", resolver, provider.credential)
 	}
-	if provider.metadata.DefaultBranch != "trunk" || provider.metadata.ID != "42" || provider.branch != "orkest/task-"+run.TaskID {
+	if provider.metadata.DefaultBranch != "trunk" || provider.metadata.ID != "42" || provider.branch != "" {
 		t.Fatalf("metadata=%+v branch=%q", provider.metadata, provider.branch)
 	}
 }
