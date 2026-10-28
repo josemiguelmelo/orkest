@@ -43,14 +43,16 @@ Organization Owners manage the organization and all memberships. Organization Ad
 
 Users register repositories in a workspace before tasks may use them. A task may involve one or more registered repositories. A task must not access repositories from another workspace through task configuration.
 
-GitHub Cloud with a PAT is the initial coding provider. Workspace-scoped
+GitHub Cloud with a PAT is the initial coding provider. GitLab Cloud and
+self-managed GitLab Server with PATs are also supported as coding providers.
+GitLab Server connections configure their HTTPS base URL. Workspace-scoped
 integration management, write-only encrypted credential storage and rotation,
 connection validation, paginated repository discovery, selection-based
-registration, and task checkout credential resolution are implemented. Integrated
-repository PATs are also supplied to agentctl for Git push authentication during a
-run. They are encrypted in the platform's task-session snapshot and omitted from
-agentctl's plaintext recovery checkpoint. Additional coding providers remain
-future support.
+registration, and task checkout credential resolution apply to these providers.
+Integrated repository PATs are supplied to agentctl for Git push authentication
+during a run. They are encrypted in the platform's task-session snapshot and
+omitted from agentctl's plaintext recovery checkpoint. Further coding providers
+remain future support.
 
 Repository configuration must identify the remote repository and the credentials or integration used to access it. The agent determines which workspace repositories need changes from the task context and creates a task branch only when changes are needed; review iterations reuse that branch. Imported task prompts use the external source reference as the main task ID and retain the Orkest ID for traceability. Agents autonomously create and update pull requests and perform the repository operations needed to complete the task, within configured permissions and approval policies. Base branch selection and discovery mechanics remain open.
 

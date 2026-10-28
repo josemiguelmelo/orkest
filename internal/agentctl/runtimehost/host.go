@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -172,9 +173,11 @@ func (h *Host) prepareRuntime(ctx context.Context, config runconfig.RuntimeConfi
 	}
 	if len(config.GitCredentials) > 0 {
 		environment = withGitCredentials(environment, config.GitCredentials)
-		environment, err = withGitHubCLI(paths.RuntimeRoot, environment, config.GitCredentials)
-		if err != nil {
-			return "", nil, err
+		if hasGitHubCredentials(config.GitCredentials) {
+			environment, err = withGitHubCLI(paths.RuntimeRoot, environment, config.GitCredentials)
+			if err != nil {
+				return "", nil, err
+			}
 		}
 	}
 	executable, err := exec.LookPath(descriptor.Executable)
@@ -185,6 +188,16 @@ func (h *Host) prepareRuntime(ctx context.Context, config runconfig.RuntimeConfi
 		return "", nil, err
 	}
 	return executable, environment, nil
+}
+
+func hasGitHubCredentials(credentials []runconfig.GitCredential) bool {
+	for _, credential := range credentials {
+		parsed, err := url.Parse(credential.RepositoryURL)
+		if err == nil && strings.EqualFold(parsed.Hostname(), "github.com") {
+			return true
+		}
+	}
+	return false
 }
 
 func configureGit(ctx context.Context, workDir string, credentials []runconfig.GitCredential) error {

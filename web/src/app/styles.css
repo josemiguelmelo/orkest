@@ -1814,6 +1814,47 @@ input[type='checkbox'] {
 .provider-callout { display: flex; gap: 12px; align-items: center; padding: 13px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-muted); }
 .provider-callout strong { font-size: 13px; }
 .provider-callout p { color: var(--muted); font-size: 11px; margin-top: 2px; }
+.provider-picker-label { margin-bottom: -6px; font-size: 12px; font-weight: 650; }
+.provider-choice-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.provider-choice {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  min-height: 112px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 13px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  color: var(--foreground);
+  background: var(--surface);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+}
+.provider-choice:hover:not(:disabled) { border-color: color-mix(in srgb, var(--primary) 45%, var(--border)); transform: translateY(-1px); }
+.provider-choice.selected { border-color: var(--primary); background: color-mix(in srgb, var(--primary) 5%, var(--surface)); box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 12%, transparent); }
+.provider-choice:disabled { cursor: not-allowed; opacity: .48; }
+.provider-choice-copy { display: grid; min-width: 0; gap: 3px; }
+.provider-choice-copy strong { font-size: 12px; }
+.provider-choice-copy small { color: var(--muted); font-size: 10px; line-height: 1.4; }
+.provider-choice-copy .provider-connected { color: var(--primary); font-weight: 600; }
+.provider-brand-icon { position: relative; display: grid; width: 34px; height: 34px; flex: 0 0 auto; place-items: center; border-radius: 10px; }
+.provider-brand-icon svg { width: 22px; height: 22px; }
+.github-brand { color: #fff; background: #24292f; }
+.github-brand svg { fill: currentColor; }
+.gitlab-brand { color: #fc6d26; background: color-mix(in srgb, #fc6d26 11%, var(--surface)); }
+.gitlab-brand svg { width: 23px; height: 23px; fill: currentColor; }
+.gitlab-brand svg path:first-child { fill: #e24329; }
+.gitlab-brand svg path:last-child { fill: #fc6d26; }
+.gitlab-server-brand i { position: absolute; right: -3px; bottom: -3px; width: 10px; height: 10px; border: 2px solid var(--surface); border-radius: 3px; background: #6b7280; }
+.provider-selected-mark { position: absolute; top: 10px; right: 10px; display: grid; width: 20px; height: 20px; place-items: center; border-radius: 50%; color: white; background: var(--primary); }
+.provider-config-section { padding-top: 3px; }
+.provider-config-heading { display: flex; align-items: center; gap: 10px; padding: 11px 0 2px; border-top: 1px solid var(--border); }
+.provider-config-heading > div { display: grid; gap: 2px; }
+.provider-config-heading strong { font-size: 12px; }
+.provider-config-heading span { color: var(--muted); font-size: 10px; }
 .integration-security-note { align-items: flex-start; padding: 10px 11px; border-radius: 8px; background: var(--surface-muted); font-size: 11px; }
 .integration-security-note svg { flex: 0 0 auto; margin-top: 2px; }
 .input-with-icon { position: relative; }
@@ -1856,6 +1897,9 @@ input[type='checkbox'] {
   .integration-panel { padding: 17px; }
   .integration-panel .panel-heading { flex-direction: column; }
   .integration-panel .panel-heading > .button { width: 100%; }
+  .provider-choice-grid { grid-template-columns: 1fr; }
+  .provider-choice { min-height: auto; flex-direction: row; align-items: center; }
+  .provider-choice-copy { flex: 1; }
   .repository-list-heading { align-items: flex-start; flex-direction: column; gap: 2px; }
   .repository-card-heading { flex-wrap: wrap; }
   .repository-card-heading > .badge { margin-left: auto; }
