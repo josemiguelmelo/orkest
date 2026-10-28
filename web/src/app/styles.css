@@ -322,6 +322,186 @@ h3 {
   grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 16px;
 }
+
+/* Agents page improvements */
+.agents-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -4px 0 20px;
+  padding: 10px 14px;
+  background: color-mix(in srgb, var(--primary) 8%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--primary) 30%, var(--border));
+  border-radius: 10px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.agents-hint svg {
+  color: var(--primary);
+  flex-shrink: 0;
+}
+.agents-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 18px;
+}
+.agent-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 2px 6px #18243b06;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+.agent-card:hover {
+  border-color: color-mix(in srgb, var(--primary) 50%, var(--border));
+  box-shadow: 0 10px 28px #18243b14;
+  transform: translateY(-2px);
+}
+.agent-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 20px 0;
+  gap: 12px;
+}
+.agent-card-icon {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 12px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--primary) 18%, transparent), color-mix(in srgb, var(--primary) 8%, transparent));
+  color: var(--primary);
+}
+.agent-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 14px 20px 16px;
+  flex: 1;
+}
+.agent-card-body h3 {
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: -0.2px;
+}
+.agent-card-description {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+  min-height: 42px;
+}
+.agent-card-model {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--surface-muted);
+  border-radius: 9px;
+  font-size: 12px;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  color: var(--foreground);
+}
+.agent-card-model svg {
+  color: var(--muted);
+  flex-shrink: 0;
+}
+.agent-card-tags {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.agent-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 9px;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--border) 40%, transparent);
+  font-size: 11px;
+  color: var(--muted);
+}
+.agent-tag svg {
+  width: 12px;
+  height: 12px;
+}
+.agent-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 14px 20px 18px;
+  border-top: 1px solid var(--border);
+  background: color-mix(in srgb, var(--surface-muted) 40%, transparent);
+}
+.agent-card-actions .button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.agent-viewer {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.agent-viewer-section {
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+}
+.agent-viewer-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: var(--surface-muted);
+  font-weight: 550;
+  font-size: 13px;
+}
+.agent-viewer-header svg {
+  color: var(--primary);
+}
+.agent-viewer-content {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.agent-viewer-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 11px 16px;
+  border-top: 1px solid var(--border);
+  font-size: 13px;
+}
+.agent-viewer-row:first-child {
+  border-top: none;
+}
+.agent-viewer-label {
+  color: var(--muted);
+}
+.agent-viewer-instructions {
+  padding: 16px;
+  max-height: 320px;
+  overflow-y: auto;
+}
+.agent-viewer-instructions pre {
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--foreground);
+}
+@media (max-width: 640px) {
+  .agents-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .resource-card {
   background: var(--surface);
   border: 1px solid var(--border);

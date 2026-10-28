@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Bot } from 'lucide-react';
+import { Bot, Brain, Cpu, Eye, FileText, Sparkles, Wrench, X } from 'lucide-react';
 import { useApp } from '../../app/context';
 import * as sdk from '../../shared/api/generated/sdk.gen';
 import type { Agent } from '../../shared/api/generated/types.gen';
@@ -47,38 +47,65 @@ export function AgentsPage() {
   const agents = useQuery(agentsQuery(scope));
   const refresh = useRefresh();
   const [editing, setEditing] = useState<Agent | null | undefined>();
+  const [viewing, setViewing] = useState<Agent>();
   return (
     <>
-      <PageHeader title="Agents" description="Reusable definitions for the way your agents work.">
+      <PageHeader
+        title="Agents"
+        description="Build intelligent agent definitions with custom models, tools, skills, and instructions."
+      >
         {permissions.editWorkspace && (
           <CreateButton onClick={() => setEditing(null)}>New agent</CreateButton>
         )}
       </PageHeader>
+      <div className="agents-hint">
+        <Sparkles size={14} />
+        <span>Reusable agents power your workspace tasks with specialized capabilities</span>
+      </div>
       {agents.isPending ? (
         <Loading />
       ) : agents.isError ? (
         <ErrorState error={agents.error} />
       ) : agents.data.length ? (
-        <div className="grid">
+        <div className="agents-grid">
           {agents.data.map((item) => (
-            <article className="resource-card" key={item.id}>
-              <div className="split">
-                <Bot className="card-icon" size={24} />
+            <article className="agent-card" key={item.id}>
+              <div className="agent-card-header">
+                <div className="agent-card-icon">
+                  <Bot size={26} />
+                </div>
                 <Badge>OpenCode</Badge>
               </div>
-              <h3>{item.name}</h3>
-              <p className="muted">{item.description || 'No description'}</p>
-              <div className="tags">
-                <Badge>
-                  {item.provider} / {item.model}
-                </Badge>
-                <Badge>{item.skillIds.length} skills</Badge>
-                <Badge>{item.mcpServerIds.length} MCP servers</Badge>
+              <div className="agent-card-body">
+                <h3>{item.name}</h3>
+                <p className="agent-card-description">
+                  {item.description || 'A configurable agent definition ready for your tasks.'}
+                </p>
+                <div className="agent-card-model">
+                  <Cpu size={14} />
+                  <span>
+                    {item.provider} / {item.model}
+                  </span>
+                </div>
+                <div className="agent-card-tags">
+                  <span className="agent-tag">
+                    <Wrench size={12} />
+                    {item.skillIds.length} skills
+                  </span>
+                  <span className="agent-tag">
+                    <Brain size={12} />
+                    {item.mcpServerIds.length} MCP servers
+                  </span>
+                </div>
               </div>
               {permissions.editWorkspace ? (
-                <div className="actions">
+                <div className="agent-card-actions">
+                  <Button variant="outline" size="sm" onClick={() => setViewing(item)}>
+                    <Eye size={14} />
+                    View
+                  </Button>
                   <Button variant="outline" size="sm" onClick={() => setEditing(item)}>
-                    Edit definition
+                    Edit
                   </Button>
                   <ConfirmButton
                     title="Delete agent?"
@@ -92,19 +119,20 @@ export function AgentsPage() {
                   />
                 </div>
               ) : (
-                <details>
-                  <summary>Instructions</summary>
-                  <p style={{ whiteSpace: 'pre-wrap' }}>
-                    {item.systemPrompt || 'No system prompt.'}
-                  </p>
-                </details>
+                <div className="agent-card-actions">
+                  <Button variant="outline" size="sm" onClick={() => setViewing(item)}>
+                    <FileText size={14} />
+                    View instructions
+                  </Button>
+                </div>
               )}
             </article>
           ))}
         </div>
       ) : (
         <Empty title="No agent definitions yet">
-          Create an agent with its model, instructions, skills, and MCP connections.
+          Create an agent with its model, instructions, skills, and MCP connections to get
+          started.
         </Empty>
       )}
       {editing !== undefined && (
@@ -114,6 +142,7 @@ export function AgentsPage() {
           onClose={() => setEditing(undefined)}
         />
       )}
+      {viewing && <AgentViewer item={viewing} onClose={() => setViewing(undefined)} />}
     </>
   );
 }
@@ -273,6 +302,75 @@ function AgentEditor({ item, onClose }: { item: Agent | null; onClose: () => voi
           />
         )}
       </Form>
+    </Dialog>
+  );
+}
+
+function AgentViewer({ item, onClose }: { item: Agent; onClose: () => void }) {
+  return (
+    <Dialog
+      title={item.name}
+      description={item.description || 'Agent definition details'}
+      open
+      onOpenChange={(v) => {
+        if (!v) onClose();
+      }}
+    >
+      <div className="agent-viewer">
+        <div className="agent-viewer-section">
+          <div className="agent-viewer-header">
+            <Bot size={18} />
+            <span>Runtime & Model</span>
+          </div>
+          <div className="agent-viewer-content">
+            <div className="agent-viewer-row">
+              <span className="agent-viewer-label">Runtime</span>
+              <Badge>OpenCode</Badge>
+            </div>
+            <div className="agent-viewer-row">
+              <span className="agent-viewer-label">Provider / Model</span>
+              <span>
+                {item.provider} / {item.model}
+              </span>
+            </div>
+          </div>
+        </div>
+        <div className="agent-viewer-section">
+          <div className="agent-viewer-header">
+            <Wrench size={18} />
+            <span>Capabilities</span>
+          </div>
+          <div className="agent-viewer-content">
+            <div className="agent-viewer-row">
+              <span className="agent-viewer-label">Skills</span>
+              <span>{item.skillIds.length} skills attached</span>
+            </div>
+            <div className="agent-viewer-row">
+              <span className="agent-viewer-label">MCP Servers</span>
+              <span>{item.mcpServerIds.length} servers connected</span>
+            </div>
+          </div>
+        </div>
+        <div className="agent-viewer-section">
+          <div className="agent-viewer-header">
+            <FileText size={18} />
+            <span>System Instructions</span>
+          </div>
+          <div className="agent-viewer-instructions">
+            {item.systemPrompt ? (
+              <pre>{item.systemPrompt}</pre>
+            ) : (
+              <p className="muted">No system instructions configured.</p>
+            )}
+          </div>
+        </div>
+      </div>
+      <div className="form-actions">
+        <Button variant="outline" onClick={onClose}>
+          <X size={14} />
+          Close
+        </Button>
+      </div>
     </Dialog>
   );
 }
