@@ -29,12 +29,17 @@ jobs:
         env:
           BASE_REVISION: ${{ github.event.pull_request.base.sha || github.event.before }}
         run: python3 tools/runtime/runtime-qualification.py "$BASE_REVISION"
+      - name: Report pending live qualification
+        if: contains(steps.qualification.outputs.runtimes, matrix.runtime) && vars.ORKEST_RUN_LIVE_QUALIFICATION != 'true'
+        env:
+          RUNTIME: ${{ matrix.runtime }}
+        run: echo "Live qualification for $RUNTIME is pending; set ORKEST_RUN_LIVE_QUALIFICATION=true in the runtime-qualification environment after credentials and test endpoints are configured."
       - uses: actions/setup-node@v4.4.0
-        if: contains(steps.qualification.outputs.runtimes, matrix.runtime)
+        if: contains(steps.qualification.outputs.runtimes, matrix.runtime) && vars.ORKEST_RUN_LIVE_QUALIFICATION == 'true'
         with:
           node-version: 22.22.2
       - name: Install pinned runtime
-        if: contains(steps.qualification.outputs.runtimes, matrix.runtime)
+        if: contains(steps.qualification.outputs.runtimes, matrix.runtime) && vars.ORKEST_RUN_LIVE_QUALIFICATION == 'true'
         env:
           RUNTIME: ${{ matrix.runtime }}
         run: |
@@ -45,7 +50,7 @@ jobs:
             *) echo "No pinned installer for $RUNTIME"; exit 1 ;;
           esac
       - name: Strict live qualification (missing settings fail)
-        if: contains(steps.qualification.outputs.runtimes, matrix.runtime)
+        if: contains(steps.qualification.outputs.runtimes, matrix.runtime) && vars.ORKEST_RUN_LIVE_QUALIFICATION == 'true'
         env:
           ORKEST_OPENCODE_BINARY: opencode
           ORKEST_CLAUDE_CODE_BINARY: claude-agent-acp

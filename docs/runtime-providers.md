@@ -143,16 +143,20 @@ See [task sessions](task-sessions.md) for prerequisites and limitations.
 Go embeds it for supported versions, provider metadata, and default image tags.
 Each Dockerfile reads it directly for the installed package version; Make reads
 it for default image tags. Direct Docker builds use the same pinned packages.
-CI reads the same file to install pinned adapters and require live qualification
-when a version changes.
+CI reads the same file to install pinned adapters and identify changed runtimes
+that need live qualification.
 
-The runtime conformance workflow qualifies changed runtimes in separate matrix
-jobs, installing each pinned adapter from that inventory. OpenCode uses
+The runtime conformance workflow handles changed runtimes in separate matrix
+jobs and installs each pinned adapter when live qualification is enabled.
+OpenCode uses
 `ORKEST_TEST_MODEL_PROVIDER` and `ORKEST_TEST_MODEL_ID`; Claude Code uses
 `anthropic` and the variable `ORKEST_CLAUDE_CODE_TEST_MODEL_ID`
 in the GitHub `runtime-qualification` environment. Both use the existing shared
 approval/cancellation/recovery prompts, MCP settings, and granted credential names.
-Missing settings fail qualification. Locally, `make qualify-runtime` checks all
-runtimes; `make qualify-runtime QUALIFY_RUNTIME=claude-code` checks Claude alone
-with `ORKEST_TEST_MODEL_ID` set to its model and
-`ORKEST_CLAUDE_CODE_BINARY` pointing to the pinned adapter.
+Set `ORKEST_RUN_LIVE_QUALIFICATION=true` in that environment to enable paid live
+qualification. Until enabled, CI runs deterministic tests and reports that live
+qualification is pending. Once enabled, missing settings fail qualification.
+Locally, `make qualify-runtime` checks all runtimes;
+`make qualify-runtime QUALIFY_RUNTIME=claude-code` checks Claude alone with
+`ORKEST_TEST_MODEL_ID` set to its model and `ORKEST_CLAUDE_CODE_BINARY` pointing
+to the pinned adapter.
