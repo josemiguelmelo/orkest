@@ -12,6 +12,7 @@ import (
 // RuntimeHost owns process startup, durable identity, and runtime session setup.
 // Concrete implementations live in runtimehost and receive profiles and protocol
 // communication factories through constructor injection.
+// RuntimeHost owns exactly one runtime assigned to this agentctl worker.
 type RuntimeHost interface {
 	Runtime() coreruntime.Runtime
 	Version() string

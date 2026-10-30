@@ -1227,7 +1227,7 @@ components:
             required: [name, runtime, provider, model, description, systemPrompt]
             properties:
               name: {type: string, minLength: 1, maxLength: 200}
-              runtime: {type: string, enum: [opencode]}
+              runtime: {type: string, enum: [opencode, claude-code]}
               provider: {type: string, minLength: 1, maxLength: 200}
               model: {type: string, minLength: 1, maxLength: 200}
               description: {type: string, maxLength: 2000}
@@ -1426,7 +1426,7 @@ components:
         id: {type: string}
         workspaceId: {type: string}
         name: {type: string}
-        runtime: {type: string, enum: [opencode]}
+        runtime: {type: string, enum: [opencode, claude-code]}
         provider: {type: string}
         model: {type: string}
         description: {type: string}

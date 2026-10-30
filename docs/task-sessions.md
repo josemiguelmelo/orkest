@@ -56,8 +56,10 @@ includes session identity, active command, queue depth, paused/ended state, and
 controls are `POST /agent/queue/resume` and `/agent/queue/discard`.
 
 Task working paths and the entire agentctl state directory must survive.
-OpenCode 2.1.4 and ACP v1 remain pinned. Session manifests verify the runtime
-version, working path, and configuration identity before calling `session/load`.
+OpenCode 2.1.4 and Claude Code's `claude-agent-acp` 0.99.0 adapter use ACP v1.
+Session manifests verify the runtime version, working path, and configuration
+identity before calling `session/load`. Claude Code's real interrupted-work
+continuation remains unqualified and pauses when replay evidence is incomplete.
 Runtime history replay is kept separate from live conversation events.
 
 An OS file lock prevents concurrent task runtimes. Its descriptor is inherited

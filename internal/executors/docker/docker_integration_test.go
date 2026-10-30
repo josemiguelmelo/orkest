@@ -11,15 +11,13 @@ import (
 	"time"
 
 	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	coreruntime "github.com/josemiguelmelo/orkest/internal/core/runtime"
 	"github.com/josemiguelmelo/orkest/internal/orchestration"
 	"github.com/moby/moby/client"
 )
 
 func TestDockerAgentctlLaunchSmoke(t *testing.T) {
 	image := os.Getenv("AGENTCTL_OPENCODE_IMAGE")
-	if image == "" {
-		image = defaultImage
-	}
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()
 	repoRoot, err := filepath.Abs("../../..")
@@ -39,7 +37,7 @@ func TestDockerAgentctlLaunchSmoke(t *testing.T) {
 			t.Errorf("remove smoke-test data directory: %v", removeErr)
 		}
 	})
-	executor, err := New(ctx, Config{DataRoot: dataRoot, Image: image})
+	executor, err := New(ctx, Config{DataRoot: dataRoot, Images: map[coreruntime.Runtime]string{coreruntime.OpenCode: image}})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -11,13 +11,20 @@ Build the images from the repository root:
 ```sh
 make docker-agentctl-base
 make docker-agentctl-opencode
+make docker-agentctl-claude-code
 ```
 
-The base image contains the `agentctl` binary, Git, and GitHub CLI 2.103.2. The runtime image extends that
-base and installs pinned OpenCode 2.1.4. Override `AGENTCTL_BASE_IMAGE` or
-`AGENTCTL_OPENCODE_IMAGE` when building or running a differently tagged image.
-The platform-side executor reads `ORKEST_DATA_DIR` through its constructor and
-uses `orkest/agentctl-opencode:2.1.4` when no image is configured.
+The base image contains the `agentctl` binary, Git, and GitHub CLI 2.103.2. Each
+runtime image extends that base and installs only its pinned runtime:
+OpenCode 2.1.4 in `orkest/agentctl-opencode:2.1.4`, or the Claude Code ACP
+adapter 0.99.0 in `orkest/agentctl-claude-code:0.99.0`. The
+`docker-agentctl-images` target builds the base and both runtime images. Override
+`AGENTCTL_BASE_IMAGE`, `AGENTCTL_OPENCODE_IMAGE`, or
+`AGENTCTL_CLAUDE_CODE_IMAGE` to use different tags. The executor chooses the
+image matching the run's runtime; these environment variables configure those
+per-runtime images. The executor passes the assigned runtime to agentctl at
+startup, and agentctl rejects run configuration for any other runtime. Container
+names include the runtime and a hash of the run ID for identification and recovery.
 
 For each organization/workspace/task scope, the executor creates durable
 `work` and `agentctl-state` directories beneath `ORKEST_DATA_DIR/tasks/<scope-hash>`

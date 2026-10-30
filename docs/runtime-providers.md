@@ -13,6 +13,7 @@ lifecycle of one execution run.
 | `runtimehost` | Subprocess and stdio ownership, provisioning application, native session manifests, task leases, replay evidence |
 | `runtime/acp` | ACP SDK communication and translation into normalized values |
 | `runtime/opencode` | Pure OpenCode native configuration rendering |
+| `runtime/claudecode` | Claude Code ACP session options and isolated configuration paths |
 | `httpapi` | One REST/WebSocket server, transport-owned controller interface, wire representations |
 | `daemon` | Standalone server lifecycle and periodic restoration supervision |
 
@@ -118,7 +119,7 @@ aliases. The checkpoint fixture moved to `run/testdata`; its bytes are unchanged
 
 Tests stay beside their owners: command encoding in `interaction`, execution and
 recovery in `run`, ACP translation in `runtime/acp`, host/storage behavior in
-`runtimehost`, pure rendering in `runtime/opencode`, and combined runtime wiring
+`runtimehost`, pure provisioning in `runtime/opencode` and `runtime/claudecode`, and combined runtime wiring
 in `runtime/*_test.go`. Configuration ownership tests remain with `run`, where
 configuration is accepted. Fixture-backed tests share `opencodetest.NewHost`.
 
@@ -134,5 +135,6 @@ Fixture success and real session loading do not prove live model continuation,
 real approval round trips, or full history coverage. Docker restoration has a
 known intermittent HTTP 502 at container replacement, reproduced on the code
 before domain organization. Report it as a failed check whenever it occurs.
-OpenCode 2.1.4 remains the only production profile; no new runtime/version is
-qualified. See [task sessions](task-sessions.md) for prerequisites and limitations.
+OpenCode 2.1.4 and Claude Code `claude-agent-acp` 0.99.0 are production profiles.
+Claude Code model execution and interrupted-work continuation remain unqualified.
+See [task sessions](task-sessions.md) for prerequisites and limitations.

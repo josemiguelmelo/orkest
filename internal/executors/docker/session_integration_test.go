@@ -12,6 +12,7 @@ import (
 
 	"github.com/containerd/errdefs"
 	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	coreruntime "github.com/josemiguelmelo/orkest/internal/core/runtime"
 	"github.com/josemiguelmelo/orkest/internal/orchestration"
 	mobyclient "github.com/moby/moby/client"
 )
@@ -39,10 +40,7 @@ func TestDockerSessionRestore(t *testing.T) {
 		}
 	})
 	image := os.Getenv("AGENTCTL_OPENCODE_IMAGE")
-	if image == "" {
-		image = defaultImage
-	}
-	executor, err := New(ctx, Config{DataRoot: dataRoot, Image: image})
+	executor, err := New(ctx, Config{DataRoot: dataRoot, Images: map[coreruntime.Runtime]string{coreruntime.OpenCode: image}})
 	if err != nil {
 		t.Fatal(err)
 	}

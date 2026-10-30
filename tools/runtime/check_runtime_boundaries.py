@@ -11,11 +11,13 @@ PROFILE_FORBIDDEN_IMPORTS = (
     "internal/orchestration", "internal/app", "internal/core/durablefile",
     "internal/agentctl/runtime/acp", "internal/agentctl/runtimehost",
     "internal/agentctl/run", "internal/agentctl/httpapi",
+    "internal/agentctl/runtime/opencode", "internal/agentctl/runtime/claudecode",
 )
 COMMUNICATION_FORBIDDEN_IMPORTS = (
     "os", "os/exec", "syscall", "path/filepath", "net/http",
     "internal/postgres", "internal/orchestration", "internal/app",
     "internal/core/durablefile", "internal/agentctl/runtime/opencode",
+    "internal/agentctl/runtime/claudecode",
     "internal/agentctl/runtimehost",
     "internal/agentctl/run", "internal/agentctl/httpapi",
 )
@@ -23,18 +25,20 @@ HOST_FORBIDDEN_IMPORTS = (
     "internal/postgres", "internal/orchestration", "internal/app",
     "internal/agentctl/httpapi", "internal/agentctl/runtime/acp",
     "internal/agentctl/runtime/opencode",
+    "internal/agentctl/runtime/claudecode",
     "internal/agentctl/run",
 )
 APPLICATION_FORBIDDEN_IMPORTS = (
     "internal/agentctl/runtimehost", "internal/agentctl/runtime/acp",
     "internal/agentctl/runtime/opencode",
+    "internal/agentctl/runtime/claudecode",
 )
 DEFINITION_FORBIDDEN_IMPORTS = (
     "os", "os/exec", "syscall", "net/http", "internal/postgres",
     "internal/orchestration", "internal/app", "internal/core/durablefile",
     "internal/agentctl/run", "internal/agentctl/httpapi",
     "internal/agentctl/runtimehost", "internal/agentctl/runtime/acp",
-    "internal/agentctl/runtime/opencode",
+    "internal/agentctl/runtime/opencode", "internal/agentctl/runtime/claudecode",
 )
 MODULE_PREFIX = "github.com/josemiguelmelo/orkest/"
 OPERATIONAL_CALLS = re.compile(
@@ -72,6 +76,7 @@ def check_file(path: Path, kind: str) -> list[str]:
 def violations(root: Path) -> list[str]:
     targets = (
         (root / "internal/agentctl/runtime/opencode", "profile"),
+        (root / "internal/agentctl/runtime/claudecode", "profile"),
         (root / "internal/agentctl/runtime/acp", "communication"),
         (root / "internal/agentctl/runtimehost", "host"),
         (root / "internal/agentctl/run", "application"),

@@ -176,6 +176,7 @@ export declare const zAgent: z.ZodObject<{
     name: z.ZodString;
     runtime: z.ZodEnum<{
         opencode: "opencode";
+        "claude-code": "claude-code";
     }>;
     provider: z.ZodString;
     model: z.ZodString;
@@ -351,6 +352,7 @@ export declare const zAgentDefinition: z.ZodObject<{
     name: z.ZodString;
     runtime: z.ZodEnum<{
         opencode: "opencode";
+        "claude-code": "claude-code";
     }>;
     provider: z.ZodString;
     model: z.ZodString;
@@ -1106,6 +1108,7 @@ export declare const zListAgentsResponse: z.ZodArray<z.ZodObject<{
     name: z.ZodString;
     runtime: z.ZodEnum<{
         opencode: "opencode";
+        "claude-code": "claude-code";
     }>;
     provider: z.ZodString;
     model: z.ZodString;
@@ -1118,6 +1121,7 @@ export declare const zCreateAgentBody: z.ZodObject<{
     name: z.ZodString;
     runtime: z.ZodEnum<{
         opencode: "opencode";
+        "claude-code": "claude-code";
     }>;
     provider: z.ZodString;
     model: z.ZodString;
@@ -1139,6 +1143,7 @@ export declare const zCreateAgentResponse: z.ZodObject<{
     name: z.ZodString;
     runtime: z.ZodEnum<{
         opencode: "opencode";
+        "claude-code": "claude-code";
     }>;
     provider: z.ZodString;
     model: z.ZodString;
@@ -1170,6 +1175,7 @@ export declare const zGetAgentResponse: z.ZodObject<{
     name: z.ZodString;
     runtime: z.ZodEnum<{
         opencode: "opencode";
+        "claude-code": "claude-code";
     }>;
     provider: z.ZodString;
     model: z.ZodString;
@@ -1182,6 +1188,7 @@ export declare const zUpdateAgentBody: z.ZodObject<{
     name: z.ZodString;
     runtime: z.ZodEnum<{
         opencode: "opencode";
+        "claude-code": "claude-code";
     }>;
     provider: z.ZodString;
     model: z.ZodString;
@@ -1204,6 +1211,7 @@ export declare const zUpdateAgentResponse: z.ZodObject<{
     name: z.ZodString;
     runtime: z.ZodEnum<{
         opencode: "opencode";
+        "claude-code": "claude-code";
     }>;
     provider: z.ZodString;
     model: z.ZodString;

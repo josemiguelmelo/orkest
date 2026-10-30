@@ -27,7 +27,7 @@ type Environment struct {
 	GrantedEnv []string
 }
 
-// Host owns startup and storage compatibility for every profile and
+// Host owns startup and storage compatibility for one runtime profile and
 // communication factory. The returned session owns the child and task lease.
 type Host struct {
 	profile         agentruntime.RuntimeProfile
@@ -82,6 +82,7 @@ func (h *Host) start(ctx context.Context, config runconfig.RuntimeConfig, restor
 		return nil, &agentruntime.LaunchError{Message: "session storage requires reconciliation", Cause: err}
 	}
 	settings := agentruntime.ResolvedRuntimeSettings{Agent: config.Agent, Model: config.Model, MCPServers: config.MCPServers, Skills: config.Skills}
+	paths := h.provisioningPaths(config, store)
 	executable, environment, err := h.prepareRuntime(ctx, config, settings, store, descriptor)
 	if err != nil {
 		return nil, err
@@ -119,7 +120,8 @@ func (h *Host) start(ctx context.Context, config runconfig.RuntimeConfig, restor
 			session.callbacks.secrets = append(session.callbacks.secrets, value)
 		}
 	}
-	if err := h.initializeSession(ctx, session, settings, descriptor, nativeID, restoring); err != nil {
+	options := h.profile.ProtocolSessionOptions(settings, paths)
+	if err := h.initializeSession(ctx, session, settings, options, descriptor, nativeID, restoring); err != nil {
 		return nil, err
 	}
 	if err := store.save(config, session.SessionID()); err != nil {
@@ -151,14 +153,7 @@ func (h *Host) validateStartup(ctx context.Context, config runconfig.RuntimeConf
 }
 
 func (h *Host) prepareRuntime(ctx context.Context, config runconfig.RuntimeConfig, settings agentruntime.ResolvedRuntimeSettings, store sessionStorage, descriptor agentruntime.RuntimeDescriptor) (string, []string, error) {
-	identity := config.RunID
-	if config.TaskSessionID != "" {
-		identity = config.TaskSessionID
-	}
-	paths := agentruntime.ProvisioningPaths{
-		RuntimeRoot: store.Root(config), WorkDir: h.environment.WorkDir,
-		ConfigSubdir: fmt.Sprintf("config-%x", sha256.Sum256([]byte(identity))),
-	}
+	paths := h.provisioningPaths(config, store)
 	plan, err := h.profile.BuildProvisioningPlan(settings, paths)
 	if err != nil {
 		return "", nil, err
@@ -185,6 +180,17 @@ func (h *Host) prepareRuntime(ctx context.Context, config runconfig.RuntimeConfi
 		return "", nil, err
 	}
 	return executable, environment, nil
+}
+
+func (h *Host) provisioningPaths(config runconfig.RuntimeConfig, store sessionStorage) agentruntime.ProvisioningPaths {
+	identity := config.RunID
+	if config.TaskSessionID != "" {
+		identity = config.TaskSessionID
+	}
+	return agentruntime.ProvisioningPaths{
+		RuntimeRoot: store.Root(config), WorkDir: h.environment.WorkDir,
+		ConfigSubdir: fmt.Sprintf("config-%x", sha256.Sum256([]byte(identity))),
+	}
 }
 
 func environmentEntries(values map[string]string) []string {
@@ -222,7 +228,7 @@ func (h *Host) startProcess(ctx context.Context, executable string, environment 
 	return &Session{child: child, connection: connection, callbacks: callbacks, ownership: owner}, nil
 }
 
-func (h *Host) initializeSession(ctx context.Context, session *Session, settings agentruntime.ResolvedRuntimeSettings, descriptor agentruntime.RuntimeDescriptor, nativeID string, restoring bool) error {
+func (h *Host) initializeSession(ctx context.Context, session *Session, settings agentruntime.ResolvedRuntimeSettings, options agentruntime.ProtocolSessionOptions, descriptor agentruntime.RuntimeDescriptor, nativeID string, restoring bool) error {
 	capabilities, err := session.connection.Initialize(ctx)
 	if err != nil {
 		return err
@@ -235,12 +241,12 @@ func (h *Host) initializeSession(ctx context.Context, session *Session, settings
 	}
 	if restoring {
 		session.callbacks.beginReplay(nativeID, descriptor.ReplayCoverageVerified)
-		if err := session.connection.LoadSession(ctx, nativeID, h.environment.WorkDir); err != nil {
+		if err := session.connection.LoadSession(ctx, nativeID, h.environment.WorkDir, options); err != nil {
 			return err
 		}
 		session.callbacks.finishReplay()
 	} else {
-		nativeID, err = session.connection.NewSession(ctx, h.environment.WorkDir)
+		nativeID, err = session.connection.NewSession(ctx, h.environment.WorkDir, options)
 		if err != nil {
 			return err
 		}

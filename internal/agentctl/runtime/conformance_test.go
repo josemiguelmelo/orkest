@@ -8,6 +8,7 @@ import (
 	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
 	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
 	sharedacp "github.com/josemiguelmelo/orkest/internal/agentctl/runtime/acp"
+	"github.com/josemiguelmelo/orkest/internal/agentctl/runtime/claudecode"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/runtime/conformance"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/runtime/opencode"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/runtime/opencode/opencodetest"
@@ -42,6 +43,26 @@ func TestRuntimeConformance(t *testing.T) {
 			}
 			return runtimehost.New(opencode.Profile{Binary: binary}, sharedacp.Factory{}, runtimehost.Environment{WorkDir: work, StateDir: state, GrantedEnv: env})
 		},
+		coreruntime.ClaudeCode: func(t *testing.T, work, state string) agentruntime.RuntimeHost {
+			t.Helper()
+			binary, env := "", []string{"ORKEST_CLAUDE_ACP_FIXTURE=1"}
+			if os.Getenv("ORKEST_RUNTIME_CONFORMANCE") == "live" {
+				binary = required(t, "ORKEST_CLAUDE_CODE_BINARY")
+				env = []string{"PATH=" + os.Getenv("PATH")}
+				names := required(t, "ORKEST_TEST_PROVIDER_ENV")
+				for _, name := range strings.Split(names, ",") {
+					env = append(env, name+"="+required(t, name))
+				}
+			}
+			if binary == "" {
+				var err error
+				binary, err = os.Executable()
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			return runtimehost.New(claudecode.Profile{Binary: binary}, sharedacp.Factory{}, runtimehost.Environment{WorkDir: work, StateDir: state, GrantedEnv: env})
+		},
 	}
 	versions := coreruntime.Supported()
 	if len(factories) != len(versions) {
@@ -53,7 +74,11 @@ func TestRuntimeConformance(t *testing.T) {
 			if !ok {
 				t.Fatal("enabled runtime has no conformance factory")
 			}
-			profile := conformance.Profile{Config: runconfig.RuntimeConfig{OrganizationID: "test-org", WorkspaceID: "test-workspace", TaskID: "test-task", TaskSessionID: "test-session", RunID: "revision-1", Runtime: runtime, Agent: runconfig.AgentDefinition{Name: "Work", Instructions: "Follow user instructions."}, Model: runconfig.ModelSelection{Provider: "fixture", ID: "fixture"}}, Remember: func(token string) string { return "remember:" + token }, Recall: "recall", Permission: "permission", Wait: "wait", Suspend: "wait"}
+			modelProvider := "fixture"
+			if runtime == coreruntime.ClaudeCode {
+				modelProvider = "anthropic"
+			}
+			profile := conformance.Profile{Config: runconfig.RuntimeConfig{OrganizationID: "test-org", WorkspaceID: "test-workspace", TaskID: "test-task", TaskSessionID: "test-session", RunID: "revision-1", Runtime: runtime, Agent: runconfig.AgentDefinition{Name: "Work", Instructions: "Follow user instructions."}, Model: runconfig.ModelSelection{Provider: modelProvider, ID: "fixture"}}, Remember: func(token string) string { return "remember:" + token }, Recall: "recall", Permission: "permission", Wait: "wait", Suspend: "wait"}
 			marker, err := ids.NewUUID()
 			if err != nil {
 				t.Fatal(err)
@@ -74,7 +99,11 @@ func TestRuntimeConformance(t *testing.T) {
 					"skills":       {Prompt: "Use the conformance skill and report its skill marker.", Expected: skillMarker},
 					"http-mcp":     {Prompt: required(t, "ORKEST_TEST_MCP_PROMPT"), Expected: required(t, "ORKEST_TEST_MCP_EXPECTED")},
 				}
-				profile.Config.Model = runconfig.ModelSelection{Provider: required(t, "ORKEST_TEST_MODEL_PROVIDER"), ID: required(t, "ORKEST_TEST_MODEL_ID")}
+				provider := required(t, "ORKEST_TEST_MODEL_PROVIDER")
+				if runtime == coreruntime.ClaudeCode {
+					provider = "anthropic"
+				}
+				profile.Config.Model = runconfig.ModelSelection{Provider: provider, ID: required(t, "ORKEST_TEST_MODEL_ID")}
 				profile.Remember = func(token string) string { return "Remember this marker for later: " + token + ". Reply acknowledged." }
 				profile.Recall = "Return the exact marker I previously asked you to remember."
 				profile.Permission = required(t, "ORKEST_TEST_APPROVAL_PROMPT")

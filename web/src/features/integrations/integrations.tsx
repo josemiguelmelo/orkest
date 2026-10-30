@@ -17,7 +17,6 @@ import {
   ConfirmButton,
   CreateButton,
   date,
-  Empty,
   ErrorState,
   Loading,
   PageHeader,
@@ -328,7 +327,7 @@ function IntegrationEditor({
         <div className="form-grid">
           <Field
             label="Provider"
-            hint={item ? undefined : 'Select the task source you want to connect'}
+            {...(item ? {} : { hint: 'Select the task source you want to connect' })}
             error={form.formState.errors.provider?.message}
           >
             {item ? (
@@ -384,7 +383,9 @@ function IntegrationEditor({
                         {p.provider.replaceAll('_', ' ')}
                       </span>
                       {selected && (
-                        <span style={{ marginLeft: 'auto', color: 'var(--primary)', fontSize: '11px' }}>
+                        <span
+                          style={{ marginLeft: 'auto', color: 'var(--primary)', fontSize: '11px' }}
+                        >
                           Selected
                         </span>
                       )}

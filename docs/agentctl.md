@@ -23,8 +23,10 @@ go run ./cmd/agentctl -listen 127.0.0.1:8081 \
 ## Runtime and recovery
 
 - The [runtime host contracts](../internal/agentctl/runtime/contracts.go) separate
-  execution from native profiles and ACP. [OpenCode](providers/opencode.md) is the
-  currently wired profile. See the [domain map](runtime-providers.md) to navigate
+  execution from native profiles and ACP. [OpenCode](providers/opencode.md) and
+  [Claude Code](providers/claude-code.md) profiles are wired. Each agentctl worker
+  requires `-runtime` at startup and rejects run configurations for another
+  runtime. See the [domain map](runtime-providers.md) to navigate
   configuration, interactions, run execution, and runtime implementations.
 - Activity is synced to private JSONL files under
   `AGENTCTL_STATE_DIR/conversations` before publication. These files contain task

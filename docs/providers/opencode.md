@@ -6,8 +6,10 @@ interface. Provider-independent API behavior is documented in
 
 ## Requirements and configuration
 
-- OpenCode **2.1.4** must be installed and available as `opencode` on `PATH`, or
-  supplied with `-opencode-binary` / `AGENTCTL_OPENCODE_BINARY`.
+- OpenCode **2.1.4** must be installed and available as `opencode` on `PATH`.
+- This `agentctl` worker must be assigned runtime `opencode` with
+  `-runtime opencode`. The Docker executor passes this from the run configuration.
+- The `-runtime` flag is mandatory at worker startup.
 - `-work-dir` must be an existing absolute directory.
 - `-state-dir` must be an absolute directory on durable storage. Retain it with
   the working tree for the run.
@@ -25,7 +27,6 @@ through `agentctl`. ACP diagnostics are discarded to avoid exposing secrets.
 Example configuration:
 
 ```dotenv
-AGENTCTL_OPENCODE_BINARY=/usr/local/bin/opencode
 AGENTCTL_WORK_DIR=/absolute/path/to/repository
 AGENTCTL_STATE_DIR=/absolute/path/to/durable/state
 ```

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ChangeEvent } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -22,16 +22,26 @@ import { Button } from '../../shared/ui/button';
 import { Dialog } from '../../shared/ui/dialog';
 import { Field, Form, Selection } from '../../shared/ui/form';
 import { useAction } from '../../shared/use-action';
-const schema = z.object({
-  name: z.string().trim().min(1).max(200),
-  description: z.string().max(2000),
-  runtime: z.literal('opencode'),
-  provider: z.string().trim().min(1).max(200),
-  model: z.string().trim().min(1).max(200),
-  systemPrompt: z.string().max(100000),
-  mcpServerIds: z.array(z.string()),
-  skillIds: z.array(z.string()),
-});
+const schema = z
+  .object({
+    name: z.string().trim().min(1).max(200),
+    description: z.string().max(2000),
+    runtime: z.enum(['opencode', 'claude-code']),
+    provider: z.string().trim().min(1).max(200),
+    model: z.string().trim().min(1).max(200),
+    systemPrompt: z.string().max(100000),
+    mcpServerIds: z.array(z.string()),
+    skillIds: z.array(z.string()),
+  })
+  .superRefine((value, context) => {
+    if (value.runtime === 'claude-code' && value.provider.toLowerCase() !== 'anthropic') {
+      context.addIssue({
+        code: 'custom',
+        path: ['provider'],
+        message: 'Claude Code requires Anthropic.',
+      });
+    }
+  });
 type ModelCatalog = Record<string, { name?: string; models?: Record<string, { name?: string }> }>;
 const modelCatalogQuery = {
   queryKey: ['runtime-model-catalog', 'opencode'],
@@ -74,7 +84,7 @@ export function AgentsPage() {
                 <div className="agent-card-icon">
                   <Bot size={26} />
                 </div>
-                <Badge>OpenCode</Badge>
+                <Badge>{item.runtime === 'claude-code' ? 'Claude Code' : 'OpenCode'}</Badge>
               </div>
               <div className="agent-card-body">
                 <h3>{item.name}</h3>
@@ -131,8 +141,7 @@ export function AgentsPage() {
         </div>
       ) : (
         <Empty title="No agent definitions yet">
-          Create an agent with its model, instructions, skills, and MCP connections to get
-          started.
+          Create an agent with its model, instructions, skills, and MCP connections to get started.
         </Empty>
       )}
       {editing !== undefined && (
@@ -159,14 +168,15 @@ function AgentEditor({ item, onClose }: { item: Agent | null; onClose: () => voi
     defaultValues: {
       name: item?.name ?? '',
       description: item?.description ?? '',
-      runtime: 'opencode' as const,
-      provider: item?.provider ?? '',
+      runtime: item?.runtime ?? 'opencode',
+      provider: item?.runtime === 'claude-code' ? 'anthropic' : (item?.provider ?? ''),
       model: item?.model ?? '',
       systemPrompt: item?.systemPrompt ?? '',
       mcpServerIds: item?.mcpServerIds ?? [],
       skillIds: item?.skillIds ?? [],
     },
   });
+  const runtimeField = form.register('runtime');
   return (
     <Dialog
       title={item ? 'Edit agent definition' : 'Create new agent'}
@@ -203,7 +213,10 @@ function AgentEditor({ item, onClose }: { item: Agent | null; onClose: () => voi
               <input {...form.register('name')} placeholder="e.g., Code Reviewer" />
             </Field>
             <Field label="Description" error={form.formState.errors.description?.message}>
-              <textarea {...form.register('description')} placeholder="Describe this agent's purpose and capabilities..." />
+              <textarea
+                {...form.register('description')}
+                placeholder="Describe this agent's purpose and capabilities..."
+              />
             </Field>
           </div>
         </div>
@@ -214,14 +227,28 @@ function AgentEditor({ item, onClose }: { item: Agent | null; onClose: () => voi
           </div>
           <div className="agent-form-section-content">
             <Field label="Runtime">
-              <select {...form.register('runtime')}>
+              <select
+                {...runtimeField}
+                onChange={(event: ChangeEvent<HTMLSelectElement>) => {
+                  void runtimeField.onChange(event);
+                  if (event.currentTarget.value === 'claude-code') {
+                    form.setValue('provider', 'anthropic', { shouldDirty: true });
+                    form.setValue('model', '', { shouldDirty: true });
+                  }
+                }}
+              >
                 <option value="opencode">OpenCode</option>
+                <option value="claude-code">Claude Code</option>
               </select>
             </Field>
             {customModel ? (
               <div className="form-grid">
                 <Field label="Model provider" error={form.formState.errors.provider?.message}>
-                  <input {...form.register('provider')} placeholder="e.g., anthropic" />
+                  <input
+                    {...form.register('provider')}
+                    placeholder="e.g., anthropic"
+                    disabled={form.watch('runtime') === 'claude-code'}
+                  />
                 </Field>
                 <Field label="Model identifier" error={form.formState.errors.model?.message}>
                   <input {...form.register('model')} placeholder="e.g., claude-sonnet-4" />
@@ -232,7 +259,12 @@ function AgentEditor({ item, onClose }: { item: Agent | null; onClose: () => voi
                 <div className="form-grid">
                   <Field label="Model provider" error={form.formState.errors.provider?.message}>
                     <select
-                      value={form.watch('provider')}
+                      value={
+                        form.watch('runtime') === 'claude-code'
+                          ? 'anthropic'
+                          : form.watch('provider')
+                      }
+                      disabled={form.watch('runtime') === 'claude-code'}
                       onChange={(event) => {
                         form.setValue('provider', event.target.value, { shouldDirty: true });
                         form.setValue('model', '', { shouldDirty: true });
@@ -269,7 +301,9 @@ function AgentEditor({ item, onClose }: { item: Agent | null; onClose: () => voi
                       )}
                       {form.watch('model') &&
                         !catalog.data?.[form.watch('provider')]?.models?.[form.watch('model')] && (
-                          <option value={form.watch('model')}>{form.watch('model')} (current)</option>
+                          <option value={form.watch('model')}>
+                            {form.watch('model')} (current)
+                          </option>
                         )}
                     </select>
                   </Field>
@@ -295,8 +329,17 @@ function AgentEditor({ item, onClose }: { item: Agent | null; onClose: () => voi
             <span>Instructions</span>
           </div>
           <div className="agent-form-section-content">
-            <Field label="System instructions" error={form.formState.errors.systemPrompt?.message} hint="Define how this agent should behave and approach tasks.">
-              <textarea rows={10} className="code-input" {...form.register('systemPrompt')} placeholder="You are an expert code reviewer. Focus on..." />
+            <Field
+              label="System instructions"
+              error={form.formState.errors.systemPrompt?.message}
+              hint="Define how this agent should behave and approach tasks."
+            >
+              <textarea
+                rows={10}
+                className="code-input"
+                {...form.register('systemPrompt')}
+                placeholder="You are an expert code reviewer. Focus on..."
+              />
             </Field>
           </div>
         </div>
@@ -357,7 +400,7 @@ function AgentViewer({ item, onClose }: { item: Agent; onClose: () => void }) {
           <div className="agent-viewer-content">
             <div className="agent-viewer-row">
               <span className="agent-viewer-label">Runtime</span>
-              <Badge>OpenCode</Badge>
+              <Badge>{item.runtime === 'claude-code' ? 'Claude Code' : 'OpenCode'}</Badge>
             </div>
             <div className="agent-viewer-row">
               <span className="agent-viewer-label">Provider / Model</span>
