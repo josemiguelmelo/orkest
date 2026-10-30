@@ -12,6 +12,7 @@ import (
 
 	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
 	"github.com/josemiguelmelo/orkest/internal/coderepository"
+	coreruntime "github.com/josemiguelmelo/orkest/internal/core/runtime"
 	"github.com/josemiguelmelo/orkest/internal/orchestration"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/network"
@@ -20,7 +21,9 @@ import (
 
 func TestStartAgentctlCreatesIsolatedContainerAndReturnsLoopbackEndpoint(t *testing.T) {
 	engine := &fakeEngine{containerID: "container-id", hostPort: "49152", running: true}
-	executor, err := NewWithClient(context.Background(), Config{DataRoot: t.TempDir(), Image: "orkest/opencode:test", ContainerUser: "1000:1000"}, engine)
+	executor, err := NewWithClient(context.Background(), Config{
+		DataRoot: t.TempDir(), Images: map[coreruntime.Runtime]string{coreruntime.OpenCode: "orkest/opencode:test"}, ContainerUser: "1000:1000",
+	}, engine)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,7 +38,7 @@ func TestStartAgentctlCreatesIsolatedContainerAndReturnsLoopbackEndpoint(t *test
 	if engine.startedID != process.ID {
 		t.Fatalf("started ID = %q, want %q", engine.startedID, process.ID)
 	}
-	if engine.created.Name != containerName("run") || !strings.HasPrefix(engine.created.Name, "orkest-agentctl-") {
+	if engine.created.Name != containerName(coreruntime.OpenCode, "run") || !strings.HasPrefix(engine.created.Name, "orkest-agentctl-opencode-") {
 		t.Fatalf("container name = %q", engine.created.Name)
 	}
 	if engine.created.Config.Image != "orkest/opencode:test" || engine.created.Config.User != "1000:1000" {
@@ -44,7 +47,7 @@ func TestStartAgentctlCreatesIsolatedContainerAndReturnsLoopbackEndpoint(t *test
 	if len(engine.created.Config.Env) != 0 {
 		t.Fatalf("unexpected environment passed to container: %v", engine.created.Config.Env)
 	}
-	if strings.Join(engine.created.Config.Cmd, " ") != "-listen 0.0.0.0:8081 -work-dir /workspace -state-dir /agentctl-state" {
+	if strings.Join(engine.created.Config.Cmd, " ") != "-listen 0.0.0.0:8081 -runtime opencode -work-dir /workspace -state-dir /agentctl-state" {
 		t.Fatalf("container command = %v", engine.created.Config.Cmd)
 	}
 	if got := engine.created.HostConfig.RestartPolicy.Name; got != container.RestartPolicyDisabled {
@@ -235,7 +238,7 @@ func TestNewWithClientRejectsInvalidSettings(t *testing.T) {
 			t.Fatalf("expected invalid config error for %+v", config)
 		}
 	}
-	if _, err := NewWithClient(context.Background(), Config{Image: "image", ContainerUser: "1000:1000"}, &fakeEngine{}); err == nil {
+	if _, err := NewWithClient(context.Background(), Config{Images: map[coreruntime.Runtime]string{coreruntime.OpenCode: "image"}, ContainerUser: "1000:1000"}, &fakeEngine{}); err == nil {
 		t.Fatal("expected missing data root error")
 	}
 }

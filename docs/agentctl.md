@@ -8,9 +8,13 @@ for request and event details.
 ## Run
 
 ```sh
-go run ./cmd/agentctl -listen 127.0.0.1:8081 \
+go run ./cmd/agentctl -runtime opencode -listen 127.0.0.1:8081 \
   -work-dir /workspace/project -state-dir /workspace/agentctl
 ```
+
+`make dev-agentctl` defaults to OpenCode. Use `AGENTCTL_RUNTIME=claude-code`
+to select Claude Code and `AGENTCTL_ARGS="-work-dir /absolute/project -state-dir /absolute/state"`
+to supply additional flags. The installed runtime must match its pinned version.
 
 - The working directory must exist; retain it and the state directory for the run.
 - An optional `.env` is loaded from the current directory. Precedence: CLI flags,
@@ -23,8 +27,10 @@ go run ./cmd/agentctl -listen 127.0.0.1:8081 \
 ## Runtime and recovery
 
 - The [runtime host contracts](../internal/agentctl/runtime/contracts.go) separate
-  execution from native profiles and ACP. [OpenCode](providers/opencode.md) is the
-  currently wired profile. See the [domain map](runtime-providers.md) to navigate
+  execution from native profiles and ACP. [OpenCode](providers/opencode.md) and
+  [Claude Code](providers/claude-code.md) profiles are wired. Each agentctl worker
+  requires `-runtime` at startup and rejects run configurations for another
+  runtime. See the [domain map](runtime-providers.md) to navigate
   configuration, interactions, run execution, and runtime implementations.
 - Activity is synced to private JSONL files under
   `AGENTCTL_STATE_DIR/conversations` before publication. These files contain task

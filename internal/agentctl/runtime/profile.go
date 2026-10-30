@@ -37,8 +37,16 @@ type ProvisioningPlan struct {
 	Environment []string
 }
 
+// ProtocolSessionOptions carries native session values through ACP without
+// coupling runtime profiles to the ACP SDK types.
+type ProtocolSessionOptions struct {
+	Metadata   map[string]any
+	MCPServers []runconfig.MCPServer
+}
+
 type RuntimeProfile interface {
 	Descriptor() RuntimeDescriptor
 	BuildProvisioningPlan(ResolvedRuntimeSettings, ProvisioningPaths) (ProvisioningPlan, error)
 	NativeSessionMode(ResolvedRuntimeSettings) string
+	ProtocolSessionOptions(ResolvedRuntimeSettings, ProvisioningPaths) ProtocolSessionOptions
 }

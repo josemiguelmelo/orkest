@@ -18,6 +18,7 @@ import (
 	gitlabprovider "github.com/josemiguelmelo/orkest/internal/coderepository/providers/gitlab"
 	"github.com/josemiguelmelo/orkest/internal/core/httplog"
 	"github.com/josemiguelmelo/orkest/internal/core/httpserver"
+	coreruntime "github.com/josemiguelmelo/orkest/internal/core/runtime"
 	"github.com/josemiguelmelo/orkest/internal/core/secretbox"
 	"github.com/josemiguelmelo/orkest/internal/executors/docker"
 	"github.com/josemiguelmelo/orkest/internal/identity"
@@ -77,7 +78,11 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 	launchRepo := postgres.NewAgentLaunchPostgresRepository(database, secretBox)
 	client := orchestration.NewHTTPAgentctlClient(httplog.PropagatingHTTPClient(&http.Client{Timeout: 10 * time.Second}))
 	executor, executorErr := docker.New(ctx, docker.Config{
-		DataRoot:                 filepath.Join(dataRoot, "agent-executions"),
+		DataRoot: filepath.Join(dataRoot, "agent-executions"),
+		Images: map[coreruntime.Runtime]string{
+			coreruntime.OpenCode:   os.Getenv("AGENTCTL_OPENCODE_IMAGE"),
+			coreruntime.ClaudeCode: os.Getenv("AGENTCTL_CLAUDE_CODE_IMAGE"),
+		},
 		ProviderEnv:              splitEnvironmentNames(os.Getenv("ORKEST_AGENT_PROVIDER_ENV")),
 		CodingProviders:          []coderepository.CodingProvider{githubprovider.NewGitHubProvider(), gitlabprovider.NewGitLabCloudProvider(), gitlabprovider.NewGitLabServerProvider()},
 		CodingCredentialResolver: codeRepositories,

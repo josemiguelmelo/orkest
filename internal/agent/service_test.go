@@ -66,3 +66,16 @@ func TestUpdatePreservesMCPSelectionWhenFieldOmitted(t *testing.T) {
 		t.Fatalf("MCP selection was lost: %#v", updated.MCPServerIDs)
 	}
 }
+
+func TestDefinitionValidationDelegatesToRuntimeProvider(t *testing.T) {
+	definition := validDefinition()
+	definition.Runtime = RuntimeClaudeCode
+	definition.Provider = "openai"
+	service := NewService(&repositoryStub{}, workspaceStub{role: "member"}, mcpAccessStub{valid: true}, nil)
+	if err := service.validateDefinition(&definition); err != modelerrors.ErrInvalid {
+		t.Fatalf("expected runtime provider validation error, got %v", err)
+	}
+	if err := validate(&definition); err != nil {
+		t.Fatalf("generic validation should not know runtime-specific rules: %v", err)
+	}
+}

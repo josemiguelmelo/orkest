@@ -119,6 +119,11 @@ func (c RuntimeConfig) Validate() error {
 	if !c.Runtime.Available() {
 		return &ValidationError{Field: "runtime", Reason: "is unsupported"}
 	}
+	if provider, ok := coreruntime.ProviderFor(c.Runtime); ok {
+		if err := provider.ValidateDefinition(coreruntime.Definition{ModelProvider: c.Model.Provider}); err != nil {
+			return &ValidationError{Field: "model.provider", Reason: "is invalid for runtime"}
+		}
+	}
 	if err := validateMCPServers(c.MCPServers); err != nil {
 		return err
 	}

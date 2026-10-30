@@ -1,17 +1,24 @@
 .DEFAULT_GOAL := help
-.PHONY: help setup dev dev-once dev-agentctl dev-web db-up db-down db-logs auth-up lint-install lint fmt sqlc check build test-integration test-postgres test-recovery test-recovery-unit docker-agentctl-base docker-agentctl-opencode docker-agentctl-images test-docker check-runtime-boundaries
+.PHONY: help setup dev dev-once dev-agentctl dev-web db-up db-down db-logs auth-up lint-install lint fmt sqlc check build test-integration test-postgres test-recovery test-recovery-unit docker-agentctl-base docker-agentctl-opencode docker-agentctl-claude-code docker-agentctl-images test-docker check-runtime-boundaries
 
 GOLANGCI_LINT_VERSION := v2.15.0
 GOLANGCI_LINT := bin/tools/$(GOLANGCI_LINT_VERSION)/golangci-lint
 SQLC_VERSION := v1.31.1
 DOCKER ?= docker
+AGENTCTL_RUNTIME ?= opencode
+AGENTCTL_ARGS ?=
+QUALIFY_RUNTIME ?= .+
+OPENCODE_VERSION = $(shell python3 -c 'import json; print(json.load(open("internal/core/runtime/versions.json"))["opencode"].removeprefix("opencode v"))')
+CLAUDE_AGENT_ACP_VERSION = $(shell python3 -c 'import json; print(json.load(open("internal/core/runtime/versions.json"))["claude-code"])')
 AGENTCTL_BASE_IMAGE ?= orkest/agentctl-base:dev
-AGENTCTL_OPENCODE_IMAGE ?= orkest/agentctl-opencode:2.1.4
+AGENTCTL_OPENCODE_IMAGE ?= orkest/agentctl-opencode:$(OPENCODE_VERSION)
+AGENTCTL_CLAUDE_CODE_IMAGE ?= orkest/agentctl-claude-code:$(CLAUDE_AGENT_ACP_VERSION)
 
 help:
 	@echo "setup             Install frontend dependencies"
 	@echo "dev               Run backend with Air auto-reload"
 	@echo "dev-once          Run backend once without auto-reload"
+	@echo "dev-agentctl      Run agentctl (AGENTCTL_RUNTIME=opencode|claude-code, AGENTCTL_ARGS=...)"
 	@echo "dev-web           Run frontend (separate terminal)"
 	@echo "db-up / db-down   Start / stop PostgreSQL (retains data)"
 	@echo "db-logs           Follow PostgreSQL logs"
@@ -28,7 +35,7 @@ help:
 	@echo "test-recovery-unit Run deterministic session/queue/recovery tests with race detection"
 	@echo "test-recovery      Also verify real OpenCode continuation (requires explicit model and credentials)"
 	@echo "test-postgres     Test PostgreSQL repositories (requires DATABASE_URL or all POSTGRES_* settings)"
-	@echo "docker-agentctl-images Build the agentctl base and OpenCode runtime images"
+	@echo "docker-agentctl-images Build the agentctl base and separate runtime images"
 	@echo "test-docker       Run Docker Engine smoke test (builds images; requires Docker Engine)"
 
 setup:
@@ -41,7 +48,7 @@ dev-once:
 	go run ./cmd/orkest
 
 dev-agentctl:
-	go run ./cmd/agentctl
+	go run ./cmd/agentctl -runtime $(AGENTCTL_RUNTIME) $(AGENTCTL_ARGS)
 
 dev-web:
 	npm --prefix web run dev
@@ -103,10 +110,13 @@ docker-agentctl-base:
 docker-agentctl-opencode: docker-agentctl-base
 	$(DOCKER) build -f build/docker/agentctl-opencode.Dockerfile --build-arg AGENTCTL_BASE_IMAGE=$(AGENTCTL_BASE_IMAGE) -t $(AGENTCTL_OPENCODE_IMAGE) .
 
-docker-agentctl-images: docker-agentctl-opencode
+docker-agentctl-claude-code: docker-agentctl-base
+	$(DOCKER) build -f build/docker/agentctl-claude-code.Dockerfile --build-arg AGENTCTL_BASE_IMAGE=$(AGENTCTL_BASE_IMAGE) -t $(AGENTCTL_CLAUDE_CODE_IMAGE) .
 
-test-docker: docker-agentctl-opencode
-	AGENTCTL_OPENCODE_IMAGE=$(AGENTCTL_OPENCODE_IMAGE) go test -tags=docker ./internal/executors/docker -run 'TestDockerAgentctlLaunchSmoke|TestDockerSessionRestore' -count=1
+docker-agentctl-images: docker-agentctl-opencode docker-agentctl-claude-code
+
+test-docker: docker-agentctl-images
+	AGENTCTL_OPENCODE_IMAGE=$(AGENTCTL_OPENCODE_IMAGE) AGENTCTL_CLAUDE_CODE_IMAGE=$(AGENTCTL_CLAUDE_CODE_IMAGE) go test -tags=docker ./internal/executors/docker -run 'TestDockerAgentctlLaunchSmoke|TestDockerSessionRestore' -count=1
 
 test-recovery-unit:
 	go test -race ./internal/agentctl/... ./internal/orchestration -run 'Restore|Recovery|Queue|Session' -count=1
@@ -124,4 +134,4 @@ test-runtime-conformance:
 # Intentionally strict: credentials, test prompts, and external MCP evidence are
 # prerequisites; this target never substitutes fixture tests or skips a runtime.
 qualify-runtime:
-	ORKEST_RUNTIME_CONFORMANCE=live go test ./internal/agentctl/runtime -run '^TestRuntimeConformance$$' -count=1 -timeout=5m -v
+	ORKEST_RUNTIME_CONFORMANCE=live go test ./internal/agentctl/runtime -run '^TestRuntimeConformance/$(QUALIFY_RUNTIME)$$' -count=1 -timeout=5m -v

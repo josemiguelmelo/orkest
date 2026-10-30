@@ -11,7 +11,7 @@ Orkest is a platform for orchestrating, monitoring, and interacting with AI agen
 - Support multiple organizations, users, and workspaces from day one.
 - Delegate authentication to Keycloak to support username/password and SSO through identity-provider configuration.
 - Use organization roles Owner/Admin/Member and workspace roles Admin/Member/Viewer.
-- Use OpenCode as the initial agent runtime; keep runtime adapters extensible.
+- Support OpenCode and Claude Code runtimes through extensible runtime adapters.
 - Provide built-in tools for communicating with the core platform; user-defined tools are outside MVP scope.
 - Use the pinned OpenCode release’s default permission behavior. Forward any runtime approval requests to the task UI; workspace permission-policy customization is deferred.
 - Support manual task creation and tasks imported from GitHub Projects v2 issue and draft issue items.
@@ -25,7 +25,7 @@ Orkest is a platform for orchestrating, monitoring, and interacting with AI agen
 - Allow a task to involve multiple repositories registered in its workspace.
 - Treat external systems as authoritative for imported task content; users edit that content at the source.
 
-Automatic assignment and automatic movement into in progress are outside the MVP. OpenCode is the confirmed MVP runtime. Specific model, deployment, and technology choices remain open.
+Automatic assignment and automatic movement into in progress are outside the MVP. OpenCode and Claude Code are supported runtimes through pinned adapters. Specific model, deployment, and technology choices remain open.
 
 ## 3. Domain model
 
@@ -168,9 +168,11 @@ Required user-facing capabilities:
 - Cancel execution and resume interrupted work, with precise semantics still to be defined.
 - Inspect failures and results without losing prior conversation or execution history.
 
-### 4.1 OpenCode runtime requirements
+### 4.1 Runtime selection
 
-OpenCode is the sole initially supported runtime. The platform must distinguish the agent runtime from the model provider and model identifier. Model selection remains configurable on agent definitions, allowing available free models without depending on a permanently free hardcoded model.
+OpenCode and Claude Code are supported runtimes. The platform must distinguish the agent runtime from the model provider and model identifier. Model selection remains configurable on agent definitions, allowing available free models without depending on a permanently free hardcoded model. Claude Code definitions use provider `anthropic` and a configured Claude model identifier.
+
+### 4.1.1 OpenCode runtime requirements
 
 The official [OpenCode ACP reference](https://dev.opencode.ai/v2/docs/cli/acp/) documents `opencode acp` as a child process using ACP over stdio, plus session load/resume and HTTP MCP support. agentctl owns this local subprocess connection and exposes the separate platform-facing transport. The HTTP-only restriction applies to MCP connections, not the local ACP transport.
 
@@ -179,6 +181,18 @@ Use the pinned release’s default permissions without introducing a custom work
 Pin and validate the selected OpenCode release before implementation acceptance: verify model selection, system prompt configuration, HTTP MCP headers, approval round trips, durable session storage, and continuation after process restart. Document and persist the required OpenCode data directories and restore the same working paths. Documentation support for session restoration is not a substitute for testing interrupted-work recovery.
 
 OpenCode documents free model offerings, some available for a limited time; available models and credentials must be configuration rather than immutable requirements. See [OpenCode models](https://dev.opencode.ai/v2/docs/console/models/). Do not silently select a paid model if a configured free model becomes unavailable.
+
+### 4.1.2 Claude Code runtime requirements
+
+Claude Code runs through the pinned `@agentclientprotocol/claude-agent-acp`
+adapter over ACP v1 stdio. Supply Anthropic API credentials through the existing
+workspace secret environment path. The selected model, system instructions,
+skills, HTTP MCP endpoints and headers, and approval requests must be bound to
+the run and restored with its session. Use the runtime's permission requests and
+forward them to users; never enable blanket automatic approval. Pin and validate
+the adapter and its bundled Claude Agent SDK. Until real qualification proves
+session continuation and complete replay evidence, uncertain interrupted work
+must remain paused for reconciliation.
 
 ### 4.2 Task sessions — confirmed interaction decisions
 
@@ -260,7 +274,7 @@ Event retention, recovery time targets, host-loss guarantees, and overall availa
 
 - Users authenticate through Keycloak and access organizations/workspaces subject to application membership and role permissions.
 - A failed/interrupted execution is visible while its task remains in progress; a normal task failure does not automatically start another attempt.
-- OpenCode executes through agentctl with configurable model selection, HTTP MCP connections, and task-specific approvals.
+- OpenCode and Claude Code execute through agentctl with configured model selection, HTTP MCP connections, and task-specific approvals.
 - Built-in platform tools expose only authorized workspace task and repository information; no custom tool catalog is required.
 - The skill catalog is separate from the deferred custom tool catalog. Skill IDs are globally unique to prevent collisions across scopes. Skill frontmatter requires a matching `name`, a non-empty `description`, and a Markdown instruction body.
 - A user can register repositories, create an agent definition, and add two team members using that definition.
@@ -299,7 +313,7 @@ Event retention, recovery time targets, host-loss guarantees, and overall availa
 
 - Invitations and external identity-to-membership provisioning beyond first-login user creation.
 - Custom workspace approval policies are deferred. MVP uses OpenCode defaults and forwards runtime approval requests without automatically accepting them.
-- Pinned OpenCode release, default model selection, and validated recovery behavior.
+- Pinned releases for supported runtimes, default model selection, and validated recovery behavior.
 - Whether workflows are fixed for MVP or configurable per workspace.
 - Internal platform tool exposure mechanism and exact allowed operations; custom tool registration is deferred.
 - GitHub import scope, comment synchronization, webhook/polling behavior, and issue-close semantics.

@@ -27,10 +27,10 @@ type NegotiatedCapabilities struct {
 
 type ProtocolClient interface {
 	Initialize(context.Context) (NegotiatedCapabilities, error)
-	NewSession(context.Context, string) (string, error)
+	NewSession(context.Context, string, ProtocolSessionOptions) (string, error)
 	// LoadSession returns only after all replay callbacks preceding its response
 	// have completed. The host seals recovery evidence at this boundary.
-	LoadSession(context.Context, string, string) error
+	LoadSession(context.Context, string, string, ProtocolSessionOptions) error
 	SetSessionMode(context.Context, string, string) error
 	Prompt(context.Context, string, string) (StopReason, error)
 	Cancel(context.Context, string) error

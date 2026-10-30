@@ -10,6 +10,7 @@ import (
 	"sync"
 
 	sdk "github.com/coder/acp-go-sdk"
+	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
 	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
 )
@@ -39,8 +40,8 @@ func (c *client) Initialize(ctx context.Context) (agentruntime.NegotiatedCapabil
 	return agentruntime.NegotiatedCapabilities{ProtocolVersion: int(response.ProtocolVersion), LoadSession: response.AgentCapabilities.LoadSession, SetSessionMode: true}, nil
 }
 
-func (c *client) NewSession(ctx context.Context, workDir string) (string, error) {
-	response, err := c.connection.NewSession(ctx, sdk.NewSessionRequest{Cwd: workDir, McpServers: []sdk.McpServer{}})
+func (c *client) NewSession(ctx context.Context, workDir string, options agentruntime.ProtocolSessionOptions) (string, error) {
+	response, err := c.connection.NewSession(ctx, sdk.NewSessionRequest{Cwd: workDir, McpServers: mcpServers(options.MCPServers), Meta: options.Metadata})
 	if err != nil {
 		return "", protocolError("create ACP session failed", err)
 	}
@@ -50,15 +51,27 @@ func (c *client) NewSession(ctx context.Context, workDir string) (string, error)
 	return string(response.SessionId), nil
 }
 
-func (c *client) LoadSession(ctx context.Context, id string, workDir string) error {
+func (c *client) LoadSession(ctx context.Context, id string, workDir string, options agentruntime.ProtocolSessionOptions) error {
 	c.mu.Lock()
 	c.sessionID = id
 	c.mu.Unlock()
-	_, err := c.connection.LoadSession(ctx, sdk.LoadSessionRequest{SessionId: sdk.SessionId(id), Cwd: workDir, McpServers: []sdk.McpServer{}})
+	_, err := c.connection.LoadSession(ctx, sdk.LoadSessionRequest{SessionId: sdk.SessionId(id), Cwd: workDir, McpServers: mcpServers(options.MCPServers), Meta: options.Metadata})
 	if err != nil {
 		return protocolError("load ACP session failed", err)
 	}
 	return nil
+}
+
+func mcpServers(servers []runconfig.MCPServer) []sdk.McpServer {
+	result := make([]sdk.McpServer, 0, len(servers))
+	for _, server := range servers {
+		headers := make([]sdk.HttpHeader, 0, len(server.Headers))
+		for name, value := range server.Headers {
+			headers = append(headers, sdk.HttpHeader{Name: name, Value: value})
+		}
+		result = append(result, sdk.McpServer{Http: &sdk.McpServerHttpInline{Type: "http", Name: server.Name, Url: server.URL, Headers: headers}})
+	}
+	return result
 }
 
 func (c *client) SetSessionMode(ctx context.Context, id, mode string) error {

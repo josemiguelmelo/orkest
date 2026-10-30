@@ -106,6 +106,10 @@ func (Profile) NativeSessionMode(settings agentruntime.ResolvedRuntimeSettings) 
 	return normalizeNativeName(settings.Agent.Name)
 }
 
+func (Profile) ProtocolSessionOptions(agentruntime.ResolvedRuntimeSettings, agentruntime.ProvisioningPaths) agentruntime.ProtocolSessionOptions {
+	return agentruntime.ProtocolSessionOptions{}
+}
+
 func buildMCPConfiguration(servers []runconfig.MCPServer) (*runtimeMCPConfig, error) {
 	if len(servers) == 0 {
 		return nil, nil

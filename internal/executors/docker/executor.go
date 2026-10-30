@@ -18,6 +18,7 @@ import (
 	"github.com/containerd/errdefs"
 	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
 	"github.com/josemiguelmelo/orkest/internal/coderepository"
+	coreruntime "github.com/josemiguelmelo/orkest/internal/core/runtime"
 	"github.com/josemiguelmelo/orkest/internal/orchestration"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/mount"
@@ -29,7 +30,6 @@ const (
 	DefaultAgentctlPort = 8081
 	workMountPath       = "/workspace"
 	stateMountPath      = "/agentctl-state"
-	defaultImage        = "orkest/agentctl-opencode:2.1.4"
 )
 
 type EngineClient interface {
@@ -43,7 +43,7 @@ type EngineClient interface {
 
 type Config struct {
 	DataRoot                 string
-	Image                    string
+	Images                   map[coreruntime.Runtime]string
 	AgentctlPort             int
 	ContainerUser            string
 	ProviderEnv              []string
@@ -84,9 +84,17 @@ func NewWithClient(ctx context.Context, config Config, client EngineClient) (*Ex
 	if err != nil {
 		return nil, fmt.Errorf("resolve Docker data root: %w", err)
 	}
-	image := strings.TrimSpace(config.Image)
-	if image == "" {
-		image = defaultImage
+	images := make(map[coreruntime.Runtime]string, len(coreruntime.Providers()))
+	for _, provider := range coreruntime.Providers() {
+		images[provider.Runtime()] = provider.DefaultImage()
+	}
+	for runtime, image := range config.Images {
+		if !runtime.Available() {
+			return nil, fmt.Errorf("unsupported runtime image %q", runtime)
+		}
+		if image = strings.TrimSpace(image); image != "" {
+			images[runtime] = image
+		}
 	}
 	port := config.AgentctlPort
 	if port == 0 {
@@ -105,7 +113,7 @@ func NewWithClient(ctx context.Context, config Config, client EngineClient) (*Ex
 	if err := validateContainerUser(containerUser); err != nil {
 		return nil, err
 	}
-	config.DataRoot, config.Image, config.AgentctlPort, config.ContainerUser = root, image, port, containerUser
+	config.DataRoot, config.Images, config.AgentctlPort, config.ContainerUser = root, images, port, containerUser
 	providers := make(map[string]coderepository.CodingProvider, len(config.CodingProviders))
 	for _, provider := range config.CodingProviders {
 		if provider == nil || strings.TrimSpace(provider.ProviderName()) == "" {
@@ -125,6 +133,10 @@ func (e *Executor) StartAgentctl(ctx context.Context, config runconfig.RunConfig
 	if err := config.Validate(); err != nil {
 		return orchestration.Process{}, err
 	}
+	image := e.config.Images[config.Runtime]
+	if image == "" {
+		return orchestration.Process{}, fmt.Errorf("no Docker image configured for runtime %q", config.Runtime)
+	}
 	workDir, stateDir, err := e.taskDirectories(config)
 	if err != nil {
 		return orchestration.Process{}, err
@@ -140,6 +152,7 @@ func (e *Executor) StartAgentctl(ctx context.Context, config runconfig.RunConfig
 	providerEnv := e.providerEnvironment()
 	command := []string{
 		"-listen", fmt.Sprintf("0.0.0.0:%d", e.config.AgentctlPort),
+		"-runtime", string(config.Runtime),
 		"-work-dir", workMountPath,
 		"-state-dir", stateMountPath,
 	}
@@ -151,7 +164,7 @@ func (e *Executor) StartAgentctl(ctx context.Context, config runconfig.RunConfig
 		command = append(command, "-env", name)
 	}
 	containerConfig := &container.Config{
-		Image:        e.config.Image,
+		Image:        image,
 		User:         e.config.ContainerUser,
 		Env:          providerEnv,
 		Cmd:          command,
@@ -171,7 +184,7 @@ func (e *Executor) StartAgentctl(ctx context.Context, config runconfig.RunConfig
 	if config.TaskSessionID != "" {
 		hostConfig.RestartPolicy.Name = container.RestartPolicyUnlessStopped
 	}
-	name := containerName(config.RunID)
+	name := containerName(config.Runtime, config.RunID)
 	created, err := e.client.ContainerCreate(ctx, mobyclient.ContainerCreateOptions{
 		Config:     containerConfig,
 		HostConfig: hostConfig,
@@ -318,7 +331,13 @@ func (e *Executor) TerminateAgentctlByRunID(ctx context.Context, runID string) e
 	if strings.TrimSpace(runID) == "" {
 		return errors.New("agent run identity is required")
 	}
-	return e.TerminateAgentctl(ctx, containerName(runID))
+	var failures []error
+	for _, name := range containerNamesForRun(runID) {
+		if err := e.TerminateAgentctl(ctx, name); err != nil {
+			failures = append(failures, err)
+		}
+	}
+	return errors.Join(failures...)
 }
 
 func (e *Executor) AgentctlRunning(ctx context.Context, processID string) (bool, error) {
@@ -342,7 +361,13 @@ func (e *Executor) AgentctlRunningByRunID(ctx context.Context, runID string) (bo
 	if strings.TrimSpace(runID) == "" {
 		return false, errors.New("agent run identity is required")
 	}
-	return e.AgentctlRunning(ctx, containerName(runID))
+	for _, name := range containerNamesForRun(runID) {
+		running, err := e.AgentctlRunning(ctx, name)
+		if err != nil || running {
+			return running, err
+		}
+	}
+	return false, nil
 }
 
 func (e *Executor) taskDirectories(config runconfig.RunConfig) (string, string, error) {
@@ -374,7 +399,7 @@ func (e *Executor) removeAfterFailure(ctx context.Context, containerID string, c
 
 func labelsFor(config runconfig.RunConfig) (map[string]string, error) {
 	values := []string{config.OrganizationID, config.WorkspaceID, config.TaskID, config.RunID}
-	labels := make(map[string]string, len(values)+1)
+	labels := make(map[string]string, len(values)+2)
 	for i, key := range []string{"organization", "workspace", "task", "run"} {
 		hash, err := hashScope(values[i])
 		if err != nil {
@@ -383,12 +408,25 @@ func labelsFor(config runconfig.RunConfig) (map[string]string, error) {
 		labels["orkest."+key+"_id_hash"] = hash
 	}
 	labels["orkest.managed"] = "agentctl"
+	labels["orkest.runtime"] = string(config.Runtime)
 	return labels, nil
 }
 
-func containerName(runID string) string {
+func containerName(runtime coreruntime.Runtime, runID string) string {
 	hash, _ := hashScope(runID)
-	return "orkest-agentctl-" + hash[:24]
+	return "orkest-agentctl-" + string(runtime) + "-" + hash[:24]
+}
+
+func containerNamesForRun(runID string) []string {
+	names := make([]string, 0, len(coreruntime.Providers())+1)
+	for _, provider := range coreruntime.Providers() {
+		names = append(names, containerName(provider.Runtime(), runID))
+	}
+	// Check the pre-runtime-qualified name as well so an upgrade can reconcile
+	// containers created before runtime names were introduced.
+	hash, _ := hashScope(runID)
+	names = append(names, "orkest-agentctl-"+hash[:24])
+	return names
 }
 
 func hashScope(value string) (string, error) {

@@ -132,7 +132,7 @@ export type Agent = {
     id: string;
     workspaceId: string;
     name: string;
-    runtime: 'opencode';
+    runtime: 'opencode' | 'claude-code';
     provider: string;
     model: string;
     description: string;
@@ -274,7 +274,7 @@ export type WorkspaceRole = {
 };
 export type AgentDefinition = {
     name: string;
-    runtime: 'opencode';
+    runtime: 'opencode' | 'claude-code';
     provider: string;
     model: string;
     description: string;

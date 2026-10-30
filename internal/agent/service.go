@@ -7,6 +7,7 @@ import (
 
 	"github.com/josemiguelmelo/orkest/internal/core/ids"
 	modelerrors "github.com/josemiguelmelo/orkest/internal/core/model/errors"
+	coreruntime "github.com/josemiguelmelo/orkest/internal/core/runtime"
 )
 
 type Service struct {
@@ -38,7 +39,7 @@ func (s *Service) Create(ctx context.Context, userID, orgID, workspaceID string,
 	if err := s.authorize(ctx, userID, orgID, workspaceID); err != nil {
 		return Agent{}, err
 	}
-	if err := validate(&definition); err != nil {
+	if err := s.validateDefinition(&definition); err != nil {
 		return Agent{}, err
 	}
 	if err := s.validateMCPServers(ctx, orgID, workspaceID, definition.MCPServerIDs); err != nil {
@@ -72,7 +73,7 @@ func (s *Service) Update(ctx context.Context, userID, orgID, workspaceID, agentI
 		}
 		definition.MCPServerIDs = current.MCPServerIDs
 	}
-	if err := validate(&definition); err != nil {
+	if err := s.validateDefinition(&definition); err != nil {
 		return Agent{}, err
 	}
 	if err := s.validateMCPServers(ctx, orgID, workspaceID, definition.MCPServerIDs); err != nil {
@@ -82,6 +83,16 @@ func (s *Service) Update(ctx context.Context, userID, orgID, workspaceID, agentI
 		return Agent{}, err
 	}
 	return s.repository.UpdateAgent(ctx, orgID, workspaceID, agentID, definition)
+}
+
+func (s *Service) validateDefinition(definition *AgentDefinition) error {
+	if err := validate(definition); err != nil {
+		return err
+	}
+	if provider, ok := coreruntime.ProviderFor(definition.Runtime); ok {
+		return provider.ValidateDefinition(coreruntime.Definition{ModelProvider: definition.Provider})
+	}
+	return nil
 }
 
 func (s *Service) validateSkills(ctx context.Context, orgID, workspaceID string, ids []string) error {

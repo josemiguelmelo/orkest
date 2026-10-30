@@ -5,7 +5,10 @@ import coreruntime "github.com/josemiguelmelo/orkest/internal/core/runtime"
 // Runtime aliases the shared platform and agentctl runtime type.
 type Runtime = coreruntime.Runtime
 
-const RuntimeOpenCode = coreruntime.OpenCode
+const (
+	RuntimeOpenCode   = coreruntime.OpenCode
+	RuntimeClaudeCode = coreruntime.ClaudeCode
+)
 
 type Agent struct {
 	ID          string `json:"id"`
