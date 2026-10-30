@@ -86,7 +86,7 @@ func NewWithClient(ctx context.Context, config Config, client EngineClient) (*Ex
 	}
 	images := make(map[coreruntime.Runtime]string, len(coreruntime.Providers()))
 	for _, provider := range coreruntime.Providers() {
-		images[provider.Runtime()] = provider.Image()
+		images[provider.Runtime()] = provider.DefaultImage()
 	}
 	for runtime, image := range config.Images {
 		if !runtime.Available() {

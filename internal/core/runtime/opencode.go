@@ -9,7 +9,7 @@ func (OpenCodeProvider) Runtime() Runtime { return OpenCode }
 
 func (OpenCodeProvider) Version() string { return Supported()[OpenCode] }
 
-func (p OpenCodeProvider) Image() string {
+func (p OpenCodeProvider) DefaultImage() string {
 	return "orkest/agentctl-opencode:" + strings.TrimPrefix(p.Version(), "opencode v")
 }
 

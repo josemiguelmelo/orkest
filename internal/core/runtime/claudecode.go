@@ -13,7 +13,9 @@ func (ClaudeCodeProvider) Runtime() Runtime { return ClaudeCode }
 
 func (ClaudeCodeProvider) Version() string { return Supported()[ClaudeCode] }
 
-func (p ClaudeCodeProvider) Image() string { return "orkest/agentctl-claude-code:" + p.Version() }
+func (p ClaudeCodeProvider) DefaultImage() string {
+	return "orkest/agentctl-claude-code:" + p.Version()
+}
 
 func (ClaudeCodeProvider) ValidateDefinition(definition Definition) error {
 	if !strings.EqualFold(definition.ModelProvider, "anthropic") {

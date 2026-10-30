@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
@@ -50,19 +51,25 @@ func main() {
 	defer stop()
 
 	hostEnvironment := runtimehost.Environment{WorkDir: *workDir, StateDir: *stateDir, GrantedEnv: env}
-	var profile agentruntime.RuntimeProfile
-	switch coreruntime.Runtime(*runtimeName) {
-	case coreruntime.OpenCode:
-		profile = opencode.Profile{}
-	case coreruntime.ClaudeCode:
-		profile = claudecode.Profile{}
-	default:
-		logger.Error("agentctl stopped", "error", "unsupported runtime", "runtime", *runtimeName)
+	profile, err := runtimeProfile(coreruntime.Runtime(*runtimeName))
+	if err != nil {
+		logger.Error("agentctl stopped", "error", err, "runtime", *runtimeName)
 		os.Exit(2)
 	}
 	host := runtimehost.New(profile, sharedacp.Factory{}, hostEnvironment, gitprovider.DefaultCLIAuthAdapters()...)
 	if err := daemon.RunAgentctl(ctx, logger, *address, host, *stateDir, *runID); err != nil {
 		logger.Error("agentctl stopped", "error", err)
 		os.Exit(1)
+	}
+}
+
+func runtimeProfile(runtime coreruntime.Runtime) (agentruntime.RuntimeProfile, error) {
+	switch runtime {
+	case coreruntime.OpenCode:
+		return opencode.Profile{}, nil
+	case coreruntime.ClaudeCode:
+		return claudecode.Profile{}, nil
+	default:
+		return nil, fmt.Errorf("unsupported runtime %q", runtime)
 	}
 }

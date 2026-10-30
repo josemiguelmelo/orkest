@@ -26,7 +26,7 @@ type Definition struct {
 type Provider interface {
 	Runtime() Runtime
 	Version() string
-	Image() string
+	DefaultImage() string
 	ValidateDefinition(Definition) error
 }
 
