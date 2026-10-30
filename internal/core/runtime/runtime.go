@@ -1,6 +1,14 @@
 // Package runtime defines the runtimes supported across the platform and agentctl.
 package runtime
 
+import (
+	_ "embed"
+	"encoding/json"
+)
+
+//go:embed versions.json
+var versionInventory []byte
+
 type Runtime string
 
 const (
@@ -30,11 +38,11 @@ func Providers() []Provider {
 	}
 }
 
-// Supported returns the runtime/version map derived from the provider catalogue.
+// Supported returns a copy of the runtime/version inventory shared with CI.
 func Supported() map[Runtime]string {
-	versions := make(map[Runtime]string)
-	for _, provider := range Providers() {
-		versions[provider.Runtime()] = provider.Version()
+	var versions map[Runtime]string
+	if err := json.Unmarshal(versionInventory, &versions); err != nil {
+		panic(err)
 	}
 	return versions
 }

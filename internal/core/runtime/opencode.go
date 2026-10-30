@@ -1,17 +1,17 @@
 package runtime
 
-const OpenCodeVersion = "opencode v2.1.4"
-
-const OpenCodeImage = "orkest/agentctl-opencode:2.1.4"
+import "strings"
 
 // OpenCodeProvider defines the OpenCode runtime's version and validation rules.
 type OpenCodeProvider struct{}
 
 func (OpenCodeProvider) Runtime() Runtime { return OpenCode }
 
-func (OpenCodeProvider) Version() string { return OpenCodeVersion }
+func (OpenCodeProvider) Version() string { return Supported()[OpenCode] }
 
-func (OpenCodeProvider) Image() string { return OpenCodeImage }
+func (p OpenCodeProvider) Image() string {
+	return "orkest/agentctl-opencode:" + strings.TrimPrefix(p.Version(), "opencode v")
+}
 
 func (OpenCodeProvider) ValidateDefinition(Definition) error { return nil }
 

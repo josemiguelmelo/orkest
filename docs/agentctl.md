@@ -8,9 +8,13 @@ for request and event details.
 ## Run
 
 ```sh
-go run ./cmd/agentctl -listen 127.0.0.1:8081 \
+go run ./cmd/agentctl -runtime opencode -listen 127.0.0.1:8081 \
   -work-dir /workspace/project -state-dir /workspace/agentctl
 ```
+
+`make dev-agentctl` defaults to OpenCode. Use `AGENTCTL_RUNTIME=claude-code`
+to select Claude Code and `AGENTCTL_ARGS="-work-dir /absolute/project -state-dir /absolute/state"`
+to supply additional flags. The installed runtime must match its pinned version.
 
 - The working directory must exist; retain it and the state directory for the run.
 - An optional `.env` is loaded from the current directory. Precedence: CLI flags,

@@ -138,3 +138,21 @@ before domain organization. Report it as a failed check whenever it occurs.
 OpenCode 2.1.4 and Claude Code `claude-agent-acp` 0.99.0 are production profiles.
 Claude Code model execution and interrupted-work continuation remain unqualified.
 See [task sessions](task-sessions.md) for prerequisites and limitations.
+
+`internal/core/runtime/versions.json` is the single runtime version inventory.
+Go embeds it for supported versions, provider metadata, and default image tags.
+Each Dockerfile reads it directly for the installed package version; Make reads
+it for default image tags. Direct Docker builds use the same pinned packages.
+CI reads the same file to install pinned adapters and require live qualification
+when a version changes.
+
+The runtime conformance workflow qualifies changed runtimes in separate matrix
+jobs, installing each pinned adapter from that inventory. OpenCode uses
+`ORKEST_TEST_MODEL_PROVIDER` and `ORKEST_TEST_MODEL_ID`; Claude Code uses
+`anthropic` and the variable `ORKEST_CLAUDE_CODE_TEST_MODEL_ID`
+in the GitHub `runtime-qualification` environment. Both use the existing shared
+approval/cancellation/recovery prompts, MCP settings, and granted credential names.
+Missing settings fail qualification. Locally, `make qualify-runtime` checks all
+runtimes; `make qualify-runtime QUALIFY_RUNTIME=claude-code` checks Claude alone
+with `ORKEST_TEST_MODEL_ID` set to its model and
+`ORKEST_CLAUDE_CODE_BINARY` pointing to the pinned adapter.

@@ -14,6 +14,20 @@ make docker-agentctl-opencode
 make docker-agentctl-claude-code
 ```
 
+To build without Make, run from the repository root:
+
+```sh
+docker build -f build/docker/agentctl-base.Dockerfile -t orkest/agentctl-base:dev .
+docker build -f build/docker/agentctl-opencode.Dockerfile -t orkest/agentctl-opencode:local .
+docker build -f build/docker/agentctl-claude-code.Dockerfile -t orkest/agentctl-claude-code:local .
+```
+
+The runtime Dockerfiles read `internal/core/runtime/versions.json` from the build
+context, so no runtime version build arguments are needed. The tag is your choice;
+configure `AGENTCTL_OPENCODE_IMAGE` or `AGENTCTL_CLAUDE_CODE_IMAGE` when using a
+custom tag. `AGENTCTL_BASE_IMAGE` remains an optional build argument for a custom
+base image.
+
 The base image contains the `agentctl` binary, Git, and GitHub CLI 2.103.2. Each
 runtime image extends that base and installs only its pinned runtime:
 OpenCode 2.1.4 in `orkest/agentctl-opencode:2.1.4`, or the Claude Code ACP
