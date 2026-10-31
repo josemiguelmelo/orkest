@@ -5,7 +5,9 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"sync"
 	"testing"
+	"time"
 
 	modelerrors "github.com/josemiguelmelo/orkest/internal/core/model/errors"
 	coreruntime "github.com/josemiguelmelo/orkest/internal/core/runtime"
@@ -107,7 +109,7 @@ func TestProfileAuthorizationAndScope(t *testing.T) {
 func TestWorkerReconcilesExpiredAttemptWithoutRebuilding(t *testing.T) {
 	r := &memoryRepo{build: Build{ID: "b", Status: "reconciling"}}
 	builder := &builderFake{}
-	w := NewExecutionProfileWorker(r, builder, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	w := NewExecutionProfileWorker(r, builder, slog.New(slog.NewTextHandler(io.Discard, nil)), 1)
 	if err := w.process(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +121,7 @@ func TestWorkerReconcilesExpiredAttemptWithoutRebuilding(t *testing.T) {
 func TestWorkerFailureIsSanitizedAndNotRetried(t *testing.T) {
 	r := &memoryRepo{build: Build{ID: "b", Status: "building"}}
 	builder := &builderFake{fail: true}
-	w := NewExecutionProfileWorker(r, builder, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	w := NewExecutionProfileWorker(r, builder, slog.New(slog.NewTextHandler(io.Discard, nil)), 1)
 	if err := w.process(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -128,5 +130,86 @@ func TestWorkerFailureIsSanitizedAndNotRetried(t *testing.T) {
 	}
 	if builder.builds != 1 || r.build.Status != "failed" || r.build.BuildError == "sensitive registry error" {
 		t.Fatal("unsafe failure handling", r.build)
+	}
+}
+
+type concurrentWorkerRepo struct {
+	ExecutionProfileRepository
+	mu       sync.Mutex
+	builds   []Build
+	finished int
+}
+
+func (r *concurrentWorkerRepo) Claim(_ context.Context, owner string) (Build, bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if len(r.builds) == 0 {
+		return Build{}, false, nil
+	}
+	b := r.builds[0]
+	r.builds = r.builds[1:]
+	b.Owner = owner
+	b.Status = "building"
+	return b, true, nil
+}
+
+func (*concurrentWorkerRepo) Heartbeat(context.Context, string, string) error { return nil }
+func (*concurrentWorkerRepo) PinInputs(context.Context, Build) error          { return nil }
+func (r *concurrentWorkerRepo) Finish(context.Context, Build, string, string, string) error {
+	r.mu.Lock()
+	r.finished++
+	r.mu.Unlock()
+	return nil
+}
+
+type concurrentBuilder struct {
+	started chan struct{}
+	release chan struct{}
+}
+
+func (*concurrentBuilder) ResolveInputs(_ context.Context, b Build) (Build, error) { return b, nil }
+func (b *concurrentBuilder) BuildAndPush(context.Context, Build) (string, error) {
+	b.started <- struct{}{}
+	<-b.release
+	return "registry/image@sha256:123", nil
+}
+func (*concurrentBuilder) Reconcile(context.Context, Build) (string, error) { return "", nil }
+
+func TestWorkerRunsConfiguredBuildsConcurrently(t *testing.T) {
+	r := &concurrentWorkerRepo{builds: []Build{{ID: "one"}, {ID: "two"}}}
+	builder := &concurrentBuilder{started: make(chan struct{}, 2), release: make(chan struct{})}
+	w := NewExecutionProfileWorker(r, builder, slog.New(slog.NewTextHandler(io.Discard, nil)), 2)
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { w.Run(ctx); close(done) }()
+	for i := 0; i < 2; i++ {
+		select {
+		case <-builder.started:
+		case <-time.After(3 * time.Second):
+			cancel()
+			t.Fatal("configured workers did not start two builds concurrently")
+		}
+	}
+	close(builder.release)
+	deadline := time.After(3 * time.Second)
+	for {
+		r.mu.Lock()
+		finished := r.finished
+		r.mu.Unlock()
+		if finished == 2 {
+			break
+		}
+		select {
+		case <-deadline:
+			cancel()
+			t.Fatal("both builds did not finish")
+		case <-time.After(time.Millisecond):
+		}
+	}
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("worker pool did not stop after cancellation")
 	}
 }

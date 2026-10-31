@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -163,7 +164,13 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 			stopRunner()
 			return buildErr
 		}
-		worker := executionprofile.NewExecutionProfileWorker(executionProfileRepository, builder, logger)
+		workerCount := 1
+		if configured, parseErr := strconv.Atoi(os.Getenv("ORKEST_EXECUTION_PROFILE_BUILD_WORKERS")); parseErr == nil && configured > 0 {
+			workerCount = configured
+		} else if os.Getenv("ORKEST_EXECUTION_PROFILE_BUILD_WORKERS") != "" {
+			logger.Warn("invalid execution profile build worker count; using default", "setting", "ORKEST_EXECUTION_PROFILE_BUILD_WORKERS", "default", workerCount)
+		}
+		worker := executionprofile.NewExecutionProfileWorker(executionProfileRepository, builder, logger, workerCount)
 		runnerWG.Add(1)
 		go func() { defer runnerWG.Done(); worker.Run(runnerCtx) }()
 	}
