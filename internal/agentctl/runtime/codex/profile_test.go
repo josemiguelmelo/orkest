@@ -48,6 +48,9 @@ func TestProvisioningUsesModelAndWorkspaceInstructions(t *testing.T) {
 	if !strings.Contains(environment, "NO_BROWSER=1") || !strings.Contains(environment, "INITIAL_AGENT_MODE=workspace-write") {
 		t.Fatalf("Codex headless permission defaults are missing: %#v", plan.Environment)
 	}
+	if !strings.Contains(environment, `DEFAULT_AUTH_REQUEST={"methodId":"api-key"}`) {
+		t.Fatalf("Codex API-key authentication request is missing: %#v", plan.Environment)
+	}
 }
 
 func TestProvisioningRejectsInvalidSkill(t *testing.T) {
