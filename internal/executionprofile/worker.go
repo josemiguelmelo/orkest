@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"sync"
 	"time"
 
 	"github.com/josemiguelmelo/orkest/internal/core/ids"
@@ -13,13 +14,33 @@ type ExecutionProfileWorker struct {
 	profileRepository ExecutionProfileRepository
 	builder           Builder
 	logger            *slog.Logger
+	workers           int
 }
 
-func NewExecutionProfileWorker(profileRepository ExecutionProfileRepository, builder Builder, logger *slog.Logger) *ExecutionProfileWorker {
-	return &ExecutionProfileWorker{profileRepository: profileRepository, builder: builder, logger: logger}
+func NewExecutionProfileWorker(profileRepository ExecutionProfileRepository, builder Builder, logger *slog.Logger, workerCounts ...int) *ExecutionProfileWorker {
+	workers := 1
+	if len(workerCounts) > 0 {
+		workers = workerCounts[0]
+	}
+	if workers < 1 {
+		workers = 1
+	}
+	return &ExecutionProfileWorker{profileRepository: profileRepository, builder: builder, logger: logger, workers: workers}
 }
 
 func (w *ExecutionProfileWorker) Run(ctx context.Context) {
+	var wg sync.WaitGroup
+	for i := 0; i < w.workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			w.runWorker(ctx)
+		}()
+	}
+	wg.Wait()
+}
+
+func (w *ExecutionProfileWorker) runWorker(ctx context.Context) {
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 	for {

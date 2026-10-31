@@ -13,6 +13,10 @@ profile builds. Source and output images must be published registry references;
 local-only Docker aliases are not supported. Orkest resolves input tags to
 immutable digests before each build.
 
+Set `ORKEST_EXECUTION_PROFILE_BUILD_WORKERS` to the maximum number of profile
+builds this platform process may handle at once. It defaults to `1`; values
+that are not positive integers are ignored and use the default.
+
 Select the deployment-wide backend with `ORKEST_IMAGE_BUILDER`:
 
 - `buildkit` (default) uses pinned BuildKit v0.34.1. By default it uses
@@ -86,7 +90,8 @@ new sessions; updating a profile affects later runs bound to it.
 
 Build jobs are stored with their profile changes in one PostgreSQL transaction.
 Workers claim jobs with `SKIP LOCKED`, renew 90-second leases every 20 seconds,
-and apply a 30-minute operation timeout. Multiple platform processes can build
+and apply a 30-minute operation timeout. The configured number of workers run
+in each platform process, and multiple platform processes can also build
 different profiles concurrently.
 
 BuildKit builds and pushes the image, then Orkest pulls the exported digest into
