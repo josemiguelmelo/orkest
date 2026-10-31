@@ -1,3 +1,4 @@
+// Package docker composes and validates execution images through Docker.
 package docker
 
 import (

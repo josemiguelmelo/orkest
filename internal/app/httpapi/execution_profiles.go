@@ -7,7 +7,9 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/executionprofile"
 )
 
-type executionProfileAPI struct{ service *executionprofile.Service }
+type executionProfileAPI struct {
+	service *executionprofile.ExecutionProfileService
+}
 
 func (a executionProfileAPI) routes(r chi.Router) {
 	r.Route("/organizations/{orgID}/workspaces/{workspaceID}/execution-profiles", func(r chi.Router) {

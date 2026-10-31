@@ -9,17 +9,17 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/core/ids"
 )
 
-type Worker struct {
-	repo    Repository
-	builder Builder
-	logger  *slog.Logger
+type ExecutionProfileWorker struct {
+	profileRepository ExecutionProfileRepository
+	builder           Builder
+	logger            *slog.Logger
 }
 
-func NewWorker(repo Repository, builder Builder, logger *slog.Logger) *Worker {
-	return &Worker{repo: repo, builder: builder, logger: logger}
+func NewExecutionProfileWorker(profileRepository ExecutionProfileRepository, builder Builder, logger *slog.Logger) *ExecutionProfileWorker {
+	return &ExecutionProfileWorker{profileRepository: profileRepository, builder: builder, logger: logger}
 }
 
-func (w *Worker) Run(ctx context.Context) {
+func (w *ExecutionProfileWorker) Run(ctx context.Context) {
 	ticker := time.NewTicker(2 * time.Second)
 	defer ticker.Stop()
 	for {
@@ -37,13 +37,13 @@ func (w *Worker) Run(ctx context.Context) {
 	}
 }
 
-func (w *Worker) process(ctx context.Context) error {
+func (w *ExecutionProfileWorker) process(ctx context.Context) error {
 	started := time.Now()
 	owner, err := ids.NewUUID()
 	if err != nil {
 		return err
 	}
-	b, ok, err := w.repo.Claim(ctx, owner)
+	b, ok, err := w.profileRepository.Claim(ctx, owner)
 	if err != nil || !ok {
 		return err
 	}
@@ -64,7 +64,7 @@ func (w *Worker) process(ctx context.Context) error {
 			case <-buildCtx.Done():
 				return
 			case <-t.C:
-				if w.repo.Heartbeat(buildCtx, buildID, owner) != nil {
+				if w.profileRepository.Heartbeat(buildCtx, buildID, owner) != nil {
 					cancel()
 					return
 				}
@@ -84,7 +84,7 @@ func (w *Worker) process(ctx context.Context) error {
 			stage = "persist_resolved_inputs"
 		}
 		if err == nil {
-			err = w.repo.PinInputs(buildCtx, b)
+			err = w.profileRepository.PinInputs(buildCtx, b)
 		}
 		if err == nil {
 			stage = "build_and_push_validate"
@@ -112,7 +112,7 @@ func (w *Worker) process(ctx context.Context) error {
 	}
 	persistCtx, stop := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer stop()
-	if err := w.repo.Finish(persistCtx, b, status, image, diagnostic); err != nil {
+	if err := w.profileRepository.Finish(persistCtx, b, status, image, diagnostic); err != nil {
 		w.logger.Error("image build result persistence failed", "build_id", b.ID, "workspace_id", b.WorkspaceID,
 			"status", status, "error_type", fmt.Sprintf("%T", err))
 		return err

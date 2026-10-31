@@ -139,4 +139,4 @@ qualify-runtime:
 .PHONY: test-image-composition
 # Requires buildctl, built agentctl-base, registry:3, and moby/buildkit:v0.34.1.
 test-image-composition:
-	go test -tags=docker ./internal/executors/docker -run '^TestDockerImageComposition$$' -count=1 -v
+	go test -tags=docker ./internal/imagebuild/docker -run '^TestDockerImageComposition$$' -count=1 -v

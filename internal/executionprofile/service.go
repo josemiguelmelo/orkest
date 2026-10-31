@@ -14,36 +14,36 @@ import (
 
 var ErrNotConfigured = errors.New("execution image registry is not configured")
 
-type Service struct {
-	repo       Repository
-	access     WorkspaceAccess
-	repository string
-	images     map[coreruntime.Runtime]string
+type ExecutionProfileService struct {
+	profileRepository ExecutionProfileRepository
+	access            WorkspaceAccess
+	imageRepository   string
+	images            map[coreruntime.Runtime]string
 }
 
-func NewService(repo Repository, access WorkspaceAccess, repository string, images map[coreruntime.Runtime]string) *Service {
-	return &Service{repo: repo, access: access, repository: repository, images: images}
+func NewExecutionProfileService(profileRepository ExecutionProfileRepository, access WorkspaceAccess, imageRepository string, images map[coreruntime.Runtime]string) *ExecutionProfileService {
+	return &ExecutionProfileService{profileRepository: profileRepository, access: access, imageRepository: imageRepository, images: images}
 }
 
-func (s *Service) List(ctx context.Context, user, org, ws string) ([]Profile, error) {
+func (s *ExecutionProfileService) List(ctx context.Context, user, org, ws string) ([]Profile, error) {
 	if _, err := s.access.GetWorkspace(ctx, user, org, ws); err != nil {
 		return nil, err
 	}
-	return s.repo.List(ctx, ws)
+	return s.profileRepository.List(ctx, ws)
 }
 
-func (s *Service) Builds(ctx context.Context, user, org, ws, id string) ([]Build, error) {
+func (s *ExecutionProfileService) Builds(ctx context.Context, user, org, ws, id string) ([]Build, error) {
 	if _, err := s.access.GetWorkspace(ctx, user, org, ws); err != nil {
 		return nil, err
 	}
-	if _, err := s.repo.Get(ctx, ws, id); err != nil {
+	if _, err := s.profileRepository.Get(ctx, ws, id); err != nil {
 		return nil, err
 	}
-	return s.repo.Builds(ctx, ws, id)
+	return s.profileRepository.Builds(ctx, ws, id)
 }
 
 // Save snapshots build inputs and enqueues atomically; generation is optimistic concurrency control.
-func (s *Service) Save(ctx context.Context, user, org, ws, id string, generation int64, input Input) (Profile, error) {
+func (s *ExecutionProfileService) Save(ctx context.Context, user, org, ws, id string, generation int64, input Input) (Profile, error) {
 	w, err := s.access.GetWorkspace(ctx, user, org, ws)
 	if err != nil {
 		return Profile{}, err
@@ -59,10 +59,10 @@ func (s *Service) Save(ctx context.Context, user, org, ws, id string, generation
 	if _, err = reference.ParseNormalizedNamed(input.ToolchainImage); err != nil {
 		return Profile{}, modelerrors.ErrInvalid
 	}
-	if s.repository == "" {
+	if s.imageRepository == "" {
 		return Profile{}, ErrNotConfigured
 	}
-	target, parseErr := reference.ParseNormalizedNamed(s.repository)
+	target, parseErr := reference.ParseNormalizedNamed(s.imageRepository)
 	if parseErr != nil || !reference.IsNameOnly(target) {
 		return Profile{}, ErrNotConfigured
 	}
@@ -74,7 +74,7 @@ func (s *Service) Save(ctx context.Context, user, org, ws, id string, generation
 			return Profile{}, err
 		}
 	} else {
-		previous, getErr := s.repo.Get(ctx, ws, id)
+		previous, getErr := s.profileRepository.Get(ctx, ws, id)
 		if getErr != nil {
 			return Profile{}, getErr
 		}
@@ -93,13 +93,13 @@ func (s *Service) Save(ctx context.Context, user, org, ws, id string, generation
 	}
 	p := Profile{ID: id, WorkspaceID: ws, Input: input, Generation: generation}
 	provider, _ := coreruntime.ProviderFor(input.Runtime)
-	b := Build{RuntimeVersion: provider.Version(), ID: buildID, ProfileID: id, WorkspaceID: ws, Runtime: input.Runtime, ToolchainImage: input.ToolchainImage, BaseImage: base, Destination: s.repository + ":build-" + buildID}
-	return s.repo.Save(ctx, p, b, create)
+	b := Build{RuntimeVersion: provider.Version(), ID: buildID, ProfileID: id, WorkspaceID: ws, Runtime: input.Runtime, ToolchainImage: input.ToolchainImage, BaseImage: base, Destination: s.imageRepository + ":build-" + buildID}
+	return s.profileRepository.Save(ctx, p, b, create)
 }
 
 // Resolve is internal: callers have already authorized the workspace operation.
-func (s *Service) Resolve(ctx context.Context, ws, id string, runtime coreruntime.Runtime) (string, error) {
-	p, err := s.repo.Get(ctx, ws, id)
+func (s *ExecutionProfileService) Resolve(ctx context.Context, ws, id string, runtime coreruntime.Runtime) (string, error) {
+	p, err := s.profileRepository.Get(ctx, ws, id)
 	if err != nil {
 		return "", err
 	}
@@ -109,8 +109,8 @@ func (s *Service) Resolve(ctx context.Context, ws, id string, runtime coreruntim
 	return p.ExecutionImage, nil
 }
 
-func (s *Service) ValidateProfile(ctx context.Context, ws, id string, runtime coreruntime.Runtime) error {
-	p, err := s.repo.Get(ctx, ws, id)
+func (s *ExecutionProfileService) ValidateProfile(ctx context.Context, ws, id string, runtime coreruntime.Runtime) error {
+	p, err := s.profileRepository.Get(ctx, ws, id)
 	if err != nil {
 		return err
 	}

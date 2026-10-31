@@ -5,7 +5,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os/exec"
+	"os/user"
+	"strconv"
 	"strings"
 	"time"
 
@@ -13,6 +16,20 @@ import (
 	coreruntime "github.com/josemiguelmelo/orkest/internal/core/runtime"
 	"github.com/josemiguelmelo/orkest/internal/executionprofile"
 )
+
+func currentContainerUser() (string, error) {
+	current, err := user.Current()
+	if err != nil {
+		return "", fmt.Errorf("resolve current user for image validation: %w", err)
+	}
+	if _, err = strconv.Atoi(current.Uid); err != nil {
+		return "", errors.New("image validation requires a numeric local user ID")
+	}
+	if _, err = strconv.Atoi(current.Gid); err != nil {
+		return "", errors.New("image validation requires a numeric local group ID")
+	}
+	return current.Uid + ":" + current.Gid, nil
+}
 
 // ImageStore resolves registry inputs and validates published images using Docker.
 // Commands receive no workspace secrets and their raw output is never published.

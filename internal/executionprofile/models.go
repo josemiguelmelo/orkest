@@ -46,7 +46,7 @@ type Build struct {
 	CreatedAt         time.Time           `json:"createdAt"`
 }
 
-type Repository interface {
+type ExecutionProfileRepository interface {
 	List(context.Context, string) ([]Profile, error)
 	Get(context.Context, string, string) (Profile, error)
 	Save(context.Context, Profile, Build, bool) (Profile, error)

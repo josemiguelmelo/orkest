@@ -13,7 +13,7 @@ import (
 )
 
 type memoryRepo struct {
-	Repository
+	ExecutionProfileRepository
 	profile  Profile
 	build    Build
 	claimed  bool
@@ -84,12 +84,12 @@ func TestProfileAuthorizationAndScope(t *testing.T) {
 	r := &memoryRepo{profile: Profile{ID: "p", WorkspaceID: "w", Input: Input{Runtime: coreruntime.OpenCode}}}
 	input := Input{Name: "Java", Runtime: coreruntime.OpenCode, ToolchainImage: "example.com/team/java:21"}
 	for _, role := range []string{"viewer", "member"} {
-		s := NewService(r, workspaceAccess{role}, "example.com/outputs", nil)
+		s := NewExecutionProfileService(r, workspaceAccess{role}, "example.com/outputs", nil)
 		if _, err := s.Save(ctx, "u", "o", "w", "", 0, input); !errors.Is(err, modelerrors.ErrForbidden) {
 			t.Fatalf("%s allowed build: %v", role, err)
 		}
 	}
-	s := NewService(r, workspaceAccess{"admin"}, "example.com/outputs", nil)
+	s := NewExecutionProfileService(r, workspaceAccess{"admin"}, "example.com/outputs", nil)
 	if _, err := s.Resolve(ctx, "other", "p", coreruntime.OpenCode); !errors.Is(err, modelerrors.ErrNotFound) {
 		t.Fatal(err)
 	}
@@ -107,7 +107,7 @@ func TestProfileAuthorizationAndScope(t *testing.T) {
 func TestWorkerReconcilesExpiredAttemptWithoutRebuilding(t *testing.T) {
 	r := &memoryRepo{build: Build{ID: "b", Status: "reconciling"}}
 	builder := &builderFake{}
-	w := NewWorker(r, builder, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	w := NewExecutionProfileWorker(r, builder, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err := w.process(context.Background()); err != nil {
 		t.Fatal(err)
 	}
@@ -119,7 +119,7 @@ func TestWorkerReconcilesExpiredAttemptWithoutRebuilding(t *testing.T) {
 func TestWorkerFailureIsSanitizedAndNotRetried(t *testing.T) {
 	r := &memoryRepo{build: Build{ID: "b", Status: "building"}}
 	builder := &builderFake{fail: true}
-	w := NewWorker(r, builder, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	w := NewExecutionProfileWorker(r, builder, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err := w.process(context.Background()); err != nil {
 		t.Fatal(err)
 	}

@@ -19,7 +19,7 @@ func (a profileRouteAccess) GetWorkspace(context.Context, string, string, string
 }
 
 type profileRouteRepository struct {
-	executionprofile.Repository
+	executionprofile.ExecutionProfileRepository
 	saved int
 }
 
@@ -34,7 +34,7 @@ func TestProfileCreationEnqueuesAndEnforcesManagementRole(t *testing.T) {
 	for _, role := range []string{"admin", "member", "viewer"} {
 		t.Run(role, func(t *testing.T) {
 			repo := &profileRouteRepository{}
-			service := executionprofile.NewService(repo, profileRouteAccess{role}, "example.com/images", nil)
+			service := executionprofile.NewExecutionProfileService(repo, profileRouteAccess{role}, "example.com/images", nil)
 			router := chi.NewRouter()
 			executionProfileAPI{service: service}.routes(router)
 			request := httptest.NewRequest(http.MethodPost, "/organizations/o/workspaces/w/execution-profiles/", strings.NewReader(`{"name":"Java","description":"Backend","runtime":"opencode","toolchainImage":"example.com/java:21"}`))
@@ -59,7 +59,7 @@ func TestProfileCreationEnqueuesAndEnforcesManagementRole(t *testing.T) {
 }
 
 func TestProfileCreationReportsMissingRegistryOnClientRoute(t *testing.T) {
-	service := executionprofile.NewService(nil, profileRouteAccess{"admin"}, "", nil)
+	service := executionprofile.NewExecutionProfileService(nil, profileRouteAccess{"admin"}, "", nil)
 	router := chi.NewRouter()
 	executionProfileAPI{service: service}.routes(router)
 	for _, suffix := range []string{"", "/"} {

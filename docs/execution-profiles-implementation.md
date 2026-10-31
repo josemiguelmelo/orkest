@@ -2,7 +2,7 @@
 ### BuildKit refinement
 
 Image composition/publishing now lives in `internal/imagebuild/buildkit` and uses
-standalone `buildctl` (tested v0.34.1). `internal/executors/docker/image_store.go`
+standalone `buildctl` (tested v0.34.1). `internal/imagebuild/docker/image_store.go`
 only resolves registry inputs, pulls output artifacts, and validates them. The
 worker's existing Builder interface and PostgreSQL persistence are unchanged.
 The exporter digest is verified before promotion; metadata is kept outside the
