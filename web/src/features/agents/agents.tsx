@@ -34,7 +34,7 @@ const schema = z
   .object({
     name: z.string().trim().min(1).max(200),
     description: z.string().max(2000),
-    runtime: z.enum(['opencode', 'claude-code', 'codex', 'github-copilot']),
+    runtime: z.enum(['opencode', 'claude-code', 'codex', 'github-copilot', 'kiro']),
     provider: z.string().trim().min(1).max(200),
     model: z.string().trim().min(1).max(200),
     systemPrompt: z.string().max(100000),
@@ -58,6 +58,9 @@ const schema = z
     if (value.runtime === 'github-copilot' && value.provider.toLowerCase() !== 'github-copilot') {
       context.addIssue({ code: 'custom', path: ['provider'], message: 'GitHub Copilot requires the GitHub Copilot provider.' });
     }
+    if (value.runtime === 'kiro' && value.provider.toLowerCase() !== 'kiro') {
+      context.addIssue({ code: 'custom', path: ['provider'], message: 'Kiro requires the Kiro provider.' });
+    }
   });
 type ModelCatalog = Record<string, { name?: string; models?: Record<string, { name?: string }> }>;
 const modelCatalogQuery = {
@@ -73,6 +76,7 @@ function runtimeName(runtime: Agent['runtime']) {
   if (runtime === 'claude-code') return 'Claude Code';
   if (runtime === 'codex') return 'Codex';
   if (runtime === 'github-copilot') return 'GitHub Copilot';
+  if (runtime === 'kiro') return 'Kiro';
   return 'OpenCode';
 }
 export function AgentsPage() {
@@ -187,14 +191,14 @@ function AgentEditor({ item, onClose }: { item: Agent | null; onClose: () => voi
   const runtimeProfiles = useQuery(agentRuntimeProfilesQuery(scope));
   const skills = useQuery(skillsQuery(scope));
   const catalog = useQuery(modelCatalogQuery);
-  const [customModel, setCustomModel] = useState(item?.runtime === 'github-copilot');
+  const [customModel, setCustomModel] = useState(item?.runtime === 'github-copilot' || item?.runtime === 'kiro');
   const form = useForm({
     resolver: zodResolver(schema),
     defaultValues: {
       name: item?.name ?? '',
       description: item?.description ?? '',
       runtime: item?.runtime ?? 'opencode',
-      provider: item?.runtime === 'claude-code' ? 'anthropic' : item?.runtime === 'codex' ? 'openai' : item?.runtime === 'github-copilot' ? 'github-copilot' : (item?.provider ?? ''),
+      provider: item?.runtime === 'claude-code' ? 'anthropic' : item?.runtime === 'codex' ? 'openai' : item?.runtime === 'github-copilot' ? 'github-copilot' : item?.runtime === 'kiro' ? 'kiro' : (item?.provider ?? ''),
       model: item?.model ?? '',
       systemPrompt: item?.systemPrompt ?? '',
       permissionPolicy: item?.permissionPolicy ?? 'ask',
@@ -291,8 +295,8 @@ function AgentEditor({ item, onClose }: { item: Agent | null; onClose: () => voi
                       form.setValue('provider', 'anthropic', { shouldDirty: true });
                     if (profile.runtime === 'codex')
                       form.setValue('provider', 'openai', { shouldDirty: true });
-                    if (profile.runtime === 'github-copilot') {
-                      form.setValue('provider', 'github-copilot', { shouldDirty: true });
+                    if (profile.runtime === 'github-copilot' || profile.runtime === 'kiro') {
+                      form.setValue('provider', profile.runtime, { shouldDirty: true });
                       setCustomModel(true);
                     } else {
                       setCustomModel(false);
@@ -330,15 +334,21 @@ function AgentEditor({ item, onClose }: { item: Agent | null; onClose: () => voi
                     form.setValue('model', '', { shouldDirty: true });
                     setCustomModel(true);
                   }
+                  if (event.currentTarget.value === 'kiro') {
+                    form.setValue('provider', 'kiro', { shouldDirty: true });
+                    form.setValue('model', '', { shouldDirty: true });
+                    setCustomModel(true);
+                  }
                 }}
               >
                 <option value="opencode">OpenCode</option>
                 <option value="claude-code">Claude Code</option>
                 <option value="codex">Codex</option>
                 <option value="github-copilot">GitHub Copilot</option>
+                <option value="kiro">Kiro</option>
               </select>
             </Field>
-            {customModel || form.watch('runtime') === 'github-copilot' ? (
+            {customModel || form.watch('runtime') === 'github-copilot' || form.watch('runtime') === 'kiro' ? (
               <div className="form-grid">
                 <Field label="Model provider" error={form.formState.errors.provider?.message}>
                   <input

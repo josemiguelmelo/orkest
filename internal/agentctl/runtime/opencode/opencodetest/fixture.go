@@ -17,7 +17,8 @@ func Run(version string) {
 	claudeFixture := os.Getenv("ORKEST_CLAUDE_ACP_FIXTURE") == "1"
 	codexFixture := os.Getenv("ORKEST_CODEX_ACP_FIXTURE") == "1"
 	copilotFixture := os.Getenv("ORKEST_COPILOT_ACP_FIXTURE") == "1"
-	optionsFixture := claudeFixture || codexFixture || copilotFixture
+	kiroFixture := os.Getenv("ORKEST_KIRO_ACP_FIXTURE") == "1"
+	optionsFixture := claudeFixture || codexFixture || copilotFixture || kiroFixture
 	if os.Getenv("ORKEST_ACP_FIXTURE") == "1" || optionsFixture {
 		if len(os.Args) > 1 && os.Args[1] == "--version" {
 			if os.Getenv("ORKEST_ACP_WRONG_VERSION") == "1" {
@@ -30,6 +31,8 @@ func Run(version string) {
 				fmt.Println("@agentclientprotocol/codex-acp " + version)
 			} else if copilotFixture {
 				fmt.Println("GitHub Copilot CLI " + version + ".")
+			} else if kiroFixture {
+				fmt.Println("kiro-cli " + version)
 			} else {
 				fmt.Println(version)
 			}
@@ -107,6 +110,8 @@ func Run(version string) {
 							data = []byte(os.Getenv("CODEX_CONFIG"))
 						} else if copilotFixture {
 							data, err = os.ReadFile(filepath.Join(os.Getenv("COPILOT_HOME"), "copilot-instructions.md"))
+						} else if kiroFixture {
+							data, err = os.ReadFile(filepath.Join(os.Getenv("KIRO_HOME"), "agents", "orkest.json"))
 						} else if optionsFixture {
 							data, err = fixtureSystemPrompt()
 						} else {
@@ -117,6 +122,8 @@ func Run(version string) {
 							data = []byte(os.Getenv("CODEX_CONFIG"))
 						} else if copilotFixture {
 							data, err = os.ReadFile(filepath.Join(os.Getenv("COPILOT_HOME"), "skills", "conformance", "SKILL.md"))
+						} else if kiroFixture {
+							data, err = os.ReadFile(filepath.Join(os.Getenv("KIRO_HOME"), "agents", "orkest.json"))
 						} else if optionsFixture {
 							data, err = fixtureSystemPrompt()
 						} else {
@@ -189,6 +196,9 @@ func fixtureSend(value any) {
 }
 
 func fixtureDataDir(claude bool) string {
+	if os.Getenv("ORKEST_KIRO_ACP_FIXTURE") == "1" {
+		return os.Getenv("KIRO_HOME")
+	}
 	if os.Getenv("ORKEST_COPILOT_ACP_FIXTURE") == "1" {
 		return os.Getenv("COPILOT_HOME")
 	}

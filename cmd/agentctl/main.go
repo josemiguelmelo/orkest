@@ -17,6 +17,7 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/agentctl/runtime/claudecode"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/runtime/codex"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/runtime/githubcopilot"
+	"github.com/josemiguelmelo/orkest/internal/agentctl/runtime/kiro"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/runtime/opencode"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/runtimehost"
 	"github.com/josemiguelmelo/orkest/internal/core/environment"
@@ -32,7 +33,7 @@ func main() {
 	}
 
 	address := flag.String("listen", environment.EnvironmentDefault("AGENTCTL_LISTEN", "127.0.0.1:8081"), "agentctl HTTP listen address")
-	runtimeName := flag.String("runtime", "", "required runtime assigned to this agentctl worker (opencode|claude-code|codex|github-copilot)")
+	runtimeName := flag.String("runtime", "", "required runtime assigned to this agentctl worker (opencode|claude-code|codex|github-copilot|kiro)")
 	workDir := flag.String("work-dir", environment.EnvironmentDefault("AGENTCTL_WORK_DIR", ""), "absolute task working directory")
 	stateDir := flag.String("state-dir", environment.EnvironmentDefault("AGENTCTL_STATE_DIR", ""), "absolute durable task state directory")
 
@@ -75,6 +76,8 @@ func runtimeProfile(runtime coreruntime.Runtime) (agentruntime.RuntimeProfile, e
 		return codex.Profile{}, nil
 	case coreruntime.GitHubCopilot:
 		return githubcopilot.Profile{}, nil
+	case coreruntime.Kiro:
+		return kiro.Profile{}, nil
 	default:
 		return nil, fmt.Errorf("unsupported runtime %q", runtime)
 	}

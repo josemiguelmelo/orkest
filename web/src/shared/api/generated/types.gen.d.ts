@@ -132,7 +132,7 @@ export type TaskRunEvent = {
 export type ExecutionProfileInput = {
     name: string;
     description: string;
-    runtime: 'opencode' | 'claude-code' | 'codex' | 'github-copilot';
+    runtime: 'opencode' | 'claude-code' | 'codex' | 'github-copilot' | 'kiro';
     toolchainImage: string;
     generation?: number;
 };
@@ -151,7 +151,7 @@ export type ExecutionProfileBuild = {
     profileId: string;
     workspaceId: string;
     generation: number;
-    runtime: 'opencode' | 'claude-code' | 'codex' | 'github-copilot';
+    runtime: 'opencode' | 'claude-code' | 'codex' | 'github-copilot' | 'kiro';
     toolchainImage: string;
     baseImage: string;
     runtimeVersion?: string;
@@ -169,7 +169,7 @@ export type Agent = {
     id: string;
     workspaceId: string;
     name: string;
-    runtime: 'opencode' | 'claude-code' | 'codex' | 'github-copilot';
+    runtime: 'opencode' | 'claude-code' | 'codex' | 'github-copilot' | 'kiro';
     provider: string;
     model: string;
     description: string;
@@ -180,7 +180,7 @@ export type Agent = {
 };
 export type AgentRuntimeProfileInput = {
     name: string;
-    runtime: 'opencode' | 'claude-code' | 'codex' | 'github-copilot';
+    runtime: 'opencode' | 'claude-code' | 'codex' | 'github-copilot' | 'kiro';
     modelProvider: string;
     modelIdentifier: string;
 };
@@ -324,7 +324,7 @@ export type WorkspaceRole = {
 };
 export type AgentDefinition = {
     name: string;
-    runtime: 'opencode' | 'claude-code' | 'codex' | 'github-copilot';
+    runtime: 'opencode' | 'claude-code' | 'codex' | 'github-copilot' | 'kiro';
     provider: string;
     model: string;
     description: string;

@@ -16,6 +16,7 @@ const (
 	ClaudeCode    Runtime = "claude-code"
 	Codex         Runtime = "codex"
 	GitHubCopilot Runtime = "github-copilot"
+	Kiro          Runtime = "kiro"
 )
 
 // Definition contains the provider/model fields used by runtime-specific
@@ -39,6 +40,7 @@ func Providers() []Provider {
 		ClaudeCodeProvider{},
 		CodexProvider{},
 		GitHubCopilotProvider{},
+		KiroProvider{},
 	}
 }
 

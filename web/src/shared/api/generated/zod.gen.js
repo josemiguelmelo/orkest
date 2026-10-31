@@ -143,7 +143,8 @@ export const zExecutionProfileInput = z.object({
         'opencode',
         'claude-code',
         'codex',
-        'github-copilot'
+        'github-copilot',
+        'kiro'
     ]),
     toolchainImage: z.string().min(1),
     generation: z.coerce.bigint().gte(BigInt(0)).max(BigInt('9223372036854775807'), { error: 'Invalid value: Expected int64 to be <= 9223372036854775807' }).optional()
@@ -167,7 +168,8 @@ export const zExecutionProfileBuild = z.object({
         'opencode',
         'claude-code',
         'codex',
-        'github-copilot'
+        'github-copilot',
+        'kiro'
     ]),
     toolchainImage: z.string(),
     baseImage: z.string(),
@@ -190,7 +192,8 @@ export const zAgent = z.object({
         'opencode',
         'claude-code',
         'codex',
-        'github-copilot'
+        'github-copilot',
+        'kiro'
     ]),
     provider: z.string(),
     model: z.string(),
@@ -206,7 +209,8 @@ export const zAgentRuntimeProfileInput = z.object({
         'opencode',
         'claude-code',
         'codex',
-        'github-copilot'
+        'github-copilot',
+        'kiro'
     ]),
     modelProvider: z.string().min(1).max(200),
     modelIdentifier: z.string().min(1).max(200)
@@ -368,7 +372,8 @@ export const zAgentDefinition = z.object({
         'opencode',
         'claude-code',
         'codex',
-        'github-copilot'
+        'github-copilot',
+        'kiro'
     ]),
     provider: z.string().min(1).max(200),
     model: z.string().min(1).max(200),

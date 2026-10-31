@@ -48,7 +48,7 @@ func (Profile) BuildProvisioningPlan(settings agentruntime.ResolvedRuntimeSettin
 		files[filepath.ToSlash(filepath.Join(configDir, "copilot", "skills", skill.ID, "SKILL.md"))] = []byte(skill.SkillMD + "\n")
 	}
 	if settings.Model.ID == "" {
-		return agentruntime.ProvisioningPlan{}, errors.New("Copilot model is required")
+		return agentruntime.ProvisioningPlan{}, errors.New("copilot model is required")
 	}
 	environment := []string{
 		"PATH=" + agentruntime.DefaultRuntimePath,
@@ -62,7 +62,7 @@ func (Profile) BuildProvisioningPlan(settings agentruntime.ResolvedRuntimeSettin
 	}
 	return agentruntime.ProvisioningPlan{
 		Directories: []string{"home", filepath.ToSlash(filepath.Join(configDir, "copilot")), filepath.ToSlash(filepath.Join(configDir, "copilot", "skills"))},
-		Files: files, Environment: environment,
+		Files:       files, Environment: environment,
 	}, nil
 }
 

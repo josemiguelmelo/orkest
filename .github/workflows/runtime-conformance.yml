@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runtime: [opencode, claude-code, codex, github-copilot]
+        runtime: [opencode, claude-code, codex, github-copilot, kiro]
     environment: runtime-qualification
     steps:
       - uses: actions/checkout@v4.2.2
@@ -44,11 +44,18 @@ jobs:
           RUNTIME: ${{ matrix.runtime }}
         run: |
           VERSION=$(python3 -c 'import json, os; print(json.load(open("internal/core/runtime/versions.json"))[os.environ["RUNTIME"]].removeprefix("opencode v"))')
+          if [[ "$RUNTIME" == "kiro" ]]; then test "$VERSION" = "2.37.0"; fi
           case "$RUNTIME" in
             opencode) npm install --global "@opencode/cli@$VERSION" ;;
             claude-code) npm install --global "@agentclientprotocol/claude-agent-acp@$VERSION" ;;
             codex) npm install --global "@agentclientprotocol/codex-acp@$VERSION" ;;
             github-copilot) npm install --global "@github/copilot@$VERSION" ;;
+            kiro) \
+              curl -fsSL "https://prod.download.cli.kiro.dev/stable/$VERSION/kirocli-x86_64-linux.tar.gz" -o /tmp/kiro-cli.tar.gz; \
+              echo "02c49873ba64285f34048aac377ccf0b546b5627f39dd775bae9fa306112ff19  /tmp/kiro-cli.tar.gz" | sha256sum -c -; \
+              mkdir /tmp/kiro-cli && tar -xzf /tmp/kiro-cli.tar.gz -C /tmp/kiro-cli; \
+              sudo env Q_INSTALL_GLOBAL=1 Q_SKIP_SETUP=1 /tmp/kiro-cli/kirocli/install.sh; \
+              kiro-cli --version | grep -F "$VERSION" ;;
             *) echo "No pinned installer for $RUNTIME"; exit 1 ;;
           esac
       - name: Strict live qualification (missing settings fail)
@@ -58,9 +65,10 @@ jobs:
           ORKEST_CLAUDE_CODE_BINARY: claude-agent-acp
           ORKEST_CODEX_BINARY: codex-acp
           ORKEST_GITHUB_COPILOT_BINARY: copilot
+          ORKEST_KIRO_BINARY: kiro-cli
           QUALIFY_RUNTIME: ${{ matrix.runtime }}
-          ORKEST_TEST_MODEL_PROVIDER: ${{ matrix.runtime == 'claude-code' && 'anthropic' || matrix.runtime == 'codex' && 'openai' || matrix.runtime == 'github-copilot' && 'github-copilot' || vars.ORKEST_TEST_MODEL_PROVIDER }}
-          ORKEST_TEST_MODEL_ID: ${{ matrix.runtime == 'claude-code' && vars.ORKEST_CLAUDE_CODE_TEST_MODEL_ID || matrix.runtime == 'codex' && vars.ORKEST_CODEX_TEST_MODEL_ID || matrix.runtime == 'github-copilot' && vars.ORKEST_GITHUB_COPILOT_TEST_MODEL_ID || matrix.runtime == 'opencode' && vars.ORKEST_TEST_MODEL_ID || '' }}
+          ORKEST_TEST_MODEL_PROVIDER: ${{ matrix.runtime == 'claude-code' && 'anthropic' || matrix.runtime == 'codex' && 'openai' || matrix.runtime == 'github-copilot' && 'github-copilot' || matrix.runtime == 'kiro' && 'kiro' || vars.ORKEST_TEST_MODEL_PROVIDER }}
+          ORKEST_TEST_MODEL_ID: ${{ matrix.runtime == 'claude-code' && vars.ORKEST_CLAUDE_CODE_TEST_MODEL_ID || matrix.runtime == 'codex' && vars.ORKEST_CODEX_TEST_MODEL_ID || matrix.runtime == 'github-copilot' && vars.ORKEST_GITHUB_COPILOT_TEST_MODEL_ID || matrix.runtime == 'kiro' && vars.ORKEST_KIRO_TEST_MODEL_ID || matrix.runtime == 'opencode' && vars.ORKEST_TEST_MODEL_ID || '' }}
           ORKEST_TEST_PROVIDER_ENV: ${{ vars.ORKEST_TEST_PROVIDER_ENV }}
           ORKEST_TEST_APPROVAL_PROMPT: ${{ vars.ORKEST_TEST_APPROVAL_PROMPT }}
           ORKEST_TEST_RECOVERY_PROMPT: ${{ vars.ORKEST_TEST_RECOVERY_PROMPT }}
@@ -71,5 +79,6 @@ jobs:
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
+          KIRO_API_KEY: ${{ secrets.KIRO_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: make qualify-runtime

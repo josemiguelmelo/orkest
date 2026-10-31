@@ -15,6 +15,7 @@ lifecycle of one execution run.
 | `runtime/opencode` | Pure OpenCode native configuration rendering |
 | `runtime/claudecode` | Claude Code ACP session options and isolated configuration paths |
 | `runtime/githubcopilot` | GitHub Copilot CLI ACP startup, model, permissions, instructions, and skills |
+| `runtime/kiro` | Kiro CLI ACP V3 startup, model, permissions, instructions, and skills |
 | `httpapi` | One REST/WebSocket server, transport-owned controller interface, wire representations |
 | `daemon` | Standalone server lifecycle and periodic restoration supervision |
 
@@ -151,6 +152,15 @@ requests, while `autonomous` enables Copilot CLI's allow-all mode inside the
 isolated task container.
 See [task sessions](task-sessions.md) for prerequisites and limitations.
 
+Kiro CLI 2.37.0 uses the shared ACP host with its V3 ACP server. Set the
+`KIRO_API_KEY` workspace secret for headless authentication. `kiro` is the
+fixed model provider, and the model identifier is written into an isolated
+Kiro agent profile. The profile includes task instructions and selected skills;
+HTTP MCP servers are passed through ACP. `ask` keeps Kiro capability approvals
+interactive, while `autonomous` adds an allow rule for Kiro capabilities inside
+the task container. Deterministic conformance is covered; live model execution,
+approval round trips, and interrupted-turn replay remain unqualified.
+
 `internal/core/runtime/versions.json` is the single runtime version inventory.
 Go embeds it for supported versions, provider metadata, and default image tags.
 Each Dockerfile reads it directly for the installed package version; Make reads
@@ -170,6 +180,9 @@ approval/cancellation/recovery prompts, MCP settings, and granted credential nam
 Set `ORKEST_RUN_LIVE_QUALIFICATION=true` in that environment to enable paid live
 qualification. Until enabled, CI runs deterministic tests and reports that live
 qualification is pending. Once enabled, missing settings fail qualification.
+Kiro live qualification uses provider `kiro` and
+`ORKEST_KIRO_TEST_MODEL_ID`; grant `KIRO_API_KEY` through
+`ORKEST_TEST_PROVIDER_ENV`.
 Locally, `make qualify-runtime` checks all runtimes;
 `make qualify-runtime QUALIFY_RUNTIME=claude-code` checks Claude alone with
 `ORKEST_TEST_MODEL_ID` set to its model and `ORKEST_CLAUDE_CODE_BINARY` pointing

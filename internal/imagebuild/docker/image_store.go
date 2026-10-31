@@ -191,6 +191,9 @@ func runtimeProbe(runtime coreruntime.Runtime, version string) string {
 	if runtime == coreruntime.GitHubCopilot {
 		return "test \"$(copilot --version | head -n 1)\" = 'GitHub Copilot CLI " + version + ".'"
 	}
+	if runtime == coreruntime.Kiro {
+		return "kiro-cli --version | grep -F '" + version + "'"
+	}
 	return "test \"$(codex-acp --version)\" = '@agentclientprotocol/codex-acp " + version + "'"
 }
 

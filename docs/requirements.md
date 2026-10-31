@@ -11,7 +11,7 @@ Orkest is a platform for orchestrating, monitoring, and interacting with AI agen
 - Support multiple organizations, users, and workspaces from day one.
 - Delegate authentication to Keycloak to support username/password and SSO through identity-provider configuration.
 - Use organization roles Owner/Admin/Member and workspace roles Admin/Member/Viewer.
-- Support OpenCode, Claude Code, Codex, and GitHub Copilot CLI runtimes through extensible runtime adapters.
+- Support OpenCode, Claude Code, Codex, GitHub Copilot CLI, and Kiro CLI runtimes through extensible runtime adapters.
 - Provide built-in tools for communicating with the core platform; user-defined tools are outside MVP scope.
 - Agent definitions select one of two permission policies across supported runtimes: `ask` preserves interactive approval behavior and forwards runtime approval requests to the task UI; `autonomous` configures the provider to proceed without interactive approval inside its isolated task environment. Native sandbox behavior can vary by provider. Existing agents default to `ask`.
 - Support manual task creation and tasks imported from GitHub Projects v2 issue and draft issue items.
@@ -25,7 +25,7 @@ Orkest is a platform for orchestrating, monitoring, and interacting with AI agen
 - Allow a task to involve multiple repositories registered in its workspace.
 - Treat external systems as authoritative for imported task content; users edit that content at the source.
 
-Automatic assignment and automatic movement into in progress are outside the MVP. OpenCode, Claude Code, Codex, and GitHub Copilot CLI are supported through pinned runtime adapters. Codex uses the ACP adapter and an OpenAI model selection; API-key credentials are provided through workspace secrets. GitHub Copilot CLI uses ACP and a GitHub Copilot model selection; credentials are provided through workspace secrets. Specific model, deployment, and technology choices remain open.
+Automatic assignment and automatic movement into in progress are outside the MVP. OpenCode, Claude Code, Codex, GitHub Copilot CLI, and Kiro CLI are supported through pinned runtime adapters. Codex uses the ACP adapter and an OpenAI model selection; API-key credentials are provided through workspace secrets. GitHub Copilot CLI uses ACP and a GitHub Copilot model selection; credentials are provided through workspace secrets. Kiro CLI uses ACP V3 and the `kiro` model provider; `KIRO_API_KEY` is supplied through workspace secrets.
 
 For local Docker development only, operators may set `ORKEST_CODEX_AUTH_FILE`
 to mount their host Codex auth file into Codex task containers. This is an
@@ -101,7 +101,7 @@ The exposure mechanism for internal tools remains an implementation decision; an
 
 ### 3.6 MCP Server
 
-An MCP server configuration represents a workspace-scoped HTTP connection to capabilities provided by an external server, such as GitHub or Jira. MVP supports remote Streamable HTTP servers through the configured runtime adapters, including OpenCode, Claude Code, Codex, and GitHub Copilot CLI; stdio servers and OAuth setup are outside MVP scope. Agent definitions select zero or more MCP servers registered in the same workspace.
+An MCP server configuration represents a workspace-scoped HTTP connection to capabilities provided by an external server, such as GitHub or Jira. MVP supports remote Streamable HTTP servers through the configured runtime adapters, including OpenCode, Claude Code, Codex, GitHub Copilot CLI, and Kiro CLI; stdio servers and OAuth setup are outside MVP scope. Agent definitions select zero or more MCP servers registered in the same workspace.
 
 Configuration includes a display name, absolute HTTP(S) endpoint URL, and optional custom request headers. Header values are encrypted at rest using the integration encryption key, write-only in APIs, and omitted from ordinary logs. Updates that omit headers preserve stored values; an explicitly supplied empty header map clears them. At launch, only the selected servers and decrypted headers are passed to agentctl and configured in the selected runtime. Server deletion removes its agent selections. MCP server changes affect future runs; already-running processes keep their startup configuration.
 
@@ -182,7 +182,7 @@ Required user-facing capabilities:
 
 ### 4.1 Runtime selection
 
-OpenCode, Claude Code, Codex, and GitHub Copilot CLI are supported runtimes. The platform must distinguish the agent runtime from the model provider and model identifier. Model selection remains configurable on agent definitions, allowing available free models without depending on a permanently free hardcoded model. Claude Code definitions use provider `anthropic` and a configured Claude model identifier. Codex definitions use provider `openai` and a configured Codex model identifier. GitHub Copilot CLI definitions use provider `github-copilot` and a configured Copilot model identifier. Codex runs use API-key authentication from workspace secrets; browser-based ChatGPT login is not part of the supported headless flow. GitHub Copilot CLI credentials are supplied through workspace secrets.
+OpenCode, Claude Code, Codex, GitHub Copilot CLI, and Kiro CLI are supported runtimes. The platform must distinguish the agent runtime from the model provider and model identifier. Model selection remains configurable on agent definitions, allowing available free models without depending on a permanently free hardcoded model. Claude Code definitions use provider `anthropic` and a configured Claude model identifier. Codex definitions use provider `openai` and a configured Codex model identifier. GitHub Copilot CLI definitions use provider `github-copilot` and a configured Copilot model identifier. Kiro CLI definitions use provider `kiro` and a configured Kiro model identifier. Codex runs use API-key authentication from workspace secrets; browser-based ChatGPT login is not part of the supported headless flow. GitHub Copilot and Kiro CLI credentials are supplied through workspace secrets.
 
 ### 4.1.1 OpenCode runtime requirements
 
@@ -299,7 +299,7 @@ Event retention, recovery time targets, host-loss guarantees, and overall availa
 
 - Users authenticate through Keycloak and access organizations/workspaces subject to application membership and role permissions.
 - A failed/interrupted execution is visible while its task remains in progress; a normal task failure does not automatically start another attempt.
-- OpenCode, Claude Code, Codex, and GitHub Copilot CLI execute through agentctl with configured model selection, HTTP MCP connections, and task-specific approvals.
+- OpenCode, Claude Code, Codex, GitHub Copilot CLI, and Kiro CLI execute through agentctl with configured model selection, HTTP MCP connections, and task-specific approvals.
 - Built-in platform tools expose only authorized workspace task and repository information; no custom tool catalog is required.
 - The skill catalog is separate from the deferred custom tool catalog. Skill IDs are globally unique to prevent collisions across scopes. Skill frontmatter requires a matching `name`, a non-empty `description`, and a Markdown instruction body.
 - A user can register repositories, create an agent definition, and add two team members using that definition.
