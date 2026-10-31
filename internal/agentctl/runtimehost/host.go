@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -36,6 +37,8 @@ type Host struct {
 	environment     Environment
 	cliAuthAdapters []gitprovider.CLIAuthAdapter
 }
+
+var runtimeVersionPattern = regexp.MustCompile(`^(?:[A-Za-z][A-Za-z0-9._+-]* )?v?[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$`)
 
 // New binds runtime contracts to an explicitly granted execution environment.
 func New(profile agentruntime.RuntimeProfile, factory agentruntime.ProtocolClientFactory, environment Environment, cliAuthAdapters ...gitprovider.CLIAuthAdapter) *Host {
@@ -301,17 +304,7 @@ func verifyRuntimeVersion(ctx context.Context, executable string, args []string,
 }
 
 func safeRuntimeVersion(value string) bool {
-	if value == "" || len(value) > 64 {
-		return false
-	}
-	for _, char := range value {
-		switch {
-		case char >= 'a' && char <= 'z', char >= 'A' && char <= 'Z', char >= '0' && char <= '9', strings.ContainsRune("._+- ", char):
-		default:
-			return false
-		}
-	}
-	return true
+	return len(value) <= 64 && runtimeVersionPattern.MatchString(value)
 }
 
 func safeRuntimeDiagnostic(value string, environment []string) string {
