@@ -80,7 +80,7 @@ Agents create and update pull requests through their permitted runtime capabilit
   - `internal/core` holds only concrete code shared by platform and agentctl, including environment loading (`internal/core/environment`), graceful HTTP server lifecycle (`internal/core/httpserver`), and OpenAPI serving/validation (`internal/core/openapi`).
   - `internal/postgres` owns the shared PostgreSQL database lifecycle and separate per-domain adapters; repository interfaces remain in their domain packages.
   - `cmd/orkest` and `cmd/agentctl` remain thin executable wiring; platform HTTP lives in `internal/app/httpapi` and agentctl HTTP lives in `internal/agentctl/httpapi`. `internal/core/openapi` owns shared serving and validation code.
-- **Docker Compose** provides PostgreSQL, Keycloak, and a persistent local Docker Registry v3 at `127.0.0.1:5000` by default. Keycloak and the platform are not Compose services.
+- **Docker Compose** provides PostgreSQL, Keycloak, and a persistent local Docker Registry v3 at `127.0.0.1:5001` by default. Keycloak and the platform are not Compose services.
 
 Avoid introducing microservices or a distributed workflow engine for the initial implementation. Durable execution state, ownership, event replay, and reconciliation are explicit application responsibilities.
 
