@@ -6,6 +6,8 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/agentctl ./cmd/agentctl
 
+FROM moby/buildkit:v0.34.1 AS buildkit
+
 FROM node:22.19.0-bookworm-slim
 
 ARG GH_VERSION=2.103.2
@@ -29,4 +31,6 @@ RUN apt-get update \
 	&& rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /out/agentctl /usr/local/bin/agentctl
+COPY --from=buildkit /usr/bin/buildctl /usr/local/bin/buildctl
+RUN buildctl --version | grep -F "v0.34.1"
 ENTRYPOINT ["/usr/local/bin/agentctl"]
