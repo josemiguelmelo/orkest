@@ -13,7 +13,7 @@ Orkest is a platform for orchestrating, monitoring, and interacting with AI agen
 - Use organization roles Owner/Admin/Member and workspace roles Admin/Member/Viewer.
 - Support OpenCode, Claude Code, and Codex runtimes through extensible runtime adapters.
 - Provide built-in tools for communicating with the core platform; user-defined tools are outside MVP scope.
-- Use the pinned OpenCode release’s default permission behavior. Forward any runtime approval requests to the task UI; workspace permission-policy customization is deferred.
+- Agent definitions select one of two permission policies across supported runtimes: `ask` preserves interactive approval behavior and forwards runtime approval requests to the task UI; `autonomous` configures the provider to proceed without interactive approval inside its isolated task environment. Native sandbox behavior can vary by provider. Existing agents default to `ask`.
 - Support manual task creation and tasks imported from GitHub Projects v2 issue and draft issue items.
 - Require users to assign tasks to specific team members and manually move tasks to in progress.
 - Support reusable agent definitions and workspace teams with individual members providing execution slots.
@@ -188,7 +188,7 @@ OpenCode, Claude Code, and Codex are supported runtimes. The platform must disti
 
 The official [OpenCode ACP reference](https://dev.opencode.ai/v2/docs/cli/acp/) documents `opencode acp` as a child process using ACP over stdio, plus session load/resume and HTTP MCP support. agentctl owns this local subprocess connection and exposes the separate platform-facing transport. The HTTP-only restriction applies to MCP connections, not the local ACP transport.
 
-Use the pinned release’s default permissions without introducing a custom workspace policy editor or blanket automatic approval. If the runtime requests permission, the user approves or rejects it through the task UI and the slot remains occupied while waiting. Record the effective runtime version and permission configuration with each run.
+Support the shared agent permission policies through OpenCode's native configuration. `ask` retains the existing approval behavior; `autonomous` allows runtime actions without interactive approval while the task remains inside its isolated environment. If a runtime asks under `ask`, the user approves or rejects through the task UI and the slot remains occupied while waiting. Record the effective runtime version and permission policy with each run.
 
 Pin and validate the selected OpenCode release before implementation acceptance: verify model selection, system prompt configuration, HTTP MCP headers, approval round trips, durable session storage, and continuation after process restart. Document and persist the required OpenCode data directories and restore the same working paths. Documentation support for session restoration is not a substitute for testing interrupted-work recovery.
 
@@ -201,7 +201,7 @@ adapter over ACP v1 stdio. Supply Anthropic API credentials through the existing
 workspace secret environment path. The selected model, system instructions,
 skills, HTTP MCP endpoints and headers, and approval requests must be bound to
 the run and restored with its session. Use the runtime's permission requests and
-forward them to users; never enable blanket automatic approval. Pin and validate
+forward them to users under `ask`; under `autonomous`, configure the pinned adapter's non-interactive permission mode. Pin and validate
 the adapter and its bundled Claude Agent SDK. Until real qualification proves
 session continuation and complete replay evidence, uncertain interrupted work
 must remain paused for reconciliation.
@@ -213,8 +213,9 @@ v1 stdio. Supply `OPENAI_API_KEY` or `CODEX_API_KEY` through the workspace
 secret environment path and disable browser-based ChatGPT login in headless
 execution. The configured model, system instructions, skills, and HTTP MCP
 servers must be bound to the run. Use workspace-write mode with runtime
-permission requests forwarded to users; do not enable full-access or blanket
-approval. Persist the Codex home and adapter state with the task session. Until
+permission requests forwarded to users under `ask`; under `autonomous`, select
+Codex's `agent-full-access` mode inside the isolated task container. Persist the
+Codex home and adapter state with the task session. Until
 credentialed qualification proves approval round trips and continuation after
 restart, uncertain interrupted work must remain paused for reconciliation.
 
@@ -336,7 +337,7 @@ Event retention, recovery time targets, host-loss guarantees, and overall availa
 ### Subsequent decisions
 
 - Invitations and external identity-to-membership provisioning beyond first-login user creation.
-- Custom workspace approval policies are deferred. MVP uses OpenCode defaults and forwards runtime approval requests without automatically accepting them.
+- Permission policies are selected per agent definition, not workspace-wide. The initial choices are `ask` (the default) and `autonomous`; runtime adapters translate the selected value into native provider configuration. The setting is snapshotted per task session.
 - Pinned releases for supported runtimes, default model selection, and validated recovery behavior.
 - Whether workflows are fixed for MVP or configurable per workspace.
 - Internal platform tool exposure mechanism and exact allowed operations; custom tool registration is deferred.

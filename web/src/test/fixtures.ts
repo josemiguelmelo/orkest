@@ -27,6 +27,7 @@ export const agent: Agent = {
   model: 'configured-model',
   description: 'Builds and refines the platform.',
   systemPrompt: 'Work carefully.',
+  permissionPolicy: 'ask',
   mcpServerIds: [],
   skillIds: [],
 };

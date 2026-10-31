@@ -20,6 +20,7 @@ type Agent struct {
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 	ExecutionProfileID pgtype.Text        `json:"execution_profile_id"`
+	PermissionPolicy   string             `json:"permission_policy"`
 	RuntimeProfileID   pgtype.Text        `json:"runtime_profile_id"`
 }
 

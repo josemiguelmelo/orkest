@@ -238,6 +238,10 @@ export declare const zAgent: z.ZodObject<{
     model: z.ZodString;
     description: z.ZodString;
     systemPrompt: z.ZodString;
+    permissionPolicy: z.ZodEnum<{
+        ask: "ask";
+        autonomous: "autonomous";
+    }>;
     mcpServerIds: z.ZodArray<z.ZodString>;
     skillIds: z.ZodArray<z.ZodString>;
 }, z.core.$strip>;
@@ -440,6 +444,10 @@ export declare const zAgentDefinition: z.ZodObject<{
     model: z.ZodString;
     description: z.ZodString;
     systemPrompt: z.ZodString;
+    permissionPolicy: z.ZodEnum<{
+        ask: "ask";
+        autonomous: "autonomous";
+    }>;
     executionProfileId: z.ZodOptional<z.ZodString>;
     runtimeProfileId: z.ZodOptional<z.ZodString>;
     mcpServerIds: z.ZodOptional<z.ZodArray<z.ZodString>>;
@@ -1430,6 +1438,10 @@ export declare const zListAgentsResponse: z.ZodArray<z.ZodObject<{
     model: z.ZodString;
     description: z.ZodString;
     systemPrompt: z.ZodString;
+    permissionPolicy: z.ZodEnum<{
+        ask: "ask";
+        autonomous: "autonomous";
+    }>;
     mcpServerIds: z.ZodArray<z.ZodString>;
     skillIds: z.ZodArray<z.ZodString>;
 }, z.core.$strip>>;
@@ -1444,6 +1456,10 @@ export declare const zCreateAgentBody: z.ZodObject<{
     model: z.ZodString;
     description: z.ZodString;
     systemPrompt: z.ZodString;
+    permissionPolicy: z.ZodEnum<{
+        ask: "ask";
+        autonomous: "autonomous";
+    }>;
     executionProfileId: z.ZodOptional<z.ZodString>;
     runtimeProfileId: z.ZodOptional<z.ZodString>;
     mcpServerIds: z.ZodOptional<z.ZodArray<z.ZodString>>;
@@ -1471,6 +1487,10 @@ export declare const zCreateAgentResponse: z.ZodObject<{
     model: z.ZodString;
     description: z.ZodString;
     systemPrompt: z.ZodString;
+    permissionPolicy: z.ZodEnum<{
+        ask: "ask";
+        autonomous: "autonomous";
+    }>;
     mcpServerIds: z.ZodArray<z.ZodString>;
     skillIds: z.ZodArray<z.ZodString>;
 }, z.core.$strip>;
@@ -1506,6 +1526,10 @@ export declare const zGetAgentResponse: z.ZodObject<{
     model: z.ZodString;
     description: z.ZodString;
     systemPrompt: z.ZodString;
+    permissionPolicy: z.ZodEnum<{
+        ask: "ask";
+        autonomous: "autonomous";
+    }>;
     mcpServerIds: z.ZodArray<z.ZodString>;
     skillIds: z.ZodArray<z.ZodString>;
 }, z.core.$strip>;
@@ -1520,6 +1544,10 @@ export declare const zUpdateAgentBody: z.ZodObject<{
     model: z.ZodString;
     description: z.ZodString;
     systemPrompt: z.ZodString;
+    permissionPolicy: z.ZodEnum<{
+        ask: "ask";
+        autonomous: "autonomous";
+    }>;
     executionProfileId: z.ZodOptional<z.ZodString>;
     runtimeProfileId: z.ZodOptional<z.ZodString>;
     mcpServerIds: z.ZodOptional<z.ZodArray<z.ZodString>>;
@@ -1548,6 +1576,10 @@ export declare const zUpdateAgentResponse: z.ZodObject<{
     model: z.ZodString;
     description: z.ZodString;
     systemPrompt: z.ZodString;
+    permissionPolicy: z.ZodEnum<{
+        ask: "ask";
+        autonomous: "autonomous";
+    }>;
     mcpServerIds: z.ZodArray<z.ZodString>;
     skillIds: z.ZodArray<z.ZodString>;
 }, z.core.$strip>;

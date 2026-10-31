@@ -158,7 +158,7 @@ func TestPostgresRepositories(t *testing.T) {
 		t.Fatal(err)
 	}
 	agentRepository := NewAgentPostgresRepository(database)
-	worker, err := agentRepository.CreateAgent(ctx, agentID, workspaceID, agent.AgentDefinition{Name: "worker", Runtime: agent.RuntimeOpenCode, Provider: "test", Model: "test-model"})
+	worker, err := agentRepository.CreateAgent(ctx, agentID, workspaceID, agent.AgentDefinition{Name: "worker", Runtime: agent.RuntimeOpenCode, Provider: "test", Model: "test-model", PermissionPolicy: agent.PermissionPolicyAsk})
 	if err != nil {
 		t.Fatalf("create agent: %v", err)
 	}

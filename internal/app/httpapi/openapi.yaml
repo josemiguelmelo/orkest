@@ -1354,7 +1354,7 @@ components:
         application/json:
           schema:
             type: object
-            required: [name, runtime, provider, model, description, systemPrompt]
+            required: [name, runtime, provider, model, description, systemPrompt, permissionPolicy]
             properties:
               name: {type: string, minLength: 1, maxLength: 200}
               runtime: {type: string, enum: [opencode, claude-code, codex]}
@@ -1362,6 +1362,7 @@ components:
               model: {type: string, minLength: 1, maxLength: 200}
               description: {type: string, maxLength: 2000}
               systemPrompt: {type: string, maxLength: 100000}
+              permissionPolicy: {type: string, enum: [ask, autonomous], description: Ask preserves provider approval prompts; autonomous disables interactive approval. Native sandbox behavior varies by provider; task environments remain isolated.}
               executionProfileId: {type: string, description: Profile ID; empty string clears the selection.}
               runtimeProfileId: {type: string, description: Runtime profile ID; empty string uses manual model settings.}
               mcpServerIds: {type: array, uniqueItems: true, items: {type: string}}
@@ -1596,7 +1597,7 @@ components:
         createdAt: {type: string, format: date-time}
     Agent:
       type: object
-      required: [id, workspaceId, name, runtime, provider, model, description, systemPrompt, mcpServerIds, skillIds]
+      required: [id, workspaceId, name, runtime, provider, model, description, systemPrompt, permissionPolicy, mcpServerIds, skillIds]
       properties:
         executionProfileId: {type: string}
         runtimeProfileId: {type: string}
@@ -1608,6 +1609,7 @@ components:
         model: {type: string}
         description: {type: string}
         systemPrompt: {type: string}
+        permissionPolicy: {type: string, enum: [ask, autonomous]}
         mcpServerIds: {type: array, items: {type: string}}
         skillIds: {type: array, items: {type: string}}
     AgentRuntimeProfileInput:

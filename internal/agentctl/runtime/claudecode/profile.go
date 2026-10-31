@@ -47,7 +47,12 @@ func (p Profile) BuildProvisioningPlan(_ agentruntime.ResolvedRuntimeSettings, p
 	}, nil
 }
 
-func (Profile) NativeSessionMode(agentruntime.ResolvedRuntimeSettings) string { return "" }
+func (Profile) NativeSessionMode(settings agentruntime.ResolvedRuntimeSettings) string {
+	if settings.Agent.PermissionPolicy == runconfig.PermissionPolicyAutonomous {
+		return "bypassPermissions"
+	}
+	return ""
+}
 
 func (Profile) ProtocolSessionOptions(settings agentruntime.ResolvedRuntimeSettings, _ agentruntime.ProvisioningPaths) agentruntime.ProtocolSessionOptions {
 	instructions := strings.TrimSpace(settings.Agent.Instructions)
@@ -56,13 +61,14 @@ func (Profile) ProtocolSessionOptions(settings agentruntime.ResolvedRuntimeSetti
 			instructions += "\n\n## Skill: " + skill.ID + "\n\n" + strings.TrimSpace(skill.SkillMD)
 		}
 	}
+	allowSkipPermissions := settings.Agent.PermissionPolicy == runconfig.PermissionPolicyAutonomous
 	return agentruntime.ProtocolSessionOptions{
 		Metadata: map[string]any{
 			"systemPrompt": instructions,
 			"claudeCode": map[string]any{
 				"options": map[string]any{
 					"model":                           settings.Model.ID,
-					"allowDangerouslySkipPermissions": false,
+					"allowDangerouslySkipPermissions": allowSkipPermissions,
 				},
 			},
 		},

@@ -45,7 +45,7 @@ func (q *Queries) DeleteAgentSkills(ctx context.Context, arg DeleteAgentSkillsPa
 }
 
 const getAgent = `-- name: GetAgent :one
-SELECT a.id, a.workspace_id, a.name, a.runtime, a.provider, a.model, a.description, a.system_prompt, a.execution_profile_id, a.runtime_profile_id
+SELECT a.id, a.workspace_id, a.name, a.runtime, a.provider, a.model, a.description, a.system_prompt, a.execution_profile_id, a.runtime_profile_id, a.permission_policy
 FROM agents a JOIN workspaces w ON w.id = a.workspace_id
 WHERE w.organization_id = $1 AND a.workspace_id = $2 AND a.id = $3
 `
@@ -67,6 +67,7 @@ type GetAgentRow struct {
 	SystemPrompt       string      `json:"system_prompt"`
 	ExecutionProfileID pgtype.Text `json:"execution_profile_id"`
 	RuntimeProfileID   pgtype.Text `json:"runtime_profile_id"`
+	PermissionPolicy   string      `json:"permission_policy"`
 }
 
 func (q *Queries) GetAgent(ctx context.Context, arg GetAgentParams) (GetAgentRow, error) {
@@ -83,14 +84,15 @@ func (q *Queries) GetAgent(ctx context.Context, arg GetAgentParams) (GetAgentRow
 		&i.SystemPrompt,
 		&i.ExecutionProfileID,
 		&i.RuntimeProfileID,
+		&i.PermissionPolicy,
 	)
 	return i, err
 }
 
 const insertAgent = `-- name: InsertAgent :one
-INSERT INTO agents (id, workspace_id, name, runtime, provider, model, description, system_prompt, execution_profile_id, runtime_profile_id)
-SELECT $1, w.id, $3, $4, $5, $6, $7, $8, $9, $10 FROM workspaces w WHERE w.id = $2
-RETURNING id, workspace_id, name, runtime, provider, model, description, system_prompt, execution_profile_id, runtime_profile_id
+INSERT INTO agents (id, workspace_id, name, runtime, provider, model, description, system_prompt, execution_profile_id, runtime_profile_id, permission_policy)
+SELECT $1, w.id, $3, $4, $5, $6, $7, $8, $9, $10, $11 FROM workspaces w WHERE w.id = $2
+RETURNING id, workspace_id, name, runtime, provider, model, description, system_prompt, execution_profile_id, runtime_profile_id, permission_policy
 `
 
 type InsertAgentParams struct {
@@ -104,6 +106,7 @@ type InsertAgentParams struct {
 	SystemPrompt       string      `json:"system_prompt"`
 	ExecutionProfileID pgtype.Text `json:"execution_profile_id"`
 	RuntimeProfileID   pgtype.Text `json:"runtime_profile_id"`
+	PermissionPolicy   string      `json:"permission_policy"`
 }
 
 type InsertAgentRow struct {
@@ -117,6 +120,7 @@ type InsertAgentRow struct {
 	SystemPrompt       string      `json:"system_prompt"`
 	ExecutionProfileID pgtype.Text `json:"execution_profile_id"`
 	RuntimeProfileID   pgtype.Text `json:"runtime_profile_id"`
+	PermissionPolicy   string      `json:"permission_policy"`
 }
 
 func (q *Queries) InsertAgent(ctx context.Context, arg InsertAgentParams) (InsertAgentRow, error) {
@@ -131,6 +135,7 @@ func (q *Queries) InsertAgent(ctx context.Context, arg InsertAgentParams) (Inser
 		arg.SystemPrompt,
 		arg.ExecutionProfileID,
 		arg.RuntimeProfileID,
+		arg.PermissionPolicy,
 	)
 	var i InsertAgentRow
 	err := row.Scan(
@@ -144,6 +149,7 @@ func (q *Queries) InsertAgent(ctx context.Context, arg InsertAgentParams) (Inser
 		&i.SystemPrompt,
 		&i.ExecutionProfileID,
 		&i.RuntimeProfileID,
+		&i.PermissionPolicy,
 	)
 	return i, err
 }
@@ -193,7 +199,7 @@ func (q *Queries) ListAgentSkillIDs(ctx context.Context, arg ListAgentSkillIDsPa
 }
 
 const listAgents = `-- name: ListAgents :many
-SELECT a.id, a.workspace_id, a.name, a.runtime, a.provider, a.model, a.description, a.system_prompt, a.execution_profile_id, a.runtime_profile_id
+SELECT a.id, a.workspace_id, a.name, a.runtime, a.provider, a.model, a.description, a.system_prompt, a.execution_profile_id, a.runtime_profile_id, a.permission_policy
 FROM agents a JOIN workspaces w ON w.id = a.workspace_id
 WHERE w.organization_id = $1 AND a.workspace_id = $2
 ORDER BY a.name, a.id
@@ -215,6 +221,7 @@ type ListAgentsRow struct {
 	SystemPrompt       string      `json:"system_prompt"`
 	ExecutionProfileID pgtype.Text `json:"execution_profile_id"`
 	RuntimeProfileID   pgtype.Text `json:"runtime_profile_id"`
+	PermissionPolicy   string      `json:"permission_policy"`
 }
 
 func (q *Queries) ListAgents(ctx context.Context, arg ListAgentsParams) ([]ListAgentsRow, error) {
@@ -237,6 +244,7 @@ func (q *Queries) ListAgents(ctx context.Context, arg ListAgentsParams) ([]ListA
 			&i.SystemPrompt,
 			&i.ExecutionProfileID,
 			&i.RuntimeProfileID,
+			&i.PermissionPolicy,
 		); err != nil {
 			return nil, err
 		}
@@ -249,10 +257,10 @@ func (q *Queries) ListAgents(ctx context.Context, arg ListAgentsParams) ([]ListA
 }
 
 const updateAgent = `-- name: UpdateAgent :one
-UPDATE agents a SET name = $4, runtime = $5, provider = $6, model = $7, description = $8, system_prompt = $9, execution_profile_id = $10, runtime_profile_id = $11, updated_at = now()
+UPDATE agents a SET name = $4, runtime = $5, provider = $6, model = $7, description = $8, system_prompt = $9, execution_profile_id = $10, runtime_profile_id = $11, permission_policy = $12, updated_at = now()
 FROM workspaces w
 WHERE w.organization_id = $1 AND a.workspace_id = w.id AND a.workspace_id = $2 AND a.id = $3
-RETURNING a.id, a.workspace_id, a.name, a.runtime, a.provider, a.model, a.description, a.system_prompt, a.execution_profile_id, a.runtime_profile_id
+RETURNING a.id, a.workspace_id, a.name, a.runtime, a.provider, a.model, a.description, a.system_prompt, a.execution_profile_id, a.runtime_profile_id, a.permission_policy
 `
 
 type UpdateAgentParams struct {
@@ -267,6 +275,7 @@ type UpdateAgentParams struct {
 	SystemPrompt       string      `json:"system_prompt"`
 	ExecutionProfileID pgtype.Text `json:"execution_profile_id"`
 	RuntimeProfileID   pgtype.Text `json:"runtime_profile_id"`
+	PermissionPolicy   string      `json:"permission_policy"`
 }
 
 type UpdateAgentRow struct {
@@ -280,6 +289,7 @@ type UpdateAgentRow struct {
 	SystemPrompt       string      `json:"system_prompt"`
 	ExecutionProfileID pgtype.Text `json:"execution_profile_id"`
 	RuntimeProfileID   pgtype.Text `json:"runtime_profile_id"`
+	PermissionPolicy   string      `json:"permission_policy"`
 }
 
 func (q *Queries) UpdateAgent(ctx context.Context, arg UpdateAgentParams) (UpdateAgentRow, error) {
@@ -295,6 +305,7 @@ func (q *Queries) UpdateAgent(ctx context.Context, arg UpdateAgentParams) (Updat
 		arg.SystemPrompt,
 		arg.ExecutionProfileID,
 		arg.RuntimeProfileID,
+		arg.PermissionPolicy,
 	)
 	var i UpdateAgentRow
 	err := row.Scan(
@@ -308,6 +319,7 @@ func (q *Queries) UpdateAgent(ctx context.Context, arg UpdateAgentParams) (Updat
 		&i.SystemPrompt,
 		&i.ExecutionProfileID,
 		&i.RuntimeProfileID,
+		&i.PermissionPolicy,
 	)
 	return i, err
 }

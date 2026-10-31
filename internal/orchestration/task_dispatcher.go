@@ -315,9 +315,10 @@ func (d *TaskDispatcher) freshConfiguration(ctx context.Context, userID, organiz
 
 			Runtime: definition.Runtime,
 			Agent: runconfig.AgentDefinition{
-				Name:         definition.Name,
-				Description:  definition.Description,
-				Instructions: systemPrompt,
+				Name:             definition.Name,
+				Description:      definition.Description,
+				Instructions:     systemPrompt,
+				PermissionPolicy: string(definition.PermissionPolicy),
 			},
 			Model: runconfig.ModelSelection{Provider: definition.Provider, ID: definition.Model},
 		},
