@@ -16,10 +16,16 @@ import (
 // AgentDefinition is the portable Markdown instruction set selected for a run.
 // Runtime profiles map it to the files and options their runtime supports.
 type AgentDefinition struct {
-	Name         string `json:"name"`
-	Description  string `json:"description"`
-	Instructions string `json:"instructions"`
+	Name             string `json:"name"`
+	Description      string `json:"description"`
+	Instructions     string `json:"instructions"`
+	PermissionPolicy string `json:"permissionPolicy,omitempty"`
 }
+
+const (
+	PermissionPolicyAsk        = "ask"
+	PermissionPolicyAutonomous = "autonomous"
+)
 
 type ModelSelection struct {
 	Provider string `json:"provider"`
@@ -118,6 +124,9 @@ func (c RuntimeConfig) Validate() error {
 	}
 	if !c.Runtime.Available() {
 		return &ValidationError{Field: "runtime", Reason: "is unsupported"}
+	}
+	if c.Agent.PermissionPolicy != "" && c.Agent.PermissionPolicy != PermissionPolicyAsk && c.Agent.PermissionPolicy != PermissionPolicyAutonomous {
+		return &ValidationError{Field: "agent.permissionPolicy", Reason: "is unsupported"}
 	}
 	if provider, ok := coreruntime.ProviderFor(c.Runtime); ok {
 		if err := provider.ValidateDefinition(coreruntime.Definition{ModelProvider: c.Model.Provider}); err != nil {

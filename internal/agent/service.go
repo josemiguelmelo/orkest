@@ -174,6 +174,9 @@ func (s *Service) authorize(ctx context.Context, userID, orgID, workspaceID stri
 }
 
 func validate(definition *AgentDefinition) error {
+	if definition.PermissionPolicy == "" {
+		definition.PermissionPolicy = PermissionPolicyAsk
+	}
 	if definition.MCPServerIDs == nil {
 		definition.MCPServerIDs = []string{}
 	}
@@ -202,7 +205,7 @@ func validate(definition *AgentDefinition) error {
 		seenSkills[id] = true
 		definition.SkillIDs[i] = id
 	}
-	if definition.Name == "" || len(definition.Name) > 200 || definition.Provider == "" || len(definition.Provider) > 200 || definition.Model == "" || len(definition.Model) > 200 || len(definition.Description) > 2000 || len(definition.SystemPrompt) > 100000 || !definition.Runtime.Available() {
+	if definition.Name == "" || len(definition.Name) > 200 || definition.Provider == "" || len(definition.Provider) > 200 || len(definition.Model) > 200 || len(definition.Description) > 2000 || len(definition.SystemPrompt) > 100000 || !definition.Runtime.Available() || (definition.PermissionPolicy != PermissionPolicyAsk && definition.PermissionPolicy != PermissionPolicyAutonomous) {
 		return modelerrors.ErrInvalid
 	}
 	return nil

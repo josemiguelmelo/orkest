@@ -20,8 +20,10 @@ import (
 	"golang.org/x/oauth2"
 )
 
-const sessionCookie = "orkest_session"
-const refreshCookie = "orkest_refresh"
+const (
+	sessionCookie = "orkest_session"
+	refreshCookie = "orkest_refresh"
+)
 
 type oidcAuth struct {
 	config        oauth2.Config

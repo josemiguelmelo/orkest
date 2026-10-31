@@ -48,6 +48,10 @@ func (Profile) BuildProvisioningPlan(settings agentruntime.ResolvedRuntimeSettin
 	if err != nil {
 		return agentruntime.ProvisioningPlan{}, errors.New("encode Codex configuration failed")
 	}
+	initialAgentMode := "workspace-write"
+	if settings.Agent.PermissionPolicy == runconfig.PermissionPolicyAutonomous {
+		initialAgentMode = "agent-full-access"
+	}
 	return agentruntime.ProvisioningPlan{
 		Directories: []string{"data", "state", "cache", "home", "home/.codex", "state/codex/logs"},
 		Environment: []string{
@@ -59,12 +63,17 @@ func (Profile) BuildProvisioningPlan(settings agentruntime.ResolvedRuntimeSettin
 			`DEFAULT_AUTH_REQUEST={"methodId":"api-key"}`,
 			"APP_SERVER_LOGS=" + filepath.ToSlash(filepath.Join(paths.RuntimeRoot, "state", "codex", "logs")),
 			"NO_BROWSER=1",
-			"INITIAL_AGENT_MODE=workspace-write",
+			"INITIAL_AGENT_MODE=" + initialAgentMode,
 		},
 	}, nil
 }
 
-func (Profile) NativeSessionMode(agentruntime.ResolvedRuntimeSettings) string { return "" }
+func (Profile) NativeSessionMode(settings agentruntime.ResolvedRuntimeSettings) string {
+	if settings.Agent.PermissionPolicy == runconfig.PermissionPolicyAutonomous {
+		return "agent-full-access"
+	}
+	return ""
+}
 
 func (Profile) ProtocolSessionOptions(settings agentruntime.ResolvedRuntimeSettings, _ agentruntime.ProvisioningPaths) agentruntime.ProtocolSessionOptions {
 	return agentruntime.ProtocolSessionOptions{

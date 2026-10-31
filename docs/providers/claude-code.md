@@ -21,6 +21,10 @@ host login or an unpinned `npx` invocation.
 - Claude Code's configuration directory is isolated below durable agentctl
   state. The adapter is forced to ACP v1 for compatibility with the shared Go
   ACP client.
+- Agent permission policy `ask` keeps interactive approval requests in the
+  task UI. `autonomous` selects Claude's `bypassPermissions` session mode and
+  enables the adapter option required for that mode, within the isolated task
+  environment.
 
 ## Process configuration
 
