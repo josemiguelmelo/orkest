@@ -27,6 +27,11 @@ Orkest is a platform for orchestrating, monitoring, and interacting with AI agen
 
 Automatic assignment and automatic movement into in progress are outside the MVP. OpenCode, Claude Code, and Codex are supported runtimes through pinned adapters. Codex uses the ACP adapter and an OpenAI model selection; API-key credentials are provided through workspace secrets. Specific model, deployment, and technology choices remain open.
 
+For local Docker development only, operators may set `ORKEST_CODEX_AUTH_FILE`
+to mount their host Codex auth file into Codex task containers. This is an
+opt-in local convenience and does not add platform-managed ChatGPT login or
+shared account connections.
+
 ## 3. Domain model
 
 ### 3.1 Organization, User, Workspace

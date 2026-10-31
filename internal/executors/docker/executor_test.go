@@ -108,6 +108,55 @@ func TestStartAgentctlUsesContainerNetworkEndpointWhenConfigured(t *testing.T) {
 	}
 }
 
+func TestCodexAuthFileIsMountedReadOnlyOnlyForCodex(t *testing.T) {
+	authFile := filepath.Join(t.TempDir(), "auth.json")
+	if err := os.WriteFile(authFile, []byte(`{"tokens":{}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	engine := &fakeEngine{containerID: "container-id", hostPort: "49152", running: true}
+	executor, err := NewWithClient(context.Background(), Config{DataRoot: t.TempDir(), CodexAuthFile: authFile}, engine)
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := runConfig()
+	config.Runtime = coreruntime.Codex
+	config.Model = runconfig.ModelSelection{Provider: "openai", ID: "gpt-5-codex"}
+	if _, err := executor.StartAgentctl(context.Background(), config); err != nil {
+		t.Fatal(err)
+	}
+	var authMountFound bool
+	for _, value := range engine.created.HostConfig.Mounts {
+		if value.Target != codexAuthMountPath {
+			continue
+		}
+		authMountFound = true
+		if value.Source != authFile || !value.ReadOnly || value.Type != "bind" {
+			t.Fatalf("Codex auth mount = %+v", value)
+		}
+	}
+	if !authMountFound {
+		t.Fatalf("Codex auth file was not mounted: %+v", engine.created.HostConfig.Mounts)
+	}
+	if !strings.Contains(strings.Join(engine.created.Config.Env, "\n"), codexAuthFileEnvironment+"="+codexAuthMountPath) {
+		t.Fatalf("Codex auth file path was not granted to agentctl: %v", engine.created.Config.Env)
+	}
+	if !strings.Contains(strings.Join(engine.created.Config.Cmd, " "), "-env "+codexAuthFileEnvironment) {
+		t.Fatalf("Codex auth path was not added to agentctl's allowed environment: %v", engine.created.Config.Cmd)
+	}
+
+	otherEngine := &fakeEngine{containerID: "container-id", hostPort: "49152", running: true}
+	otherExecutor, err := NewWithClient(context.Background(), Config{DataRoot: t.TempDir(), CodexAuthFile: authFile}, otherEngine)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := otherExecutor.StartAgentctl(context.Background(), runConfig()); err != nil {
+		t.Fatal(err)
+	}
+	if len(otherEngine.created.HostConfig.Mounts) != 2 {
+		t.Fatalf("non-Codex container received an auth mount: %+v", otherEngine.created.HostConfig.Mounts)
+	}
+}
+
 func TestPrepareRepositoriesUsesProviderAndTaskWorkspacePaths(t *testing.T) {
 	provider := &checkoutProviderStub{}
 	executor := &Executor{repositoryProviders: map[string]coderepository.CodingProvider{"test": provider}}
@@ -264,6 +313,9 @@ func TestNewWithClientRejectsInvalidSettings(t *testing.T) {
 	}
 	if _, err := NewWithClient(context.Background(), Config{Images: map[coreruntime.Runtime]string{coreruntime.OpenCode: "image"}, ContainerUser: "1000:1000"}, &fakeEngine{}); err == nil {
 		t.Fatal("expected missing data root error")
+	}
+	if _, err := NewWithClient(context.Background(), Config{DataRoot: t.TempDir(), CodexAuthFile: "relative/auth.json"}, &fakeEngine{}); err == nil {
+		t.Fatal("expected relative Codex auth path error")
 	}
 }
 

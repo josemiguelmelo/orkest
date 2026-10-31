@@ -47,8 +47,11 @@ Keycloak authenticates users while Orkest enforces access boundaries. Organizati
 Codex is pinned through `@agentclientprotocol/codex-acp` 2.3.0 and uses the
 shared ACP v1 host. It requires an OpenAI model provider and API-key credentials
 from workspace secrets; browser-based ChatGPT login is disabled in headless
-execution. Live model, approval, MCP, and restart-continuation qualification is
-still required before treating those behaviors as verified.
+execution. Local Docker development can optionally import a host auth file via
+`ORKEST_CODEX_AUTH_FILE`; the read-only source is copied into the task's private
+Codex home and is not synchronized back. Live model, approval, MCP, and
+restart-continuation qualification is still required before treating those
+behaviors as verified.
 
 - **OpenCode v2.1.4**, **Claude Code through `claude-agent-acp` 0.99.0**, and **Codex through `codex-acp` 2.3.0** are pinned runtimes. OpenCode handshake/session loading are verified. Claude Code and Codex use the shared ACP v1 host; real model execution, approval round trips, and interrupted-work continuation require credentialed qualification.
 - **ACP over local stdio** uses `github.com/coder/acp-go-sdk v0.13.5` between `agentctl` and runtime subprocesses.

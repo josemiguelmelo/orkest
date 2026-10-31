@@ -70,6 +70,17 @@ out of host paths and container labels. The directories are mode 0700 and the
 container runs as the platform process UID/GID so files remain writable by the
 platform user. The agentctl state directory must remain on persistent storage.
 
+For local Docker use, `ORKEST_CODEX_AUTH_FILE` can opt Codex containers into a
+host Codex login. Set it to an absolute path visible to the Docker daemon, for
+example `/Users/alice/.codex/auth.json`. The Docker executor mounts that file
+read-only only for Codex containers; agentctl copies it into the task's private
+Codex home with mode 0600. It is not passed to other runtimes, stored in the
+database, or returned by an API. With Docker Compose, set the variable in `.env`;
+the host path must be visible to the Docker daemon. Leave it unset to use the
+workspace `OPENAI_API_KEY` secret flow. Codex changes its task-local copy as
+credentials refresh, but those updates are not written back to the host file, so
+refresh the local Codex login if later runs can no longer authenticate.
+
 The GitHub coding provider resolves each integration PAT on the platform. It uses a
 temporary credential helper for checkout, then sends the PAT to agentctl in the
 encrypted task-session configuration. Git receives URL-scoped HTTP authorization

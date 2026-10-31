@@ -86,8 +86,9 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 	launchRepo := postgres.NewAgentLaunchPostgresRepository(database, secretBox)
 	client := orchestration.NewHTTPAgentctlClient(httplog.PropagatingHTTPClient(&http.Client{Timeout: 10 * time.Second}))
 	executor, executorErr := dockerexecutor.New(ctx, dockerexecutor.Config{
-		DataRoot:    filepath.Join(dataRoot, "agent-executions"),
-		NetworkName: os.Getenv("ORKEST_AGENTCTL_NETWORK"),
+		DataRoot:      filepath.Join(dataRoot, "agent-executions"),
+		NetworkName:   os.Getenv("ORKEST_AGENTCTL_NETWORK"),
+		CodexAuthFile: os.Getenv("ORKEST_CODEX_AUTH_FILE"),
 		Images: map[coreruntime.Runtime]string{
 			coreruntime.OpenCode:   os.Getenv("AGENTCTL_OPENCODE_IMAGE"),
 			coreruntime.ClaudeCode: os.Getenv("AGENTCTL_CLAUDE_CODE_IMAGE"),
