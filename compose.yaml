@@ -1,6 +1,8 @@
 services:
   orkest:
     profiles: ["orkest"]
+    # Daemonless BuildKit runs inside this container and needs mount capabilities.
+    privileged: true
     build:
       context: .
       dockerfile: build/docker/orkest.Dockerfile
