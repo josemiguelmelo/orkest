@@ -21,6 +21,7 @@ import (
 )
 
 const sessionCookie = "orkest_session"
+const refreshCookie = "orkest_refresh"
 
 type oidcAuth struct {
 	config        oauth2.Config
@@ -179,11 +180,15 @@ func (a *oidcAuth) callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: rawIDToken, Path: "/", HttpOnly: true, Secure: a.secure, SameSite: http.SameSiteLaxMode, MaxAge: maxAge, Expires: idToken.Expiry})
+	if token.RefreshToken != "" {
+		http.SetCookie(w, &http.Cookie{Name: refreshCookie, Value: token.RefreshToken, Path: "/", HttpOnly: true, Secure: a.secure, SameSite: http.SameSiteLaxMode, MaxAge: 30 * 24 * 60 * 60})
+	}
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
 func (a *oidcAuth) logout(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: "", Path: "/", HttpOnly: true, Secure: a.secure, SameSite: http.SameSiteLaxMode, MaxAge: -1})
+	http.SetCookie(w, &http.Cookie{Name: refreshCookie, Value: "", Path: "/", HttpOnly: true, Secure: a.secure, SameSite: http.SameSiteLaxMode, MaxAge: -1})
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -226,6 +231,20 @@ func (a *oidcAuth) middleware(next http.Handler) http.Handler {
 			return
 		}
 		token, err := a.verifier.Verify(r.Context(), raw)
+		if err != nil && r.Header.Get("Authorization") == "" {
+			if refresh, cookieErr := r.Cookie(refreshCookie); cookieErr == nil && refresh.Value != "" {
+				refreshed, refreshErr := a.refreshSession(r.Context(), refresh.Value)
+				if refreshErr == nil {
+					if refreshedIDToken, ok := refreshed.Extra("id_token").(string); ok && refreshedIDToken != "" {
+						raw = refreshedIDToken
+						token, err = a.verifier.Verify(r.Context(), raw)
+						if err == nil {
+							setSessionCookies(w, a.secure, raw, refreshed.RefreshToken, token.Expiry)
+						}
+					}
+				}
+			}
+		}
 		if err != nil {
 			writeError(w, http.StatusUnauthorized, "unauthorized")
 			return
@@ -247,6 +266,19 @@ func (a *oidcAuth) middleware(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), userContextKey{}, user)))
 	})
+}
+
+func (a *oidcAuth) refreshSession(ctx context.Context, refreshToken string) (*oauth2.Token, error) {
+	ctx = context.WithValue(ctx, oauth2.HTTPClient, a.httpClient)
+	return a.config.TokenSource(ctx, &oauth2.Token{RefreshToken: refreshToken}).Token()
+}
+
+func setSessionCookies(w http.ResponseWriter, secure bool, idToken, refreshToken string, expires time.Time) {
+	maxAge := int(time.Until(expires).Seconds())
+	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: idToken, Path: "/", HttpOnly: true, Secure: secure, SameSite: http.SameSiteLaxMode, MaxAge: maxAge, Expires: expires})
+	if refreshToken != "" {
+		http.SetCookie(w, &http.Cookie{Name: refreshCookie, Value: refreshToken, Path: "/", HttpOnly: true, Secure: secure, SameSite: http.SameSiteLaxMode, MaxAge: 30 * 24 * 60 * 60})
+	}
 }
 
 func logServerError(r *http.Request, message string, err error) {
