@@ -38,6 +38,8 @@ services:
       # The Docker daemon must see this path for nested agent bind mounts.
       - "${ORKEST_DATA_DIR:-${PWD}/data}:${ORKEST_DATA_DIR:-${PWD}/data}"
       - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - orkest
     depends_on:
       postgres:
         condition: service_healthy
@@ -55,6 +57,8 @@ services:
     volumes:
       - ./docker/keycloak/realm-orkest.json:/opt/keycloak/data/import/realm-orkest.json:ro
       - keycloak_data:/opt/keycloak/data
+    networks:
+      - orkest
   postgres:
     image: postgres:18.3-alpine3.23
     environment:
@@ -71,15 +75,19 @@ services:
       timeout: 5s
       retries: 10
       start_period: 10s
+    networks:
+      - orkest
   registry:
     image: registry:3
     ports:
       - "127.0.0.1:${REGISTRY_PORT:-5001}:5000"
     volumes:
       - registry_data:/var/lib/registry
+    networks:
+      - orkest
 
 networks:
-  default:
+  orkest:
     name: orkest
 
 volumes:
