@@ -23,6 +23,7 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/executionprofile"
 	dockerexecutor "github.com/josemiguelmelo/orkest/internal/executors/docker"
 	"github.com/josemiguelmelo/orkest/internal/identity"
+	"github.com/josemiguelmelo/orkest/internal/imagebuild"
 	"github.com/josemiguelmelo/orkest/internal/imagebuild/buildkit"
 	dockerimage "github.com/josemiguelmelo/orkest/internal/imagebuild/docker"
 	"github.com/josemiguelmelo/orkest/internal/mcpserver"
@@ -85,7 +86,8 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 	launchRepo := postgres.NewAgentLaunchPostgresRepository(database, secretBox)
 	client := orchestration.NewHTTPAgentctlClient(httplog.PropagatingHTTPClient(&http.Client{Timeout: 10 * time.Second}))
 	executor, executorErr := dockerexecutor.New(ctx, dockerexecutor.Config{
-		DataRoot: filepath.Join(dataRoot, "agent-executions"),
+		DataRoot:    filepath.Join(dataRoot, "agent-executions"),
+		NetworkName: os.Getenv("ORKEST_AGENTCTL_NETWORK"),
 		Images: map[coreruntime.Runtime]string{
 			coreruntime.OpenCode:   os.Getenv("AGENTCTL_OPENCODE_IMAGE"),
 			coreruntime.ClaudeCode: os.Getenv("AGENTCTL_CLAUDE_CODE_IMAGE"),
@@ -134,12 +136,24 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 	runnerCtx, stopRunner := context.WithCancel(ctx)
 	var runnerWG sync.WaitGroup
 	if os.Getenv("ORKEST_EXECUTION_IMAGE_REPOSITORY") != "" {
-		imageStore, buildErr := dockerimage.NewImageStore()
+		registry := imagebuild.RegistryMapping{
+			DockerHost:   os.Getenv("ORKEST_DOCKER_REGISTRY_HOST"),
+			BuildKitHost: os.Getenv("ORKEST_BUILDKIT_REGISTRY_HOST"),
+		}
+		imageStore, buildErr := dockerimage.NewImageStore(registry)
 		if buildErr != nil {
 			stopRunner()
 			return buildErr
 		}
-		builder, buildErr := newImageBuilder(os.Getenv("ORKEST_IMAGE_BUILDER"), imageStore, buildkit.Config{Binary: os.Getenv("ORKEST_BUILDCTL_BINARY"), Address: os.Getenv("ORKEST_BUILDKIT_ADDR"), TLSCA: os.Getenv("ORKEST_BUILDKIT_TLS_CA"), TLSCert: os.Getenv("ORKEST_BUILDKIT_TLS_CERT"), TLSKey: os.Getenv("ORKEST_BUILDKIT_TLS_KEY"), Daemonless: strings.EqualFold(os.Getenv("ORKEST_BUILDKIT_DAEMONLESS"), "true")})
+		builder, buildErr := newImageBuilder(os.Getenv("ORKEST_IMAGE_BUILDER"), imageStore, buildkit.Config{
+			Binary:     os.Getenv("ORKEST_BUILDCTL_BINARY"),
+			Address:    os.Getenv("ORKEST_BUILDKIT_ADDR"),
+			Registry:   registry,
+			TLSCA:      os.Getenv("ORKEST_BUILDKIT_TLS_CA"),
+			TLSCert:    os.Getenv("ORKEST_BUILDKIT_TLS_CERT"),
+			TLSKey:     os.Getenv("ORKEST_BUILDKIT_TLS_KEY"),
+			Daemonless: strings.EqualFold(os.Getenv("ORKEST_BUILDKIT_DAEMONLESS"), "true"),
+		})
 		if buildErr != nil {
 			stopRunner()
 			return buildErr

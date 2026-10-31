@@ -84,6 +84,30 @@ func TestStartAgentctlCreatesIsolatedContainerAndReturnsLoopbackEndpoint(t *test
 	}
 }
 
+func TestStartAgentctlUsesContainerNetworkEndpointWhenConfigured(t *testing.T) {
+	engine := &fakeEngine{containerID: "container-id", hostPort: "49152", running: true}
+	executor, err := NewWithClient(context.Background(), Config{
+		DataRoot: t.TempDir(), NetworkName: "orkest", ContainerUser: "1000:1000",
+	}, engine)
+	if err != nil {
+		t.Fatal(err)
+	}
+	process, err := executor.StartAgentctl(context.Background(), runConfig())
+	if err != nil {
+		t.Fatal(err)
+	}
+	name := containerName(coreruntime.OpenCode, "run")
+	if want := "http://" + name + ":8081"; process.Endpoint != want {
+		t.Fatalf("endpoint = %q, want %q", process.Endpoint, want)
+	}
+	if got := string(engine.created.HostConfig.NetworkMode); got != "orkest" {
+		t.Fatalf("network mode = %q", got)
+	}
+	if len(engine.created.HostConfig.PortBindings) != 0 {
+		t.Fatalf("unexpected published port bindings: %+v", engine.created.HostConfig.PortBindings)
+	}
+}
+
 func TestPrepareRepositoriesUsesProviderAndTaskWorkspacePaths(t *testing.T) {
 	provider := &checkoutProviderStub{}
 	executor := &Executor{repositoryProviders: map[string]coderepository.CodingProvider{"test": provider}}

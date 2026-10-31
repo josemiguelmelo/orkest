@@ -15,6 +15,7 @@ import (
 	"github.com/distribution/reference"
 	coreruntime "github.com/josemiguelmelo/orkest/internal/core/runtime"
 	"github.com/josemiguelmelo/orkest/internal/executionprofile"
+	"github.com/josemiguelmelo/orkest/internal/imagebuild"
 )
 
 func currentContainerUser() (string, error) {
@@ -34,11 +35,12 @@ func currentContainerUser() (string, error) {
 // ImageStore resolves registry inputs and validates published images using Docker.
 // Commands receive no workspace secrets and their raw output is never published.
 type ImageStore struct {
-	binary string
-	user   string
+	binary   string
+	user     string
+	registry imagebuild.RegistryMapping
 }
 
-func NewImageStore() (*ImageStore, error) {
+func NewImageStore(registry imagebuild.RegistryMapping) (*ImageStore, error) {
 	user, err := currentContainerUser()
 	if err != nil {
 		return nil, err
@@ -47,7 +49,7 @@ func NewImageStore() (*ImageStore, error) {
 	if err != nil {
 		return nil, errors.New("image validation requires Docker CLI")
 	}
-	return &ImageStore{binary: binary, user: user}, nil
+	return &ImageStore{binary: binary, user: user, registry: registry}, nil
 }
 
 func (b *ImageStore) command(ctx context.Context, args ...string) ([]byte, error) {
@@ -127,7 +129,7 @@ type inspectedImage struct {
 }
 
 func (b *ImageStore) inspect(ctx context.Context, image string) (inspectedImage, error) {
-	out, err := b.command(ctx, "image", "inspect", image)
+	out, err := b.command(ctx, "image", "inspect", b.registry.ForDocker(image))
 	if err != nil {
 		return inspectedImage{}, err
 	}
@@ -187,7 +189,7 @@ func runtimeProbe(runtime coreruntime.Runtime, version string) string {
 }
 
 func (b *ImageStore) Verify(ctx context.Context, build executionprofile.Build, ref string) (string, error) {
-	if _, err := b.command(ctx, "pull", ref); err != nil {
+	if _, err := b.command(ctx, "pull", b.registry.ForDocker(ref)); err != nil {
 		return "", executionprofile.Failure("verify_pull_image", commandReason(err, "Docker could not pull the image for verification; check registry reachability and credentials."), err)
 	}
 	image, err := b.artifact(ctx, build, ref)
@@ -202,15 +204,16 @@ func (b *ImageStore) Verify(ctx context.Context, build executionprofile.Build, r
 
 func (b *ImageStore) ResolveInputs(ctx context.Context, build executionprofile.Build) (executionprofile.Build, error) {
 	resolve := func(ref string) (string, error) {
-		_, pullErr := b.command(ctx, "pull", ref)
-		image, err := b.inspect(ctx, ref)
+		dockerRef := b.registry.ForDocker(ref)
+		_, pullErr := b.command(ctx, "pull", dockerRef)
+		image, err := b.inspect(ctx, dockerRef)
 		if err != nil {
 			return "", err
 		}
 		if pullErr != nil {
 			return "", pullErr
 		}
-		requested, err := reference.ParseNormalizedNamed(ref)
+		requested, err := reference.ParseNormalizedNamed(dockerRef)
 		if err != nil {
 			return "", errors.New("invalid source image reference")
 		}

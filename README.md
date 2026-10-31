@@ -35,11 +35,23 @@ session cookie; API clients can also send the verified Keycloak ID token as a
 bearer token. Local OIDC values are in `.env.example`. These credentials and
 HTTP settings are for local development only.
 
+For the full container stack, run `docker compose up --build`; Orkest is optional
+and starts only with `docker compose --profile orkest up --build`. The default
+`docker compose up` starts PostgreSQL, Keycloak, and the local registry without
+building or starting Orkest. If you change `ORKEST_PORT`, update
+`OIDC_REDIRECT_URL` and the Orkest client's redirect URI in
+`docker/keycloak/realm-orkest.json` to use that port.
+Compose builds the Orkest image with BuildKit; the app also uses its bundled
+rootless BuildKit daemonless builder for execution profile images.
+The app container uses the host Docker socket to launch task containers, so the
+Docker daemon must be available at `/var/run/docker.sock`. Build the agent runtime
+images with `make docker-agentctl-images` before starting task execution.
+
 The sample `.env` configures PostgreSQL at `127.0.0.1:5432`; the component-variable
 form requires all five values and does not add runtime defaults.
 The database and username come from `POSTGRES_DB` and `POSTGRES_USERNAME`; the password
 comes from `.env`. Set `DATABASE_URL` instead to use a complete PostgreSQL connection URL. Compose runs
-PostgreSQL and Keycloak. Data persists in named volumes
+PostgreSQL, Keycloak, and the registry. Data persists in named volumes
 at PostgreSQL 18's `/var/lib/postgresql` mount. `make db-down` retains the volume.
 Postgres initialization variables apply only when the volume is first created;
 changing `.env` does not change existing database credentials. The version-specific

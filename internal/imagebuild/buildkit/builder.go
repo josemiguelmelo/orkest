@@ -27,6 +27,7 @@ type ImageStore interface {
 type Config struct {
 	Binary     string
 	Address    string
+	Registry   imagebuild.RegistryMapping
 	TLSCA      string
 	TLSCert    string
 	TLSKey     string
@@ -72,6 +73,9 @@ func (b *Builder) BuildAndPush(ctx context.Context, build executionprofile.Build
 	if err != nil {
 		return "", executionprofile.Failure("prepare_destination", "The output image reference is invalid; verify the execution image repository setting.", err)
 	}
+	destinationName := b.config.Registry.ForBuildKit(destination.String())
+	resolvedBase := b.config.Registry.ForBuildKit(build.ResolvedBase)
+	resolvedToolchain := b.config.Registry.ForBuildKit(build.ResolvedToolchain)
 	contextDir := prepared.Directory
 	// Keep exporter metadata outside the sent build context.
 	metadataPath := filepath.Join(prepared.Root, "metadata.json")
@@ -80,8 +84,8 @@ func (b *Builder) BuildAndPush(ctx context.Context, build executionprofile.Build
 		args = b.connectionArgs()
 	}
 	args = append(args, "build", "--frontend", "dockerfile.v0", "--local", "context="+contextDir, "--local", "dockerfile="+contextDir,
-		"--opt", "build-arg:BASE="+build.ResolvedBase, "--opt", "build-arg:TOOLCHAIN="+build.ResolvedToolchain,
-		"--opt", "label:dev.orkest.build="+build.ID, "--output", "type=image,name="+destination.String()+",push=true", "--metadata-file", metadataPath)
+		"--opt", "build-arg:BASE="+resolvedBase, "--opt", "build-arg:TOOLCHAIN="+resolvedToolchain,
+		"--opt", "label:dev.orkest.build="+build.ID, "--output", "type=image,name="+destinationName+",push=true", "--metadata-file", metadataPath)
 	cmd := exec.CommandContext(ctx, b.config.Binary, args...)
 	cmd.WaitDelay = 5 * time.Second
 	cmd.Stdout = io.Discard

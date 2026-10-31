@@ -2,9 +2,12 @@
 
 The Docker executor starts one `agentctl` container per run. It targets the local
 Docker Engine configured with `DOCKER_HOST` (or the Engine's default socket). The
-executor binds a dynamically allocated host port on `127.0.0.1`; the container
-listens on port 8081. It returns the Docker container ID and the host endpoint to
-the launch service.
+executor binds a dynamically allocated host port on `127.0.0.1` by default; the
+container listens on port 8081. When `ORKEST_AGENTCTL_NETWORK` is set, it instead
+joins each agentctl container to that Docker network and uses the container name
+and port 8081 as its endpoint. Compose sets this to the shared `orkest` network
+so Orkest can reach its agentctl containers directly. It returns the Docker
+container ID and endpoint to the launch service.
 
 Build the images from the repository root:
 

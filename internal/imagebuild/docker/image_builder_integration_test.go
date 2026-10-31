@@ -15,6 +15,7 @@ import (
 
 	"github.com/josemiguelmelo/orkest/internal/core/ids"
 	"github.com/josemiguelmelo/orkest/internal/executionprofile"
+	"github.com/josemiguelmelo/orkest/internal/imagebuild"
 	"github.com/josemiguelmelo/orkest/internal/imagebuild/buildkit"
 )
 
@@ -22,7 +23,7 @@ import (
 func TestDockerImageComposition(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
-	builder, err := NewImageStore()
+	builder, err := NewImageStore(imagebuild.RegistryMapping{})
 	if err != nil {
 		t.Fatal(err)
 	}

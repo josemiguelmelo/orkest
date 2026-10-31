@@ -18,9 +18,12 @@ FROM docker:27.5.1-cli AS docker-cli
 
 FROM moby/buildkit:v0.34.1-rootless
 
+USER root
+
 COPY --from=go-builder /out/orkest /usr/local/bin/orkest
 COPY --from=web-builder /src/web/dist /opt/orkest/web
 COPY --from=docker-cli /usr/local/bin/docker /usr/local/bin/docker
+COPY build/docker/buildkitd.toml /etc/buildkit/buildkitd.toml
 
 ENV HTTP_ADDR=0.0.0.0:8080 \
 	ORKEST_WEB_DIR=/opt/orkest/web \
