@@ -11,7 +11,7 @@ case "$runtime" in
     test "$version" = "2.37.0"; \
     case "$(dpkg --print-architecture)" in \
       amd64) filename="kirocli-x86_64-linux.tar.gz"; checksum="02c49873ba64285f34048aac377ccf0b546b5627f39dd775bae9fa306112ff19" ;; \
-      arm64) filename="kirocli-aarch64-linux.tar.gz"; checksum="3588100df2addfbb2c6953698ea2d6e7d2b88c5ef664ec3235e08fa454219f68" ;; \
+      arm64) filename="kirocli-aarch64-linux-musl.tar.gz"; checksum="945b334790d5a12c9953f1ba01846fa1274c2d28e90a66ee023a9972a063e574" ;; \
       *) echo "unsupported architecture for Kiro CLI" >&2; exit 1 ;; \
     esac; \
     archive="/tmp/kiro-cli.tar.gz"; \
