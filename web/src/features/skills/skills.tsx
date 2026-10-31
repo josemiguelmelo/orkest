@@ -42,6 +42,37 @@ export function skillName(content: string): string {
   const value: unknown = parse(match[1], { maxAliasCount: 10 });
   return metadata.parse(value).name;
 }
+function SkillPreview({ content }: { content: string }) {
+  const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)([\s\S]*)$/.exec(content.trim());
+  let details: z.infer<typeof metadata> | undefined;
+  if (match?.[1]) {
+    try {
+      const result = metadata.safeParse(parse(match[1], { maxAliasCount: 10 }));
+      if (result.success) details = result.data;
+    } catch {
+      // Keep the instructions preview available while frontmatter is being edited.
+    }
+  }
+  return (
+    <section className="skill-preview" aria-label="Skill preview">
+      {details ? (
+        <header className="skill-preview-meta">
+          <span className="skill-preview-label">Skill</span>
+          <h3>{details.name}</h3>
+          <p>{details.description}</p>
+        </header>
+      ) : (
+        <p className="skill-preview-notice">
+          Add valid YAML frontmatter with a name and description to complete this skill.
+        </p>
+      )}
+      <div className="skill-preview-instructions">
+        <h3>Instructions</h3>
+        <Markdown text={match?.[2] ?? content} />
+      </div>
+    </section>
+  );
+}
 const schema = z.object({
   skillMD: z
     .string()
@@ -160,7 +191,7 @@ export function SkillsPage() {
             if (!open) setViewing(undefined);
           }}
         >
-          <Markdown text={viewing.skillMD} />
+          <SkillPreview content={viewing.skillMD} />
         </Dialog>
       )}
     </>
@@ -250,7 +281,7 @@ function SkillEditor({
             <textarea rows={15} className="code-input" {...form.register('skillMD')} />
           </Field>
         </div>
-        {preview && <Markdown text={form.watch('skillMD')} />}
+        {preview && <SkillPreview content={form.watch('skillMD')} />}
       </Form>
     </Dialog>
   );
