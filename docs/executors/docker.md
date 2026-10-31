@@ -17,6 +17,18 @@ make docker-agentctl-opencode
 make docker-agentctl-claude-code
 ```
 
+For the local Compose registry, build and push both runtime images with:
+
+```sh
+make docker-agentctl-push-local
+```
+
+This starts the `registry` Compose service, pushes images to
+`localhost:${REGISTRY_PORT:-5001}/orkest`, and tags matching local images under
+`registry:5000/orkest`, which is the default reference used by the Compose Orkest
+service. Override `REGISTRY_PORT`, `LOCAL_REGISTRY`, `CONTAINER_REGISTRY`, or
+`AGENTCTL_REGISTRY_NAMESPACE` when using a different local registry setup.
+
 To build without Make, run from the repository root:
 
 ```sh
