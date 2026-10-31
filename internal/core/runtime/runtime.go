@@ -12,9 +12,10 @@ var versionInventory []byte
 type Runtime string
 
 const (
-	OpenCode   Runtime = "opencode"
-	ClaudeCode Runtime = "claude-code"
-	Codex      Runtime = "codex"
+	OpenCode      Runtime = "opencode"
+	ClaudeCode    Runtime = "claude-code"
+	Codex         Runtime = "codex"
+	GitHubCopilot Runtime = "github-copilot"
 )
 
 // Definition contains the provider/model fields used by runtime-specific
@@ -37,6 +38,7 @@ func Providers() []Provider {
 		OpenCodeProvider{},
 		ClaudeCodeProvider{},
 		CodexProvider{},
+		GitHubCopilotProvider{},
 	}
 }
 

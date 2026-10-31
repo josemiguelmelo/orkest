@@ -16,7 +16,8 @@ func Run(version string) {
 	}
 	claudeFixture := os.Getenv("ORKEST_CLAUDE_ACP_FIXTURE") == "1"
 	codexFixture := os.Getenv("ORKEST_CODEX_ACP_FIXTURE") == "1"
-	optionsFixture := claudeFixture || codexFixture
+	copilotFixture := os.Getenv("ORKEST_COPILOT_ACP_FIXTURE") == "1"
+	optionsFixture := claudeFixture || codexFixture || copilotFixture
 	if os.Getenv("ORKEST_ACP_FIXTURE") == "1" || optionsFixture {
 		if len(os.Args) > 1 && os.Args[1] == "--version" {
 			if os.Getenv("ORKEST_ACP_WRONG_VERSION") == "1" {
@@ -27,6 +28,8 @@ func Run(version string) {
 				fmt.Println("0.99.0")
 			} else if codexFixture {
 				fmt.Println("@agentclientprotocol/codex-acp " + version)
+			} else if copilotFixture {
+				fmt.Println("GitHub Copilot CLI " + version + ".")
 			} else {
 				fmt.Println(version)
 			}
@@ -102,6 +105,8 @@ func Run(version string) {
 					case "probe:instructions":
 						if codexFixture {
 							data = []byte(os.Getenv("CODEX_CONFIG"))
+						} else if copilotFixture {
+							data, err = os.ReadFile(filepath.Join(os.Getenv("COPILOT_HOME"), "copilot-instructions.md"))
 						} else if optionsFixture {
 							data, err = fixtureSystemPrompt()
 						} else {
@@ -110,6 +115,8 @@ func Run(version string) {
 					case "probe:skills":
 						if codexFixture {
 							data = []byte(os.Getenv("CODEX_CONFIG"))
+						} else if copilotFixture {
+							data, err = os.ReadFile(filepath.Join(os.Getenv("COPILOT_HOME"), "skills", "conformance", "SKILL.md"))
 						} else if optionsFixture {
 							data, err = fixtureSystemPrompt()
 						} else {
@@ -182,6 +189,9 @@ func fixtureSend(value any) {
 }
 
 func fixtureDataDir(claude bool) string {
+	if os.Getenv("ORKEST_COPILOT_ACP_FIXTURE") == "1" {
+		return os.Getenv("COPILOT_HOME")
+	}
 	if claude {
 		if os.Getenv("ORKEST_CODEX_ACP_FIXTURE") == "1" {
 			return os.Getenv("XDG_DATA_HOME")

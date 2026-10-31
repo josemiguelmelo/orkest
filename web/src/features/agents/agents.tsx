@@ -34,7 +34,7 @@ const schema = z
   .object({
     name: z.string().trim().min(1).max(200),
     description: z.string().max(2000),
-    runtime: z.enum(['opencode', 'claude-code', 'codex']),
+    runtime: z.enum(['opencode', 'claude-code', 'codex', 'github-copilot']),
     provider: z.string().trim().min(1).max(200),
     model: z.string().trim().min(1).max(200),
     systemPrompt: z.string().max(100000),
@@ -55,6 +55,9 @@ const schema = z
     if (value.runtime === 'codex' && value.provider.toLowerCase() !== 'openai') {
       context.addIssue({ code: 'custom', path: ['provider'], message: 'Codex requires OpenAI.' });
     }
+    if (value.runtime === 'github-copilot' && value.provider.toLowerCase() !== 'github-copilot') {
+      context.addIssue({ code: 'custom', path: ['provider'], message: 'GitHub Copilot requires the GitHub Copilot provider.' });
+    }
   });
 type ModelCatalog = Record<string, { name?: string; models?: Record<string, { name?: string }> }>;
 const modelCatalogQuery = {
@@ -69,6 +72,7 @@ const modelCatalogQuery = {
 function runtimeName(runtime: Agent['runtime']) {
   if (runtime === 'claude-code') return 'Claude Code';
   if (runtime === 'codex') return 'Codex';
+  if (runtime === 'github-copilot') return 'GitHub Copilot';
   return 'OpenCode';
 }
 export function AgentsPage() {
@@ -183,14 +187,14 @@ function AgentEditor({ item, onClose }: { item: Agent | null; onClose: () => voi
   const runtimeProfiles = useQuery(agentRuntimeProfilesQuery(scope));
   const skills = useQuery(skillsQuery(scope));
   const catalog = useQuery(modelCatalogQuery);
-  const [customModel, setCustomModel] = useState(false);
+  const [customModel, setCustomModel] = useState(item?.runtime === 'github-copilot');
   const form = useForm({
     resolver: zodResolver(schema),
     defaultValues: {
       name: item?.name ?? '',
       description: item?.description ?? '',
       runtime: item?.runtime ?? 'opencode',
-      provider: item?.runtime === 'claude-code' ? 'anthropic' : item?.runtime === 'codex' ? 'openai' : (item?.provider ?? ''),
+      provider: item?.runtime === 'claude-code' ? 'anthropic' : item?.runtime === 'codex' ? 'openai' : item?.runtime === 'github-copilot' ? 'github-copilot' : (item?.provider ?? ''),
       model: item?.model ?? '',
       systemPrompt: item?.systemPrompt ?? '',
       permissionPolicy: item?.permissionPolicy ?? 'ask',
@@ -287,6 +291,12 @@ function AgentEditor({ item, onClose }: { item: Agent | null; onClose: () => voi
                       form.setValue('provider', 'anthropic', { shouldDirty: true });
                     if (profile.runtime === 'codex')
                       form.setValue('provider', 'openai', { shouldDirty: true });
+                    if (profile.runtime === 'github-copilot') {
+                      form.setValue('provider', 'github-copilot', { shouldDirty: true });
+                      setCustomModel(true);
+                    } else {
+                      setCustomModel(false);
+                    }
                     if (profile.runtime !== 'opencode')
                       form.setValue('model', '', { shouldDirty: true });
                   }
@@ -315,14 +325,20 @@ function AgentEditor({ item, onClose }: { item: Agent | null; onClose: () => voi
                     form.setValue('provider', 'openai', { shouldDirty: true });
                     form.setValue('model', '', { shouldDirty: true });
                   }
+                  if (event.currentTarget.value === 'github-copilot') {
+                    form.setValue('provider', 'github-copilot', { shouldDirty: true });
+                    form.setValue('model', '', { shouldDirty: true });
+                    setCustomModel(true);
+                  }
                 }}
               >
                 <option value="opencode">OpenCode</option>
                 <option value="claude-code">Claude Code</option>
                 <option value="codex">Codex</option>
+                <option value="github-copilot">GitHub Copilot</option>
               </select>
             </Field>
-            {customModel ? (
+            {customModel || form.watch('runtime') === 'github-copilot' ? (
               <div className="form-grid">
                 <Field label="Model provider" error={form.formState.errors.provider?.message}>
                   <input
@@ -354,7 +370,7 @@ function AgentEditor({ item, onClose }: { item: Agent | null; onClose: () => voi
                       }}
                     >
                       <option value="">Select a provider</option>
-                      {Object.entries(catalog.data ?? {}).filter(([id]) => form.watch('runtime') === 'opencode' || id === 'openai').map(([id, provider]) => (
+                      {Object.entries(catalog.data ?? {}).filter(([id]) => form.watch('runtime') === 'opencode' || (form.watch('runtime') === 'codex' && id === 'openai')).map(([id, provider]) => (
                         <option value={id} key={id}>
                           {provider.name ?? id}
                         </option>
@@ -433,7 +449,7 @@ function AgentEditor({ item, onClose }: { item: Agent | null; onClose: () => voi
             <span>Permission policy</span>
           </div>
           <div className="agent-form-section-content">
-            <Field label="Agent autonomy" hint="Autonomous mode skips approval prompts. Provider controls vary; Codex uses full access inside the isolated task environment.">
+            <Field label="Agent autonomy" hint="Autonomous mode skips approval prompts. Provider controls vary; Codex uses full access and Copilot allows all tools inside the isolated task environment.">
               <select {...form.register('permissionPolicy')}>
                 <option value="ask">Ask for permission</option>
                 <option value="autonomous">Autonomous</option>

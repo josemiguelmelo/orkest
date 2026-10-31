@@ -78,7 +78,7 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 	mcpServerService := mcpserver.NewMCPServerService(postgres.NewMCPServerPostgresRepository(database), secretBox, workspaces)
 	workspaceEnvironment := workspaceenv.NewService(postgres.NewWorkspaceEnvironmentPostgresRepository(database), workspaces, secretBox)
 	executionProfileRepository := postgres.NewExecutionProfileRepository(database)
-	profileImages := map[coreruntime.Runtime]string{coreruntime.OpenCode: os.Getenv("AGENTCTL_OPENCODE_IMAGE"), coreruntime.ClaudeCode: os.Getenv("AGENTCTL_CLAUDE_CODE_IMAGE"), coreruntime.Codex: os.Getenv("AGENTCTL_CODEX_IMAGE")}
+	profileImages := map[coreruntime.Runtime]string{coreruntime.OpenCode: os.Getenv("AGENTCTL_OPENCODE_IMAGE"), coreruntime.ClaudeCode: os.Getenv("AGENTCTL_CLAUDE_CODE_IMAGE"), coreruntime.Codex: os.Getenv("AGENTCTL_CODEX_IMAGE"), coreruntime.GitHubCopilot: os.Getenv("AGENTCTL_GITHUB_COPILOT_IMAGE")}
 	executionProfileService := executionprofile.NewExecutionProfileService(executionProfileRepository, workspaces, os.Getenv("ORKEST_EXECUTION_IMAGE_REPOSITORY"), profileImages)
 	agents := agent.NewService(postgres.NewAgentPostgresRepository(database), workspaces, mcpServerService, skillCatalog)
 	agents.SetProfiles(executionProfileService)
@@ -96,6 +96,7 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 			coreruntime.OpenCode:   os.Getenv("AGENTCTL_OPENCODE_IMAGE"),
 			coreruntime.ClaudeCode: os.Getenv("AGENTCTL_CLAUDE_CODE_IMAGE"),
 			coreruntime.Codex:      os.Getenv("AGENTCTL_CODEX_IMAGE"),
+			coreruntime.GitHubCopilot: os.Getenv("AGENTCTL_GITHUB_COPILOT_IMAGE"),
 		},
 		ProviderEnv:              splitEnvironmentNames(os.Getenv("ORKEST_AGENT_PROVIDER_ENV")),
 		CodingProviders:          []coderepository.CodingProvider{githubprovider.NewGitHubProvider(), gitlabprovider.NewGitLabCloudProvider(), gitlabprovider.NewGitLabServerProvider()},

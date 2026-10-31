@@ -54,6 +54,23 @@ it('queues preparation with Codex selected as the runtime', async () => {
     body: { name: 'Codex profile', runtime: 'codex', toolchainImage: 'example.com/tools:latest' },
   });
 });
+it('queues preparation with GitHub Copilot selected as the runtime', async () => {
+  const user = userEvent.setup();
+  page();
+  await user.click(screen.getByRole('button', { name: 'New profile' }));
+  await user.type(screen.getByLabelText('Name'), 'Copilot profile');
+  await user.type(screen.getByLabelText('Toolchain image'), 'example.com/tools:latest');
+  await user.selectOptions(screen.getByLabelText('Agent runtime'), 'github-copilot');
+  await user.click(screen.getByRole('button', { name: 'Create and build' }));
+  await waitFor(() => expect(state.create).toHaveBeenCalledTimes(1));
+  expect(state.create.mock.calls[0]?.[0] as unknown).toMatchObject({
+    body: {
+      name: 'Copilot profile',
+      runtime: 'github-copilot',
+      toolchainImage: 'example.com/tools:latest',
+    },
+  });
+});
 it('does not offer build creation to read-only users', async () => {
   state.admin = false;
   page();

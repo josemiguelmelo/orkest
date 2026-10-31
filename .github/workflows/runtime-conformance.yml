@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        runtime: [opencode, claude-code, codex]
+        runtime: [opencode, claude-code, codex, github-copilot]
     environment: runtime-qualification
     steps:
       - uses: actions/checkout@v4.2.2
@@ -48,6 +48,7 @@ jobs:
             opencode) npm install --global "@opencode/cli@$VERSION" ;;
             claude-code) npm install --global "@agentclientprotocol/claude-agent-acp@$VERSION" ;;
             codex) npm install --global "@agentclientprotocol/codex-acp@$VERSION" ;;
+            github-copilot) npm install --global "@github/copilot@$VERSION" ;;
             *) echo "No pinned installer for $RUNTIME"; exit 1 ;;
           esac
       - name: Strict live qualification (missing settings fail)
@@ -56,9 +57,10 @@ jobs:
           ORKEST_OPENCODE_BINARY: opencode
           ORKEST_CLAUDE_CODE_BINARY: claude-agent-acp
           ORKEST_CODEX_BINARY: codex-acp
+          ORKEST_GITHUB_COPILOT_BINARY: copilot
           QUALIFY_RUNTIME: ${{ matrix.runtime }}
-          ORKEST_TEST_MODEL_PROVIDER: ${{ matrix.runtime == 'claude-code' && 'anthropic' || matrix.runtime == 'codex' && 'openai' || vars.ORKEST_TEST_MODEL_PROVIDER }}
-          ORKEST_TEST_MODEL_ID: ${{ matrix.runtime == 'claude-code' && vars.ORKEST_CLAUDE_CODE_TEST_MODEL_ID || matrix.runtime == 'codex' && vars.ORKEST_CODEX_TEST_MODEL_ID || matrix.runtime == 'opencode' && vars.ORKEST_TEST_MODEL_ID || '' }}
+          ORKEST_TEST_MODEL_PROVIDER: ${{ matrix.runtime == 'claude-code' && 'anthropic' || matrix.runtime == 'codex' && 'openai' || matrix.runtime == 'github-copilot' && 'github-copilot' || vars.ORKEST_TEST_MODEL_PROVIDER }}
+          ORKEST_TEST_MODEL_ID: ${{ matrix.runtime == 'claude-code' && vars.ORKEST_CLAUDE_CODE_TEST_MODEL_ID || matrix.runtime == 'codex' && vars.ORKEST_CODEX_TEST_MODEL_ID || matrix.runtime == 'github-copilot' && vars.ORKEST_GITHUB_COPILOT_TEST_MODEL_ID || matrix.runtime == 'opencode' && vars.ORKEST_TEST_MODEL_ID || '' }}
           ORKEST_TEST_PROVIDER_ENV: ${{ vars.ORKEST_TEST_PROVIDER_ENV }}
           ORKEST_TEST_APPROVAL_PROMPT: ${{ vars.ORKEST_TEST_APPROVAL_PROMPT }}
           ORKEST_TEST_RECOVERY_PROMPT: ${{ vars.ORKEST_TEST_RECOVERY_PROMPT }}
@@ -68,5 +70,6 @@ jobs:
           ORKEST_TEST_MCP_EXPECTED: ${{ vars.ORKEST_TEST_MCP_EXPECTED }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_GITHUB_TOKEN }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
         run: make qualify-runtime
