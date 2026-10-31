@@ -25,6 +25,16 @@ type HTTPAgentctlClient struct {
 	pollEvery time.Duration
 }
 
+type agentctlHTTPError struct {
+	Status  int
+	Code    string `json:"errorCode"`
+	Message string `json:"error"`
+}
+
+func (e *agentctlHTTPError) Error() string {
+	return fmt.Sprintf("agentctl request returned HTTP %d", e.Status)
+}
+
 func NewHTTPAgentctlClient(client *http.Client) *HTTPAgentctlClient {
 	if client == nil {
 		client = &http.Client{Timeout: 10 * time.Second}
@@ -145,7 +155,12 @@ func (c *HTTPAgentctlClient) post(ctx context.Context, endpoint, path string, pa
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("agentctl request returned HTTP %d", resp.StatusCode)
+		var response agentctlHTTPError
+		response.Status = resp.StatusCode
+		if err := json.NewDecoder(io.LimitReader(resp.Body, 4096)).Decode(&response); err != nil {
+			return &agentctlHTTPError{Status: resp.StatusCode}
+		}
+		return &response
 	}
 	return nil
 }

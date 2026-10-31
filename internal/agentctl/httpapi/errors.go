@@ -26,6 +26,11 @@ func writeServiceError(w http.ResponseWriter, err error, status int, code, messa
 		protocol.WriteError(w, http.StatusBadGateway, "launch_failed", launchError.Message)
 		return
 	}
+	var runtimeError *agentruntime.RuntimeError
+	if errors.As(err, &runtimeError) {
+		protocol.WriteError(w, http.StatusBadGateway, "launch_failed", runtimeError.Message)
+		return
+	}
 	for _, known := range []struct {
 		err    error
 		status int

@@ -1,10 +1,14 @@
 .DEFAULT_GOAL := help
-.PHONY: help setup dev dev-once dev-agentctl dev-web db-up db-down db-logs auth-up lint-install lint fmt sqlc check build test-integration test-postgres test-recovery test-recovery-unit docker-agentctl-base docker-agentctl-opencode docker-agentctl-claude-code docker-agentctl-images test-docker check-runtime-boundaries
+.PHONY: help setup dev dev-once dev-agentctl dev-web db-up db-down db-logs auth-up lint-install lint fmt sqlc check build test-integration test-postgres test-recovery test-recovery-unit docker-agentctl-base docker-agentctl-opencode docker-agentctl-claude-code docker-agentctl-images docker-agentctl-push-local test-docker check-runtime-boundaries
 
 GOLANGCI_LINT_VERSION := v2.15.0
 GOLANGCI_LINT := bin/tools/$(GOLANGCI_LINT_VERSION)/golangci-lint
 SQLC_VERSION := v1.31.1
 DOCKER ?= docker
+REGISTRY_PORT ?= 5001
+LOCAL_REGISTRY ?= localhost:$(REGISTRY_PORT)
+CONTAINER_REGISTRY ?= registry:5000
+AGENTCTL_REGISTRY_NAMESPACE ?= orkest
 AGENTCTL_RUNTIME ?= opencode
 AGENTCTL_ARGS ?=
 QUALIFY_RUNTIME ?= .+
@@ -36,6 +40,7 @@ help:
 	@echo "test-recovery      Also verify real OpenCode continuation (requires explicit model and credentials)"
 	@echo "test-postgres     Test PostgreSQL repositories (requires DATABASE_URL or all POSTGRES_* settings)"
 	@echo "docker-agentctl-images Build the agentctl base and separate runtime images"
+	@echo "docker-agentctl-push-local Build and push runtime images to the local registry"
 	@echo "test-docker       Run Docker Engine smoke test (builds images; requires Docker Engine)"
 
 setup:
@@ -114,6 +119,15 @@ docker-agentctl-claude-code: docker-agentctl-base
 	$(DOCKER) build -f build/docker/agentctl-claude-code.Dockerfile --build-arg AGENTCTL_BASE_IMAGE=$(AGENTCTL_BASE_IMAGE) -t $(AGENTCTL_CLAUDE_CODE_IMAGE) .
 
 docker-agentctl-images: docker-agentctl-opencode docker-agentctl-claude-code
+
+docker-agentctl-push-local: docker-agentctl-images
+	$(DOCKER) compose up -d registry
+	$(DOCKER) tag $(AGENTCTL_OPENCODE_IMAGE) $(LOCAL_REGISTRY)/$(AGENTCTL_REGISTRY_NAMESPACE)/agentctl-opencode:$(OPENCODE_VERSION)
+	$(DOCKER) push $(LOCAL_REGISTRY)/$(AGENTCTL_REGISTRY_NAMESPACE)/agentctl-opencode:$(OPENCODE_VERSION)
+	$(DOCKER) tag $(AGENTCTL_OPENCODE_IMAGE) $(CONTAINER_REGISTRY)/$(AGENTCTL_REGISTRY_NAMESPACE)/agentctl-opencode:$(OPENCODE_VERSION)
+	$(DOCKER) tag $(AGENTCTL_CLAUDE_CODE_IMAGE) $(LOCAL_REGISTRY)/$(AGENTCTL_REGISTRY_NAMESPACE)/agentctl-claude-code:$(CLAUDE_AGENT_ACP_VERSION)
+	$(DOCKER) push $(LOCAL_REGISTRY)/$(AGENTCTL_REGISTRY_NAMESPACE)/agentctl-claude-code:$(CLAUDE_AGENT_ACP_VERSION)
+	$(DOCKER) tag $(AGENTCTL_CLAUDE_CODE_IMAGE) $(CONTAINER_REGISTRY)/$(AGENTCTL_REGISTRY_NAMESPACE)/agentctl-claude-code:$(CLAUDE_AGENT_ACP_VERSION)
 
 test-docker: docker-agentctl-images
 	AGENTCTL_OPENCODE_IMAGE=$(AGENTCTL_OPENCODE_IMAGE) AGENTCTL_CLAUDE_CODE_IMAGE=$(AGENTCTL_CLAUDE_CODE_IMAGE) go test -tags=docker ./internal/executors/docker -run 'TestDockerAgentctlLaunchSmoke|TestDockerSessionRestore' -count=1

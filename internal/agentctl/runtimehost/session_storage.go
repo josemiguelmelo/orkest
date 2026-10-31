@@ -16,6 +16,8 @@ import (
 // sessionStorage owns the existing v1 layout independently of native protocols.
 type sessionStorage struct{ StateDir, WorkDir, RuntimeVersion string }
 
+var errSessionAlreadyExists = errors.New("session already exists; explicit restoration required")
+
 type sessionManifest struct {
 	Version        int    `json:"version"`
 	RuntimeVersion string `json:"runtimeVersion"`
@@ -90,7 +92,7 @@ func (s sessionStorage) acquire(config runconfig.RuntimeConfig) (*os.File, error
 func (s sessionStorage) reserveCreation(config runconfig.RuntimeConfig) error {
 	root := s.Root(config)
 	if _, err := os.Stat(filepath.Join(root, "session.json")); err == nil {
-		return errors.New("session already exists; explicit restoration required")
+		return errSessionAlreadyExists
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return err
 	}

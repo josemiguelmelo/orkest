@@ -6,11 +6,13 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 
@@ -35,6 +37,8 @@ type Host struct {
 	environment     Environment
 	cliAuthAdapters []gitprovider.CLIAuthAdapter
 }
+
+var runtimeVersionPattern = regexp.MustCompile(`^(?:[A-Za-z][A-Za-z0-9._+-]* )?v?[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$`)
 
 // New binds runtime contracts to an explicitly granted execution environment.
 func New(profile agentruntime.RuntimeProfile, factory agentruntime.ProtocolClientFactory, environment Environment, cliAuthAdapters ...gitprovider.CLIAuthAdapter) *Host {
@@ -79,7 +83,14 @@ func (h *Host) start(ctx context.Context, config runconfig.RuntimeConfig, restor
 		err = store.reserveCreation(config)
 	}
 	if err != nil {
-		return nil, &agentruntime.LaunchError{Message: "session storage requires reconciliation", Cause: err}
+		message := "could not reserve durable session storage; check storage availability and permissions"
+		switch {
+		case errors.Is(err, errSessionAlreadyExists):
+			message = "saved session already exists; continue that session or explicitly start a new session"
+		case errors.Is(err, os.ErrExist):
+			message = "session creation was already reserved by a previous attempt; reconcile it or explicitly start a new session"
+		}
+		return nil, &agentruntime.LaunchError{Message: message, Cause: err}
 	}
 	settings := agentruntime.ResolvedRuntimeSettings{Agent: config.Agent, Model: config.Model, MCPServers: config.MCPServers, Skills: config.Skills}
 	paths := h.provisioningPaths(config, store)
@@ -101,23 +112,22 @@ func (h *Host) start(ctx context.Context, config runconfig.RuntimeConfig, restor
 		name, value, ok := strings.Cut(entry, "=")
 		name = strings.ToLower(name)
 		if ok && (strings.Contains(name, "key") || strings.Contains(name, "token") || strings.Contains(name, "secret") || strings.Contains(name, "password")) {
-			session.callbacks.secrets = append(session.callbacks.secrets, value)
+			session.callbacks.AddSecretValues(value)
 		}
 	}
 	for _, value := range config.Environment {
 		if value != "" {
-			session.callbacks.secrets = append(session.callbacks.secrets, value)
+			session.callbacks.AddSecretValues(value)
 		}
 	}
 	for _, credential := range config.GitCredentials {
 		if credential.Token != "" {
-			session.callbacks.secrets = append(session.callbacks.secrets, credential.Token)
-			session.callbacks.secrets = append(session.callbacks.secrets, base64.StdEncoding.EncodeToString([]byte("x-access-token:"+credential.Token)))
+			session.callbacks.AddSecretValues(credential.Token, base64.StdEncoding.EncodeToString([]byte("x-access-token:"+credential.Token)))
 		}
 	}
 	for _, server := range config.MCPServers {
 		for _, value := range server.Headers {
-			session.callbacks.secrets = append(session.callbacks.secrets, value)
+			session.callbacks.AddSecretValues(value)
 		}
 	}
 	options := h.profile.ProtocolSessionOptions(settings, paths)
@@ -271,12 +281,45 @@ func verifyRuntimeVersion(ctx context.Context, executable string, args []string,
 	probe.Env = environment
 	output, err := probe.Output()
 	if err != nil {
-		return &agentruntime.LaunchError{Message: "inspect runtime version failed", Cause: err}
+		message := "runtime version command failed; verify the pinned runtime is installed and executable"
+		var exitError *exec.ExitError
+		if errors.As(err, &exitError) {
+			message = fmt.Sprintf("runtime version command exited with status %d; verify the pinned runtime is installed and executable", exitError.ExitCode())
+			if detail := safeRuntimeDiagnostic(string(exitError.Stderr), environment); detail != "" {
+				message = fmt.Sprintf("runtime version command exited with status %d: %s", exitError.ExitCode(), detail)
+			}
+		} else if errors.Is(err, context.DeadlineExceeded) {
+			message = "runtime version command timed out; verify the runtime image is healthy"
+		}
+		return &agentruntime.LaunchError{Message: message, Cause: err}
 	}
-	if strings.TrimSpace(string(output)) != want {
-		return &agentruntime.LaunchError{Message: "runtime version does not match the pinned version"}
+	got := strings.TrimSpace(string(output))
+	if got != want {
+		if !safeRuntimeVersion(got) {
+			got = "unrecognized output"
+		}
+		return &agentruntime.LaunchError{Message: fmt.Sprintf("runtime version mismatch: Orkest requires %s but the installed runtime reports %s", want, got)}
 	}
 	return nil
+}
+
+func safeRuntimeVersion(value string) bool {
+	return len(value) <= 64 && runtimeVersionPattern.MatchString(value)
+}
+
+func safeRuntimeDiagnostic(value string, environment []string) string {
+	for _, entry := range environment {
+		_, secret, ok := strings.Cut(entry, "=")
+		if ok && secret != "" {
+			value = strings.ReplaceAll(value, secret, "[redacted]")
+		}
+	}
+	value = strings.Join(strings.Fields(value), " ")
+	runes := []rune(value)
+	if len(runes) > 400 {
+		value = string(runes[:400]) + "…"
+	}
+	return value
 }
 
 var _ agentruntime.RuntimeHost = (*Host)(nil)

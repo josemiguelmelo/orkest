@@ -47,7 +47,7 @@ func (s *LaunchService) Start(ctx context.Context, config runconfig.RunConfig) (
 		}
 	}
 	fail := func(stage string, cause error) (Launch, error) {
-		launch.Status, launch.FailureStage, launch.FailureReason, launch.UpdatedAt = LaunchFailed, stage, sanitizedFailure(stage), time.Now().UTC()
+		launch.Status, launch.FailureStage, launch.FailureReason, launch.UpdatedAt = LaunchFailed, stage, sanitizedFailure(stage, cause), time.Now().UTC()
 		if config.TaskSessionID != "" {
 			launch.Status = LaunchFailedPendingClose
 		}
@@ -229,7 +229,18 @@ func validEndpoint(endpoint string) bool {
 	return err == nil && (u.Scheme == "http" || u.Scheme == "https") && u.Host != "" && u.User == nil && u.RawQuery == "" && u.Fragment == ""
 }
 
-func sanitizedFailure(stage string) string { return "launch step failed: " + stage }
+func sanitizedFailure(stage string, cause error) string {
+	reason := "launch step failed: " + stage
+	var response *agentctlHTTPError
+	if errors.As(cause, &response) && response.Code == "launch_failed" && response.Message != "" {
+		message := strings.Join(strings.Fields(response.Message), " ")
+		if len(message) > 500 {
+			message = message[:500]
+		}
+		reason += ": " + message
+	}
+	return reason
+}
 
 func (s *LaunchService) deliverPrompt(ctx context.Context, launch Launch, commandID, prompt string) error {
 	outbox := s.repo

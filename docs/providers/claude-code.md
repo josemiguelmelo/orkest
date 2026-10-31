@@ -34,6 +34,11 @@ OpenCode is packaged separately in its own runtime image.
 
 ## Recovery and qualification
 
+When startup fails, task chat shows the failed launch stage and a bounded,
+sanitized ACP or runtime startup diagnostic when available. Configured
+environment values are redacted before the diagnostic is returned to the
+platform; raw provider output is not exposed.
+
 ACP session loading is implemented, but Claude Code is not yet qualified for
 automatic interrupted-work continuation. The runtime profile therefore does
 not attest complete replay coverage; uncertain interrupted commands remain

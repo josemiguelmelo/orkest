@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"strings"
 	"sync"
 
 	sdk "github.com/coder/acp-go-sdk"
@@ -35,7 +36,7 @@ type client struct {
 func (c *client) Initialize(ctx context.Context) (agentruntime.NegotiatedCapabilities, error) {
 	response, err := c.connection.Initialize(ctx, sdk.InitializeRequest{ProtocolVersion: 1})
 	if err != nil {
-		return agentruntime.NegotiatedCapabilities{}, protocolError("initialize ACP connection failed", err)
+		return agentruntime.NegotiatedCapabilities{}, c.protocolError("initialize ACP connection failed", err)
 	}
 	return agentruntime.NegotiatedCapabilities{ProtocolVersion: int(response.ProtocolVersion), LoadSession: response.AgentCapabilities.LoadSession, SetSessionMode: true}, nil
 }
@@ -43,7 +44,7 @@ func (c *client) Initialize(ctx context.Context) (agentruntime.NegotiatedCapabil
 func (c *client) NewSession(ctx context.Context, workDir string, options agentruntime.ProtocolSessionOptions) (string, error) {
 	response, err := c.connection.NewSession(ctx, sdk.NewSessionRequest{Cwd: workDir, McpServers: mcpServers(options.MCPServers), Meta: options.Metadata})
 	if err != nil {
-		return "", protocolError("create ACP session failed", err)
+		return "", c.protocolError("create ACP session failed", err)
 	}
 	c.mu.Lock()
 	c.sessionID = string(response.SessionId)
@@ -57,7 +58,7 @@ func (c *client) LoadSession(ctx context.Context, id string, workDir string, opt
 	c.mu.Unlock()
 	_, err := c.connection.LoadSession(ctx, sdk.LoadSessionRequest{SessionId: sdk.SessionId(id), Cwd: workDir, McpServers: mcpServers(options.MCPServers), Meta: options.Metadata})
 	if err != nil {
-		return protocolError("load ACP session failed", err)
+		return c.protocolError("load ACP session failed", err)
 	}
 	return nil
 }
@@ -77,7 +78,7 @@ func mcpServers(servers []runconfig.MCPServer) []sdk.McpServer {
 func (c *client) SetSessionMode(ctx context.Context, id, mode string) error {
 	_, err := c.connection.SetSessionMode(ctx, sdk.SetSessionModeRequest{SessionId: sdk.SessionId(id), ModeId: sdk.SessionModeId(mode)})
 	if err != nil {
-		return protocolError("set ACP session mode failed", err)
+		return c.protocolError("set ACP session mode failed", err)
 	}
 	return nil
 }
@@ -94,14 +95,14 @@ func (c *client) Prompt(ctx context.Context, id, text string) (agentruntime.Stop
 			kind = agentruntime.RuntimeInterrupted
 		default:
 		}
-		return "", &agentruntime.RuntimeError{Kind: kind, Message: "ACP prompt failed", Cause: err}
+		return "", c.protocolErrorKind(kind, "ACP prompt failed", err)
 	}
 	return agentruntime.StopReason(response.StopReason), nil
 }
 
 func (c *client) Cancel(ctx context.Context, id string) error {
 	if err := c.connection.Cancel(ctx, sdk.CancelNotification{SessionId: sdk.SessionId(id)}); err != nil {
-		return protocolError("cancel ACP prompt failed", err)
+		return c.protocolError("cancel ACP prompt failed", err)
 	}
 	return nil
 }
@@ -262,6 +263,31 @@ func toolUpdate(kind, id, title, status, toolKind string, input, output any, loc
 	return u
 }
 
-func protocolError(message string, cause error) error {
-	return &agentruntime.RuntimeError{Kind: agentruntime.RuntimeFailure, Message: message, Cause: cause}
+func (c *client) protocolError(message string, cause error) error {
+	return c.protocolErrorKind(agentruntime.RuntimeFailure, message, cause)
+}
+
+func (c *client) protocolErrorKind(kind agentruntime.RuntimeFailureKind, message string, cause error) error {
+	var requestError *sdk.RequestError
+	if errors.As(cause, &requestError) && requestError.Message != "" {
+		detail := strings.TrimSpace(requestError.Message)
+		var secrets []string
+		if provider, ok := c.callbacks.(interface{ SecretValues() []string }); ok {
+			secrets = provider.SecretValues()
+		}
+		for _, secret := range secrets {
+			if secret != "" {
+				detail = strings.ReplaceAll(detail, secret, "[redacted]")
+			}
+		}
+		detail = strings.Join(strings.Fields(detail), " ")
+		runes := []rune(detail)
+		if len(runes) > 400 {
+			detail = string(runes[:400]) + "…"
+		}
+		if detail != "" {
+			message += ": " + detail
+		}
+	}
+	return &agentruntime.RuntimeError{Kind: kind, Message: message, Cause: cause}
 }

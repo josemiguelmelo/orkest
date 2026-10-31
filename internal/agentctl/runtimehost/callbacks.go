@@ -19,6 +19,18 @@ type sessionCallbacks struct {
 	observerFailed bool
 }
 
+func (c *sessionCallbacks) SecretValues() []string {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return append([]string(nil), c.secrets...)
+}
+
+func (c *sessionCallbacks) AddSecretValues(values ...string) {
+	c.mu.Lock()
+	c.secrets = append(c.secrets, values...)
+	c.mu.Unlock()
+}
+
 func (c *sessionCallbacks) Update(update interaction.Update) error {
 	c.mu.Lock()
 	observer := c.observer
