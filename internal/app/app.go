@@ -139,7 +139,7 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 			stopRunner()
 			return buildErr
 		}
-		builder, buildErr := newImageBuilder(os.Getenv("ORKEST_IMAGE_BUILDER"), imageStore, buildkit.Config{Binary: os.Getenv("ORKEST_BUILDCTL_BINARY"), Address: os.Getenv("ORKEST_BUILDKIT_ADDR"), TLSCA: os.Getenv("ORKEST_BUILDKIT_TLS_CA"), TLSCert: os.Getenv("ORKEST_BUILDKIT_TLS_CERT"), TLSKey: os.Getenv("ORKEST_BUILDKIT_TLS_KEY")})
+		builder, buildErr := newImageBuilder(os.Getenv("ORKEST_IMAGE_BUILDER"), imageStore, buildkit.Config{Binary: os.Getenv("ORKEST_BUILDCTL_BINARY"), Address: os.Getenv("ORKEST_BUILDKIT_ADDR"), TLSCA: os.Getenv("ORKEST_BUILDKIT_TLS_CA"), TLSCert: os.Getenv("ORKEST_BUILDKIT_TLS_CERT"), TLSKey: os.Getenv("ORKEST_BUILDKIT_TLS_KEY"), Daemonless: strings.EqualFold(os.Getenv("ORKEST_BUILDKIT_DAEMONLESS"), "true")})
 		if buildErr != nil {
 			stopRunner()
 			return buildErr

@@ -15,10 +15,16 @@ immutable digests before each build.
 
 Select the deployment-wide backend with `ORKEST_IMAGE_BUILDER`:
 
-- `buildkit` (default) uses pinned `buildctl` v0.34.1 and a compatible BuildKit
-  daemon. Set `ORKEST_BUILDCTL_BINARY` to override the executable path,
+- `buildkit` (default) uses pinned BuildKit v0.34.1. By default it uses
+  `buildctl` with a compatible BuildKit daemon. Set `ORKEST_BUILDCTL_BINARY` to
+  override the executable path,
   `ORKEST_BUILDKIT_ADDR` to select the daemon, and `ORKEST_BUILDKIT_TLS_CA`,
   `ORKEST_BUILDKIT_TLS_CERT`, and `ORKEST_BUILDKIT_TLS_KEY` for optional mTLS.
+  Set `ORKEST_BUILDKIT_DAEMONLESS=true` with the bundled
+  `buildctl-daemonless.sh` wrapper to start a rootless BuildKit daemon for each
+  build inside the platform container. Container runtimes must allow the user
+  namespace and mount operations required by rootless BuildKit; see the
+  [BuildKit rootless requirements](https://github.com/moby/buildkit/blob/v0.34.1/docs/rootless.md#containerized-deployment).
 - `docker` uses the deployment's Docker CLI and daemon. It does not need
   `buildctl` or a separate BuildKit daemon.
 
@@ -28,7 +34,9 @@ accounts or refresh ECR credentials. When the BuildKit and Docker daemons are
 separate, both must reach the registries. The BuildKit daemon also needs package
 network access. Use a Unix socket or protected connection for BuildKit; remote
 TCP connections should use mTLS. `DOCKER_HOST` selects the Docker daemon used
-for validation and execution.
+for validation and execution. Daemonless mode uses the platform container's
+network and filesystem for each temporary builder; it does not need a separate
+BuildKit daemon or persistent BuildKit cache.
 
 ## Prepare a toolchain image
 

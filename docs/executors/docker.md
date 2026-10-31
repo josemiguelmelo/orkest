@@ -28,8 +28,9 @@ configure `AGENTCTL_OPENCODE_IMAGE` or `AGENTCTL_CLAUDE_CODE_IMAGE` when using a
 custom tag. `AGENTCTL_BASE_IMAGE` remains an optional build argument for a custom
 base image.
 
-The base image contains the `agentctl` binary, Git, and GitHub CLI 2.103.2. Each
-runtime image extends that base and installs only its pinned runtime:
+The base image contains the `agentctl` binary, Git, GitHub CLI 2.103.2, and
+GitLab CLI 1.125.0. It does not include BuildKit; image composition runs on the
+platform host. Each runtime image extends that base and installs only its pinned runtime:
 OpenCode 2.1.4 in `orkest/agentctl-opencode:2.1.4`, or the Claude Code ACP
 adapter 0.99.0 in `orkest/agentctl-claude-code:0.99.0`. The
 `docker-agentctl-images` target builds the base and both runtime images. Override

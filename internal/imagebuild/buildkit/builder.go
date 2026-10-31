@@ -1,4 +1,4 @@
-// Package buildkit composes and publishes execution images using a standalone BuildKit daemon.
+// Package buildkit composes and publishes execution images using BuildKit.
 package buildkit
 
 import (
@@ -25,11 +25,12 @@ type ImageStore interface {
 }
 
 type Config struct {
-	Binary  string
-	Address string
-	TLSCA   string
-	TLSCert string
-	TLSKey  string
+	Binary     string
+	Address    string
+	TLSCA      string
+	TLSCert    string
+	TLSKey     string
+	Daemonless bool
 }
 
 type Builder struct {
@@ -44,14 +45,16 @@ func New(config Config, store ImageStore) (*Builder, error) {
 	if config.Binary == "" {
 		config.Binary = "buildctl"
 	}
+	if config.Daemonless {
+		config.Binary = "buildctl-daemonless.sh"
+	} else if (config.TLSCert == "") != (config.TLSKey == "") {
+		return nil, errors.New("buildkit client certificate and key must be configured together")
+	}
 	binary, err := exec.LookPath(config.Binary)
 	if err != nil {
 		return nil, errors.New("image composition requires buildctl")
 	}
 	config.Binary = binary
-	if (config.TLSCert == "") != (config.TLSKey == "") {
-		return nil, errors.New("buildkit client certificate and key must be configured together")
-	}
 	return &Builder{config: config, store: store}, nil
 }
 
@@ -72,7 +75,10 @@ func (b *Builder) BuildAndPush(ctx context.Context, build executionprofile.Build
 	contextDir := prepared.Directory
 	// Keep exporter metadata outside the sent build context.
 	metadataPath := filepath.Join(prepared.Root, "metadata.json")
-	args := b.connectionArgs()
+	var args []string
+	if !b.config.Daemonless {
+		args = b.connectionArgs()
+	}
 	args = append(args, "build", "--frontend", "dockerfile.v0", "--local", "context="+contextDir, "--local", "dockerfile="+contextDir,
 		"--opt", "build-arg:BASE="+build.ResolvedBase, "--opt", "build-arg:TOOLCHAIN="+build.ResolvedToolchain,
 		"--opt", "label:dev.orkest.build="+build.ID, "--output", "type=image,name="+destination.String()+",push=true", "--metadata-file", metadataPath)
