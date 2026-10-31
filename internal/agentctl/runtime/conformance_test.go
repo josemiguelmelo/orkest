@@ -12,6 +12,7 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/agentctl/runtime/codex"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/runtime/conformance"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/runtime/githubcopilot"
+	"github.com/josemiguelmelo/orkest/internal/agentctl/runtime/kiro"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/runtime/opencode"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/runtime/opencode/opencodetest"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/runtimehost"
@@ -103,6 +104,25 @@ func TestRuntimeConformance(t *testing.T) {
 			}
 			return runtimehost.New(githubcopilot.Profile{Binary: binary}, sharedacp.Factory{}, runtimehost.Environment{WorkDir: work, StateDir: state, GrantedEnv: env})
 		},
+		coreruntime.Kiro: func(t *testing.T, work, state string) agentruntime.RuntimeHost {
+			t.Helper()
+			binary, env := "", []string{"ORKEST_KIRO_ACP_FIXTURE=1", "ORKEST_FIXTURE_VERSION=" + kiro.Version}
+			if os.Getenv("ORKEST_RUNTIME_CONFORMANCE") == "live" {
+				binary = required(t, "ORKEST_KIRO_BINARY")
+				env = []string{"PATH=" + os.Getenv("PATH")}
+				for _, name := range strings.Split(required(t, "ORKEST_TEST_PROVIDER_ENV"), ",") {
+					env = append(env, name+"="+required(t, name))
+				}
+			}
+			if binary == "" {
+				var err error
+				binary, err = os.Executable()
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			return runtimehost.New(kiro.Profile{Binary: binary}, sharedacp.Factory{}, runtimehost.Environment{WorkDir: work, StateDir: state, GrantedEnv: env})
+		},
 	}
 	versions := coreruntime.Supported()
 	if len(factories) != len(versions) {
@@ -122,6 +142,8 @@ func TestRuntimeConformance(t *testing.T) {
 				modelProvider = "openai"
 			case coreruntime.GitHubCopilot:
 				modelProvider = "github-copilot"
+			case coreruntime.Kiro:
+				modelProvider = "kiro"
 			}
 			profile := conformance.Profile{Config: runconfig.RuntimeConfig{OrganizationID: "test-org", WorkspaceID: "test-workspace", TaskID: "test-task", TaskSessionID: "test-session", RunID: "revision-1", Runtime: runtime, Agent: runconfig.AgentDefinition{Name: "Work", Instructions: "Follow user instructions."}, Model: runconfig.ModelSelection{Provider: modelProvider, ID: "fixture"}}, Remember: func(token string) string { return "remember:" + token }, Recall: "recall", Permission: "permission", Wait: "wait", Suspend: "wait"}
 			marker, err := ids.NewUUID()
@@ -145,10 +167,13 @@ func TestRuntimeConformance(t *testing.T) {
 					"http-mcp":     {Prompt: required(t, "ORKEST_TEST_MCP_PROMPT"), Expected: required(t, "ORKEST_TEST_MCP_EXPECTED")},
 				}
 				provider := required(t, "ORKEST_TEST_MODEL_PROVIDER")
-				if runtime == coreruntime.ClaudeCode {
+				switch runtime {
+				case coreruntime.ClaudeCode:
 					provider = "anthropic"
-				} else if runtime == coreruntime.GitHubCopilot {
+				case coreruntime.GitHubCopilot:
 					provider = "github-copilot"
+				case coreruntime.Kiro:
+					provider = "kiro"
 				}
 				profile.Config.Model = runconfig.ModelSelection{Provider: provider, ID: required(t, "ORKEST_TEST_MODEL_ID")}
 				profile.Remember = func(token string) string { return "Remember this marker for later: " + token + ". Reply acknowledged." }

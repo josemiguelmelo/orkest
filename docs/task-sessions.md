@@ -57,7 +57,8 @@ controls are `POST /agent/queue/resume` and `/agent/queue/discard`.
 
 Task working paths and the entire agentctl state directory must survive.
 OpenCode 2.1.4, Claude Code's `claude-agent-acp` 0.99.0 adapter, Codex's
-`codex-acp` 2.3.0 adapter, and GitHub Copilot CLI 1.0.105 use ACP v1. Copilot's
+`codex-acp` 2.3.0 adapter, GitHub Copilot CLI 1.0.105, and Kiro CLI 2.37.0 use
+ACP v1. Kiro uses the V3 harness and newline-delimited JSON-RPC framing. Copilot's
 ACP server is in public preview; its interrupted-turn replay remains
 unqualified and pauses when the journal cannot establish the outcome.
 Session manifests verify the runtime version, working path, and configuration

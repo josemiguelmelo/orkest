@@ -13,7 +13,9 @@ func (GitHubCopilotProvider) Runtime() Runtime { return GitHubCopilot }
 
 func (GitHubCopilotProvider) Version() string { return Supported()[GitHubCopilot] }
 
-func (p GitHubCopilotProvider) DefaultImage() string { return "orkest/agentctl-github-copilot:" + p.Version() }
+func (p GitHubCopilotProvider) DefaultImage() string {
+	return "orkest/agentctl-github-copilot:" + p.Version()
+}
 
 func (GitHubCopilotProvider) ValidateDefinition(definition Definition) error {
 	if !strings.EqualFold(definition.ModelProvider, "github-copilot") {

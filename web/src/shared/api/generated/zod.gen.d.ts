@@ -179,6 +179,7 @@ export declare const zExecutionProfileInput: z.ZodObject<{
         "claude-code": "claude-code";
         codex: "codex";
         "github-copilot": "github-copilot";
+        kiro: "kiro";
     }>;
     toolchainImage: z.ZodString;
     generation: z.ZodOptional<z.ZodCoercedBigInt<unknown>>;
@@ -191,6 +192,7 @@ export declare const zExecutionProfile: z.ZodIntersection<z.ZodObject<{
         "claude-code": "claude-code";
         codex: "codex";
         "github-copilot": "github-copilot";
+        kiro: "kiro";
     }>;
     toolchainImage: z.ZodString;
     generation: z.ZodOptional<z.ZodCoercedBigInt<unknown>>;
@@ -214,6 +216,7 @@ export declare const zExecutionProfileBuild: z.ZodObject<{
         "claude-code": "claude-code";
         codex: "codex";
         "github-copilot": "github-copilot";
+        kiro: "kiro";
     }>;
     toolchainImage: z.ZodString;
     baseImage: z.ZodString;
@@ -237,6 +240,7 @@ export declare const zAgent: z.ZodObject<{
         "claude-code": "claude-code";
         codex: "codex";
         "github-copilot": "github-copilot";
+        kiro: "kiro";
     }>;
     provider: z.ZodString;
     model: z.ZodString;
@@ -256,6 +260,7 @@ export declare const zAgentRuntimeProfileInput: z.ZodObject<{
         "claude-code": "claude-code";
         codex: "codex";
         "github-copilot": "github-copilot";
+        kiro: "kiro";
     }>;
     modelProvider: z.ZodString;
     modelIdentifier: z.ZodString;
@@ -267,6 +272,7 @@ export declare const zAgentRuntimeProfile: z.ZodIntersection<z.ZodObject<{
         "claude-code": "claude-code";
         codex: "codex";
         "github-copilot": "github-copilot";
+        kiro: "kiro";
     }>;
     modelProvider: z.ZodString;
     modelIdentifier: z.ZodString;
@@ -446,6 +452,7 @@ export declare const zAgentDefinition: z.ZodObject<{
         "claude-code": "claude-code";
         codex: "codex";
         "github-copilot": "github-copilot";
+        kiro: "kiro";
     }>;
     provider: z.ZodString;
     model: z.ZodString;
@@ -492,6 +499,7 @@ export declare const zListAgentRuntimeProfilesResponse: z.ZodArray<z.ZodIntersec
         "claude-code": "claude-code";
         codex: "codex";
         "github-copilot": "github-copilot";
+        kiro: "kiro";
     }>;
     modelProvider: z.ZodString;
     modelIdentifier: z.ZodString;
@@ -508,6 +516,7 @@ export declare const zCreateAgentRuntimeProfileBody: z.ZodObject<{
         "claude-code": "claude-code";
         codex: "codex";
         "github-copilot": "github-copilot";
+        kiro: "kiro";
     }>;
     modelProvider: z.ZodString;
     modelIdentifier: z.ZodString;
@@ -526,6 +535,7 @@ export declare const zCreateAgentRuntimeProfileResponse: z.ZodIntersection<z.Zod
         "claude-code": "claude-code";
         codex: "codex";
         "github-copilot": "github-copilot";
+        kiro: "kiro";
     }>;
     modelProvider: z.ZodString;
     modelIdentifier: z.ZodString;
@@ -551,6 +561,7 @@ export declare const zUpdateAgentRuntimeProfileBody: z.ZodObject<{
         "claude-code": "claude-code";
         codex: "codex";
         "github-copilot": "github-copilot";
+        kiro: "kiro";
     }>;
     modelProvider: z.ZodString;
     modelIdentifier: z.ZodString;
@@ -570,6 +581,7 @@ export declare const zUpdateAgentRuntimeProfileResponse: z.ZodIntersection<z.Zod
         "claude-code": "claude-code";
         codex: "codex";
         "github-copilot": "github-copilot";
+        kiro: "kiro";
     }>;
     modelProvider: z.ZodString;
     modelIdentifier: z.ZodString;
@@ -594,6 +606,7 @@ export declare const zListExecutionProfilesResponse: z.ZodArray<z.ZodIntersectio
         "claude-code": "claude-code";
         codex: "codex";
         "github-copilot": "github-copilot";
+        kiro: "kiro";
     }>;
     toolchainImage: z.ZodString;
     generation: z.ZodOptional<z.ZodCoercedBigInt<unknown>>;
@@ -615,6 +628,7 @@ export declare const zCreateExecutionProfileBody: z.ZodObject<{
         "claude-code": "claude-code";
         codex: "codex";
         "github-copilot": "github-copilot";
+        kiro: "kiro";
     }>;
     toolchainImage: z.ZodString;
     generation: z.ZodOptional<z.ZodCoercedBigInt<unknown>>;
@@ -634,6 +648,7 @@ export declare const zCreateExecutionProfileResponse: z.ZodIntersection<z.ZodObj
         "claude-code": "claude-code";
         codex: "codex";
         "github-copilot": "github-copilot";
+        kiro: "kiro";
     }>;
     toolchainImage: z.ZodString;
     generation: z.ZodOptional<z.ZodCoercedBigInt<unknown>>;
@@ -655,6 +670,7 @@ export declare const zUpdateExecutionProfileBody: z.ZodObject<{
         "claude-code": "claude-code";
         codex: "codex";
         "github-copilot": "github-copilot";
+        kiro: "kiro";
     }>;
     toolchainImage: z.ZodString;
     generation: z.ZodOptional<z.ZodCoercedBigInt<unknown>>;
@@ -675,6 +691,7 @@ export declare const zUpdateExecutionProfileResponse: z.ZodIntersection<z.ZodObj
         "claude-code": "claude-code";
         codex: "codex";
         "github-copilot": "github-copilot";
+        kiro: "kiro";
     }>;
     toolchainImage: z.ZodString;
     generation: z.ZodOptional<z.ZodCoercedBigInt<unknown>>;
@@ -706,6 +723,7 @@ export declare const zListExecutionProfileBuildsResponse: z.ZodArray<z.ZodObject
         "claude-code": "claude-code";
         codex: "codex";
         "github-copilot": "github-copilot";
+        kiro: "kiro";
     }>;
     toolchainImage: z.ZodString;
     baseImage: z.ZodString;
@@ -1452,6 +1470,7 @@ export declare const zListAgentsResponse: z.ZodArray<z.ZodObject<{
         "claude-code": "claude-code";
         codex: "codex";
         "github-copilot": "github-copilot";
+        kiro: "kiro";
     }>;
     provider: z.ZodString;
     model: z.ZodString;
@@ -1471,6 +1490,7 @@ export declare const zCreateAgentBody: z.ZodObject<{
         "claude-code": "claude-code";
         codex: "codex";
         "github-copilot": "github-copilot";
+        kiro: "kiro";
     }>;
     provider: z.ZodString;
     model: z.ZodString;
@@ -1503,6 +1523,7 @@ export declare const zCreateAgentResponse: z.ZodObject<{
         "claude-code": "claude-code";
         codex: "codex";
         "github-copilot": "github-copilot";
+        kiro: "kiro";
     }>;
     provider: z.ZodString;
     model: z.ZodString;
@@ -1543,6 +1564,7 @@ export declare const zGetAgentResponse: z.ZodObject<{
         "claude-code": "claude-code";
         codex: "codex";
         "github-copilot": "github-copilot";
+        kiro: "kiro";
     }>;
     provider: z.ZodString;
     model: z.ZodString;
@@ -1562,6 +1584,7 @@ export declare const zUpdateAgentBody: z.ZodObject<{
         "claude-code": "claude-code";
         codex: "codex";
         "github-copilot": "github-copilot";
+        kiro: "kiro";
     }>;
     provider: z.ZodString;
     model: z.ZodString;
@@ -1595,6 +1618,7 @@ export declare const zUpdateAgentResponse: z.ZodObject<{
         "claude-code": "claude-code";
         codex: "codex";
         "github-copilot": "github-copilot";
+        kiro: "kiro";
     }>;
     provider: z.ZodString;
     model: z.ZodString;

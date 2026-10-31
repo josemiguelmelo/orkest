@@ -21,9 +21,9 @@ func TestDescriptorUsesPinnedCopilotACPAndKeepsReplayUnqualified(t *testing.T) {
 
 func TestProvisioningCarriesInstructionsSkillsModelAndMCP(t *testing.T) {
 	settings := agentruntime.ResolvedRuntimeSettings{
-		Agent: runconfig.AgentDefinition{Instructions: "Do the task"},
-		Model: runconfig.ModelSelection{Provider: "github-copilot", ID: "gpt-4.1"},
-		Skills: []runconfig.Skill{{ID: "review", SkillMD: "Review carefully"}},
+		Agent:      runconfig.AgentDefinition{Instructions: "Do the task"},
+		Model:      runconfig.ModelSelection{Provider: "github-copilot", ID: "gpt-4.1"},
+		Skills:     []runconfig.Skill{{ID: "review", SkillMD: "Review carefully"}},
 		MCPServers: []runconfig.MCPServer{{ID: "tools", Name: "Tools", URL: "https://mcp.example.test", Headers: map[string]string{"Authorization": "secret"}}},
 	}
 	paths := agentruntime.ProvisioningPaths{RuntimeRoot: "/state", WorkDir: "/work", ConfigSubdir: "run-config"}

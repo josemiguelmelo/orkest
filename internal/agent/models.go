@@ -10,6 +10,7 @@ const (
 	RuntimeClaudeCode    = coreruntime.ClaudeCode
 	RuntimeCodex         = coreruntime.Codex
 	RuntimeGitHubCopilot = coreruntime.GitHubCopilot
+	RuntimeKiro          = coreruntime.Kiro
 )
 
 type PermissionPolicy string

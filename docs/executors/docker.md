@@ -50,12 +50,13 @@ GitLab CLI 1.125.0. It does not include BuildKit; image composition runs on the
 platform host. Each runtime image extends that base and installs only its pinned runtime:
 OpenCode 2.1.4 in `orkest/agentctl-opencode:2.1.4`, or the Claude Code ACP
 adapter 0.99.0 in `orkest/agentctl-claude-code:0.99.0`, or Codex ACP adapter
-2.3.0 in `orkest/agentctl-codex:2.3.0`, or GitHub Copilot CLI 1.0.105 in
-`orkest/agentctl-github-copilot:1.0.105`. The `docker-agentctl-images` target
+2.3.0 in `orkest/agentctl-codex:2.3.0`, GitHub Copilot CLI 1.0.105 in
+`orkest/agentctl-github-copilot:1.0.105`, or Kiro CLI 2.37.0 in
+`orkest/agentctl-kiro:2.37.0`. The `docker-agentctl-images` target
 builds the base and all runtime images. Override
 `AGENTCTL_BASE_IMAGE`, `AGENTCTL_OPENCODE_IMAGE`, or
-`AGENTCTL_CLAUDE_CODE_IMAGE`, `AGENTCTL_CODEX_IMAGE`, or
-`AGENTCTL_GITHUB_COPILOT_IMAGE` to use different tags.
+`AGENTCTL_CLAUDE_CODE_IMAGE`, `AGENTCTL_CODEX_IMAGE`,
+`AGENTCTL_GITHUB_COPILOT_IMAGE`, or `AGENTCTL_KIRO_IMAGE` to use different tags.
 The executor chooses the image matching the run's runtime; these environment
 variables configure those per-runtime images. The executor passes the assigned runtime to agentctl at
 startup, and agentctl rejects run configuration for any other runtime. Container

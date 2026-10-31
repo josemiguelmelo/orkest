@@ -53,12 +53,12 @@ Codex home and is not synchronized back. Live model, approval, MCP, and
 restart-continuation qualification is still required before treating those
 behaviors as verified.
 
-- **OpenCode v2.1.4**, **Claude Code through `claude-agent-acp` 0.99.0**, **Codex through `codex-acp` 2.3.0**, and **GitHub Copilot CLI 1.0.105** are pinned runtimes. OpenCode handshake/session loading are verified. Other runtimes use the shared ACP v1 host; real model execution, approval round trips, and interrupted-work continuation require credentialed qualification.
+- **OpenCode v2.1.4**, **Claude Code through `claude-agent-acp` 0.99.0**, **Codex through `codex-acp` 2.3.0**, **GitHub Copilot CLI 1.0.105**, and **Kiro CLI 2.37.0** are pinned runtimes. OpenCode handshake/session loading are verified. The other runtimes use the shared ACP host; real model execution, approval round trips, and interrupted-work continuation require credentialed qualification.
 - **ACP over local stdio** uses `github.com/coder/acp-go-sdk v0.13.5` between `agentctl` and runtime subprocesses.
 - The standalone **Go `agentctl` binary** owns the subprocess and ACP connection. It exposes REST commands and a receive-only activity WebSocket using **`github.com/coder/websocket v1.8.15`**. It journals events and retains task-scoped runtime state.
 - The agentctl HTTP server uses **Chi v5.2.3**; WebSocket upgrades use `coder/websocket`. Platform startup reconciles persisted launches, closes confirmed-ended or unconfigured processes, and reconnects healthy endpoints to replay events from the stored sequence. Durable task sessions implement command reconciliation, agentctl restart recovery, session loading, and conservative continuation. Uncertain effects pause for user reconciliation.
 - The first **Docker Engine executor** is implemented in `internal/executors/docker` with the pinned Moby Go client v0.6.2. It starts agentctl containers with task-scoped durable host bind mounts and loopback-only dynamic port publication, then gracefully stops and removes containers after terminal run events. Task/run API wiring and repository preparation are implemented; team-member slot allocation is separate unfinished work.
-- Docker image build targets create a shared agentctl base image and separate OpenCode, Claude Code ACP, Codex ACP, and GitHub Copilot runtime images. The mounted work and agentctl state directories persist on the Docker host. Session-enabled containers restore durable sessions after restart and preserve task files. Real model continuation remains separately gated on explicit model configuration.
+- Docker image build targets create a shared agentctl base image and separate OpenCode, Claude Code ACP, Codex ACP, GitHub Copilot, and Kiro runtime images. The mounted work and agentctl state directories persist on the Docker host. Session-enabled containers restore durable sessions after restart and preserve task files. Real model continuation remains separately gated on explicit model configuration.
 - An **authenticated platform-to-agentctl transport** remains proposed and unimplemented. The current local transport uses persisted run identities and event cursors for platform restart reconnect and replay, without transport authentication or explicit acknowledgements.
 
 Real OpenCode handshake, session loading, daemon/container restoration, and retained working files have integration coverage. Claude Code, Codex, and GitHub Copilot have deterministic profile coverage but require credentialed conformance for real model execution, approval round trips, and continuation.
@@ -147,7 +147,7 @@ selects the concrete host. Checkpoints and session manifests share
 native configuration plans; compatible
 protocols use the shared ACP implementation in `internal/agentctl/runtime/acp`.
 OpenCode 2.1.4, Claude Code `claude-agent-acp` 0.99.0, Codex `codex-acp` 2.3.0,
-and GitHub Copilot CLI 1.0.105 are runtime profiles. Copilot ACP is in public
+GitHub Copilot CLI 1.0.105, and Kiro CLI 2.37.0 are runtime profiles. Copilot ACP is in public
 preview; its live model execution and interrupted-turn replay remain unqualified.
 History coverage is not qualified for safe interrupted-turn continuation, so
 restoration pauses when the journal cannot establish the outcome. See [runtime host and ACP

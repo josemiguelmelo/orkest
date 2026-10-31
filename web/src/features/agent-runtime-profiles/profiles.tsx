@@ -17,7 +17,7 @@ import { useAction } from '../../shared/use-action';
 
 const schema = z.object({
   name: z.string().trim().min(1).max(200),
-  runtime: z.enum(['opencode', 'claude-code', 'codex', 'github-copilot']),
+  runtime: z.enum(['opencode', 'claude-code', 'codex', 'github-copilot', 'kiro']),
   modelProvider: z.string().trim().min(1).max(200),
   modelIdentifier: z.string().trim().min(1).max(200),
 });
@@ -67,7 +67,7 @@ function ProfileEditor({ profile, onClose }: { profile: AgentRuntimeProfile | nu
       })) onClose();
     }}>
       <Field label="Name" error={form.formState.errors.name?.message}><input {...form.register('name')} placeholder="e.g., Claude through LiteLLM" /></Field>
-      <Field label="Runtime"><select {...form.register('runtime', { onChange: (event: ChangeEvent<HTMLSelectElement>) => { if (event.target.value === 'claude-code') form.setValue('modelProvider', 'anthropic', { shouldDirty: true }); if (event.target.value === 'codex') form.setValue('modelProvider', 'openai', { shouldDirty: true }); if (event.target.value === 'github-copilot') form.setValue('modelProvider', 'github-copilot', { shouldDirty: true }); } })}><option value="opencode">OpenCode</option><option value="claude-code">Claude Code</option><option value="codex">Codex</option><option value="github-copilot">GitHub Copilot</option></select></Field>
+      <Field label="Runtime"><select {...form.register('runtime', { onChange: (event: ChangeEvent<HTMLSelectElement>) => { if (event.target.value === 'claude-code') form.setValue('modelProvider', 'anthropic', { shouldDirty: true }); if (event.target.value === 'codex') form.setValue('modelProvider', 'openai', { shouldDirty: true }); if (event.target.value === 'github-copilot') form.setValue('modelProvider', 'github-copilot', { shouldDirty: true }); if (event.target.value === 'kiro') form.setValue('modelProvider', 'kiro', { shouldDirty: true }); } })}><option value="opencode">OpenCode</option><option value="claude-code">Claude Code</option><option value="codex">Codex</option><option value="github-copilot">GitHub Copilot</option><option value="kiro">Kiro</option></select></Field>
       <Field label="Model provider" error={form.formState.errors.modelProvider?.message} hint="Runtime-specific providers are fixed; OpenCode accepts gateway provider names."><input {...form.register('modelProvider')} placeholder="e.g., anthropic or litellm" readOnly={form.watch('runtime') !== 'opencode'} /></Field>
       <Field label="Model identifier" error={form.formState.errors.modelIdentifier?.message}><input {...form.register('modelIdentifier')} placeholder="e.g., claude-sonnet-4" /></Field>
       {profile && <Badge>Changes apply to linked agents</Badge>}

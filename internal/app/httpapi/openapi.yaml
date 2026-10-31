@@ -1357,7 +1357,7 @@ components:
             required: [name, runtime, provider, model, description, systemPrompt, permissionPolicy]
             properties:
               name: {type: string, minLength: 1, maxLength: 200}
-              runtime: {type: string, enum: [opencode, claude-code, codex, github-copilot]}
+              runtime: {type: string, enum: [opencode, claude-code, codex, github-copilot, kiro]}
               provider: {type: string, minLength: 1, maxLength: 200}
               model: {type: string, minLength: 1, maxLength: 200}
               description: {type: string, maxLength: 2000}
@@ -1559,7 +1559,7 @@ components:
       properties:
         name: {type: string, minLength: 1, maxLength: 200}
         description: {type: string, maxLength: 2000}
-        runtime: {type: string, enum: [opencode, claude-code, codex, github-copilot]}
+        runtime: {type: string, enum: [opencode, claude-code, codex, github-copilot, kiro]}
         toolchainImage: {type: string, minLength: 1}
         generation: {type: integer, format: int64, minimum: 0}
     ExecutionProfile:
@@ -1584,7 +1584,7 @@ components:
         profileId: {type: string}
         workspaceId: {type: string}
         generation: {type: integer, format: int64}
-        runtime: {type: string, enum: [opencode, claude-code, codex, github-copilot]}
+        runtime: {type: string, enum: [opencode, claude-code, codex, github-copilot, kiro]}
         toolchainImage: {type: string}
         baseImage: {type: string}
         runtimeVersion: {type: string}
@@ -1604,7 +1604,7 @@ components:
         id: {type: string}
         workspaceId: {type: string}
         name: {type: string}
-        runtime: {type: string, enum: [opencode, claude-code, codex, github-copilot]}
+        runtime: {type: string, enum: [opencode, claude-code, codex, github-copilot, kiro]}
         provider: {type: string}
         model: {type: string}
         description: {type: string}
@@ -1617,7 +1617,7 @@ components:
       required: [name, runtime, modelProvider, modelIdentifier]
       properties:
         name: {type: string, minLength: 1, maxLength: 200}
-        runtime: {type: string, enum: [opencode, claude-code, codex, github-copilot]}
+        runtime: {type: string, enum: [opencode, claude-code, codex, github-copilot, kiro]}
         modelProvider: {type: string, minLength: 1, maxLength: 200}
         modelIdentifier: {type: string, minLength: 1, maxLength: 200}
     AgentRuntimeProfile:

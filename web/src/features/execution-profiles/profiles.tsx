@@ -129,7 +129,7 @@ function ProfileEditor({
   const action = useAction();
   const [name, setName] = useState(profile?.name ?? '');
   const [description, setDescription] = useState(profile?.description ?? '');
-  const [runtime, setRuntime] = useState<'opencode' | 'claude-code' | 'codex' | 'github-copilot'>(
+  const [runtime, setRuntime] = useState<'opencode' | 'claude-code' | 'codex' | 'github-copilot' | 'kiro'>(
     profile?.runtime ?? 'opencode',
   );
   const [toolchainImage, setImage] = useState(profile?.toolchainImage ?? '');
@@ -214,6 +214,7 @@ function ProfileEditor({
             <option value="claude-code">Claude Code</option>
             <option value="codex">Codex</option>
             <option value="github-copilot">GitHub Copilot</option>
+                <option value="kiro">Kiro</option>
           </select>
         </Field>
         <Field
