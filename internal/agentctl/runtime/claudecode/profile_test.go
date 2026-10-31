@@ -49,7 +49,7 @@ func TestProvisioningIsScopedAndUsesACPv1(t *testing.T) {
 	if len(plan.Files) != 0 {
 		t.Fatalf("unexpected rendered files: %#v", plan.Files)
 	}
-	wantEnv := []string{"HOME=/state/run/home", "CLAUDE_CONFIG_DIR=/state/run/config-abc/claude", "CLAUDE_AGENT_ACP_PROTOCOL=v1"}
+	wantEnv := []string{"PATH=" + agentruntime.DefaultRuntimePath, "HOME=/state/run/home", "CLAUDE_CONFIG_DIR=/state/run/config-abc/claude", "CLAUDE_AGENT_ACP_PROTOCOL=v1"}
 	if !reflect.DeepEqual(plan.Environment, wantEnv) {
 		t.Fatalf("unexpected environment: %#v", plan.Environment)
 	}

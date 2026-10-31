@@ -39,6 +39,7 @@ func (p Profile) BuildProvisioningPlan(_ agentruntime.ResolvedRuntimeSettings, p
 	return agentruntime.ProvisioningPlan{
 		Directories: []string{"data", "state", "cache", "home", filepath.ToSlash(filepath.Join(configDir, "claude"))},
 		Environment: []string{
+			"PATH=" + agentruntime.DefaultRuntimePath,
 			"HOME=" + filepath.ToSlash(filepath.Join(paths.RuntimeRoot, "home")),
 			"CLAUDE_CONFIG_DIR=" + filepath.ToSlash(filepath.Join(paths.RuntimeRoot, configDir, "claude")),
 			"CLAUDE_AGENT_ACP_PROTOCOL=v1",

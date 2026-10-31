@@ -71,7 +71,13 @@ func mergeEnvironment(granted, runtimeEnv, reservedNames, reservedPrefixes []str
 	}
 	for _, entry := range runtimeEnv {
 		key, _, ok := strings.Cut(entry, "=")
-		if !ok || !validEnvironmentName(key) || strings.ContainsRune(entry, '\x00') || seen[key] {
+		if !ok || !validEnvironmentName(key) || strings.ContainsRune(entry, '\x00') {
+			return nil, errors.New("invalid runtime environment plan")
+		}
+		if key == "PATH" && seen[key] {
+			continue
+		}
+		if seen[key] {
 			return nil, errors.New("invalid runtime environment plan")
 		}
 		seen[key] = true

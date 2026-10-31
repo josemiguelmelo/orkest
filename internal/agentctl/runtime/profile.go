@@ -5,6 +5,10 @@ import (
 	coreruntime "github.com/josemiguelmelo/orkest/internal/core/runtime"
 )
 
+// DefaultRuntimePath gives child runtime processes access to standard image
+// locations without inheriting the agentctl process environment wholesale.
+const DefaultRuntimePath = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+
 // ResolvedRuntimeSettings intentionally excludes organization, workspace, task,
 // run, process, and persistence state from native runtime profiles.
 type ResolvedRuntimeSettings struct {

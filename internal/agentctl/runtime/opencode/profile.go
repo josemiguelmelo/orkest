@@ -91,6 +91,7 @@ func (p Profile) BuildProvisioningPlan(settings agentruntime.ResolvedRuntimeSett
 		Directories: []string{"data", "state", "cache", "home", configRoot, "data/opencode", "state/opencode", "cache/opencode"},
 		Files:       files,
 		Environment: []string{
+			"PATH=" + agentruntime.DefaultRuntimePath,
 			"HOME=" + home,
 			"XDG_DATA_HOME=" + dataHome,
 			"XDG_CONFIG_HOME=" + configHome,
