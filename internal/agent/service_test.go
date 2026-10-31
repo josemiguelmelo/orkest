@@ -45,6 +45,20 @@ func validDefinition() AgentDefinition {
 	return AgentDefinition{Name: "Work", Runtime: RuntimeOpenCode, Provider: "provider", Model: "model", Description: "work"}
 }
 
+func TestPermissionPolicyDefaultsToAskAndRejectsUnknownValues(t *testing.T) {
+	definition := validDefinition()
+	if err := validate(&definition); err != nil {
+		t.Fatal(err)
+	}
+	if definition.PermissionPolicy != PermissionPolicyAsk {
+		t.Fatalf("default policy = %q, want ask", definition.PermissionPolicy)
+	}
+	definition.PermissionPolicy = "unexpected"
+	if err := validate(&definition); err != modelerrors.ErrInvalid {
+		t.Fatalf("unknown policy error = %v, want invalid", err)
+	}
+}
+
 func TestCreateRejectsMCPServerOutsideWorkspace(t *testing.T) {
 	service := NewService(&repositoryStub{}, workspaceStub{role: "member"}, mcpAccessStub{valid: false}, nil)
 	definition := validDefinition()

@@ -63,6 +63,8 @@ behaviors as verified.
 
 Real OpenCode handshake, session loading, daemon/container restoration, and retained working files have integration coverage. Claude Code and Codex have deterministic profile coverage but require credentialed conformance for real model execution, approval round trips, and continuation.
 
+Agent definitions persist an `ask` or `autonomous` permission policy. Task dispatch snapshots it into each run; OpenCode, Claude Code, and Codex profiles translate it to their native configuration while the executor isolates task environments. Provider sandbox behavior varies: Codex's autonomous mode uses `agent-full-access` inside the isolated task container. Continued sessions retain their original policy.
+
 The conversation service separates ordered event commits from its in-memory state lock, so journal writes and syncs do not block status reads or shutdown admission. Event-producing commands still serialize behind in-flight commits; final shutdown joins outstanding work and storage I/O. The journal owns sequence numbers and commit timestamps. A persistence failure fences the conversation and cancels local prompt/permission waits without selecting an approval option. Local cancellation does not prove runtime termination or permit replacement; reconciliation remains required.
 
 Runtime failures retain wrapped diagnostic causes and subprocess exit status in memory. Error strings and API messages remain sanitized; raw causes and runtime output must not be written to ordinary logs. Unexpected unsuccessful process exits are reported as failed unless the conversation is already interrupted. Durable sessions use these states to trigger restoration or expose blocked recovery.

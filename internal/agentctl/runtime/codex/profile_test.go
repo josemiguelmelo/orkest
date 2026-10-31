@@ -22,7 +22,7 @@ func TestDescriptorPinsACPAdapterAndIsolatesCodexState(t *testing.T) {
 
 func TestProvisioningUsesModelAndWorkspaceInstructions(t *testing.T) {
 	settings := agentruntime.ResolvedRuntimeSettings{
-		Agent:  runconfig.AgentDefinition{Name: "Work", Instructions: "Do the task"},
+		Agent:  runconfig.AgentDefinition{Name: "Work", Instructions: "Do the task", PermissionPolicy: runconfig.PermissionPolicyAutonomous},
 		Model:  runconfig.ModelSelection{Provider: "openai", ID: "gpt-codex"},
 		Skills: []runconfig.Skill{{ID: "review", SkillMD: "Review carefully"}},
 	}
@@ -41,15 +41,28 @@ func TestProvisioningUsesModelAndWorkspaceInstructions(t *testing.T) {
 	if codexConfig["model"] != "gpt-codex" || !strings.Contains(codexConfig["developer_instructions"], "Review carefully") {
 		t.Fatalf("Codex configuration omitted model or instructions: %#v", codexConfig)
 	}
+	if got := (Profile{}).NativeSessionMode(settings); got != "agent-full-access" {
+		t.Fatalf("autonomous Codex mode = %q, want agent-full-access", got)
+	}
 	if !strings.Contains(strings.Join(plan.Environment, "\n"), "APP_SERVER_LOGS=/state/state/codex/logs") {
 		t.Fatalf("Codex logs are not scoped to durable runtime state: %#v", plan.Environment)
 	}
 	environment := strings.Join(plan.Environment, "\n")
-	if !strings.Contains(environment, "NO_BROWSER=1") || !strings.Contains(environment, "INITIAL_AGENT_MODE=workspace-write") {
+	if !strings.Contains(environment, "NO_BROWSER=1") || !strings.Contains(environment, "INITIAL_AGENT_MODE=agent-full-access") {
 		t.Fatalf("Codex headless permission defaults are missing: %#v", plan.Environment)
 	}
 	if !strings.Contains(environment, `DEFAULT_AUTH_REQUEST={"methodId":"api-key"}`) {
 		t.Fatalf("Codex API-key authentication request is missing: %#v", plan.Environment)
+	}
+}
+
+func TestAskPolicyStartsCodexInWorkspaceWriteMode(t *testing.T) {
+	plan, err := (Profile{}).BuildProvisioningPlan(agentruntime.ResolvedRuntimeSettings{}, agentruntime.ProvisioningPaths{RuntimeRoot: "/state", WorkDir: "/work", ConfigSubdir: "run-config"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(strings.Join(plan.Environment, "\n"), "INITIAL_AGENT_MODE=workspace-write") {
+		t.Fatalf("ask policy did not retain workspace-write mode: %#v", plan.Environment)
 	}
 }
 

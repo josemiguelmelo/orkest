@@ -32,9 +32,15 @@ func (p Profile) Descriptor() agentruntime.RuntimeDescriptor {
 }
 
 type runtimeConfiguration struct {
-	Autoupdate bool              `json:"autoupdate"`
-	Share      string            `json:"share"`
-	MCP        *runtimeMCPConfig `json:"mcp,omitempty"`
+	Autoupdate  bool              `json:"autoupdate"`
+	Share       string            `json:"share"`
+	Permissions []permissionRule  `json:"permissions,omitempty"`
+	MCP         *runtimeMCPConfig `json:"mcp,omitempty"`
+}
+type permissionRule struct {
+	Action   string `json:"action"`
+	Resource string `json:"resource"`
+	Effect   string `json:"effect"`
 }
 type (
 	runtimeMCPConfig struct {
@@ -78,7 +84,11 @@ func (p Profile) BuildProvisioningPlan(settings agentruntime.ResolvedRuntimeSett
 	if err != nil {
 		return agentruntime.ProvisioningPlan{}, err
 	}
-	encoded, err := json.Marshal(runtimeConfiguration{Share: "disabled", MCP: mcp})
+	runtimeConfig := runtimeConfiguration{Share: "disabled", MCP: mcp}
+	if settings.Agent.PermissionPolicy == runconfig.PermissionPolicyAutonomous {
+		runtimeConfig.Permissions = []permissionRule{{Action: "*", Resource: "*", Effect: "allow"}}
+	}
+	encoded, err := json.Marshal(runtimeConfig)
 	if err != nil {
 		return agentruntime.ProvisioningPlan{}, errors.New("encode runtime configuration failed")
 	}

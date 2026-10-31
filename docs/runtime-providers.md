@@ -91,8 +91,9 @@ filesystem, persistence, or platform operations. SDK types stay in that package;
 callbacks carry `interaction.Update` and `interaction.Permission` values.
 Session creation/loading takes its working directory directly. OpenCode's agent
 Markdown, native names, model/mode selection, skills, HTTP MCP JSON, XDG paths,
-and `OPENCODE_*` values belong to `runtime/opencode/profile.go`. OpenCode's native
-HTTP MCP client and default permission behavior remain unchanged.
+and `OPENCODE_*` values belong to `runtime/opencode/profile.go`. Runtime
+permission policies are translated by each provider profile; approval requests
+continue through the shared interaction callback when the selected policy asks.
 
 Recovery marker encoding belongs to `interaction`; reconciliation policy and
 evidence belong to agentctl's run/host implementations. During `LoadSession`,

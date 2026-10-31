@@ -42,3 +42,25 @@ func TestPrepareEnvironmentIncludesConfiguredHTTPMCPServers(t *testing.T) {
 		t.Fatalf("unexpected runtime MCP configuration: %#v", runtimeConfig.MCP.Servers)
 	}
 }
+
+func TestAutonomousPolicyAllowsOpenCodeActions(t *testing.T) {
+	plan, err := (Profile{}).BuildProvisioningPlan(agentruntime.ResolvedRuntimeSettings{Agent: runconfig.AgentDefinition{PermissionPolicy: runconfig.PermissionPolicyAutonomous}}, agentruntime.ProvisioningPaths{RuntimeRoot: t.TempDir(), WorkDir: t.TempDir(), ConfigSubdir: "config-run"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, entry := range plan.Environment {
+		if strings.HasPrefix(entry, "OPENCODE_CONFIG_CONTENT=") {
+			var config struct {
+				Permissions []permissionRule `json:"permissions"`
+			}
+			if err := json.Unmarshal([]byte(strings.TrimPrefix(entry, "OPENCODE_CONFIG_CONTENT=")), &config); err != nil {
+				t.Fatal(err)
+			}
+			if len(config.Permissions) != 1 || config.Permissions[0] != (permissionRule{Action: "*", Resource: "*", Effect: "allow"}) {
+				t.Fatalf("unexpected autonomous policy: %#v", config.Permissions)
+			}
+			return
+		}
+	}
+	t.Fatal("OpenCode runtime configuration was missing")
+}

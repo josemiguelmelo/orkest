@@ -37,6 +37,7 @@ const schema = z
     provider: z.string().trim().min(1).max(200),
     model: z.string().trim().min(1).max(200),
     systemPrompt: z.string().max(100000),
+    permissionPolicy: z.enum(['ask', 'autonomous']),
     mcpServerIds: z.array(z.string()),
     skillIds: z.array(z.string()),
     executionProfileId: z.string(),
@@ -189,6 +190,7 @@ function AgentEditor({ item, onClose }: { item: Agent | null; onClose: () => voi
       provider: item?.runtime === 'claude-code' ? 'anthropic' : item?.runtime === 'codex' ? 'openai' : (item?.provider ?? ''),
       model: item?.model ?? '',
       systemPrompt: item?.systemPrompt ?? '',
+      permissionPolicy: item?.permissionPolicy ?? 'ask',
       mcpServerIds: item?.mcpServerIds ?? [],
       skillIds: item?.skillIds ?? [],
       executionProfileId: item?.executionProfileId ?? '',
@@ -397,6 +399,20 @@ function AgentEditor({ item, onClose }: { item: Agent | null; onClose: () => voi
         <div className="agent-form-section">
           <div className="agent-form-section-header">
             <Wrench size={16} />
+            <span>Permission policy</span>
+          </div>
+          <div className="agent-form-section-content">
+            <Field label="Agent autonomy" hint="Autonomous mode skips approval prompts. Provider controls vary; Codex uses full access inside the isolated task environment.">
+              <select {...form.register('permissionPolicy')}>
+                <option value="ask">Ask for permission</option>
+                <option value="autonomous">Autonomous</option>
+              </select>
+            </Field>
+          </div>
+        </div>
+        <div className="agent-form-section">
+          <div className="agent-form-section-header">
+            <Wrench size={16} />
             <span>Tools & Capabilities</span>
           </div>
           <div className="agent-form-section-content">
@@ -458,6 +474,10 @@ function AgentViewer({ item, onClose }: { item: Agent; onClose: () => void }) {
               <span>
                 {item.provider} / {item.model}
               </span>
+            </div>
+            <div className="agent-viewer-row">
+              <span className="agent-viewer-label">Permission policy</span>
+              <span>{item.permissionPolicy === 'autonomous' ? 'Autonomous' : 'Ask for permission'}</span>
             </div>
           </div>
         </div>

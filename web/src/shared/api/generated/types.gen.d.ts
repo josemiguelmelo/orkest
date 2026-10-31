@@ -173,6 +173,7 @@ export type Agent = {
     model: string;
     description: string;
     systemPrompt: string;
+    permissionPolicy: 'ask' | 'autonomous';
     mcpServerIds: Array<string>;
     skillIds: Array<string>;
 };
@@ -315,6 +316,10 @@ export type AgentDefinition = {
     model: string;
     description: string;
     systemPrompt: string;
+    /**
+     * Ask preserves provider approval prompts; autonomous disables interactive approval. Native sandbox behavior varies by provider; task environments remain isolated.
+     */
+    permissionPolicy: 'ask' | 'autonomous';
     /**
      * Profile ID; empty string clears the selection.
      */

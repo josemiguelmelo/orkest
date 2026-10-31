@@ -20,9 +20,11 @@ interface. Provider-independent API behavior is documented in
   prompt. The materialized file remains in durable runtime state for the run.
 
 The provider starts `opencode acp` and connects over local stdio using ACP v1.
-It initializes a new session in the configured working directory. OpenCode's
-default permissions are retained; permission requests are passed to the user
-through `agentctl`. ACP diagnostics are discarded to avoid exposing secrets.
+It initializes a new session in the configured working directory. The agent's
+permission policy is applied in native OpenCode configuration. `ask` retains
+the existing approval behavior and passes requests to the user through
+`agentctl`; `autonomous` allows runtime actions without interactive approval.
+ACP diagnostics are discarded to avoid exposing secrets.
 
 Example configuration:
 

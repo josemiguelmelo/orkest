@@ -40,6 +40,19 @@ func TestProtocolOptionsCarryModelInstructionsSkillsAndMCP(t *testing.T) {
 	}
 }
 
+func TestAutonomousPolicySelectsClaudeBypassMode(t *testing.T) {
+	settings := agentruntime.ResolvedRuntimeSettings{Agent: runconfig.AgentDefinition{PermissionPolicy: runconfig.PermissionPolicyAutonomous}}
+	options := (Profile{}).ProtocolSessionOptions(settings, agentruntime.ProvisioningPaths{})
+	claude := options.Metadata["claudeCode"].(map[string]any)
+	claudeOptions := claude["options"].(map[string]any)
+	if claudeOptions["allowDangerouslySkipPermissions"] != true {
+		t.Fatalf("Claude bypass permission was not enabled: %#v", claudeOptions)
+	}
+	if got := (Profile{}).NativeSessionMode(settings); got != "bypassPermissions" {
+		t.Fatalf("native mode = %q, want bypassPermissions", got)
+	}
+}
+
 func TestProvisioningIsScopedAndUsesACPv1(t *testing.T) {
 	paths := agentruntime.ProvisioningPaths{RuntimeRoot: "/state/run", WorkDir: "/workspace", ConfigSubdir: "config-abc"}
 	plan, err := (Profile{}).BuildProvisioningPlan(agentruntime.ResolvedRuntimeSettings{}, paths)

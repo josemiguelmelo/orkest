@@ -192,6 +192,7 @@ export const zAgent = z.object({
     model: z.string(),
     description: z.string(),
     systemPrompt: z.string(),
+    permissionPolicy: z.enum(['ask', 'autonomous']),
     mcpServerIds: z.array(z.string()),
     skillIds: z.array(z.string())
 });
@@ -351,6 +352,7 @@ export const zAgentDefinition = z.object({
     model: z.string().min(1).max(200),
     description: z.string().max(2000),
     systemPrompt: z.string().max(100000),
+    permissionPolicy: z.enum(['ask', 'autonomous']),
     executionProfileId: z.string().optional(),
     mcpServerIds: z.array(z.string()).optional(),
     skillIds: z.array(z.string()).optional()
