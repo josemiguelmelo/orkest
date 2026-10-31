@@ -28,6 +28,7 @@ type RuntimeDescriptor struct {
 	Runtime                coreruntime.Runtime
 	Version                string
 	VersionOutputPrefix    string
+	VersionOutputSuffix    string
 	Executable             string
 	Arguments              []string
 	VersionArguments       []string

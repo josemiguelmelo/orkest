@@ -72,6 +72,7 @@ func TestRuntimeProbeMatchesPinnedVersions(t *testing.T) {
 		{name: "OpenCode", runtime: coreruntime.OpenCode, version: "opencode v2.1.4", want: `test "$(opencode --version)" = 'opencode v2.1.4'`},
 		{name: "Claude Code", runtime: coreruntime.ClaudeCode, version: "0.99.0", want: `test "$(claude-agent-acp --version)" = '0.99.0'`},
 		{name: "Codex", runtime: coreruntime.Codex, version: "2.3.0", want: `test "$(codex-acp --version)" = '@agentclientprotocol/codex-acp 2.3.0'`},
+		{name: "GitHub Copilot", runtime: coreruntime.GitHubCopilot, version: "1.0.105", want: `test "$(copilot --version | head -n 1)" = 'GitHub Copilot CLI 1.0.105.'`},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

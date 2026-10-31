@@ -188,6 +188,9 @@ func runtimeProbe(runtime coreruntime.Runtime, version string) string {
 	if runtime == coreruntime.ClaudeCode {
 		return "test \"$(claude-agent-acp --version)\" = '" + version + "'"
 	}
+	if runtime == coreruntime.GitHubCopilot {
+		return "test \"$(copilot --version | head -n 1)\" = 'GitHub Copilot CLI " + version + ".'"
+	}
 	return "test \"$(codex-acp --version)\" = '@agentclientprotocol/codex-acp " + version + "'"
 }
 

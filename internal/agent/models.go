@@ -6,9 +6,10 @@ import coreruntime "github.com/josemiguelmelo/orkest/internal/core/runtime"
 type Runtime = coreruntime.Runtime
 
 const (
-	RuntimeOpenCode   = coreruntime.OpenCode
-	RuntimeClaudeCode = coreruntime.ClaudeCode
-	RuntimeCodex      = coreruntime.Codex
+	RuntimeOpenCode      = coreruntime.OpenCode
+	RuntimeClaudeCode    = coreruntime.ClaudeCode
+	RuntimeCodex         = coreruntime.Codex
+	RuntimeGitHubCopilot = coreruntime.GitHubCopilot
 )
 
 type PermissionPolicy string

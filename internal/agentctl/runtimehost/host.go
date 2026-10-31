@@ -208,7 +208,7 @@ func (h *Host) prepareRuntime(ctx context.Context, config runconfig.RuntimeConfi
 	if err != nil {
 		return "", nil, &agentruntime.LaunchError{Message: "runtime executable unavailable", Cause: err}
 	}
-	if err := verifyRuntimeVersion(ctx, executable, descriptor.VersionArguments, descriptor.Version, descriptor.VersionOutputPrefix, environment); err != nil {
+	if err := verifyRuntimeVersion(ctx, executable, descriptor.VersionArguments, descriptor.Version, descriptor.VersionOutputPrefix, descriptor.VersionOutputSuffix, environment); err != nil {
 		return "", nil, err
 	}
 	return executable, environment, nil
@@ -298,7 +298,7 @@ func (h *Host) initializeSession(ctx context.Context, session *Session, settings
 	return nil
 }
 
-func verifyRuntimeVersion(ctx context.Context, executable string, args []string, want string, outputPrefix string, environment []string) error {
+func verifyRuntimeVersion(ctx context.Context, executable string, args []string, want string, outputPrefix, outputSuffix string, environment []string) error {
 	probe := exec.CommandContext(ctx, executable, args...)
 	probe.Env = environment
 	output, err := probe.Output()
@@ -318,6 +318,9 @@ func verifyRuntimeVersion(ctx context.Context, executable string, args []string,
 	got := strings.TrimSpace(string(output))
 	if outputPrefix != "" {
 		got = strings.TrimPrefix(got, outputPrefix)
+	}
+	if outputSuffix != "" {
+		got = strings.TrimSuffix(got, outputSuffix)
 	}
 	if got != want {
 		if !safeRuntimeVersion(strings.TrimSpace(string(output))) {

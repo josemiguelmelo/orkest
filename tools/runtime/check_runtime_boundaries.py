@@ -13,6 +13,7 @@ PROFILE_FORBIDDEN_IMPORTS = (
     "internal/agentctl/run", "internal/agentctl/httpapi",
     "internal/agentctl/runtime/opencode", "internal/agentctl/runtime/claudecode",
     "internal/agentctl/runtime/codex",
+    "internal/agentctl/runtime/githubcopilot",
 )
 COMMUNICATION_FORBIDDEN_IMPORTS = (
     "os", "os/exec", "syscall", "path/filepath", "net/http",
@@ -20,6 +21,7 @@ COMMUNICATION_FORBIDDEN_IMPORTS = (
     "internal/core/durablefile", "internal/agentctl/runtime/opencode",
     "internal/agentctl/runtime/claudecode",
     "internal/agentctl/runtime/codex",
+    "internal/agentctl/runtime/githubcopilot",
     "internal/agentctl/runtimehost",
     "internal/agentctl/run", "internal/agentctl/httpapi",
 )
@@ -29,6 +31,7 @@ HOST_FORBIDDEN_IMPORTS = (
     "internal/agentctl/runtime/opencode",
     "internal/agentctl/runtime/claudecode",
     "internal/agentctl/runtime/codex",
+    "internal/agentctl/runtime/githubcopilot",
     "internal/agentctl/run",
 )
 APPLICATION_FORBIDDEN_IMPORTS = (
@@ -36,6 +39,7 @@ APPLICATION_FORBIDDEN_IMPORTS = (
     "internal/agentctl/runtime/opencode",
     "internal/agentctl/runtime/claudecode",
     "internal/agentctl/runtime/codex",
+    "internal/agentctl/runtime/githubcopilot",
 )
 DEFINITION_FORBIDDEN_IMPORTS = (
     "os", "os/exec", "syscall", "net/http", "internal/postgres",
@@ -44,6 +48,7 @@ DEFINITION_FORBIDDEN_IMPORTS = (
     "internal/agentctl/runtimehost", "internal/agentctl/runtime/acp",
     "internal/agentctl/runtime/opencode", "internal/agentctl/runtime/claudecode",
     "internal/agentctl/runtime/codex",
+    "internal/agentctl/runtime/githubcopilot",
 )
 MODULE_PREFIX = "github.com/josemiguelmelo/orkest/"
 OPERATIONAL_CALLS = re.compile(
@@ -83,6 +88,7 @@ def violations(root: Path) -> list[str]:
         (root / "internal/agentctl/runtime/opencode", "profile"),
         (root / "internal/agentctl/runtime/claudecode", "profile"),
         (root / "internal/agentctl/runtime/codex", "profile"),
+        (root / "internal/agentctl/runtime/githubcopilot", "profile"),
         (root / "internal/agentctl/runtime/acp", "communication"),
         (root / "internal/agentctl/runtimehost", "host"),
         (root / "internal/agentctl/run", "application"),

@@ -14,6 +14,7 @@ lifecycle of one execution run.
 | `runtime/acp` | ACP SDK communication and translation into normalized values |
 | `runtime/opencode` | Pure OpenCode native configuration rendering |
 | `runtime/claudecode` | Claude Code ACP session options and isolated configuration paths |
+| `runtime/githubcopilot` | GitHub Copilot CLI ACP startup, model, permissions, instructions, and skills |
 | `httpapi` | One REST/WebSocket server, transport-owned controller interface, wire representations |
 | `daemon` | Standalone server lifecycle and periodic restoration supervision |
 
@@ -138,6 +139,16 @@ known intermittent HTTP 502 at container replacement, reproduced on the code
 before domain organization. Report it as a failed check whenever it occurs.
 OpenCode 2.1.4 and Claude Code `claude-agent-acp` 0.99.0 are production profiles.
 Claude Code model execution and interrupted-work continuation remain unqualified.
+GitHub Copilot CLI 1.0.105 uses the shared ACP host. Its ACP support is in public
+preview; deterministic conformance is covered, while live model execution and
+interrupted-turn replay remain unqualified. Set the `COPILOT_GITHUB_TOKEN`
+workspace secret (or grant `GH_TOKEN` / `GITHUB_TOKEN`) for GitHub Copilot
+authentication. `github-copilot` is the fixed model provider; the model
+identifier is passed to the CLI. The runtime keeps its CLI state, custom
+instructions, and skills in the durable per-session Copilot home. HTTP MCP
+servers are passed through ACP. `ask` retains Copilot's interactive permission
+requests, while `autonomous` enables Copilot CLI's allow-all mode inside the
+isolated task container.
 See [task sessions](task-sessions.md) for prerequisites and limitations.
 
 `internal/core/runtime/versions.json` is the single runtime version inventory.
@@ -152,7 +163,9 @@ jobs and installs each pinned adapter when live qualification is enabled.
 OpenCode uses
 `ORKEST_TEST_MODEL_PROVIDER` and `ORKEST_TEST_MODEL_ID`; Claude Code uses
 `anthropic` and the variable `ORKEST_CLAUDE_CODE_TEST_MODEL_ID`
-in the GitHub `runtime-qualification` environment. Both use the existing shared
+in the GitHub `runtime-qualification` environment. GitHub Copilot uses
+`github-copilot` and `ORKEST_GITHUB_COPILOT_TEST_MODEL_ID`; provide its
+authentication through the granted environment variable list. All runtimes use the existing shared
 approval/cancellation/recovery prompts, MCP settings, and granted credential names.
 Set `ORKEST_RUN_LIVE_QUALIFICATION=true` in that environment to enable paid live
 qualification. Until enabled, CI runs deterministic tests and reports that live
