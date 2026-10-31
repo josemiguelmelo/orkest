@@ -14,6 +14,7 @@ type Runtime string
 const (
 	OpenCode   Runtime = "opencode"
 	ClaudeCode Runtime = "claude-code"
+	Codex      Runtime = "codex"
 )
 
 // Definition contains the provider/model fields used by runtime-specific
@@ -35,6 +36,7 @@ func Providers() []Provider {
 	return []Provider{
 		OpenCodeProvider{},
 		ClaudeCodeProvider{},
+		CodexProvider{},
 	}
 }
 

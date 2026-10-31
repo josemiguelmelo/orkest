@@ -35,6 +35,7 @@ services:
 
       AGENTCTL_OPENCODE_IMAGE: ${AGENTCTL_OPENCODE_IMAGE:-registry:5000/orkest/agentctl-opencode:2.1.4}
       AGENTCTL_CLAUDE_CODE_IMAGE: ${AGENTCTL_CLAUDE_CODE_IMAGE:-registry:5000/orkest/agentctl-claude-code:0.99.0}
+      AGENTCTL_CODEX_IMAGE: ${AGENTCTL_CODEX_IMAGE:-registry:5000/orkest/agentctl-codex:2.3.0}
     ports:
       - "127.0.0.1:${ORKEST_PORT:-8080}:8080"
     volumes:

@@ -132,7 +132,7 @@ export type TaskRunEvent = {
 export type ExecutionProfileInput = {
     name: string;
     description: string;
-    runtime: 'opencode' | 'claude-code';
+    runtime: 'opencode' | 'claude-code' | 'codex';
     toolchainImage: string;
     generation?: number;
 };
@@ -151,7 +151,7 @@ export type ExecutionProfileBuild = {
     profileId: string;
     workspaceId: string;
     generation: number;
-    runtime: 'opencode' | 'claude-code';
+    runtime: 'opencode' | 'claude-code' | 'codex';
     toolchainImage: string;
     baseImage: string;
     runtimeVersion?: string;
@@ -168,7 +168,7 @@ export type Agent = {
     id: string;
     workspaceId: string;
     name: string;
-    runtime: 'opencode' | 'claude-code';
+    runtime: 'opencode' | 'claude-code' | 'codex';
     provider: string;
     model: string;
     description: string;
@@ -310,7 +310,7 @@ export type WorkspaceRole = {
 };
 export type AgentDefinition = {
     name: string;
-    runtime: 'opencode' | 'claude-code';
+    runtime: 'opencode' | 'claude-code' | 'codex';
     provider: string;
     model: string;
     description: string;

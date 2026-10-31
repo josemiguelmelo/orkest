@@ -33,7 +33,7 @@ const schema = z
   .object({
     name: z.string().trim().min(1).max(200),
     description: z.string().max(2000),
-    runtime: z.enum(['opencode', 'claude-code']),
+    runtime: z.enum(['opencode', 'claude-code', 'codex']),
     provider: z.string().trim().min(1).max(200),
     model: z.string().trim().min(1).max(200),
     systemPrompt: z.string().max(100000),
@@ -49,6 +49,9 @@ const schema = z
         message: 'Claude Code requires Anthropic.',
       });
     }
+    if (value.runtime === 'codex' && value.provider.toLowerCase() !== 'openai') {
+      context.addIssue({ code: 'custom', path: ['provider'], message: 'Codex requires OpenAI.' });
+    }
   });
 type ModelCatalog = Record<string, { name?: string; models?: Record<string, { name?: string }> }>;
 const modelCatalogQuery = {
@@ -60,6 +63,11 @@ const modelCatalogQuery = {
   },
   staleTime: 60 * 60 * 1000,
 };
+function runtimeName(runtime: Agent['runtime']) {
+  if (runtime === 'claude-code') return 'Claude Code';
+  if (runtime === 'codex') return 'Codex';
+  return 'OpenCode';
+}
 export function AgentsPage() {
   const { scope, permissions } = useApp();
   const agents = useQuery(agentsQuery(scope));
@@ -92,7 +100,7 @@ export function AgentsPage() {
                 <div className="agent-card-icon">
                   <Bot size={26} />
                 </div>
-                <Badge>{item.runtime === 'claude-code' ? 'Claude Code' : 'OpenCode'}</Badge>
+                <Badge>{runtimeName(item.runtime)}</Badge>
               </div>
               <div className="agent-card-body">
                 <h3>{item.name}</h3>
@@ -178,7 +186,7 @@ function AgentEditor({ item, onClose }: { item: Agent | null; onClose: () => voi
       name: item?.name ?? '',
       description: item?.description ?? '',
       runtime: item?.runtime ?? 'opencode',
-      provider: item?.runtime === 'claude-code' ? 'anthropic' : (item?.provider ?? ''),
+      provider: item?.runtime === 'claude-code' ? 'anthropic' : item?.runtime === 'codex' ? 'openai' : (item?.provider ?? ''),
       model: item?.model ?? '',
       systemPrompt: item?.systemPrompt ?? '',
       mcpServerIds: item?.mcpServerIds ?? [],
@@ -246,6 +254,10 @@ function AgentEditor({ item, onClose }: { item: Agent | null; onClose: () => voi
                     form.setValue('runtime', profile.runtime, { shouldDirty: true });
                     if (profile.runtime === 'claude-code')
                       form.setValue('provider', 'anthropic', { shouldDirty: true });
+                    if (profile.runtime === 'codex')
+                      form.setValue('provider', 'openai', { shouldDirty: true });
+                    if (profile.runtime !== 'opencode')
+                      form.setValue('model', '', { shouldDirty: true });
                   }
                 }}
               >
@@ -267,10 +279,15 @@ function AgentEditor({ item, onClose }: { item: Agent | null; onClose: () => voi
                     form.setValue('provider', 'anthropic', { shouldDirty: true });
                     form.setValue('model', '', { shouldDirty: true });
                   }
+                  if (event.currentTarget.value === 'codex') {
+                    form.setValue('provider', 'openai', { shouldDirty: true });
+                    form.setValue('model', '', { shouldDirty: true });
+                  }
                 }}
               >
                 <option value="opencode">OpenCode</option>
                 <option value="claude-code">Claude Code</option>
+                <option value="codex">Codex</option>
               </select>
             </Field>
             {customModel ? (
@@ -279,7 +296,7 @@ function AgentEditor({ item, onClose }: { item: Agent | null; onClose: () => voi
                   <input
                     {...form.register('provider')}
                     placeholder="e.g., anthropic"
-                    disabled={form.watch('runtime') === 'claude-code'}
+                    disabled={form.watch('runtime') !== 'opencode'}
                   />
                 </Field>
                 <Field label="Model identifier" error={form.formState.errors.model?.message}>
@@ -294,16 +311,18 @@ function AgentEditor({ item, onClose }: { item: Agent | null; onClose: () => voi
                       value={
                         form.watch('runtime') === 'claude-code'
                           ? 'anthropic'
+                          : form.watch('runtime') === 'codex'
+                            ? 'openai'
                           : form.watch('provider')
                       }
-                      disabled={form.watch('runtime') === 'claude-code'}
+                      disabled={form.watch('runtime') !== 'opencode'}
                       onChange={(event) => {
                         form.setValue('provider', event.target.value, { shouldDirty: true });
                         form.setValue('model', '', { shouldDirty: true });
                       }}
                     >
                       <option value="">Select a provider</option>
-                      {Object.entries(catalog.data ?? {}).map(([id, provider]) => (
+                      {Object.entries(catalog.data ?? {}).filter(([id]) => form.watch('runtime') === 'opencode' || id === 'openai').map(([id, provider]) => (
                         <option value={id} key={id}>
                           {provider.name ?? id}
                         </option>
@@ -432,7 +451,7 @@ function AgentViewer({ item, onClose }: { item: Agent; onClose: () => void }) {
           <div className="agent-viewer-content">
             <div className="agent-viewer-row">
               <span className="agent-viewer-label">Runtime</span>
-              <Badge>{item.runtime === 'claude-code' ? 'Claude Code' : 'OpenCode'}</Badge>
+              <Badge>{runtimeName(item.runtime)}</Badge>
             </div>
             <div className="agent-viewer-row">
               <span className="agent-viewer-label">Provider / Model</span>

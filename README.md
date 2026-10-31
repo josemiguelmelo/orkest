@@ -47,7 +47,7 @@ The app container uses the host Docker socket to launch task containers, so the
 Docker daemon must be available at `/var/run/docker.sock`. Build the agent runtime
 images with `make docker-agentctl-images` before starting task execution. For
 the Compose registry setup, use `make docker-agentctl-push-local` to build and
-push both runtime images to the local registry and tag them for Orkest.
+push all runtime images to the local registry and tag them for Orkest.
 
 The sample `.env` configures PostgreSQL at `127.0.0.1:5432`; the component-variable
 form requires all five values and does not add runtime defaults.

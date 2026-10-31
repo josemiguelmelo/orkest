@@ -177,6 +177,7 @@ export declare const zExecutionProfileInput: z.ZodObject<{
     runtime: z.ZodEnum<{
         opencode: "opencode";
         "claude-code": "claude-code";
+        codex: "codex";
     }>;
     toolchainImage: z.ZodString;
     generation: z.ZodOptional<z.ZodCoercedBigInt<unknown>>;
@@ -187,6 +188,7 @@ export declare const zExecutionProfile: z.ZodIntersection<z.ZodObject<{
     runtime: z.ZodEnum<{
         opencode: "opencode";
         "claude-code": "claude-code";
+        codex: "codex";
     }>;
     toolchainImage: z.ZodString;
     generation: z.ZodOptional<z.ZodCoercedBigInt<unknown>>;
@@ -208,6 +210,7 @@ export declare const zExecutionProfileBuild: z.ZodObject<{
     runtime: z.ZodEnum<{
         opencode: "opencode";
         "claude-code": "claude-code";
+        codex: "codex";
     }>;
     toolchainImage: z.ZodString;
     baseImage: z.ZodString;
@@ -228,6 +231,7 @@ export declare const zAgent: z.ZodObject<{
     runtime: z.ZodEnum<{
         opencode: "opencode";
         "claude-code": "claude-code";
+        codex: "codex";
     }>;
     provider: z.ZodString;
     model: z.ZodString;
@@ -404,6 +408,7 @@ export declare const zAgentDefinition: z.ZodObject<{
     runtime: z.ZodEnum<{
         opencode: "opencode";
         "claude-code": "claude-code";
+        codex: "codex";
     }>;
     provider: z.ZodString;
     model: z.ZodString;
@@ -444,6 +449,7 @@ export declare const zListExecutionProfilesResponse: z.ZodArray<z.ZodIntersectio
     runtime: z.ZodEnum<{
         opencode: "opencode";
         "claude-code": "claude-code";
+        codex: "codex";
     }>;
     toolchainImage: z.ZodString;
     generation: z.ZodOptional<z.ZodCoercedBigInt<unknown>>;
@@ -463,6 +469,7 @@ export declare const zCreateExecutionProfileBody: z.ZodObject<{
     runtime: z.ZodEnum<{
         opencode: "opencode";
         "claude-code": "claude-code";
+        codex: "codex";
     }>;
     toolchainImage: z.ZodString;
     generation: z.ZodOptional<z.ZodCoercedBigInt<unknown>>;
@@ -480,6 +487,7 @@ export declare const zCreateExecutionProfileResponse: z.ZodIntersection<z.ZodObj
     runtime: z.ZodEnum<{
         opencode: "opencode";
         "claude-code": "claude-code";
+        codex: "codex";
     }>;
     toolchainImage: z.ZodString;
     generation: z.ZodOptional<z.ZodCoercedBigInt<unknown>>;
@@ -499,6 +507,7 @@ export declare const zUpdateExecutionProfileBody: z.ZodObject<{
     runtime: z.ZodEnum<{
         opencode: "opencode";
         "claude-code": "claude-code";
+        codex: "codex";
     }>;
     toolchainImage: z.ZodString;
     generation: z.ZodOptional<z.ZodCoercedBigInt<unknown>>;
@@ -517,6 +526,7 @@ export declare const zUpdateExecutionProfileResponse: z.ZodIntersection<z.ZodObj
     runtime: z.ZodEnum<{
         opencode: "opencode";
         "claude-code": "claude-code";
+        codex: "codex";
     }>;
     toolchainImage: z.ZodString;
     generation: z.ZodOptional<z.ZodCoercedBigInt<unknown>>;
@@ -546,6 +556,7 @@ export declare const zListExecutionProfileBuildsResponse: z.ZodArray<z.ZodObject
     runtime: z.ZodEnum<{
         opencode: "opencode";
         "claude-code": "claude-code";
+        codex: "codex";
     }>;
     toolchainImage: z.ZodString;
     baseImage: z.ZodString;
@@ -1289,6 +1300,7 @@ export declare const zListAgentsResponse: z.ZodArray<z.ZodObject<{
     runtime: z.ZodEnum<{
         opencode: "opencode";
         "claude-code": "claude-code";
+        codex: "codex";
     }>;
     provider: z.ZodString;
     model: z.ZodString;
@@ -1302,6 +1314,7 @@ export declare const zCreateAgentBody: z.ZodObject<{
     runtime: z.ZodEnum<{
         opencode: "opencode";
         "claude-code": "claude-code";
+        codex: "codex";
     }>;
     provider: z.ZodString;
     model: z.ZodString;
@@ -1326,6 +1339,7 @@ export declare const zCreateAgentResponse: z.ZodObject<{
     runtime: z.ZodEnum<{
         opencode: "opencode";
         "claude-code": "claude-code";
+        codex: "codex";
     }>;
     provider: z.ZodString;
     model: z.ZodString;
@@ -1359,6 +1373,7 @@ export declare const zGetAgentResponse: z.ZodObject<{
     runtime: z.ZodEnum<{
         opencode: "opencode";
         "claude-code": "claude-code";
+        codex: "codex";
     }>;
     provider: z.ZodString;
     model: z.ZodString;
@@ -1372,6 +1387,7 @@ export declare const zUpdateAgentBody: z.ZodObject<{
     runtime: z.ZodEnum<{
         opencode: "opencode";
         "claude-code": "claude-code";
+        codex: "codex";
     }>;
     provider: z.ZodString;
     model: z.ZodString;
@@ -1397,6 +1413,7 @@ export declare const zUpdateAgentResponse: z.ZodObject<{
     runtime: z.ZodEnum<{
         opencode: "opencode";
         "claude-code": "claude-code";
+        codex: "codex";
     }>;
     provider: z.ZodString;
     model: z.ZodString;

@@ -41,6 +41,19 @@ it('queues preparation with the selected runtime and toolchain', async () => {
     body: { name: 'Java backend', runtime: 'claude-code', toolchainImage: 'example.com/java:21' },
   });
 });
+it('queues preparation with Codex selected as the runtime', async () => {
+  const user = userEvent.setup();
+  page();
+  await user.click(screen.getByRole('button', { name: 'New profile' }));
+  await user.type(screen.getByLabelText('Name'), 'Codex profile');
+  await user.type(screen.getByLabelText('Toolchain image'), 'example.com/tools:latest');
+  await user.selectOptions(screen.getByLabelText('Agent runtime'), 'codex');
+  await user.click(screen.getByRole('button', { name: 'Create and build' }));
+  await waitFor(() => expect(state.create).toHaveBeenCalledTimes(1));
+  expect(state.create.mock.calls[0]?.[0] as unknown).toMatchObject({
+    body: { name: 'Codex profile', runtime: 'codex', toolchainImage: 'example.com/tools:latest' },
+  });
+});
 it('does not offer build creation to read-only users', async () => {
   state.admin = false;
   page();

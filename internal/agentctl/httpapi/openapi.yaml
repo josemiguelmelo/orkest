@@ -394,7 +394,7 @@ components:
               repositoryPath: { type: string }
               token: { type: string, writeOnly: true }
         runId: { type: string, pattern: '\S' }
-        runtime: { type: string, enum: [opencode, claude-code] }
+        runtime: { type: string, enum: [opencode, claude-code, codex] }
         agent:
           type: object
           additionalProperties: false

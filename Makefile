@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help setup dev dev-once dev-agentctl dev-web db-up db-down db-logs auth-up lint-install lint fmt sqlc check build test-integration test-postgres test-recovery test-recovery-unit docker-agentctl-base docker-agentctl-opencode docker-agentctl-claude-code docker-agentctl-images docker-agentctl-push-local test-docker check-runtime-boundaries
+.PHONY: help setup dev dev-once dev-agentctl dev-web db-up db-down db-logs auth-up lint-install lint fmt sqlc check build test-integration test-postgres test-recovery test-recovery-unit docker-agentctl-base docker-agentctl-opencode docker-agentctl-claude-code docker-agentctl-codex docker-agentctl-images docker-agentctl-push-local test-docker check-runtime-boundaries
 
 GOLANGCI_LINT_VERSION := v2.15.0
 GOLANGCI_LINT := bin/tools/$(GOLANGCI_LINT_VERSION)/golangci-lint
@@ -14,15 +14,17 @@ AGENTCTL_ARGS ?=
 QUALIFY_RUNTIME ?= .+
 OPENCODE_VERSION = $(shell python3 -c 'import json; print(json.load(open("internal/core/runtime/versions.json"))["opencode"].removeprefix("opencode v"))')
 CLAUDE_AGENT_ACP_VERSION = $(shell python3 -c 'import json; print(json.load(open("internal/core/runtime/versions.json"))["claude-code"])')
+CODEX_ACP_VERSION = $(shell python3 -c 'import json; print(json.load(open("internal/core/runtime/versions.json"))["codex"])')
 AGENTCTL_BASE_IMAGE ?= orkest/agentctl-base:dev
 AGENTCTL_OPENCODE_IMAGE ?= orkest/agentctl-opencode:$(OPENCODE_VERSION)
 AGENTCTL_CLAUDE_CODE_IMAGE ?= orkest/agentctl-claude-code:$(CLAUDE_AGENT_ACP_VERSION)
+AGENTCTL_CODEX_IMAGE ?= orkest/agentctl-codex:$(CODEX_ACP_VERSION)
 
 help:
 	@echo "setup             Install frontend dependencies"
 	@echo "dev               Run backend with Air auto-reload"
 	@echo "dev-once          Run backend once without auto-reload"
-	@echo "dev-agentctl      Run agentctl (AGENTCTL_RUNTIME=opencode|claude-code, AGENTCTL_ARGS=...)"
+	@echo "dev-agentctl      Run agentctl (AGENTCTL_RUNTIME=opencode|claude-code|codex, AGENTCTL_ARGS=...)"
 	@echo "dev-web           Run frontend (separate terminal)"
 	@echo "db-up / db-down   Start / stop PostgreSQL (retains data)"
 	@echo "db-logs           Follow PostgreSQL logs"
@@ -118,7 +120,10 @@ docker-agentctl-opencode: docker-agentctl-base
 docker-agentctl-claude-code: docker-agentctl-base
 	$(DOCKER) build -f build/docker/agentctl-claude-code.Dockerfile --build-arg AGENTCTL_BASE_IMAGE=$(AGENTCTL_BASE_IMAGE) -t $(AGENTCTL_CLAUDE_CODE_IMAGE) .
 
-docker-agentctl-images: docker-agentctl-opencode docker-agentctl-claude-code
+docker-agentctl-codex: docker-agentctl-base
+	$(DOCKER) build -f build/docker/agentctl-codex.Dockerfile --build-arg AGENTCTL_BASE_IMAGE=$(AGENTCTL_BASE_IMAGE) -t $(AGENTCTL_CODEX_IMAGE) .
+
+docker-agentctl-images: docker-agentctl-opencode docker-agentctl-claude-code docker-agentctl-codex
 
 docker-agentctl-push-local: docker-agentctl-images
 	$(DOCKER) compose up -d registry
@@ -128,9 +133,12 @@ docker-agentctl-push-local: docker-agentctl-images
 	$(DOCKER) tag $(AGENTCTL_CLAUDE_CODE_IMAGE) $(LOCAL_REGISTRY)/$(AGENTCTL_REGISTRY_NAMESPACE)/agentctl-claude-code:$(CLAUDE_AGENT_ACP_VERSION)
 	$(DOCKER) push $(LOCAL_REGISTRY)/$(AGENTCTL_REGISTRY_NAMESPACE)/agentctl-claude-code:$(CLAUDE_AGENT_ACP_VERSION)
 	$(DOCKER) tag $(AGENTCTL_CLAUDE_CODE_IMAGE) $(CONTAINER_REGISTRY)/$(AGENTCTL_REGISTRY_NAMESPACE)/agentctl-claude-code:$(CLAUDE_AGENT_ACP_VERSION)
+	$(DOCKER) tag $(AGENTCTL_CODEX_IMAGE) $(LOCAL_REGISTRY)/$(AGENTCTL_REGISTRY_NAMESPACE)/agentctl-codex:$(CODEX_ACP_VERSION)
+	$(DOCKER) push $(LOCAL_REGISTRY)/$(AGENTCTL_REGISTRY_NAMESPACE)/agentctl-codex:$(CODEX_ACP_VERSION)
+	$(DOCKER) tag $(AGENTCTL_CODEX_IMAGE) $(CONTAINER_REGISTRY)/$(AGENTCTL_REGISTRY_NAMESPACE)/agentctl-codex:$(CODEX_ACP_VERSION)
 
 test-docker: docker-agentctl-images
-	AGENTCTL_OPENCODE_IMAGE=$(AGENTCTL_OPENCODE_IMAGE) AGENTCTL_CLAUDE_CODE_IMAGE=$(AGENTCTL_CLAUDE_CODE_IMAGE) go test -tags=docker ./internal/executors/docker -run 'TestDockerAgentctlLaunchSmoke|TestDockerSessionRestore' -count=1
+	AGENTCTL_OPENCODE_IMAGE=$(AGENTCTL_OPENCODE_IMAGE) AGENTCTL_CLAUDE_CODE_IMAGE=$(AGENTCTL_CLAUDE_CODE_IMAGE) AGENTCTL_CODEX_IMAGE=$(AGENTCTL_CODEX_IMAGE) go test -tags=docker ./internal/executors/docker -run 'TestDockerAgentctlLaunchSmoke|TestDockerSessionRestore' -count=1
 
 test-recovery-unit:
 	go test -race ./internal/agentctl/... ./internal/orchestration -run 'Restore|Recovery|Queue|Session' -count=1

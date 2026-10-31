@@ -11,7 +11,7 @@ Orkest is a platform for orchestrating, monitoring, and interacting with AI agen
 - Support multiple organizations, users, and workspaces from day one.
 - Delegate authentication to Keycloak to support username/password and SSO through identity-provider configuration.
 - Use organization roles Owner/Admin/Member and workspace roles Admin/Member/Viewer.
-- Support OpenCode and Claude Code runtimes through extensible runtime adapters.
+- Support OpenCode, Claude Code, and Codex runtimes through extensible runtime adapters.
 - Provide built-in tools for communicating with the core platform; user-defined tools are outside MVP scope.
 - Use the pinned OpenCode release’s default permission behavior. Forward any runtime approval requests to the task UI; workspace permission-policy customization is deferred.
 - Support manual task creation and tasks imported from GitHub Projects v2 issue and draft issue items.
@@ -25,7 +25,7 @@ Orkest is a platform for orchestrating, monitoring, and interacting with AI agen
 - Allow a task to involve multiple repositories registered in its workspace.
 - Treat external systems as authoritative for imported task content; users edit that content at the source.
 
-Automatic assignment and automatic movement into in progress are outside the MVP. OpenCode and Claude Code are supported runtimes through pinned adapters. Specific model, deployment, and technology choices remain open.
+Automatic assignment and automatic movement into in progress are outside the MVP. OpenCode, Claude Code, and Codex are supported runtimes through pinned adapters. Codex uses the ACP adapter and an OpenAI model selection; API-key credentials are provided through workspace secrets. Specific model, deployment, and technology choices remain open.
 
 ## 3. Domain model
 
@@ -170,7 +170,7 @@ Required user-facing capabilities:
 
 ### 4.1 Runtime selection
 
-OpenCode and Claude Code are supported runtimes. The platform must distinguish the agent runtime from the model provider and model identifier. Model selection remains configurable on agent definitions, allowing available free models without depending on a permanently free hardcoded model. Claude Code definitions use provider `anthropic` and a configured Claude model identifier.
+OpenCode, Claude Code, and Codex are supported runtimes. The platform must distinguish the agent runtime from the model provider and model identifier. Model selection remains configurable on agent definitions, allowing available free models without depending on a permanently free hardcoded model. Claude Code definitions use provider `anthropic` and a configured Claude model identifier. Codex definitions use provider `openai` and a configured Codex model identifier. Codex runs use API-key authentication from workspace secrets; browser-based ChatGPT login is not part of the supported headless flow.
 
 ### 4.1.1 OpenCode runtime requirements
 
@@ -193,6 +193,18 @@ forward them to users; never enable blanket automatic approval. Pin and validate
 the adapter and its bundled Claude Agent SDK. Until real qualification proves
 session continuation and complete replay evidence, uncertain interrupted work
 must remain paused for reconciliation.
+
+### 4.1.3 Codex runtime requirements
+
+Codex runs through the pinned `@agentclientprotocol/codex-acp` adapter over ACP
+v1 stdio. Supply `OPENAI_API_KEY` or `CODEX_API_KEY` through the workspace
+secret environment path and disable browser-based ChatGPT login in headless
+execution. The configured model, system instructions, skills, and HTTP MCP
+servers must be bound to the run. Use workspace-write mode with runtime
+permission requests forwarded to users; do not enable full-access or blanket
+approval. Persist the Codex home and adapter state with the task session. Until
+credentialed qualification proves approval round trips and continuation after
+restart, uncertain interrupted work must remain paused for reconciliation.
 
 ### 4.2 Task sessions — confirmed interaction decisions
 
@@ -274,7 +286,7 @@ Event retention, recovery time targets, host-loss guarantees, and overall availa
 
 - Users authenticate through Keycloak and access organizations/workspaces subject to application membership and role permissions.
 - A failed/interrupted execution is visible while its task remains in progress; a normal task failure does not automatically start another attempt.
-- OpenCode and Claude Code execute through agentctl with configured model selection, HTTP MCP connections, and task-specific approvals.
+- OpenCode, Claude Code, and Codex execute through agentctl with configured model selection, HTTP MCP connections, and task-specific approvals.
 - Built-in platform tools expose only authorized workspace task and repository information; no custom tool catalog is required.
 - The skill catalog is separate from the deferred custom tool catalog. Skill IDs are globally unique to prevent collisions across scopes. Skill frontmatter requires a matching `name`, a non-empty `description`, and a Markdown instruction body.
 - A user can register repositories, create an agent definition, and add two team members using that definition.
