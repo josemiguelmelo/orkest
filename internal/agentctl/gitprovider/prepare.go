@@ -1,6 +1,7 @@
 package gitprovider
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"fmt"
@@ -44,9 +45,14 @@ func configureRepositoryIdentity(ctx context.Context, workDir string, credential
 		path := filepath.Join(workDir, credential.RepositoryPath)
 		for _, setting := range [][2]string{{"user.name", "Orkest Agent"}, {"user.email", "agent@orkest.local"}} {
 			cmd := exec.CommandContext(ctx, "git", "-C", path, "config", "--local", setting[0], setting[1])
-			cmd.Stdout, cmd.Stderr = io.Discard, io.Discard
+			var stderr bytes.Buffer
+			cmd.Stdout, cmd.Stderr = io.Discard, &stderr
 			if err := cmd.Run(); err != nil {
-				return &agentruntime.RuntimeError{Kind: agentruntime.RuntimeFailure, Message: "configure Git identity failed", Cause: err}
+				cause := fmt.Errorf("git config %s failed: %w", setting[0], err)
+				if output := strings.TrimSpace(stderr.String()); output != "" {
+					cause = fmt.Errorf("%w: %s", cause, output)
+				}
+				return &agentruntime.RuntimeError{Kind: agentruntime.RuntimeFailure, Message: "configure Git identity failed", Cause: cause}
 			}
 		}
 	}
