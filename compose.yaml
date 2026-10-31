@@ -28,6 +28,7 @@ services:
       ORKEST_IMAGE_BUILDER: buildkit
       ORKEST_BUILDKIT_DAEMONLESS: "true"
       ORKEST_BUILDCTL_BINARY: /usr/bin/buildctl-daemonless.sh
+      ORKEST_DOCKER_REGISTRY_HOST: localhost:${REGISTRY_PORT:-5001}
       ORKEST_BUILDKIT_REGISTRY_HOST: registry:5000
 
       AGENTCTL_OPENCODE_IMAGE: ${AGENTCTL_OPENCODE_IMAGE:-registry:5000/orkest/agentctl-opencode:2.1.4}
