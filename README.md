@@ -206,7 +206,7 @@ Frontend API artifacts are generated from the platform OpenAPI contract. After c
 
 Before making changes, read [AGENTS.md](AGENTS.md), the [requirements](docs/requirements.md), and the [technology stack](docs/tech-stack.md). Keep changes focused, preserve confirmed/proposed distinctions, pin dependencies, and never commit secrets. Add tests beside changed Go packages or under `web/` as appropriate, and update documentation when behavior or commands change.
 
-There is not currently a `CONTRIBUTING.md` file. Pull requests should explain the user-visible change, list checks run, and call out any infrastructure, credentials, or verification limitations.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, verification, pull request, and licensing guidance.
 
 ## Documentation
 
@@ -225,4 +225,4 @@ There is not currently a `CONTRIBUTING.md` file. Pull requests should explain th
 
 Orkest is under active development. The [requirements document](docs/requirements.md) records confirmed scope, proposed behavior, recovery requirements, and open decisions. In particular, real model execution and continuation qualification require provider credentials and are not implied by deterministic tests or session loading alone.
 
-This repository does not currently contain a `LICENSE` file. No license is asserted by this README; establish and add the project license before distributing the software.
+Orkest is licensed under the [Apache License 2.0](LICENSE.md).
