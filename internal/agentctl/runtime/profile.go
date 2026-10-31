@@ -27,6 +27,7 @@ type ProvisioningPaths struct {
 type RuntimeDescriptor struct {
 	Runtime                coreruntime.Runtime
 	Version                string
+	VersionOutputPrefix    string
 	Executable             string
 	Arguments              []string
 	VersionArguments       []string

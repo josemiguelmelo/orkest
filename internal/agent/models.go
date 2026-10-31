@@ -8,6 +8,7 @@ type Runtime = coreruntime.Runtime
 const (
 	RuntimeOpenCode   = coreruntime.OpenCode
 	RuntimeClaudeCode = coreruntime.ClaudeCode
+	RuntimeCodex      = coreruntime.Codex
 )
 
 type Agent struct {

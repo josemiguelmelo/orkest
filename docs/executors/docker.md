@@ -15,9 +15,10 @@ Build the images from the repository root:
 make docker-agentctl-base
 make docker-agentctl-opencode
 make docker-agentctl-claude-code
+make docker-agentctl-codex
 ```
 
-For the local Compose registry, build and push both runtime images with:
+For the local Compose registry, build and push all runtime images with:
 
 ```sh
 make docker-agentctl-push-local
@@ -35,24 +36,26 @@ To build without Make, run from the repository root:
 docker build -f build/docker/agentctl-base.Dockerfile -t orkest/agentctl-base:dev .
 docker build -f build/docker/agentctl-opencode.Dockerfile -t orkest/agentctl-opencode:local .
 docker build -f build/docker/agentctl-claude-code.Dockerfile -t orkest/agentctl-claude-code:local .
+docker build -f build/docker/agentctl-codex.Dockerfile -t orkest/agentctl-codex:local .
 ```
 
 The runtime Dockerfiles read `internal/core/runtime/versions.json` from the build
 context, so no runtime version build arguments are needed. The tag is your choice;
-configure `AGENTCTL_OPENCODE_IMAGE` or `AGENTCTL_CLAUDE_CODE_IMAGE` when using a
-custom tag. `AGENTCTL_BASE_IMAGE` remains an optional build argument for a custom
-base image.
+configure `AGENTCTL_OPENCODE_IMAGE`, `AGENTCTL_CLAUDE_CODE_IMAGE`, or
+`AGENTCTL_CODEX_IMAGE` when using a custom tag. `AGENTCTL_BASE_IMAGE` remains an
+optional build argument for a custom base image.
 
 The base image contains the `agentctl` binary, Git, GitHub CLI 2.103.2, and
 GitLab CLI 1.125.0. It does not include BuildKit; image composition runs on the
 platform host. Each runtime image extends that base and installs only its pinned runtime:
 OpenCode 2.1.4 in `orkest/agentctl-opencode:2.1.4`, or the Claude Code ACP
-adapter 0.99.0 in `orkest/agentctl-claude-code:0.99.0`. The
-`docker-agentctl-images` target builds the base and both runtime images. Override
+adapter 0.99.0 in `orkest/agentctl-claude-code:0.99.0`, or Codex ACP adapter
+2.3.0 in `orkest/agentctl-codex:2.3.0`. The `docker-agentctl-images` target
+builds the base and all runtime images. Override
 `AGENTCTL_BASE_IMAGE`, `AGENTCTL_OPENCODE_IMAGE`, or
-`AGENTCTL_CLAUDE_CODE_IMAGE` to use different tags. The executor chooses the
-image matching the run's runtime; these environment variables configure those
-per-runtime images. The executor passes the assigned runtime to agentctl at
+`AGENTCTL_CLAUDE_CODE_IMAGE`, or `AGENTCTL_CODEX_IMAGE` to use different tags.
+The executor chooses the image matching the run's runtime; these environment
+variables configure those per-runtime images. The executor passes the assigned runtime to agentctl at
 startup, and agentctl rejects run configuration for any other runtime. Container
 names include the runtime and a hash of the run ID for identification and recovery.
 
@@ -66,6 +69,17 @@ requested work needs changes. Those checkouts persist across review iterations. 
 out of host paths and container labels. The directories are mode 0700 and the
 container runs as the platform process UID/GID so files remain writable by the
 platform user. The agentctl state directory must remain on persistent storage.
+
+For local Docker use, `ORKEST_CODEX_AUTH_FILE` can opt Codex containers into a
+host Codex login. Set it to an absolute path visible to the Docker daemon, for
+example `/Users/alice/.codex/auth.json`. The Docker executor mounts that file
+read-only only for Codex containers; agentctl copies it into the task's private
+Codex home with mode 0600. It is not passed to other runtimes, stored in the
+database, or returned by an API. With Docker Compose, set the variable in `.env`;
+the host path must be visible to the Docker daemon. Leave it unset to use the
+workspace `OPENAI_API_KEY` secret flow. Codex changes its task-local copy as
+credentials refresh, but those updates are not written back to the host file, so
+refresh the local Codex login if later runs can no longer authenticate.
 
 The GitHub coding provider resolves each integration PAT on the platform. It uses a
 temporary credential helper for checkout, then sends the PAT to agentctl in the

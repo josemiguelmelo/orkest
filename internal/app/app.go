@@ -77,7 +77,7 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 	mcpServerService := mcpserver.NewMCPServerService(postgres.NewMCPServerPostgresRepository(database), secretBox, workspaces)
 	workspaceEnvironment := workspaceenv.NewService(postgres.NewWorkspaceEnvironmentPostgresRepository(database), workspaces, secretBox)
 	executionProfileRepository := postgres.NewExecutionProfileRepository(database)
-	profileImages := map[coreruntime.Runtime]string{coreruntime.OpenCode: os.Getenv("AGENTCTL_OPENCODE_IMAGE"), coreruntime.ClaudeCode: os.Getenv("AGENTCTL_CLAUDE_CODE_IMAGE")}
+	profileImages := map[coreruntime.Runtime]string{coreruntime.OpenCode: os.Getenv("AGENTCTL_OPENCODE_IMAGE"), coreruntime.ClaudeCode: os.Getenv("AGENTCTL_CLAUDE_CODE_IMAGE"), coreruntime.Codex: os.Getenv("AGENTCTL_CODEX_IMAGE")}
 	executionProfileService := executionprofile.NewExecutionProfileService(executionProfileRepository, workspaces, os.Getenv("ORKEST_EXECUTION_IMAGE_REPOSITORY"), profileImages)
 	agents := agent.NewService(postgres.NewAgentPostgresRepository(database), workspaces, mcpServerService, skillCatalog)
 	agents.SetProfiles(executionProfileService)
@@ -86,11 +86,13 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 	launchRepo := postgres.NewAgentLaunchPostgresRepository(database, secretBox)
 	client := orchestration.NewHTTPAgentctlClient(httplog.PropagatingHTTPClient(&http.Client{Timeout: 10 * time.Second}))
 	executor, executorErr := dockerexecutor.New(ctx, dockerexecutor.Config{
-		DataRoot:    filepath.Join(dataRoot, "agent-executions"),
-		NetworkName: os.Getenv("ORKEST_AGENTCTL_NETWORK"),
+		DataRoot:      filepath.Join(dataRoot, "agent-executions"),
+		NetworkName:   os.Getenv("ORKEST_AGENTCTL_NETWORK"),
+		CodexAuthFile: os.Getenv("ORKEST_CODEX_AUTH_FILE"),
 		Images: map[coreruntime.Runtime]string{
 			coreruntime.OpenCode:   os.Getenv("AGENTCTL_OPENCODE_IMAGE"),
 			coreruntime.ClaudeCode: os.Getenv("AGENTCTL_CLAUDE_CODE_IMAGE"),
+			coreruntime.Codex:      os.Getenv("AGENTCTL_CODEX_IMAGE"),
 		},
 		ProviderEnv:              splitEnvironmentNames(os.Getenv("ORKEST_AGENT_PROVIDER_ENV")),
 		CodingProviders:          []coderepository.CodingProvider{githubprovider.NewGitHubProvider(), gitlabprovider.NewGitLabCloudProvider(), gitlabprovider.NewGitLabServerProvider()},

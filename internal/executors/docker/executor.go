@@ -27,9 +27,11 @@ import (
 )
 
 const (
-	DefaultAgentctlPort = 8081
-	workMountPath       = "/workspace"
-	stateMountPath      = "/agentctl-state"
+	DefaultAgentctlPort      = 8081
+	workMountPath            = "/workspace"
+	stateMountPath           = "/agentctl-state"
+	codexAuthMountPath       = stateMountPath + "/codex-auth/auth.json"
+	codexAuthFileEnvironment = "ORKEST_CODEX_AUTH_FILE"
 )
 
 type EngineClient interface {
@@ -47,6 +49,7 @@ type Config struct {
 	Images                   map[coreruntime.Runtime]string
 	AgentctlPort             int
 	ContainerUser            string
+	CodexAuthFile            string
 	ProviderEnv              []string
 	CodingProviders          []coderepository.CodingProvider
 	CodingCredentialResolver interface {
@@ -114,7 +117,11 @@ func NewWithClient(ctx context.Context, config Config, client EngineClient) (*Ex
 	if err := validateContainerUser(containerUser); err != nil {
 		return nil, err
 	}
-	config.DataRoot, config.Images, config.AgentctlPort, config.ContainerUser = root, images, port, containerUser
+	codexAuthFile := strings.TrimSpace(config.CodexAuthFile)
+	if codexAuthFile != "" && !filepath.IsAbs(codexAuthFile) {
+		return nil, errors.New("codex auth file path must be absolute")
+	}
+	config.DataRoot, config.Images, config.AgentctlPort, config.ContainerUser, config.CodexAuthFile = root, images, port, containerUser, codexAuthFile
 	config.NetworkName = strings.TrimSpace(config.NetworkName)
 	providers := make(map[string]coderepository.CodingProvider, len(config.CodingProviders))
 	for _, provider := range config.CodingProviders {
@@ -155,6 +162,7 @@ func (e *Executor) StartAgentctl(ctx context.Context, config runconfig.RunConfig
 	}
 	port := network.MustParsePort(fmt.Sprintf("%d/tcp", e.config.AgentctlPort))
 	providerEnv := e.providerEnvironment()
+	containerEnv := append([]string(nil), providerEnv...)
 	command := []string{
 		"-listen", fmt.Sprintf("0.0.0.0:%d", e.config.AgentctlPort),
 		"-runtime", string(config.Runtime),
@@ -164,6 +172,10 @@ func (e *Executor) StartAgentctl(ctx context.Context, config runconfig.RunConfig
 	if config.TaskSessionID != "" {
 		command = append(command, "-run-id", config.RunID)
 	}
+	if config.Runtime == coreruntime.Codex && e.config.CodexAuthFile != "" {
+		containerEnv = append(containerEnv, codexAuthFileEnvironment+"="+codexAuthMountPath)
+		command = append(command, "-env", codexAuthFileEnvironment)
+	}
 	for _, variable := range providerEnv {
 		name, _, _ := strings.Cut(variable, "=")
 		command = append(command, "-env", name)
@@ -171,7 +183,7 @@ func (e *Executor) StartAgentctl(ctx context.Context, config runconfig.RunConfig
 	containerConfig := &container.Config{
 		Image:        image,
 		User:         e.config.ContainerUser,
-		Env:          providerEnv,
+		Env:          containerEnv,
 		Cmd:          command,
 		ExposedPorts: network.PortSet{port: {}},
 		Labels:       labels,
@@ -185,6 +197,11 @@ func (e *Executor) StartAgentctl(ctx context.Context, config runconfig.RunConfig
 		// Agentctl cannot restore its active session after process restart yet. Do not
 		// silently restart an incomplete run until reconciliation is implemented.
 		RestartPolicy: container.RestartPolicy{Name: container.RestartPolicyDisabled},
+	}
+	if config.Runtime == coreruntime.Codex && e.config.CodexAuthFile != "" {
+		hostConfig.Mounts = append(hostConfig.Mounts, mount.Mount{
+			Type: mount.TypeBind, Source: e.config.CodexAuthFile, Target: codexAuthMountPath, ReadOnly: true,
+		})
 	}
 	if e.config.NetworkName != "" {
 		hostConfig.NetworkMode = container.NetworkMode(e.config.NetworkName)
@@ -294,6 +311,9 @@ func (e *Executor) providerEnvironment() []string {
 		if name == "" {
 			continue
 		}
+		if name == codexAuthFileEnvironment {
+			continue
+		}
 		if _, exists := seen[name]; exists {
 			continue
 		}
@@ -396,6 +416,22 @@ func (e *Executor) taskDirectories(config runconfig.RunConfig) (string, string, 
 		}
 		if err := os.Chmod(path, 0o700); err != nil {
 			return "", "", fmt.Errorf("restrict durable task directory permissions: %w", err)
+		}
+	}
+	if config.Runtime == coreruntime.Codex && e.config.CodexAuthFile != "" {
+		authMountDir := filepath.Join(stateDir, "codex-auth")
+		if err := os.MkdirAll(authMountDir, 0o700); err != nil {
+			return "", "", fmt.Errorf("create Codex auth mount directory: %w", err)
+		}
+		if err := os.Chmod(authMountDir, 0o700); err != nil {
+			return "", "", fmt.Errorf("restrict Codex auth mount directory permissions: %w", err)
+		}
+		placeholder, err := os.OpenFile(filepath.Join(authMountDir, "auth.json"), os.O_CREATE|os.O_WRONLY, 0o600)
+		if err != nil {
+			return "", "", fmt.Errorf("create Codex auth mount target: %w", err)
+		}
+		if err := placeholder.Close(); err != nil {
+			return "", "", fmt.Errorf("close Codex auth mount target: %w", err)
 		}
 	}
 	return workDir, stateDir, nil

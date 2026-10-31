@@ -24,6 +24,7 @@ services:
       ORKEST_INTEGRATION_ENCRYPTION_KEY: ${ORKEST_INTEGRATION_ENCRYPTION_KEY:-}
 
       ORKEST_DATA_DIR: ${ORKEST_DATA_DIR:-${PWD}/data}
+      ORKEST_CODEX_AUTH_FILE: ${ORKEST_CODEX_AUTH_FILE:-}
       ORKEST_AGENTCTL_NETWORK: orkest
 
       ORKEST_EXECUTION_IMAGE_REPOSITORY: ${ORKEST_EXECUTION_IMAGE_REPOSITORY:-registry:5000/orkest/execution-images}
@@ -35,6 +36,7 @@ services:
 
       AGENTCTL_OPENCODE_IMAGE: ${AGENTCTL_OPENCODE_IMAGE:-registry:5000/orkest/agentctl-opencode:2.1.4}
       AGENTCTL_CLAUDE_CODE_IMAGE: ${AGENTCTL_CLAUDE_CODE_IMAGE:-registry:5000/orkest/agentctl-claude-code:0.99.0}
+      AGENTCTL_CODEX_IMAGE: ${AGENTCTL_CODEX_IMAGE:-registry:5000/orkest/agentctl-codex:2.3.0}
     ports:
       - "127.0.0.1:${ORKEST_PORT:-8080}:8080"
     volumes:

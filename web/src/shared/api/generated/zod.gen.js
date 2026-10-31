@@ -139,7 +139,11 @@ export const zTaskRunEvent = z.object({
 export const zExecutionProfileInput = z.object({
     name: z.string().min(1).max(200),
     description: z.string().max(2000),
-    runtime: z.enum(['opencode', 'claude-code']),
+    runtime: z.enum([
+        'opencode',
+        'claude-code',
+        'codex'
+    ]),
     toolchainImage: z.string().min(1),
     generation: z.coerce.bigint().gte(BigInt(0)).max(BigInt('9223372036854775807'), { error: 'Invalid value: Expected int64 to be <= 9223372036854775807' }).optional()
 });
@@ -158,7 +162,11 @@ export const zExecutionProfileBuild = z.object({
     profileId: z.string(),
     workspaceId: z.string(),
     generation: z.coerce.bigint().min(BigInt('-9223372036854775808'), { error: 'Invalid value: Expected int64 to be >= -9223372036854775808' }).max(BigInt('9223372036854775807'), { error: 'Invalid value: Expected int64 to be <= 9223372036854775807' }),
-    runtime: z.enum(['opencode', 'claude-code']),
+    runtime: z.enum([
+        'opencode',
+        'claude-code',
+        'codex'
+    ]),
     toolchainImage: z.string(),
     baseImage: z.string(),
     runtimeVersion: z.string().optional(),
@@ -175,7 +183,11 @@ export const zAgent = z.object({
     id: z.string(),
     workspaceId: z.string(),
     name: z.string(),
-    runtime: z.enum(['opencode', 'claude-code']),
+    runtime: z.enum([
+        'opencode',
+        'claude-code',
+        'codex'
+    ]),
     provider: z.string(),
     model: z.string(),
     description: z.string(),
@@ -330,7 +342,11 @@ export const zWorkspaceRole = z.object({
 });
 export const zAgentDefinition = z.object({
     name: z.string().min(1).max(200),
-    runtime: z.enum(['opencode', 'claude-code']),
+    runtime: z.enum([
+        'opencode',
+        'claude-code',
+        'codex'
+    ]),
     provider: z.string().min(1).max(200),
     model: z.string().min(1).max(200),
     description: z.string().max(2000),

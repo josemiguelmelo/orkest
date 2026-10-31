@@ -11,15 +11,22 @@ import (
 )
 
 func Run(version string) {
+	if fixtureVersion := os.Getenv("ORKEST_FIXTURE_VERSION"); fixtureVersion != "" {
+		version = fixtureVersion
+	}
 	claudeFixture := os.Getenv("ORKEST_CLAUDE_ACP_FIXTURE") == "1"
-	if os.Getenv("ORKEST_ACP_FIXTURE") == "1" || claudeFixture {
+	codexFixture := os.Getenv("ORKEST_CODEX_ACP_FIXTURE") == "1"
+	optionsFixture := claudeFixture || codexFixture
+	if os.Getenv("ORKEST_ACP_FIXTURE") == "1" || optionsFixture {
 		if len(os.Args) > 1 && os.Args[1] == "--version" {
 			if os.Getenv("ORKEST_ACP_WRONG_VERSION") == "1" {
 				fmt.Println("SECRET")
 				os.Exit(0)
 			}
-			if claudeFixture {
+			if claudeFixture && os.Getenv("ORKEST_FIXTURE_VERSION") == "" {
 				fmt.Println("0.99.0")
+			} else if codexFixture {
+				fmt.Println("@agentclientprotocol/codex-acp " + version)
 			} else {
 				fmt.Println(version)
 			}
@@ -41,8 +48,8 @@ func Run(version string) {
 			case "initialize":
 				result = map[string]any{"protocolVersion": 1, "agentCapabilities": map[string]any{"loadSession": os.Getenv("ORKEST_ACP_NO_RESTORE") != "1"}, "authMethods": []any{}}
 			case "session/new":
-				if claudeFixture {
-					if err := writeClaudeSessionOptions(request.Params); err != nil {
+				if optionsFixture {
+					if err := writeSessionOptions(request.Params); err != nil {
 						os.Exit(14)
 					}
 				}
@@ -54,8 +61,8 @@ func Run(version string) {
 				if json.Unmarshal(request.Params, &params) != nil || params.SessionID != "fixture-session" {
 					os.Exit(9)
 				}
-				if claudeFixture {
-					if err := writeClaudeSessionOptions(request.Params); err != nil {
+				if optionsFixture {
+					if err := writeSessionOptions(request.Params); err != nil {
 						os.Exit(14)
 					}
 				}
@@ -93,20 +100,24 @@ func Run(version string) {
 					var err error
 					switch params.Prompt[0].Text {
 					case "probe:instructions":
-						if claudeFixture {
-							data, err = claudeSystemPrompt()
+						if codexFixture {
+							data = []byte(os.Getenv("CODEX_CONFIG"))
+						} else if optionsFixture {
+							data, err = fixtureSystemPrompt()
 						} else {
 							data, err = os.ReadFile(filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "opencode", "agents", "work.md"))
 						}
 					case "probe:skills":
-						if claudeFixture {
-							data, err = claudeSystemPrompt()
+						if codexFixture {
+							data = []byte(os.Getenv("CODEX_CONFIG"))
+						} else if optionsFixture {
+							data, err = fixtureSystemPrompt()
 						} else {
 							data, err = os.ReadFile(filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "opencode", "skills", "conformance", "SKILL.md"))
 						}
 					case "probe:http-mcp":
-						if claudeFixture {
-							data, err = claudeMCPConfig()
+						if optionsFixture {
+							data, err = fixtureMCPConfig()
 						} else {
 							data = []byte(os.Getenv("OPENCODE_CONFIG_CONTENT"))
 						}
@@ -172,16 +183,19 @@ func fixtureSend(value any) {
 
 func fixtureDataDir(claude bool) string {
 	if claude {
+		if os.Getenv("ORKEST_CODEX_ACP_FIXTURE") == "1" {
+			return os.Getenv("XDG_DATA_HOME")
+		}
 		return os.Getenv("CLAUDE_CONFIG_DIR")
 	}
 	return os.Getenv("XDG_DATA_HOME")
 }
 
-func writeClaudeSessionOptions(params json.RawMessage) error {
+func writeSessionOptions(params json.RawMessage) error {
 	return os.WriteFile(filepath.Join(fixtureDataDir(true), "session-options.json"), params, 0o600)
 }
 
-func claudeSystemPrompt() ([]byte, error) {
+func fixtureSystemPrompt() ([]byte, error) {
 	data, err := os.ReadFile(filepath.Join(fixtureDataDir(true), "session-options.json"))
 	if err != nil {
 		return nil, err
@@ -195,7 +209,7 @@ func claudeSystemPrompt() ([]byte, error) {
 	return params.Meta["systemPrompt"], nil
 }
 
-func claudeMCPConfig() ([]byte, error) {
+func fixtureMCPConfig() ([]byte, error) {
 	data, err := os.ReadFile(filepath.Join(fixtureDataDir(true), "session-options.json"))
 	if err != nil {
 		return nil, err

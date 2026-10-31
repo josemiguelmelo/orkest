@@ -185,7 +185,10 @@ func runtimeProbe(runtime coreruntime.Runtime, version string) string {
 	if runtime == coreruntime.OpenCode {
 		return "test \"$(opencode --version)\" = '" + version + "'"
 	}
-	return "test \"$(claude-agent-acp --version)\" = '" + version + "'"
+	if runtime == coreruntime.ClaudeCode {
+		return "test \"$(claude-agent-acp --version)\" = '" + version + "'"
+	}
+	return "test \"$(codex-acp --version)\" = '@agentclientprotocol/codex-acp " + version + "'"
 }
 
 func (b *ImageStore) Verify(ctx context.Context, build executionprofile.Build, ref string) (string, error) {

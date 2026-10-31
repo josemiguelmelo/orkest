@@ -94,7 +94,7 @@ func (h *Host) start(ctx context.Context, config runconfig.RuntimeConfig, restor
 	}
 	settings := agentruntime.ResolvedRuntimeSettings{Agent: config.Agent, Model: config.Model, MCPServers: config.MCPServers, Skills: config.Skills}
 	paths := h.provisioningPaths(config, store)
-	executable, environment, err := h.prepareRuntime(ctx, config, settings, store, descriptor)
+	executable, environment, err := h.prepareRuntime(ctx, config, settings, store, descriptor, restoring)
 	if err != nil {
 		return nil, err
 	}
@@ -119,6 +119,14 @@ func (h *Host) start(ctx context.Context, config runconfig.RuntimeConfig, restor
 		if value != "" {
 			session.callbacks.AddSecretValues(value)
 		}
+	}
+	if descriptor.Runtime == coreruntime.Codex {
+		authFile := filepath.Join(paths.RuntimeRoot, filepath.FromSlash(codexAuthFileRelative))
+		contents, readErr := os.ReadFile(authFile)
+		if readErr != nil && !errors.Is(readErr, os.ErrNotExist) {
+			return nil, &agentruntime.LaunchError{Message: "read saved Codex auth state failed", Cause: readErr}
+		}
+		session.callbacks.AddSecretValues(codexAuthSecretValues(contents)...)
 	}
 	for _, credential := range config.GitCredentials {
 		if credential.Token != "" {
@@ -162,13 +170,27 @@ func (h *Host) validateStartup(ctx context.Context, config runconfig.RuntimeConf
 	return nil
 }
 
-func (h *Host) prepareRuntime(ctx context.Context, config runconfig.RuntimeConfig, settings agentruntime.ResolvedRuntimeSettings, store sessionStorage, descriptor agentruntime.RuntimeDescriptor) (string, []string, error) {
+func (h *Host) prepareRuntime(ctx context.Context, config runconfig.RuntimeConfig, settings agentruntime.ResolvedRuntimeSettings, store sessionStorage, descriptor agentruntime.RuntimeDescriptor, restoring bool) (string, []string, error) {
 	paths := h.provisioningPaths(config, store)
 	plan, err := h.profile.BuildProvisioningPlan(settings, paths)
 	if err != nil {
 		return "", nil, err
 	}
-	granted := append(slices.Clone(h.environment.GrantedEnv), environmentEntries(config.Environment)...)
+	grantedHostEnv := slices.Clone(h.environment.GrantedEnv)
+	if descriptor.Runtime == coreruntime.Codex {
+		var authFileContents []byte
+		grantedHostEnv, authFileContents, err = prepareLocalCodexAuthFile(grantedHostEnv, paths.RuntimeRoot, restoring)
+		if err != nil {
+			return "", nil, err
+		}
+		if authFileContents != nil {
+			if plan.Files == nil {
+				plan.Files = make(map[string][]byte)
+			}
+			plan.Files["home/.codex/auth.json"] = authFileContents
+		}
+	}
+	granted := append(grantedHostEnv, environmentEntries(config.Environment)...)
 	environment, err := applyProvisioningPlan(paths.RuntimeRoot, granted, descriptor.ReservedEnvNames, descriptor.ReservedEnvPrefixes, plan)
 	if err != nil {
 		return "", nil, err
@@ -186,7 +208,7 @@ func (h *Host) prepareRuntime(ctx context.Context, config runconfig.RuntimeConfi
 	if err != nil {
 		return "", nil, &agentruntime.LaunchError{Message: "runtime executable unavailable", Cause: err}
 	}
-	if err := verifyRuntimeVersion(ctx, executable, descriptor.VersionArguments, descriptor.Version, environment); err != nil {
+	if err := verifyRuntimeVersion(ctx, executable, descriptor.VersionArguments, descriptor.Version, descriptor.VersionOutputPrefix, environment); err != nil {
 		return "", nil, err
 	}
 	return executable, environment, nil
@@ -276,7 +298,7 @@ func (h *Host) initializeSession(ctx context.Context, session *Session, settings
 	return nil
 }
 
-func verifyRuntimeVersion(ctx context.Context, executable string, args []string, want string, environment []string) error {
+func verifyRuntimeVersion(ctx context.Context, executable string, args []string, want string, outputPrefix string, environment []string) error {
 	probe := exec.CommandContext(ctx, executable, args...)
 	probe.Env = environment
 	output, err := probe.Output()
@@ -294,8 +316,11 @@ func verifyRuntimeVersion(ctx context.Context, executable string, args []string,
 		return &agentruntime.LaunchError{Message: message, Cause: err}
 	}
 	got := strings.TrimSpace(string(output))
+	if outputPrefix != "" {
+		got = strings.TrimPrefix(got, outputPrefix)
+	}
 	if got != want {
-		if !safeRuntimeVersion(got) {
+		if !safeRuntimeVersion(strings.TrimSpace(string(output))) {
 			got = "unrecognized output"
 		}
 		return &agentruntime.LaunchError{Message: fmt.Sprintf("runtime version mismatch: Orkest requires %s but the installed runtime reports %s", want, got)}
