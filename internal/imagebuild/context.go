@@ -2,12 +2,14 @@
 package imagebuild
 
 import (
+	_ "embed"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+	"text/template"
 
 	"github.com/distribution/reference"
 	dockerrecipes "github.com/josemiguelmelo/orkest/build/docker"
@@ -16,6 +18,11 @@ import (
 )
 
 var versionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$`)
+
+//go:embed templates/execution-profile.Dockerfile.tmpl
+var executionProfileDockerfile string
+
+var executionProfileDockerfileTemplate = template.Must(template.New("execution-profile").Parse(executionProfileDockerfile))
 
 type Context struct{ Root, Directory, Destination string }
 
@@ -57,8 +64,14 @@ func Prepare(build executionprofile.Build) (*Context, error) {
 	if err = os.Mkdir(result.Directory, 0o700); err != nil {
 		return nil, err
 	}
-	dockerfile := fmt.Sprintf("ARG BASE\nARG TOOLCHAIN\nFROM ${BASE} AS agentctl\nFROM ${TOOLCHAIN}\nUSER root\nCOPY --from=agentctl /usr/local/bin/agentctl /usr/local/bin/agentctl\nCOPY install-runtime.sh /tmp/orkest-install-runtime.sh\nRUN sh /tmp/orkest-install-runtime.sh %s %s && rm /tmp/orkest-install-runtime.sh\nWORKDIR /workspace\nENTRYPOINT [\"/usr/local/bin/agentctl\"]\nCMD []\n", build.Runtime, version)
-	if err = os.WriteFile(filepath.Join(result.Directory, "Dockerfile"), []byte(dockerfile), 0o600); err != nil {
+	var dockerfile strings.Builder
+	if err = executionProfileDockerfileTemplate.Execute(&dockerfile, struct {
+		Runtime        coreruntime.Runtime
+		RuntimeVersion string
+	}{Runtime: build.Runtime, RuntimeVersion: version}); err != nil {
+		return nil, fmt.Errorf("render execution profile Dockerfile: %w", err)
+	}
+	if err = os.WriteFile(filepath.Join(result.Directory, "Dockerfile"), []byte(dockerfile.String()), 0o600); err != nil {
 		return nil, err
 	}
 	if err = os.WriteFile(filepath.Join(result.Directory, "install-runtime.sh"), dockerrecipes.InstallRuntime, 0o600); err != nil {

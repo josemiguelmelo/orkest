@@ -134,7 +134,7 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 	runnerCtx, stopRunner := context.WithCancel(ctx)
 	var runnerWG sync.WaitGroup
 	if os.Getenv("ORKEST_EXECUTION_IMAGE_REPOSITORY") != "" {
-		imageStore, buildErr := dockerimage.NewImageStore("")
+		imageStore, buildErr := dockerimage.NewImageStore()
 		if buildErr != nil {
 			stopRunner()
 			return buildErr

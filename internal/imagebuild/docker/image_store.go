@@ -38,13 +38,10 @@ type ImageStore struct {
 	user   string
 }
 
-func NewImageStore(user string) (*ImageStore, error) {
-	if user == "" {
-		var err error
-		user, err = currentContainerUser()
-		if err != nil {
-			return nil, err
-		}
+func NewImageStore() (*ImageStore, error) {
+	user, err := currentContainerUser()
+	if err != nil {
+		return nil, err
 	}
 	binary, err := exec.LookPath("docker")
 	if err != nil {

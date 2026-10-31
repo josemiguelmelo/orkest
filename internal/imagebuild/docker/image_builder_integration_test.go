@@ -22,7 +22,7 @@ import (
 func TestDockerImageComposition(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
-	builder, err := NewImageStore("")
+	builder, err := NewImageStore()
 	if err != nil {
 		t.Fatal(err)
 	}
