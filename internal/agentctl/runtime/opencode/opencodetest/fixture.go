@@ -25,6 +25,8 @@ func Run(version string) {
 			}
 			if claudeFixture && os.Getenv("ORKEST_FIXTURE_VERSION") == "" {
 				fmt.Println("0.99.0")
+			} else if codexFixture {
+				fmt.Println("@agentclientprotocol/codex-acp " + version)
 			} else {
 				fmt.Println(version)
 			}

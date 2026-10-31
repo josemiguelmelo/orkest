@@ -12,7 +12,7 @@ import (
 
 func TestDescriptorPinsACPAdapterAndIsolatesCodexState(t *testing.T) {
 	descriptor := (Profile{}).Descriptor()
-	if descriptor.Runtime != coreruntime.Codex || descriptor.Version != "2.3.0" || descriptor.Executable != "codex-acp" {
+	if descriptor.Runtime != coreruntime.Codex || descriptor.Version != "2.3.0" || descriptor.VersionOutputPrefix != "@agentclientprotocol/codex-acp " || descriptor.Executable != "codex-acp" {
 		t.Fatalf("unexpected Codex descriptor: %+v", descriptor)
 	}
 	if descriptor.ReplayCoverageVerified {

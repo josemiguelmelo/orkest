@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	coreruntime "github.com/josemiguelmelo/orkest/internal/core/runtime"
 	"github.com/josemiguelmelo/orkest/internal/executionprofile"
 )
 
@@ -58,6 +59,26 @@ fi
 	}
 	if strings.Contains(string(commands), "build") || strings.Contains(string(commands), "push") {
 		t.Fatal("reconciliation rebuilt or republished")
+	}
+}
+
+func TestRuntimeProbeMatchesPinnedVersions(t *testing.T) {
+	tests := []struct {
+		name    string
+		runtime coreruntime.Runtime
+		version string
+		want    string
+	}{
+		{name: "OpenCode", runtime: coreruntime.OpenCode, version: "opencode v2.1.4", want: `test "$(opencode --version)" = 'opencode v2.1.4'`},
+		{name: "Claude Code", runtime: coreruntime.ClaudeCode, version: "0.99.0", want: `test "$(claude-agent-acp --version)" = '0.99.0'`},
+		{name: "Codex", runtime: coreruntime.Codex, version: "2.3.0", want: `test "$(codex-acp --version)" = '@agentclientprotocol/codex-acp 2.3.0'`},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := runtimeProbe(test.runtime, test.version); got != test.want {
+				t.Fatalf("runtime probe = %q, want %q", got, test.want)
+			}
+		})
 	}
 }
 

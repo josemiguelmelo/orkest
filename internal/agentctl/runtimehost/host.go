@@ -186,7 +186,7 @@ func (h *Host) prepareRuntime(ctx context.Context, config runconfig.RuntimeConfi
 	if err != nil {
 		return "", nil, &agentruntime.LaunchError{Message: "runtime executable unavailable", Cause: err}
 	}
-	if err := verifyRuntimeVersion(ctx, executable, descriptor.VersionArguments, descriptor.Version, environment); err != nil {
+	if err := verifyRuntimeVersion(ctx, executable, descriptor.VersionArguments, descriptor.Version, descriptor.VersionOutputPrefix, environment); err != nil {
 		return "", nil, err
 	}
 	return executable, environment, nil
@@ -276,7 +276,7 @@ func (h *Host) initializeSession(ctx context.Context, session *Session, settings
 	return nil
 }
 
-func verifyRuntimeVersion(ctx context.Context, executable string, args []string, want string, environment []string) error {
+func verifyRuntimeVersion(ctx context.Context, executable string, args []string, want string, outputPrefix string, environment []string) error {
 	probe := exec.CommandContext(ctx, executable, args...)
 	probe.Env = environment
 	output, err := probe.Output()
@@ -294,8 +294,11 @@ func verifyRuntimeVersion(ctx context.Context, executable string, args []string,
 		return &agentruntime.LaunchError{Message: message, Cause: err}
 	}
 	got := strings.TrimSpace(string(output))
+	if outputPrefix != "" {
+		got = strings.TrimPrefix(got, outputPrefix)
+	}
 	if got != want {
-		if !safeRuntimeVersion(got) {
+		if !safeRuntimeVersion(strings.TrimSpace(string(output))) {
 			got = "unrecognized output"
 		}
 		return &agentruntime.LaunchError{Message: fmt.Sprintf("runtime version mismatch: Orkest requires %s but the installed runtime reports %s", want, got)}

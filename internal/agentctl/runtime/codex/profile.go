@@ -22,7 +22,7 @@ func (p Profile) Descriptor() agentruntime.RuntimeDescriptor {
 		binary = "codex-acp"
 	}
 	return agentruntime.RuntimeDescriptor{
-		Runtime: coreruntime.Codex, Version: Version, Executable: binary,
+		Runtime: coreruntime.Codex, Version: Version, VersionOutputPrefix: "@agentclientprotocol/codex-acp ", Executable: binary,
 		VersionArguments: []string{"--version"},
 		ReservedEnvNames: []string{"HOME", "CODEX_PATH", "CODEX_CONFIG", "MODEL_PROVIDER", "APP_SERVER_LOGS", "NO_BROWSER", "INITIAL_AGENT_MODE"},
 	}
