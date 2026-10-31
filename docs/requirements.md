@@ -118,6 +118,13 @@ An agent definition is reusable configuration containing:
 
 An agent definition belongs to a workspace and does not itself supply execution capacity. Its versioning policy remains open.
 
+Workspace runtime profiles are reusable presets containing a name, runtime,
+model provider, and model identifier. Agent definitions can select a runtime
+profile or configure those three settings directly. Updating a runtime profile
+updates every linked agent definition together; deleting it preserves the
+linked agents' last resolved settings and returns them to direct configuration.
+Execution image/toolchain profiles remain a separate resource.
+
 ### 3.8 Agent Team and Team Member
 
 A workspace has an agent team. Users add members to the team and select an agent definition for each member. Multiple members may reuse the same definition.

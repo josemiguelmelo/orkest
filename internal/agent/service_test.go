@@ -41,6 +41,12 @@ func (m mcpAccessStub) Exists(context.Context, string, string, []string) (bool, 
 	return m.valid, nil
 }
 
+type runtimeProfileStub struct{ runtime Runtime }
+
+func (p runtimeProfileStub) ResolveAgentProfile(context.Context, string, string) (Runtime, string, string, error) {
+	return p.runtime, "anthropic", "gateway/claude-sonnet", nil
+}
+
 func validDefinition() AgentDefinition {
 	return AgentDefinition{Name: "Work", Runtime: RuntimeOpenCode, Provider: "provider", Model: "model", Description: "work"}
 }
@@ -77,5 +83,20 @@ func TestDefinitionValidationDelegatesToRuntimeProvider(t *testing.T) {
 	}
 	if err := validate(&definition); err != nil {
 		t.Fatalf("generic validation should not know runtime-specific rules: %v", err)
+	}
+}
+
+func TestCreateResolvesRuntimeProfileSettings(t *testing.T) {
+	repository := &repositoryStub{}
+	service := NewService(repository, workspaceStub{role: "member"}, mcpAccessStub{valid: true}, nil)
+	service.SetRuntimeProfiles(runtimeProfileStub{runtime: RuntimeClaudeCode})
+	definition := validDefinition()
+	definition.RuntimeProfileID = "profile"
+	created, err := service.Create(context.Background(), "user", "org", "workspace", definition)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.Runtime != RuntimeClaudeCode || created.Provider != "anthropic" || created.Model != "gateway/claude-sonnet" {
+		t.Fatalf("runtime profile settings were not applied: %#v", created.AgentDefinition)
 	}
 }

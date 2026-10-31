@@ -20,6 +20,7 @@ type Agent struct {
 	CreatedAt          pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
 	ExecutionProfileID pgtype.Text        `json:"execution_profile_id"`
+	RuntimeProfileID   pgtype.Text        `json:"runtime_profile_id"`
 }
 
 type AgentLaunch struct {
@@ -58,6 +59,17 @@ type AgentPromptOutbox struct {
 	Prompt    string             `json:"prompt"`
 	Delivered bool               `json:"delivered"`
 	CreatedAt pgtype.Timestamptz `json:"created_at"`
+}
+
+type AgentRuntimeProfile struct {
+	ID              string             `json:"id"`
+	WorkspaceID     string             `json:"workspace_id"`
+	Name            string             `json:"name"`
+	Runtime         string             `json:"runtime"`
+	ModelProvider   string             `json:"model_provider"`
+	ModelIdentifier string             `json:"model_identifier"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
 }
 
 type AgentSkill struct {

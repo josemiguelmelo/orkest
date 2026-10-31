@@ -238,6 +238,14 @@ function ShellContent({ session }: { session: CurrentUser }) {
               <p className="nav-label spacer">Configuration</p>
               <Link
                 className="nav-link"
+                to="/organizations/$orgId/workspaces/$workspaceId/agent-runtime-profiles"
+                params={workspaceParams}
+              >
+                <Bot size={17} />
+                Runtime profiles
+              </Link>
+              <Link
+                className="nav-link"
                 to="/organizations/$orgId/workspaces/$workspaceId/execution-profiles"
                 params={workspaceParams}
               >

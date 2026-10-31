@@ -165,6 +165,7 @@ export type ExecutionProfileBuild = {
 };
 export type Agent = {
     executionProfileId?: string;
+    runtimeProfileId?: string;
     id: string;
     workspaceId: string;
     name: string;
@@ -175,6 +176,18 @@ export type Agent = {
     systemPrompt: string;
     mcpServerIds: Array<string>;
     skillIds: Array<string>;
+};
+export type AgentRuntimeProfileInput = {
+    name: string;
+    runtime: 'opencode' | 'claude-code' | 'codex';
+    modelProvider: string;
+    modelIdentifier: string;
+};
+export type AgentRuntimeProfile = AgentRuntimeProfileInput & {
+    id: string;
+    workspaceId: string;
+    createdAt: string;
+    updatedAt: string;
 };
 export type McpServer = {
     id: string;
@@ -319,6 +332,10 @@ export type AgentDefinition = {
      * Profile ID; empty string clears the selection.
      */
     executionProfileId?: string;
+    /**
+     * Runtime profile ID; empty string uses manual model settings.
+     */
+    runtimeProfileId?: string;
     mcpServerIds?: Array<string>;
     skillIds?: Array<string>;
 };
@@ -331,6 +348,132 @@ export type McpServerInput = {
 };
 export type CodeRepositoryCreate2 = CodeRepositoryCreate;
 export type TaskIntegration2 = TaskIntegrationInputWritable;
+export type ListAgentRuntimeProfilesData = {
+    body?: never;
+    path: {
+        orgID: string;
+        workspaceID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/agent-runtime-profiles';
+};
+export type ListAgentRuntimeProfilesErrors = {
+    /**
+     * Missing or invalid credentials
+     */
+    401: Error;
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+};
+export type ListAgentRuntimeProfilesError = ListAgentRuntimeProfilesErrors[keyof ListAgentRuntimeProfilesErrors];
+export type ListAgentRuntimeProfilesResponses = {
+    /**
+     * Runtime profiles
+     */
+    200: Array<AgentRuntimeProfile>;
+};
+export type ListAgentRuntimeProfilesResponse = ListAgentRuntimeProfilesResponses[keyof ListAgentRuntimeProfilesResponses];
+export type CreateAgentRuntimeProfileData = {
+    body: AgentRuntimeProfileInput;
+    path: {
+        orgID: string;
+        workspaceID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/agent-runtime-profiles';
+};
+export type CreateAgentRuntimeProfileErrors = {
+    /**
+     * Request body or role is invalid
+     */
+    400: Error;
+    /**
+     * Missing or invalid credentials
+     */
+    401: Error;
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+};
+export type CreateAgentRuntimeProfileError = CreateAgentRuntimeProfileErrors[keyof CreateAgentRuntimeProfileErrors];
+export type CreateAgentRuntimeProfileResponses = {
+    /**
+     * Runtime profile created and applied to linked agents
+     */
+    201: AgentRuntimeProfile;
+};
+export type CreateAgentRuntimeProfileResponse = CreateAgentRuntimeProfileResponses[keyof CreateAgentRuntimeProfileResponses];
+export type DeleteAgentRuntimeProfileData = {
+    body?: never;
+    path: {
+        orgID: string;
+        workspaceID: string;
+        profileID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/agent-runtime-profiles/{profileID}';
+};
+export type DeleteAgentRuntimeProfileErrors = {
+    /**
+     * Missing or invalid credentials
+     */
+    401: Error;
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+    /**
+     * Resource is absent or inaccessible
+     */
+    404: Error;
+};
+export type DeleteAgentRuntimeProfileError = DeleteAgentRuntimeProfileErrors[keyof DeleteAgentRuntimeProfileErrors];
+export type DeleteAgentRuntimeProfileResponses = {
+    /**
+     * Runtime profile deleted; linked agents retain their last model settings
+     */
+    204: void;
+};
+export type DeleteAgentRuntimeProfileResponse = DeleteAgentRuntimeProfileResponses[keyof DeleteAgentRuntimeProfileResponses];
+export type UpdateAgentRuntimeProfileData = {
+    body: AgentRuntimeProfileInput;
+    path: {
+        orgID: string;
+        workspaceID: string;
+        profileID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/agent-runtime-profiles/{profileID}';
+};
+export type UpdateAgentRuntimeProfileErrors = {
+    /**
+     * Request body or role is invalid
+     */
+    400: Error;
+    /**
+     * Missing or invalid credentials
+     */
+    401: Error;
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+    /**
+     * Resource is absent or inaccessible
+     */
+    404: Error;
+};
+export type UpdateAgentRuntimeProfileError = UpdateAgentRuntimeProfileErrors[keyof UpdateAgentRuntimeProfileErrors];
+export type UpdateAgentRuntimeProfileResponses = {
+    /**
+     * Runtime profile updated and applied to linked agents
+     */
+    200: AgentRuntimeProfile;
+};
+export type UpdateAgentRuntimeProfileResponse = UpdateAgentRuntimeProfileResponses[keyof UpdateAgentRuntimeProfileResponses];
 export type ListExecutionProfilesData = {
     body?: never;
     path: {

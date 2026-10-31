@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/josemiguelmelo/orkest/internal/agent"
+	"github.com/josemiguelmelo/orkest/internal/agentruntimeprofile"
 	"github.com/josemiguelmelo/orkest/internal/app/httpapi"
 	"github.com/josemiguelmelo/orkest/internal/coderepository"
 	githubprovider "github.com/josemiguelmelo/orkest/internal/coderepository/providers/github"
@@ -81,6 +82,8 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 	executionProfileService := executionprofile.NewExecutionProfileService(executionProfileRepository, workspaces, os.Getenv("ORKEST_EXECUTION_IMAGE_REPOSITORY"), profileImages)
 	agents := agent.NewService(postgres.NewAgentPostgresRepository(database), workspaces, mcpServerService, skillCatalog)
 	agents.SetProfiles(executionProfileService)
+	agentRuntimeProfiles := agentruntimeprofile.NewService(postgres.NewAgentRuntimeProfilePostgresRepository(database), workspaces)
+	agents.SetRuntimeProfiles(agentRuntimeProfiles)
 	codeRepositories := coderepository.NewService(postgres.NewCodeReposPostgresRepository(database), workspaces, dataRoot, githubprovider.NewGitHubProvider(), gitlabprovider.NewGitLabCloudProvider(), gitlabprovider.NewGitLabServerProvider())
 	codeRepositories.SetSecretBox(secretBox)
 	launchRepo := postgres.NewAgentLaunchPostgresRepository(database, secretBox)
@@ -166,7 +169,7 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 	}
 	runnerWG.Add(1)
 	go func() { defer runnerWG.Done(); integrations.Run(runnerCtx) }()
-	router, err := httpapi.NewRouter(users, organizations, workspaces, agents, codeRepositories, tasks, integrations, mcpServerService, skillCatalog, launchService, executionProfileService, workspaceEnvironment)
+	router, err := httpapi.NewRouter(users, organizations, workspaces, agents, codeRepositories, tasks, integrations, mcpServerService, skillCatalog, launchService, executionProfileService, agentRuntimeProfiles, workspaceEnvironment)
 	if err != nil {
 		stopRunner()
 		runnerWG.Wait()

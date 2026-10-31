@@ -17,6 +17,8 @@ tags:
     description: Workspace-scoped environment variables and secrets.
   - name: ExecutionProfiles
     description: Workspace execution toolchains and asynchronous image builds.
+  - name: AgentRuntimeProfiles
+    description: Workspace presets for runtime and model selection.
   - name: Agents
     description: Workspace-scoped reusable agent definitions.
   - name: Skills
@@ -32,6 +34,61 @@ tags:
   - name: Tasks
     description: Workspace-scoped tasks, comments, and repository associations.
 paths:
+  /api/organizations/{orgID}/workspaces/{workspaceID}/agent-runtime-profiles:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [AgentRuntimeProfiles]
+      operationId: listAgentRuntimeProfiles
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      responses:
+        "200": {description: Runtime profiles, content: {application/json: {schema: {type: array, items: {$ref: "#/components/schemas/AgentRuntimeProfile"}}}}}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+    post:
+      tags: [AgentRuntimeProfiles]
+      operationId: createAgentRuntimeProfile
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/AgentRuntimeProfileInput"}
+      responses:
+        "201": {description: Runtime profile created and applied to linked agents, content: {application/json: {schema: {$ref: "#/components/schemas/AgentRuntimeProfile"}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/agent-runtime-profiles/{profileID}:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+      - {name: profileID, in: path, required: true, schema: {type: string}}
+    put:
+      tags: [AgentRuntimeProfiles]
+      operationId: updateAgentRuntimeProfile
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/AgentRuntimeProfileInput"}
+      responses:
+        "200": {description: Runtime profile updated and applied to linked agents, content: {application/json: {schema: {$ref: "#/components/schemas/AgentRuntimeProfile"}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+    delete:
+      tags: [AgentRuntimeProfiles]
+      operationId: deleteAgentRuntimeProfile
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      responses:
+        "204": {description: Runtime profile deleted; linked agents retain their last model settings}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
   /api/organizations/{orgID}/workspaces/{workspaceID}/execution-profiles:
     parameters:
       - {name: orgID, in: path, required: true, schema: {type: string}}
@@ -1306,6 +1363,7 @@ components:
               description: {type: string, maxLength: 2000}
               systemPrompt: {type: string, maxLength: 100000}
               executionProfileId: {type: string, description: Profile ID; empty string clears the selection.}
+              runtimeProfileId: {type: string, description: Runtime profile ID; empty string uses manual model settings.}
               mcpServerIds: {type: array, uniqueItems: true, items: {type: string}}
               skillIds: {type: array, uniqueItems: true, items: {type: string}}
             additionalProperties: false
@@ -1541,6 +1599,7 @@ components:
       required: [id, workspaceId, name, runtime, provider, model, description, systemPrompt, mcpServerIds, skillIds]
       properties:
         executionProfileId: {type: string}
+        runtimeProfileId: {type: string}
         id: {type: string}
         workspaceId: {type: string}
         name: {type: string}
@@ -1551,6 +1610,24 @@ components:
         systemPrompt: {type: string}
         mcpServerIds: {type: array, items: {type: string}}
         skillIds: {type: array, items: {type: string}}
+    AgentRuntimeProfileInput:
+      type: object
+      required: [name, runtime, modelProvider, modelIdentifier]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 200}
+        runtime: {type: string, enum: [opencode, claude-code, codex]}
+        modelProvider: {type: string, minLength: 1, maxLength: 200}
+        modelIdentifier: {type: string, minLength: 1, maxLength: 200}
+    AgentRuntimeProfile:
+      allOf:
+        - {$ref: "#/components/schemas/AgentRuntimeProfileInput"}
+        - type: object
+          required: [id, workspaceId, createdAt, updatedAt]
+          properties:
+            id: {type: string}
+            workspaceId: {type: string}
+            createdAt: {type: string, format: date-time}
+            updatedAt: {type: string, format: date-time}
     MCPServer:
       type: object
       required: [id, workspaceId, name, url, hasHeaders]

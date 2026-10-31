@@ -15,6 +15,9 @@ const Task = lazy(() => import('../features/tasks/tasks').then((m) => ({ default
 const Profiles = lazy(() =>
   import('../features/execution-profiles/profiles').then((m) => ({ default: m.ProfilesPage })),
 );
+const AgentRuntimeProfiles = lazy(() =>
+  import('../features/agent-runtime-profiles/profiles').then((m) => ({ default: m.AgentRuntimeProfilesPage })),
+);
 const Agents = lazy(() =>
   import('../features/agents/agents').then((m) => ({ default: m.AgentsPage })),
 );
@@ -110,6 +113,11 @@ const profiles = createRoute({
   path: 'execution-profiles',
   component: loading(Profiles),
 });
+const agentRuntimeProfiles = createRoute({
+  getParentRoute: () => workspace,
+  path: 'agent-runtime-profiles',
+  component: loading(AgentRuntimeProfiles),
+});
 const skills = createRoute({
   getParentRoute: () => workspace,
   path: 'skills',
@@ -147,6 +155,7 @@ const tree = root.addChildren([
       taskRoute,
       agents,
       profiles,
+      agentRuntimeProfiles,
       skills,
       repositories,
       mcp,
