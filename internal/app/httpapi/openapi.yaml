@@ -15,6 +15,8 @@ tags:
     description: Workspaces and workspace memberships.
   - name: WorkspaceEnvironment
     description: Workspace-scoped environment variables and secrets.
+  - name: ExecutionProfiles
+    description: Workspace execution toolchains and asynchronous image builds.
   - name: Agents
     description: Workspace-scoped reusable agent definitions.
   - name: Skills
@@ -30,6 +32,77 @@ tags:
   - name: Tasks
     description: Workspace-scoped tasks, comments, and repository associations.
 paths:
+  /api/organizations/{orgID}/workspaces/{workspaceID}/execution-profiles:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [ExecutionProfiles]
+      operationId: listExecutionProfiles
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      responses:
+        "200": {description: Execution profile operation, content: {application/json: {schema: {type: array, items: {$ref: "#/components/schemas/ExecutionProfile"}}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
+        "503": {description: Image registry not configured, content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}}
+    post:
+      tags: [ExecutionProfiles]
+      operationId: createExecutionProfile
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ExecutionProfileInput"}
+      responses:
+        "202": {description: Execution profile operation, content: {application/json: {schema: {$ref: "#/components/schemas/ExecutionProfile"}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
+        "503": {description: Image registry not configured, content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/execution-profiles/{profileID}:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+      - {name: profileID, in: path, required: true, schema: {type: string}}
+    put:
+      tags: [ExecutionProfiles]
+      operationId: updateExecutionProfile
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/ExecutionProfileInput"}
+      responses:
+        "202": {description: Execution profile operation, content: {application/json: {schema: {$ref: "#/components/schemas/ExecutionProfile"}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
+        "503": {description: Image registry not configured, content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/execution-profiles/{profileID}/builds:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+      - {name: profileID, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [ExecutionProfiles]
+      operationId: listExecutionProfileBuilds
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      responses:
+        "200": {description: Execution profile operation, content: {application/json: {schema: {type: array, items: {$ref: "#/components/schemas/ExecutionProfileBuild"}}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
   /api/coding-providers:
     get:
       tags: [CodingIntegrations]
@@ -1232,6 +1305,7 @@ components:
               model: {type: string, minLength: 1, maxLength: 200}
               description: {type: string, maxLength: 2000}
               systemPrompt: {type: string, maxLength: 100000}
+              executionProfileId: {type: string, description: Profile ID; empty string clears the selection.}
               mcpServerIds: {type: array, uniqueItems: true, items: {type: string}}
               skillIds: {type: array, uniqueItems: true, items: {type: string}}
             additionalProperties: false
@@ -1400,6 +1474,7 @@ components:
       type: object
       required: [runId, taskId, status, lastSequence, updatedAt]
       properties:
+        executionImage: {type: string}
         recoveryBlocked: {type: boolean}
         executionState: {type: string}
         queuePaused: {type: boolean}
@@ -1419,10 +1494,53 @@ components:
         runId: {type: string}
         sequence: {type: integer, minimum: 1}
         payload: {type: object, additionalProperties: true}
+    ExecutionProfileInput:
+      type: object
+      required: [name, description, runtime, toolchainImage]
+      properties:
+        name: {type: string, minLength: 1, maxLength: 200}
+        description: {type: string, maxLength: 2000}
+        runtime: {type: string, enum: [opencode, claude-code]}
+        toolchainImage: {type: string, minLength: 1}
+        generation: {type: integer, format: int64, minimum: 0}
+    ExecutionProfile:
+      allOf:
+        - {$ref: "#/components/schemas/ExecutionProfileInput"}
+        - type: object
+          required: [id, workspaceId, generation, status, executionImage, buildError, createdAt, updatedAt]
+          properties:
+            id: {type: string}
+            workspaceId: {type: string}
+            generation: {type: integer, format: int64}
+            status: {type: string}
+            executionImage: {type: string}
+            buildError: {type: string}
+            createdAt: {type: string, format: date-time}
+            updatedAt: {type: string, format: date-time}
+    ExecutionProfileBuild:
+      type: object
+      required: [id, profileId, workspaceId, generation, runtime, toolchainImage, baseImage, destination, status, executionImage, buildError, createdAt]
+      properties:
+        id: {type: string}
+        profileId: {type: string}
+        workspaceId: {type: string}
+        generation: {type: integer, format: int64}
+        runtime: {type: string, enum: [opencode, claude-code]}
+        toolchainImage: {type: string}
+        baseImage: {type: string}
+        runtimeVersion: {type: string}
+        resolvedToolchain: {type: string}
+        resolvedBase: {type: string}
+        destination: {type: string}
+        status: {type: string}
+        executionImage: {type: string}
+        buildError: {type: string}
+        createdAt: {type: string, format: date-time}
     Agent:
       type: object
       required: [id, workspaceId, name, runtime, provider, model, description, systemPrompt, mcpServerIds, skillIds]
       properties:
+        executionProfileId: {type: string}
         id: {type: string}
         workspaceId: {type: string}
         name: {type: string}

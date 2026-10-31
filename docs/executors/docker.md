@@ -2,9 +2,12 @@
 
 The Docker executor starts one `agentctl` container per run. It targets the local
 Docker Engine configured with `DOCKER_HOST` (or the Engine's default socket). The
-executor binds a dynamically allocated host port on `127.0.0.1`; the container
-listens on port 8081. It returns the Docker container ID and the host endpoint to
-the launch service.
+executor binds a dynamically allocated host port on `127.0.0.1` by default; the
+container listens on port 8081. When `ORKEST_AGENTCTL_NETWORK` is set, it instead
+joins each agentctl container to that Docker network and uses the container name
+and port 8081 as its endpoint. Compose sets this to the shared `orkest` network
+so Orkest can reach its agentctl containers directly. It returns the Docker
+container ID and endpoint to the launch service.
 
 Build the images from the repository root:
 
@@ -28,8 +31,9 @@ configure `AGENTCTL_OPENCODE_IMAGE` or `AGENTCTL_CLAUDE_CODE_IMAGE` when using a
 custom tag. `AGENTCTL_BASE_IMAGE` remains an optional build argument for a custom
 base image.
 
-The base image contains the `agentctl` binary, Git, and GitHub CLI 2.103.2. Each
-runtime image extends that base and installs only its pinned runtime:
+The base image contains the `agentctl` binary, Git, GitHub CLI 2.103.2, and
+GitLab CLI 1.125.0. It does not include BuildKit; image composition runs on the
+platform host. Each runtime image extends that base and installs only its pinned runtime:
 OpenCode 2.1.4 in `orkest/agentctl-opencode:2.1.4`, or the Claude Code ACP
 adapter 0.99.0 in `orkest/agentctl-claude-code:0.99.0`. The
 `docker-agentctl-images` target builds the base and both runtime images. Override
@@ -76,3 +80,17 @@ make test-docker
 ```
 
 Unit tests use a fake Docker Engine client and do not require Docker access.
+
+## Custom toolchains
+
+Workspace execution profiles can asynchronously compose toolchain images with
+one pinned runtime and publish them using deployment-managed Docker credentials.
+Set `ORKEST_EXECUTION_IMAGE_REPOSITORY` to enable builds and
+`ORKEST_IMAGE_BUILDER=buildkit|docker` to select composition. BuildKit mode
+(default) uses `ORKEST_BUILDKIT_ADDR`; Docker mode builds/pushes through Docker
+without needing buildctl. Docker pulls, validates, and executes published digests
+in both modes. Both
+daemons must reach the input/output registries. See [execution profiles](../execution-profiles.md)
+for configuration, supported foundations, profile permissions, and verification.
+Active runs retain their image; later user-started runs can adopt an update while
+restoring the same session. Registry and local image retention are operator-managed.

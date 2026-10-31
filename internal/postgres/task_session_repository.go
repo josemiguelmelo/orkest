@@ -99,7 +99,7 @@ func (r *AgentLaunchPostgresRepository) ReserveSessionRun(ctx context.Context, c
 			return err
 		}
 	}
-	if err := q.InsertAgentLaunch(ctx, sqlc.InsertAgentLaunchParams{RunID: config.RunID, OrganizationID: config.OrganizationID, WorkspaceID: config.WorkspaceID, TaskID: config.TaskID, TaskSessionID: pgtype.Text{String: config.TaskSessionID, Valid: true}, Status: string(orchestration.LaunchStarting)}); err != nil {
+	if err := q.InsertAgentLaunch(ctx, sqlc.InsertAgentLaunchParams{ExecutionImage: config.ExecutionImage, RunID: config.RunID, OrganizationID: config.OrganizationID, WorkspaceID: config.WorkspaceID, TaskID: config.TaskID, TaskSessionID: pgtype.Text{String: config.TaskSessionID, Valid: true}, Status: string(orchestration.LaunchStarting)}); err != nil {
 		return err
 	}
 	if config.InitialCommandID != "" {

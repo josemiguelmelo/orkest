@@ -1,0 +1,11 @@
+ARG BASE
+ARG TOOLCHAIN
+FROM ${BASE} AS agentctl
+FROM ${TOOLCHAIN}
+USER root
+COPY --from=agentctl /usr/local/bin/agentctl /usr/local/bin/agentctl
+COPY install-runtime.sh /tmp/orkest-install-runtime.sh
+RUN sh /tmp/orkest-install-runtime.sh {{ .Runtime }} {{ .RuntimeVersion }} && rm /tmp/orkest-install-runtime.sh
+WORKDIR /workspace
+ENTRYPOINT ["/usr/local/bin/agentctl"]
+CMD []

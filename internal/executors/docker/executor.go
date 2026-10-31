@@ -43,6 +43,7 @@ type EngineClient interface {
 
 type Config struct {
 	DataRoot                 string
+	NetworkName              string
 	Images                   map[coreruntime.Runtime]string
 	AgentctlPort             int
 	ContainerUser            string
@@ -114,6 +115,7 @@ func NewWithClient(ctx context.Context, config Config, client EngineClient) (*Ex
 		return nil, err
 	}
 	config.DataRoot, config.Images, config.AgentctlPort, config.ContainerUser = root, images, port, containerUser
+	config.NetworkName = strings.TrimSpace(config.NetworkName)
 	providers := make(map[string]coderepository.CodingProvider, len(config.CodingProviders))
 	for _, provider := range config.CodingProviders {
 		if provider == nil || strings.TrimSpace(provider.ProviderName()) == "" {
@@ -133,7 +135,10 @@ func (e *Executor) StartAgentctl(ctx context.Context, config runconfig.RunConfig
 	if err := config.Validate(); err != nil {
 		return orchestration.Process{}, err
 	}
-	image := e.config.Images[config.Runtime]
+	image := config.ExecutionImage
+	if image == "" {
+		image = e.config.Images[config.Runtime]
+	}
 	if image == "" {
 		return orchestration.Process{}, fmt.Errorf("no Docker image configured for runtime %q", config.Runtime)
 	}
@@ -181,6 +186,10 @@ func (e *Executor) StartAgentctl(ctx context.Context, config runconfig.RunConfig
 		// silently restart an incomplete run until reconciliation is implemented.
 		RestartPolicy: container.RestartPolicy{Name: container.RestartPolicyDisabled},
 	}
+	if e.config.NetworkName != "" {
+		hostConfig.NetworkMode = container.NetworkMode(e.config.NetworkName)
+		hostConfig.PortBindings = nil
+	}
 	if config.TaskSessionID != "" {
 		hostConfig.RestartPolicy.Name = container.RestartPolicyUnlessStopped
 	}
@@ -224,6 +233,10 @@ func (e *Executor) StartAgentctl(ctx context.Context, config runconfig.RunConfig
 		return process, e.removeAfterFailure(ctx, created.ID, fmt.Errorf("start agentctl container: %w", failure))
 	}
 	endpoint, err := publishedEndpoint(inspection.Container, e.config.AgentctlPort)
+	if e.config.NetworkName != "" {
+		endpoint = fmt.Sprintf("http://%s:%d", name, e.config.AgentctlPort)
+		err = nil
+	}
 	if err != nil {
 		return process, e.removeAfterFailure(ctx, created.ID, err)
 	}

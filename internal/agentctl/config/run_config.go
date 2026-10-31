@@ -9,6 +9,9 @@ import (
 // It is separate from reusable agent definitions and process startup options.
 type RunConfig struct {
 	RuntimeConfig
+	// Platform-only image selection is persisted with the session, excluded by ForRuntime.
+	ExecutionProfileID   string `json:"executionProfileId,omitempty"`
+	ExecutionImage       string `json:"executionImage,omitempty"`
 	RestoreSession       bool   `json:"restoreSession,omitempty"`
 	EncryptedEnvironment string `json:"encryptedEnvironment,omitempty"`
 	// Repositories are executor-only checkout inputs and are intentionally

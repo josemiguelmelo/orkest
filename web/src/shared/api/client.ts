@@ -20,6 +20,8 @@ export class ApiError extends Error {
   }
 }
 const messages: Record<string, string> = {
+  execution_images_not_configured:
+    'Image building is not configured. Ask your administrator to set ORKEST_EXECUTION_IMAGE_REPOSITORY to a registry repository.',
   invalid_request: 'Some values are invalid. Check the form and try again.',
   conflict:
     'This item is still in use, or its current state prevents this change. Remove dependent resources and try again.',
@@ -57,10 +59,13 @@ const messages: Record<string, string> = {
   gitlab_config_invalid: 'The GitLab connection settings are invalid. Check the server URL.',
   gitlab_token_required: 'Enter a GitLab personal access token.',
   gitlab_authentication_failed: 'GitLab rejected this token. Check it and try again.',
-  gitlab_connection_failed: 'Could not validate the GitLab connection. Check the URL, token, and server availability.',
-  gitlab_token_invalid_or_revoked: 'The GitLab token is invalid or revoked. Replace it in workspace settings.',
+  gitlab_connection_failed:
+    'Could not validate the GitLab connection. Check the URL, token, and server availability.',
+  gitlab_token_invalid_or_revoked:
+    'The GitLab token is invalid or revoked. Replace it in workspace settings.',
   gitlab_permission_denied: 'GitLab denied access. Check token permissions and project access.',
-  gitlab_repository_unavailable: 'This repository is no longer accessible to the selected integration.',
+  gitlab_repository_unavailable:
+    'This repository is no longer accessible to the selected integration.',
   agent_dispatch_failed:
     'The task changed to in progress, but agent dispatch failed. Refresh to see its current state.',
   run_not_found:

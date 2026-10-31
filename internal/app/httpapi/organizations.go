@@ -12,6 +12,7 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/core/httplog"
 	modelerrors "github.com/josemiguelmelo/orkest/internal/core/model/errors"
 	"github.com/josemiguelmelo/orkest/internal/core/secretbox"
+	"github.com/josemiguelmelo/orkest/internal/executionprofile"
 	"github.com/josemiguelmelo/orkest/internal/organization"
 	"github.com/josemiguelmelo/orkest/internal/task"
 	"github.com/josemiguelmelo/orkest/internal/taskintegration"
@@ -176,6 +177,8 @@ func respond(w http.ResponseWriter, value any, err error, success int) {
 		var integrationConfigurationError *taskintegration.ConfigurationError
 		var codingProviderError *coderepository.ProviderError
 		switch {
+		case errors.Is(err, executionprofile.ErrNotConfigured):
+			status, code = http.StatusServiceUnavailable, "execution_images_not_configured"
 		case errors.Is(err, secretbox.ErrKeyUnavailable):
 			status, code = http.StatusServiceUnavailable, "integration_encryption_not_configured"
 		case errors.As(err, &integrationValidationError):

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -23,6 +24,7 @@ const sessionCookie = "orkest_session"
 
 type oidcAuth struct {
 	config        oauth2.Config
+	httpClient    *http.Client
 	verifier      *oidc.IDTokenVerifier
 	secure        bool
 	users         *identity.UserRegistrationService
@@ -34,20 +36,85 @@ type userContextKey struct{}
 func newOIDCAuth(ctx context.Context, users *identity.UserRegistrationService, organizations *organization.OrganizationService) (*oidcAuth, error) {
 	issuer := envOr("OIDC_ISSUER_URL", "http://localhost:8082/realms/orkest")
 	clientID := envOr("OIDC_CLIENT_ID", "orkest-web")
+	httpClient, err := oidcHTTPClient(issuer, os.Getenv("OIDC_INTERNAL_ISSUER_URL"))
+	if err != nil {
+		return nil, fmt.Errorf("configure OIDC HTTP client: %w", err)
+	}
+	ctx = context.WithValue(ctx, oauth2.HTTPClient, httpClient)
 	provider, err := oidc.NewProvider(ctx, issuer)
 	if err != nil {
 		return nil, fmt.Errorf("discover OIDC provider: %w", err)
 	}
 	redirectURL := envOr("OIDC_REDIRECT_URL", "http://localhost:8080/auth/callback")
+	endpoint := provider.Endpoint()
+	endpoint.AuthURL, err = publicOIDCEndpoint(issuer, endpoint.AuthURL)
+	if err != nil {
+		return nil, fmt.Errorf("configure public OIDC authorization endpoint: %w", err)
+	}
 	return &oidcAuth{
 		config: oauth2.Config{
 			ClientID: clientID, ClientSecret: envOr("OIDC_CLIENT_SECRET", "orkest-local-secret"),
-			Endpoint: provider.Endpoint(), RedirectURL: redirectURL,
+			Endpoint: endpoint, RedirectURL: redirectURL,
 			Scopes: []string{oidc.ScopeOpenID, "profile", "email"},
 		},
-		verifier: provider.Verifier(&oidc.Config{ClientID: clientID}), users: users, organizations: organizations,
+		httpClient: httpClient,
+		verifier:   provider.Verifier(&oidc.Config{ClientID: clientID}), users: users, organizations: organizations,
 		secure: strings.EqualFold(os.Getenv("OIDC_COOKIE_SECURE"), "true"),
 	}, nil
+}
+
+func publicOIDCEndpoint(issuer, endpoint string) (string, error) {
+	publicURL, err := url.Parse(issuer)
+	if err != nil {
+		return "", fmt.Errorf("parse public issuer: %w", err)
+	}
+	endpointURL, err := url.Parse(endpoint)
+	if err != nil {
+		return "", fmt.Errorf("parse authorization endpoint: %w", err)
+	}
+	if publicURL.Scheme == "" || publicURL.Host == "" || endpointURL.Scheme == "" || endpointURL.Host == "" {
+		return "", fmt.Errorf("issuer and authorization endpoint must be absolute URLs")
+	}
+	endpointURL.Scheme = publicURL.Scheme
+	endpointURL.Host = publicURL.Host
+	return endpointURL.String(), nil
+}
+
+func oidcHTTPClient(issuer, internalIssuer string) (*http.Client, error) {
+	transport := http.DefaultTransport
+	if internalIssuer != "" {
+		publicURL, err := url.Parse(issuer)
+		if err != nil {
+			return nil, fmt.Errorf("parse public issuer: %w", err)
+		}
+		internalURL, err := url.Parse(internalIssuer)
+		if err != nil {
+			return nil, fmt.Errorf("parse internal issuer: %w", err)
+		}
+		if publicURL.Scheme == "" || publicURL.Host == "" || internalURL.Scheme == "" || internalURL.Host == "" {
+			return nil, fmt.Errorf("public and internal issuers must be absolute URLs")
+		}
+		transport = &oidcIssuerTransport{base: http.DefaultTransport, public: publicURL, internal: internalURL}
+	}
+	return &http.Client{Transport: transport}, nil
+}
+
+type oidcIssuerTransport struct {
+	base     http.RoundTripper
+	public   *url.URL
+	internal *url.URL
+}
+
+func (t *oidcIssuerTransport) RoundTrip(request *http.Request) (*http.Response, error) {
+	if request.URL.Scheme != t.public.Scheme || request.URL.Host != t.public.Host {
+		return t.base.RoundTrip(request)
+	}
+	clone := request.Clone(request.Context())
+	urlCopy := *request.URL
+	urlCopy.Scheme = t.internal.Scheme
+	urlCopy.Host = t.internal.Host
+	clone.URL = &urlCopy
+	return t.base.RoundTrip(clone)
 }
 
 func (a *oidcAuth) login(w http.ResponseWriter, r *http.Request) {
@@ -75,7 +142,8 @@ func (a *oidcAuth) callback(w http.ResponseWriter, r *http.Request) {
 	}
 	http.SetCookie(w, &http.Cookie{Name: "orkest_oauth_state", Value: "", Path: "/auth", HttpOnly: true, Secure: a.secure, MaxAge: -1})
 	http.SetCookie(w, &http.Cookie{Name: "orkest_oauth_nonce", Value: "", Path: "/auth", HttpOnly: true, Secure: a.secure, MaxAge: -1})
-	token, err := a.config.Exchange(r.Context(), r.URL.Query().Get("code"))
+	ctx := context.WithValue(r.Context(), oauth2.HTTPClient, a.httpClient)
+	token, err := a.config.Exchange(ctx, r.URL.Query().Get("code"))
 	if err != nil {
 		http.Error(w, "login failed", http.StatusUnauthorized)
 		return

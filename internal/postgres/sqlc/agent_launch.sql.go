@@ -12,8 +12,8 @@ import (
 )
 
 const insertAgentLaunch = `-- name: InsertAgentLaunch :exec
-INSERT INTO agent_launches (run_id, organization_id, workspace_id, task_id, status, task_session_id)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO agent_launches (run_id, organization_id, workspace_id, task_id, status, task_session_id, execution_image)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 `
 
 type InsertAgentLaunchParams struct {
@@ -23,6 +23,7 @@ type InsertAgentLaunchParams struct {
 	TaskID         string      `json:"task_id"`
 	Status         string      `json:"status"`
 	TaskSessionID  pgtype.Text `json:"task_session_id"`
+	ExecutionImage string      `json:"execution_image"`
 }
 
 func (q *Queries) InsertAgentLaunch(ctx context.Context, arg InsertAgentLaunchParams) error {
@@ -33,12 +34,13 @@ func (q *Queries) InsertAgentLaunch(ctx context.Context, arg InsertAgentLaunchPa
 		arg.TaskID,
 		arg.Status,
 		arg.TaskSessionID,
+		arg.ExecutionImage,
 	)
 	return err
 }
 
 const listReconnectableAgentLaunches = `-- name: ListReconnectableAgentLaunches :many
-SELECT launch.run_id, launch.task_session_id, launch.organization_id, launch.workspace_id, launch.task_id,
+SELECT launch.run_id, launch.execution_image, launch.task_session_id, launch.organization_id, launch.workspace_id, launch.task_id,
        launch.status, launch.process_id, launch.endpoint, launch.failure_stage,
        launch.failure_reason, launch.last_sequence,
        COALESCE(latest.event->>'type', '')::text AS last_event_type, launch.updated_at
@@ -57,6 +59,7 @@ ORDER BY launch.created_at
 
 type ListReconnectableAgentLaunchesRow struct {
 	RunID          string             `json:"run_id"`
+	ExecutionImage string             `json:"execution_image"`
 	TaskSessionID  pgtype.Text        `json:"task_session_id"`
 	OrganizationID string             `json:"organization_id"`
 	WorkspaceID    string             `json:"workspace_id"`
@@ -82,6 +85,7 @@ func (q *Queries) ListReconnectableAgentLaunches(ctx context.Context) ([]ListRec
 		var i ListReconnectableAgentLaunchesRow
 		if err := rows.Scan(
 			&i.RunID,
+			&i.ExecutionImage,
 			&i.TaskSessionID,
 			&i.OrganizationID,
 			&i.WorkspaceID,
@@ -142,7 +146,7 @@ func (q *Queries) ListTaskAgentLaunchEvents(ctx context.Context, arg ListTaskAge
 }
 
 const listTaskAgentLaunches = `-- name: ListTaskAgentLaunches :many
-SELECT run_id, task_session_id, organization_id, workspace_id, task_id, status, endpoint, failure_stage,
+SELECT run_id, execution_image, task_session_id, organization_id, workspace_id, task_id, status, endpoint, failure_stage,
        failure_reason, last_sequence, created_at, updated_at
 FROM agent_launches
 WHERE organization_id = $1 AND workspace_id = $2 AND task_id = $3
@@ -157,6 +161,7 @@ type ListTaskAgentLaunchesParams struct {
 
 type ListTaskAgentLaunchesRow struct {
 	RunID          string             `json:"run_id"`
+	ExecutionImage string             `json:"execution_image"`
 	TaskSessionID  pgtype.Text        `json:"task_session_id"`
 	OrganizationID string             `json:"organization_id"`
 	WorkspaceID    string             `json:"workspace_id"`
@@ -181,6 +186,7 @@ func (q *Queries) ListTaskAgentLaunches(ctx context.Context, arg ListTaskAgentLa
 		var i ListTaskAgentLaunchesRow
 		if err := rows.Scan(
 			&i.RunID,
+			&i.ExecutionImage,
 			&i.TaskSessionID,
 			&i.OrganizationID,
 			&i.WorkspaceID,

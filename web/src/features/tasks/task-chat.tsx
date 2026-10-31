@@ -197,6 +197,11 @@ export function TaskChat({ task }: { task: Task }) {
           <div>
             <h2>Conversation</h2>
             <p>Agent · Task context preserved</p>
+            {latest?.executionImage && (
+              <p title={latest.executionImage}>
+                Prepared execution image · {latest.executionImage.split('@')[1]?.slice(0, 19)}
+              </p>
+            )}
           </div>
         </div>
         <span

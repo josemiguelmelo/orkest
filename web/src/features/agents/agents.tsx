@@ -8,7 +8,14 @@ import { useApp } from '../../app/context';
 import * as sdk from '../../shared/api/generated/sdk.gen';
 import type { Agent } from '../../shared/api/generated/types.gen';
 import { command, data } from '../../shared/api/client';
-import { agentsQuery, mcpQuery, path, skillsQuery, useRefresh } from '../../shared/api/queries';
+import {
+  agentsQuery,
+  profilesQuery,
+  mcpQuery,
+  path,
+  skillsQuery,
+  useRefresh,
+} from '../../shared/api/queries';
 import {
   Badge,
   ConfirmButton,
@@ -32,6 +39,7 @@ const schema = z
     systemPrompt: z.string().max(100000),
     mcpServerIds: z.array(z.string()),
     skillIds: z.array(z.string()),
+    executionProfileId: z.string(),
   })
   .superRefine((value, context) => {
     if (value.runtime === 'claude-code' && value.provider.toLowerCase() !== 'anthropic') {
@@ -160,6 +168,7 @@ function AgentEditor({ item, onClose }: { item: Agent | null; onClose: () => voi
   const refresh = useRefresh();
   const action = useAction();
   const servers = useQuery(mcpQuery(scope));
+  const profiles = useQuery(profilesQuery(scope));
   const skills = useQuery(skillsQuery(scope));
   const catalog = useQuery(modelCatalogQuery);
   const [customModel, setCustomModel] = useState(false);
@@ -174,6 +183,7 @@ function AgentEditor({ item, onClose }: { item: Agent | null; onClose: () => voi
       systemPrompt: item?.systemPrompt ?? '',
       mcpServerIds: item?.mcpServerIds ?? [],
       skillIds: item?.skillIds ?? [],
+      executionProfileId: item?.executionProfileId ?? '',
     },
   });
   const runtimeField = form.register('runtime');
@@ -226,6 +236,28 @@ function AgentEditor({ item, onClose }: { item: Agent | null; onClose: () => voi
             <span>Model Configuration</span>
           </div>
           <div className="agent-form-section-content">
+            <Field label="Execution profile">
+              <select
+                {...form.register('executionProfileId')}
+                onChange={(e) => {
+                  form.setValue('executionProfileId', e.target.value, { shouldDirty: true });
+                  const profile = profiles.data?.find((p) => p.id === e.target.value);
+                  if (profile) {
+                    form.setValue('runtime', profile.runtime, { shouldDirty: true });
+                    if (profile.runtime === 'claude-code')
+                      form.setValue('provider', 'anthropic', { shouldDirty: true });
+                  }
+                }}
+              >
+                <option value="">Default environment</option>
+                {profiles.data?.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name} ({p.runtime}, {p.status})
+                  </option>
+                ))}
+              </select>
+              {profiles.isError && <ErrorState error={profiles.error} />}
+            </Field>
             <Field label="Runtime">
               <select
                 {...runtimeField}

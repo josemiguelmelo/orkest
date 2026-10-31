@@ -12,6 +12,9 @@ const Organization = lazy(() =>
 );
 const Tasks = lazy(() => import('../features/tasks/tasks').then((m) => ({ default: m.TasksPage })));
 const Task = lazy(() => import('../features/tasks/tasks').then((m) => ({ default: m.TaskPage })));
+const Profiles = lazy(() =>
+  import('../features/execution-profiles/profiles').then((m) => ({ default: m.ProfilesPage })),
+);
 const Agents = lazy(() =>
   import('../features/agents/agents').then((m) => ({ default: m.AgentsPage })),
 );
@@ -102,6 +105,11 @@ const agents = createRoute({
   path: 'agents',
   component: loading(Agents),
 });
+const profiles = createRoute({
+  getParentRoute: () => workspace,
+  path: 'execution-profiles',
+  component: loading(Profiles),
+});
 const skills = createRoute({
   getParentRoute: () => workspace,
   path: 'skills',
@@ -138,6 +146,7 @@ const tree = root.addChildren([
       tasksRoute,
       taskRoute,
       agents,
+      profiles,
       skills,
       repositories,
       mcp,

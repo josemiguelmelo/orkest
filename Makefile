@@ -102,7 +102,7 @@ test-integration:
 
 test-postgres:
 	@{ test -n "$$DATABASE_URL" || { test -n "$$POSTGRES_HOST" && test -n "$$POSTGRES_PORT" && test -n "$$POSTGRES_USERNAME" && test -n "$$POSTGRES_PASSWORD" && test -n "$$POSTGRES_DB"; }; } || (echo "Set DATABASE_URL or all POSTGRES_HOST, POSTGRES_PORT, POSTGRES_USERNAME, POSTGRES_PASSWORD, and POSTGRES_DB values; start PostgreSQL with make db-up"; exit 1)
-	go test ./internal/postgres -run 'TestPostgresRepositories|TestSessionMigrations' -count=1
+	go test ./internal/postgres -run 'TestPostgresRepositories|TestSessionMigrations|TestExecutionProfileMigration' -count=1
 
 docker-agentctl-base:
 	$(DOCKER) build -f build/docker/agentctl-base.Dockerfile -t $(AGENTCTL_BASE_IMAGE) .
@@ -135,3 +135,8 @@ test-runtime-conformance:
 # prerequisites; this target never substitutes fixture tests or skips a runtime.
 qualify-runtime:
 	ORKEST_RUNTIME_CONFORMANCE=live go test ./internal/agentctl/runtime -run '^TestRuntimeConformance/$(QUALIFY_RUNTIME)$$' -count=1 -timeout=5m -v
+
+.PHONY: test-image-composition
+# Requires buildctl, built agentctl-base, registry:3, and moby/buildkit:v0.34.1.
+test-image-composition:
+	go test -tags=docker ./internal/imagebuild/docker -run '^TestDockerImageComposition$$' -count=1 -v

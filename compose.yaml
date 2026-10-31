@@ -1,15 +1,67 @@
 services:
+  orkest:
+    profiles: ["orkest"]
+    # Daemonless BuildKit runs inside this container and needs mount capabilities.
+    privileged: true
+    build:
+      context: .
+      dockerfile: build/docker/orkest.Dockerfile
+    environment:
+      HTTP_ADDR: 0.0.0.0:8080
+      DOCKER_HOST: unix:///var/run/docker.sock
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USERNAME: ${POSTGRES_USERNAME:?Set POSTGRES_USERNAME in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:?Set POSTGRES_DB in .env}
+      OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:-http://localhost:8082/realms/orkest}
+      OIDC_INTERNAL_ISSUER_URL: http://keycloak:8080/realms/orkest
+      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-orkest-web}
+      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-orkest-local-secret}
+      OIDC_REDIRECT_URL: ${OIDC_REDIRECT_URL:-http://localhost:8080/auth/callback}
+      OIDC_COOKIE_SECURE: ${OIDC_COOKIE_SECURE:-false}
+
+      ORKEST_INTEGRATION_ENCRYPTION_KEY: ${ORKEST_INTEGRATION_ENCRYPTION_KEY:-}
+
+      ORKEST_DATA_DIR: ${ORKEST_DATA_DIR:-${PWD}/data}
+      ORKEST_AGENTCTL_NETWORK: orkest
+
+      ORKEST_EXECUTION_IMAGE_REPOSITORY: ${ORKEST_EXECUTION_IMAGE_REPOSITORY:-registry:5000/orkest/execution-images}
+      ORKEST_IMAGE_BUILDER: buildkit
+      ORKEST_BUILDKIT_DAEMONLESS: "true"
+      ORKEST_BUILDCTL_BINARY: /usr/bin/buildctl-daemonless.sh
+      ORKEST_DOCKER_REGISTRY_HOST: localhost:${REGISTRY_PORT:-5001}
+      ORKEST_BUILDKIT_REGISTRY_HOST: registry:5000
+
+      AGENTCTL_OPENCODE_IMAGE: ${AGENTCTL_OPENCODE_IMAGE:-registry:5000/orkest/agentctl-opencode:2.1.4}
+      AGENTCTL_CLAUDE_CODE_IMAGE: ${AGENTCTL_CLAUDE_CODE_IMAGE:-registry:5000/orkest/agentctl-claude-code:0.99.0}
+    ports:
+      - "127.0.0.1:${ORKEST_PORT:-8080}:8080"
+    volumes:
+      # The Docker daemon must see this path for nested agent bind mounts.
+      - "${ORKEST_DATA_DIR:-${PWD}/data}:${ORKEST_DATA_DIR:-${PWD}/data}"
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - orkest
+    depends_on:
+      postgres:
+        condition: service_healthy
+      keycloak:
+        condition: service_started
   keycloak:
     image: quay.io/keycloak/keycloak:26.3.3
     command: ["start-dev", "--import-realm"]
     environment:
       KC_BOOTSTRAP_ADMIN_USERNAME: admin
       KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+      KC_HOSTNAME: http://localhost:${KEYCLOAK_PORT:-8082}
     ports:
       - "127.0.0.1:${KEYCLOAK_PORT:-8082}:8080"
     volumes:
       - ./docker/keycloak/realm-orkest.json:/opt/keycloak/data/import/realm-orkest.json:ro
       - keycloak_data:/opt/keycloak/data
+    networks:
+      - orkest
   postgres:
     image: postgres:18.3-alpine3.23
     environment:
@@ -26,7 +78,22 @@ services:
       timeout: 5s
       retries: 10
       start_period: 10s
+    networks:
+      - orkest
+  registry:
+    image: registry:3
+    ports:
+      - "127.0.0.1:${REGISTRY_PORT:-5001}:5000"
+    volumes:
+      - registry_data:/var/lib/registry
+    networks:
+      - orkest
+
+networks:
+  orkest:
+    name: orkest
 
 volumes:
   postgres18_data:
   keycloak_data:
+  registry_data:

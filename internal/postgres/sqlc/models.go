@@ -9,16 +9,17 @@ import (
 )
 
 type Agent struct {
-	ID           string             `json:"id"`
-	WorkspaceID  string             `json:"workspace_id"`
-	Name         string             `json:"name"`
-	Runtime      string             `json:"runtime"`
-	Provider     string             `json:"provider"`
-	Model        string             `json:"model"`
-	Description  string             `json:"description"`
-	SystemPrompt string             `json:"system_prompt"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt    pgtype.Timestamptz `json:"updated_at"`
+	ID                 string             `json:"id"`
+	WorkspaceID        string             `json:"workspace_id"`
+	Name               string             `json:"name"`
+	Runtime            string             `json:"runtime"`
+	Provider           string             `json:"provider"`
+	Model              string             `json:"model"`
+	Description        string             `json:"description"`
+	SystemPrompt       string             `json:"system_prompt"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+	ExecutionProfileID pgtype.Text        `json:"execution_profile_id"`
 }
 
 type AgentLaunch struct {
@@ -35,6 +36,7 @@ type AgentLaunch struct {
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 	TaskSessionID  pgtype.Text        `json:"task_session_id"`
+	ExecutionImage string             `json:"execution_image"`
 }
 
 type AgentLaunchEvent struct {
@@ -86,6 +88,41 @@ type CodingIntegration struct {
 	EncryptedCredential string             `json:"encrypted_credential"`
 	CreatedAt           pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+}
+
+type ExecutionProfile struct {
+	ID             string             `json:"id"`
+	WorkspaceID    string             `json:"workspace_id"`
+	Name           string             `json:"name"`
+	Description    string             `json:"description"`
+	Runtime        string             `json:"runtime"`
+	ToolchainImage string             `json:"toolchain_image"`
+	Generation     int64              `json:"generation"`
+	Status         string             `json:"status"`
+	ExecutionImage string             `json:"execution_image"`
+	BuildError     string             `json:"build_error"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
+}
+
+type ExecutionProfileBuild struct {
+	ID                string             `json:"id"`
+	WorkspaceID       string             `json:"workspace_id"`
+	ProfileID         string             `json:"profile_id"`
+	Generation        int64              `json:"generation"`
+	Runtime           string             `json:"runtime"`
+	ToolchainImage    string             `json:"toolchain_image"`
+	BaseImage         string             `json:"base_image"`
+	Destination       string             `json:"destination"`
+	RuntimeVersion    string             `json:"runtime_version"`
+	ResolvedToolchain string             `json:"resolved_toolchain"`
+	ResolvedBase      string             `json:"resolved_base"`
+	Status            string             `json:"status"`
+	ExecutionImage    string             `json:"execution_image"`
+	BuildError        string             `json:"build_error"`
+	Owner             string             `json:"owner"`
+	LeaseUntil        pgtype.Timestamptz `json:"lease_until"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 }
 
 type McpServer struct {
