@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/josemiguelmelo/orkest/internal/agent"
 	modelerrors "github.com/josemiguelmelo/orkest/internal/core/model/errors"
@@ -29,7 +30,7 @@ func (r *AgentPostgresRepository) Agents(ctx context.Context, orgID, workspaceID
 	}
 	out := make([]agent.Agent, 0, len(rows))
 	for _, row := range rows {
-		value := agent.Agent{ID: row.ID, WorkspaceID: row.WorkspaceID, AgentDefinition: agent.AgentDefinition{Name: row.Name, Runtime: agent.Runtime(row.Runtime), Provider: row.Provider, Model: row.Model, Description: row.Description, SystemPrompt: row.SystemPrompt}}
+		value := agent.Agent{ID: row.ID, WorkspaceID: row.WorkspaceID, AgentDefinition: agent.AgentDefinition{Name: row.Name, Runtime: agent.Runtime(row.Runtime), Provider: row.Provider, Model: row.Model, Description: row.Description, ExecutionProfileID: row.ExecutionProfileID.String, SystemPrompt: row.SystemPrompt}}
 		value.MCPServerIDs, err = r.mcpServerIDs(ctx, row.ID)
 		if err != nil {
 			return nil, err
@@ -48,7 +49,7 @@ func (r *AgentPostgresRepository) Agent(ctx context.Context, orgID, workspaceID,
 	if err != nil {
 		return agent.Agent{}, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
 	}
-	a := agent.Agent{ID: row.ID, WorkspaceID: row.WorkspaceID, AgentDefinition: agent.AgentDefinition{Name: row.Name, Runtime: agent.Runtime(row.Runtime), Provider: row.Provider, Model: row.Model, Description: row.Description, SystemPrompt: row.SystemPrompt}}
+	a := agent.Agent{ID: row.ID, WorkspaceID: row.WorkspaceID, AgentDefinition: agent.AgentDefinition{Name: row.Name, Runtime: agent.Runtime(row.Runtime), Provider: row.Provider, Model: row.Model, Description: row.Description, ExecutionProfileID: row.ExecutionProfileID.String, SystemPrompt: row.SystemPrompt}}
 	a.MCPServerIDs, err = r.mcpServerIDs(ctx, id)
 	if err == nil {
 		a.SkillIDs, err = r.skillIDs(ctx, workspaceID, id)
@@ -63,7 +64,7 @@ func (r *AgentPostgresRepository) CreateAgent(ctx context.Context, id, workspace
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	queries := r.queries.WithTx(tx)
-	row, err := queries.InsertAgent(ctx, sqlc.InsertAgentParams{ID: id, ID_2: workspaceID, Name: definition.Name, Runtime: string(definition.Runtime), Provider: definition.Provider, Model: definition.Model, Description: definition.Description, SystemPrompt: definition.SystemPrompt})
+	row, err := queries.InsertAgent(ctx, sqlc.InsertAgentParams{ID: id, ID_2: workspaceID, Name: definition.Name, Runtime: string(definition.Runtime), Provider: definition.Provider, Model: definition.Model, Description: definition.Description, ExecutionProfileID: pgtype.Text{String: definition.ExecutionProfileID, Valid: definition.ExecutionProfileID != ""}, SystemPrompt: definition.SystemPrompt})
 	if err == nil {
 		err = replaceAgentMCPServers(ctx, tx, workspaceID, id, definition.MCPServerIDs)
 	}
@@ -73,7 +74,7 @@ func (r *AgentPostgresRepository) CreateAgent(ctx context.Context, id, workspace
 	if err == nil {
 		err = tx.Commit(ctx)
 	}
-	a := agent.Agent{ID: row.ID, WorkspaceID: row.WorkspaceID, AgentDefinition: agent.AgentDefinition{Name: row.Name, Runtime: agent.Runtime(row.Runtime), Provider: row.Provider, Model: row.Model, Description: row.Description, SystemPrompt: row.SystemPrompt}}
+	a := agent.Agent{ID: row.ID, WorkspaceID: row.WorkspaceID, AgentDefinition: agent.AgentDefinition{Name: row.Name, Runtime: agent.Runtime(row.Runtime), Provider: row.Provider, Model: row.Model, Description: row.Description, ExecutionProfileID: row.ExecutionProfileID.String, SystemPrompt: row.SystemPrompt}}
 	a.MCPServerIDs = definition.MCPServerIDs
 	a.SkillIDs = definition.SkillIDs
 	return a, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
@@ -86,7 +87,7 @@ func (r *AgentPostgresRepository) UpdateAgent(ctx context.Context, orgID, worksp
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	queries := r.queries.WithTx(tx)
-	row, err := queries.UpdateAgent(ctx, sqlc.UpdateAgentParams{OrganizationID: orgID, WorkspaceID: workspaceID, ID: id, Name: definition.Name, Runtime: string(definition.Runtime), Provider: definition.Provider, Model: definition.Model, Description: definition.Description, SystemPrompt: definition.SystemPrompt})
+	row, err := queries.UpdateAgent(ctx, sqlc.UpdateAgentParams{OrganizationID: orgID, WorkspaceID: workspaceID, ID: id, Name: definition.Name, Runtime: string(definition.Runtime), Provider: definition.Provider, Model: definition.Model, Description: definition.Description, ExecutionProfileID: pgtype.Text{String: definition.ExecutionProfileID, Valid: definition.ExecutionProfileID != ""}, SystemPrompt: definition.SystemPrompt})
 	if err == nil {
 		err = replaceAgentMCPServers(ctx, tx, workspaceID, id, definition.MCPServerIDs)
 	}
@@ -96,7 +97,7 @@ func (r *AgentPostgresRepository) UpdateAgent(ctx context.Context, orgID, worksp
 	if err == nil {
 		err = tx.Commit(ctx)
 	}
-	a := agent.Agent{ID: row.ID, WorkspaceID: row.WorkspaceID, AgentDefinition: agent.AgentDefinition{Name: row.Name, Runtime: agent.Runtime(row.Runtime), Provider: row.Provider, Model: row.Model, Description: row.Description, SystemPrompt: row.SystemPrompt}}
+	a := agent.Agent{ID: row.ID, WorkspaceID: row.WorkspaceID, AgentDefinition: agent.AgentDefinition{Name: row.Name, Runtime: agent.Runtime(row.Runtime), Provider: row.Provider, Model: row.Model, Description: row.Description, ExecutionProfileID: row.ExecutionProfileID.String, SystemPrompt: row.SystemPrompt}}
 	a.MCPServerIDs = definition.MCPServerIDs
 	a.SkillIDs = definition.SkillIDs
 	return a, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)

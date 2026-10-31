@@ -319,3 +319,17 @@ Event retention, recovery time targets, host-loss guarantees, and overall availa
 - GitHub import scope, comment synchronization, webhook/polling behavior, and issue-close semantics.
 - Docker deployment location, environment persistence, resource limits, and credential provisioning.
 - Artifact types, log/chat retention, audit requirements, and usage/cost reporting scope.
+
+## 11. Execution toolchain profiles
+
+Confirmed: a workspace supports multiple profiles, and agents can select different
+or shared toolchains. Profiles pair a supported runtime with a toolchain image.
+Creating/updating a profile queues asynchronous composition and registry publishing.
+A new ready image never interrupts active execution or approval waits; the next
+user-started run can restore the same session using it. Explicit profile revisions
+are not required. Build attempts and run image identities retain provenance.
+
+Implemented policy: workspace Admins and inherited organization Owners/Admins
+manage profiles/builds; Members select profiles through agent configuration;
+Viewers are read-only. Runtime changes use a different profile and session.
+See [execution profiles](execution-profiles.md) for operational qualifications.

@@ -32,6 +32,7 @@ func (a taskRunAPI) routes(r chi.Router) {
 }
 
 type taskRunView struct {
+	ExecutionImage  string                     `json:"executionImage"`
 	RecoveryBlocked bool                       `json:"recoveryBlocked"`
 	ExecutionState  agentrun.ExecutionState    `json:"executionState,omitempty"`
 	QueuePaused     bool                       `json:"queuePaused"`
@@ -172,7 +173,7 @@ func scopeParams(r *http.Request) (string, string, string) {
 }
 
 func runView(item orchestration.Launch) taskRunView {
-	return taskRunView{RunID: item.RunID, TaskSessionID: item.TaskSessionID, ExecutionState: item.ExecutionState, RecoveryBlocked: item.RecoveryBlocked, QueuePaused: item.QueuePaused, QueueDepth: item.QueueDepth, TaskID: item.TaskID, Status: item.Status, FailureStage: item.FailureStage, FailureReason: item.FailureReason, LastSequence: item.LastSequence, UpdatedAt: item.UpdatedAt.UTC().Format("2006-01-02T15:04:05.999999999Z07:00")}
+	return taskRunView{ExecutionImage: item.ExecutionImage, RunID: item.RunID, TaskSessionID: item.TaskSessionID, ExecutionState: item.ExecutionState, RecoveryBlocked: item.RecoveryBlocked, QueuePaused: item.QueuePaused, QueueDepth: item.QueueDepth, TaskID: item.TaskID, Status: item.Status, FailureStage: item.FailureStage, FailureReason: item.FailureReason, LastSequence: item.LastSequence, UpdatedAt: item.UpdatedAt.UTC().Format("2006-01-02T15:04:05.999999999Z07:00")}
 }
 
 func (a taskRunAPI) resumeQueue(w http.ResponseWriter, r *http.Request) { a.queue(w, r, false) }

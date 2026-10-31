@@ -117,6 +117,7 @@ export const zTaskComment = z.object({
     createdAt: z.iso.datetime()
 });
 export const zTaskRun = z.object({
+    executionImage: z.string().optional(),
     recoveryBlocked: z.boolean().optional(),
     executionState: z.string().optional(),
     queuePaused: z.boolean().optional(),
@@ -135,7 +136,42 @@ export const zTaskRunEvent = z.object({
     sequence: z.int().gte(1),
     payload: z.record(z.string(), z.unknown())
 });
+export const zExecutionProfileInput = z.object({
+    name: z.string().min(1).max(200),
+    description: z.string().max(2000),
+    runtime: z.enum(['opencode', 'claude-code']),
+    toolchainImage: z.string().min(1),
+    generation: z.coerce.bigint().gte(BigInt(0)).max(BigInt('9223372036854775807'), { error: 'Invalid value: Expected int64 to be <= 9223372036854775807' }).optional()
+});
+export const zExecutionProfile = zExecutionProfileInput.and(z.object({
+    id: z.string(),
+    workspaceId: z.string(),
+    generation: z.coerce.bigint().min(BigInt('-9223372036854775808'), { error: 'Invalid value: Expected int64 to be >= -9223372036854775808' }).max(BigInt('9223372036854775807'), { error: 'Invalid value: Expected int64 to be <= 9223372036854775807' }),
+    status: z.string(),
+    executionImage: z.string(),
+    buildError: z.string(),
+    createdAt: z.iso.datetime(),
+    updatedAt: z.iso.datetime()
+}));
+export const zExecutionProfileBuild = z.object({
+    id: z.string(),
+    profileId: z.string(),
+    workspaceId: z.string(),
+    generation: z.coerce.bigint().min(BigInt('-9223372036854775808'), { error: 'Invalid value: Expected int64 to be >= -9223372036854775808' }).max(BigInt('9223372036854775807'), { error: 'Invalid value: Expected int64 to be <= 9223372036854775807' }),
+    runtime: z.enum(['opencode', 'claude-code']),
+    toolchainImage: z.string(),
+    baseImage: z.string(),
+    runtimeVersion: z.string().optional(),
+    resolvedToolchain: z.string().optional(),
+    resolvedBase: z.string().optional(),
+    destination: z.string(),
+    status: z.string(),
+    executionImage: z.string(),
+    buildError: z.string(),
+    createdAt: z.iso.datetime()
+});
 export const zAgent = z.object({
+    executionProfileId: z.string().optional(),
     id: z.string(),
     workspaceId: z.string(),
     name: z.string(),
@@ -299,6 +335,7 @@ export const zAgentDefinition = z.object({
     model: z.string().min(1).max(200),
     description: z.string().max(2000),
     systemPrompt: z.string().max(100000),
+    executionProfileId: z.string().optional(),
     mcpServerIds: z.array(z.string()).optional(),
     skillIds: z.array(z.string()).optional()
 });
@@ -309,6 +346,42 @@ export const zMcpServerInput = z.object({
 });
 export const zCodeRepositoryCreate2 = zCodeRepositoryCreate;
 export const zTaskIntegration2 = zTaskIntegrationInputWritable;
+export const zListExecutionProfilesPath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string()
+});
+/**
+ * Execution profile operation
+ */
+export const zListExecutionProfilesResponse = z.array(zExecutionProfile);
+export const zCreateExecutionProfileBody = zExecutionProfileInput;
+export const zCreateExecutionProfilePath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string()
+});
+/**
+ * Execution profile operation
+ */
+export const zCreateExecutionProfileResponse = zExecutionProfile;
+export const zUpdateExecutionProfileBody = zExecutionProfileInput;
+export const zUpdateExecutionProfilePath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string(),
+    profileID: z.string()
+});
+/**
+ * Execution profile operation
+ */
+export const zUpdateExecutionProfileResponse = zExecutionProfile;
+export const zListExecutionProfileBuildsPath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string(),
+    profileID: z.string()
+});
+/**
+ * Execution profile operation
+ */
+export const zListExecutionProfileBuildsResponse = z.array(zExecutionProfileBuild);
 /**
  * Coding provider catalog
  */

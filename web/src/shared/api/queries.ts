@@ -135,3 +135,13 @@ export function useRefresh() {
     await client.invalidateQueries({ queryKey: ['session'] });
   };
 }
+
+export const profilesQuery = (s: WorkspaceScope) =>
+  queryOptions({
+    queryKey: [...keys.workspace(s), 'execution-profiles'],
+    queryFn: ({ signal }) => data(sdk.listExecutionProfiles({ ...command, path: path(s), signal })),
+    refetchInterval: (q) =>
+      q.state.data?.some((p) => ['queued', 'building', 'reconciling'].includes(p.status))
+        ? 2000
+        : false,
+  });

@@ -41,9 +41,23 @@ func (a agentAPI) create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a agentAPI) update(w http.ResponseWriter, r *http.Request) {
-	var body agent.AgentDefinition
-	if !decodeBody(w, r, &body) {
+	var request struct {
+		agent.AgentDefinition
+		ExecutionProfileID *string `json:"executionProfileId"`
+	}
+	if !decodeBody(w, r, &request) {
 		return
+	}
+	body := request.AgentDefinition
+	if request.ExecutionProfileID != nil {
+		body.ExecutionProfileID = *request.ExecutionProfileID
+	} else {
+		current, err := a.agents.Get(r.Context(), currentUserID(r), chi.URLParam(r, "orgID"), chi.URLParam(r, "workspaceID"), chi.URLParam(r, "agentID"))
+		if err != nil {
+			respond(w, nil, err, http.StatusOK)
+			return
+		}
+		body.ExecutionProfileID = current.ExecutionProfileID
 	}
 	v, err := a.agents.Update(r.Context(), currentUserID(r), chi.URLParam(r, "orgID"), chi.URLParam(r, "workspaceID"), chi.URLParam(r, "agentID"), body)
 	respond(w, v, err, http.StatusOK)

@@ -222,6 +222,7 @@ func TestPostgresRepositories(t *testing.T) {
 	if _, err = workspaceRepository.Workspace(ctx, "another-organization", workspaceID, owner.ID); !errors.Is(err, modelerrors.ErrNotFound) {
 		t.Fatalf("workspace read crossed organization boundary: %v", err)
 	}
+	t.Run("execution profiles", func(t *testing.T) { testExecutionProfiles(t, database, workspaceID) })
 	updatedWorkspace, err := workspaceRepository.UpdateWorkspace(ctx, org.ID, workspaceID, "updated workspace")
 	if err != nil || updatedWorkspace.Name != "updated workspace" || updatedWorkspace.OrganizationID != org.ID {
 		t.Fatalf("update workspace: workspace=%+v err=%v", updatedWorkspace, err)

@@ -40,7 +40,7 @@ func (s *LaunchService) Start(ctx context.Context, config runconfig.RunConfig) (
 	if err := config.Validate(); err != nil {
 		return Launch{}, err
 	}
-	launch := Launch{RunID: config.RunID, TaskSessionID: config.TaskSessionID, OrganizationID: config.OrganizationID, WorkspaceID: config.WorkspaceID, TaskID: config.TaskID, Status: LaunchStarting}
+	launch := Launch{ExecutionImage: config.ExecutionImage, RunID: config.RunID, TaskSessionID: config.TaskSessionID, OrganizationID: config.OrganizationID, WorkspaceID: config.WorkspaceID, TaskID: config.TaskID, Status: LaunchStarting}
 	if !config.ReservedRun {
 		if err := s.repo.CreateLaunch(ctx, launch); err != nil {
 			return Launch{}, fmt.Errorf("create launch record: %w", err)

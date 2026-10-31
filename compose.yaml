@@ -26,7 +26,14 @@ services:
       timeout: 5s
       retries: 10
       start_period: 10s
+  registry:
+    image: registry:3
+    ports:
+      - "127.0.0.1:${REGISTRY_PORT:-5001}:5000"
+    volumes:
+      - registry_data:/var/lib/registry
 
 volumes:
   postgres18_data:
   keycloak_data:
+  registry_data:

@@ -17,12 +17,13 @@ type Agent struct {
 }
 
 type AgentDefinition struct {
-	Name         string   `json:"name"`
-	Runtime      Runtime  `json:"runtime"`
-	Provider     string   `json:"provider"`
-	Model        string   `json:"model"`
-	Description  string   `json:"description"`
-	SystemPrompt string   `json:"systemPrompt"`
-	MCPServerIDs []string `json:"mcpServerIds"`
-	SkillIDs     []string `json:"skillIds"`
+	ExecutionProfileID string   `json:"executionProfileId"`
+	Name               string   `json:"name"`
+	Runtime            Runtime  `json:"runtime"`
+	Provider           string   `json:"provider"`
+	Model              string   `json:"model"`
+	Description        string   `json:"description"`
+	SystemPrompt       string   `json:"systemPrompt"`
+	MCPServerIDs       []string `json:"mcpServerIds"`
+	SkillIDs           []string `json:"skillIds"`
 }

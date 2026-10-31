@@ -15,10 +15,30 @@ type Service struct {
 	workspaces WorkspaceAccess
 	mcpServers MCPServerAccess
 	skills     SkillAccess
+	profiles   interface {
+		ValidateProfile(context.Context, string, string, Runtime) error
+	}
 }
 
 func NewService(repository Repository, workspaces WorkspaceAccess, mcpServers MCPServerAccess, skills SkillAccess) *Service {
 	return &Service{repository: repository, workspaces: workspaces, mcpServers: mcpServers, skills: skills}
+}
+
+func (s *Service) SetProfiles(profiles interface {
+	ValidateProfile(context.Context, string, string, Runtime) error
+},
+) {
+	s.profiles = profiles
+}
+
+func (s *Service) validateProfile(ctx context.Context, workspaceID string, d AgentDefinition) error {
+	if d.ExecutionProfileID == "" {
+		return nil
+	}
+	if s.profiles == nil {
+		return modelerrors.ErrInvalid
+	}
+	return s.profiles.ValidateProfile(ctx, workspaceID, d.ExecutionProfileID, d.Runtime)
 }
 
 func (s *Service) List(ctx context.Context, userID, orgID, workspaceID string) ([]Agent, error) {
@@ -37,6 +57,9 @@ func (s *Service) Get(ctx context.Context, userID, orgID, workspaceID, agentID s
 
 func (s *Service) Create(ctx context.Context, userID, orgID, workspaceID string, definition AgentDefinition) (Agent, error) {
 	if err := s.authorize(ctx, userID, orgID, workspaceID); err != nil {
+		return Agent{}, err
+	}
+	if err := s.validateProfile(ctx, workspaceID, definition); err != nil {
 		return Agent{}, err
 	}
 	if err := s.validateDefinition(&definition); err != nil {
@@ -72,6 +95,9 @@ func (s *Service) Update(ctx context.Context, userID, orgID, workspaceID, agentI
 			return Agent{}, err
 		}
 		definition.MCPServerIDs = current.MCPServerIDs
+	}
+	if err := s.validateProfile(ctx, workspaceID, definition); err != nil {
+		return Agent{}, err
 	}
 	if err := s.validateDefinition(&definition); err != nil {
 		return Agent{}, err

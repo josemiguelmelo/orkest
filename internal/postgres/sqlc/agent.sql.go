@@ -7,6 +7,8 @@ package sqlc
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const deleteAgent = `-- name: DeleteAgent :execrows
@@ -43,7 +45,7 @@ func (q *Queries) DeleteAgentSkills(ctx context.Context, arg DeleteAgentSkillsPa
 }
 
 const getAgent = `-- name: GetAgent :one
-SELECT a.id, a.workspace_id, a.name, a.runtime, a.provider, a.model, a.description, a.system_prompt
+SELECT a.id, a.workspace_id, a.name, a.runtime, a.provider, a.model, a.description, a.system_prompt, a.execution_profile_id
 FROM agents a JOIN workspaces w ON w.id = a.workspace_id
 WHERE w.organization_id = $1 AND a.workspace_id = $2 AND a.id = $3
 `
@@ -55,14 +57,15 @@ type GetAgentParams struct {
 }
 
 type GetAgentRow struct {
-	ID           string `json:"id"`
-	WorkspaceID  string `json:"workspace_id"`
-	Name         string `json:"name"`
-	Runtime      string `json:"runtime"`
-	Provider     string `json:"provider"`
-	Model        string `json:"model"`
-	Description  string `json:"description"`
-	SystemPrompt string `json:"system_prompt"`
+	ID                 string      `json:"id"`
+	WorkspaceID        string      `json:"workspace_id"`
+	Name               string      `json:"name"`
+	Runtime            string      `json:"runtime"`
+	Provider           string      `json:"provider"`
+	Model              string      `json:"model"`
+	Description        string      `json:"description"`
+	SystemPrompt       string      `json:"system_prompt"`
+	ExecutionProfileID pgtype.Text `json:"execution_profile_id"`
 }
 
 func (q *Queries) GetAgent(ctx context.Context, arg GetAgentParams) (GetAgentRow, error) {
@@ -77,36 +80,39 @@ func (q *Queries) GetAgent(ctx context.Context, arg GetAgentParams) (GetAgentRow
 		&i.Model,
 		&i.Description,
 		&i.SystemPrompt,
+		&i.ExecutionProfileID,
 	)
 	return i, err
 }
 
 const insertAgent = `-- name: InsertAgent :one
-INSERT INTO agents (id, workspace_id, name, runtime, provider, model, description, system_prompt)
-SELECT $1, w.id, $3, $4, $5, $6, $7, $8 FROM workspaces w WHERE w.id = $2
-RETURNING id, workspace_id, name, runtime, provider, model, description, system_prompt
+INSERT INTO agents (id, workspace_id, name, runtime, provider, model, description, system_prompt, execution_profile_id)
+SELECT $1, w.id, $3, $4, $5, $6, $7, $8, $9 FROM workspaces w WHERE w.id = $2
+RETURNING id, workspace_id, name, runtime, provider, model, description, system_prompt, execution_profile_id
 `
 
 type InsertAgentParams struct {
-	ID           string `json:"id"`
-	ID_2         string `json:"id_2"`
-	Name         string `json:"name"`
-	Runtime      string `json:"runtime"`
-	Provider     string `json:"provider"`
-	Model        string `json:"model"`
-	Description  string `json:"description"`
-	SystemPrompt string `json:"system_prompt"`
+	ID                 string      `json:"id"`
+	ID_2               string      `json:"id_2"`
+	Name               string      `json:"name"`
+	Runtime            string      `json:"runtime"`
+	Provider           string      `json:"provider"`
+	Model              string      `json:"model"`
+	Description        string      `json:"description"`
+	SystemPrompt       string      `json:"system_prompt"`
+	ExecutionProfileID pgtype.Text `json:"execution_profile_id"`
 }
 
 type InsertAgentRow struct {
-	ID           string `json:"id"`
-	WorkspaceID  string `json:"workspace_id"`
-	Name         string `json:"name"`
-	Runtime      string `json:"runtime"`
-	Provider     string `json:"provider"`
-	Model        string `json:"model"`
-	Description  string `json:"description"`
-	SystemPrompt string `json:"system_prompt"`
+	ID                 string      `json:"id"`
+	WorkspaceID        string      `json:"workspace_id"`
+	Name               string      `json:"name"`
+	Runtime            string      `json:"runtime"`
+	Provider           string      `json:"provider"`
+	Model              string      `json:"model"`
+	Description        string      `json:"description"`
+	SystemPrompt       string      `json:"system_prompt"`
+	ExecutionProfileID pgtype.Text `json:"execution_profile_id"`
 }
 
 func (q *Queries) InsertAgent(ctx context.Context, arg InsertAgentParams) (InsertAgentRow, error) {
@@ -119,6 +125,7 @@ func (q *Queries) InsertAgent(ctx context.Context, arg InsertAgentParams) (Inser
 		arg.Model,
 		arg.Description,
 		arg.SystemPrompt,
+		arg.ExecutionProfileID,
 	)
 	var i InsertAgentRow
 	err := row.Scan(
@@ -130,6 +137,7 @@ func (q *Queries) InsertAgent(ctx context.Context, arg InsertAgentParams) (Inser
 		&i.Model,
 		&i.Description,
 		&i.SystemPrompt,
+		&i.ExecutionProfileID,
 	)
 	return i, err
 }
@@ -179,7 +187,7 @@ func (q *Queries) ListAgentSkillIDs(ctx context.Context, arg ListAgentSkillIDsPa
 }
 
 const listAgents = `-- name: ListAgents :many
-SELECT a.id, a.workspace_id, a.name, a.runtime, a.provider, a.model, a.description, a.system_prompt
+SELECT a.id, a.workspace_id, a.name, a.runtime, a.provider, a.model, a.description, a.system_prompt, a.execution_profile_id
 FROM agents a JOIN workspaces w ON w.id = a.workspace_id
 WHERE w.organization_id = $1 AND a.workspace_id = $2
 ORDER BY a.name, a.id
@@ -191,14 +199,15 @@ type ListAgentsParams struct {
 }
 
 type ListAgentsRow struct {
-	ID           string `json:"id"`
-	WorkspaceID  string `json:"workspace_id"`
-	Name         string `json:"name"`
-	Runtime      string `json:"runtime"`
-	Provider     string `json:"provider"`
-	Model        string `json:"model"`
-	Description  string `json:"description"`
-	SystemPrompt string `json:"system_prompt"`
+	ID                 string      `json:"id"`
+	WorkspaceID        string      `json:"workspace_id"`
+	Name               string      `json:"name"`
+	Runtime            string      `json:"runtime"`
+	Provider           string      `json:"provider"`
+	Model              string      `json:"model"`
+	Description        string      `json:"description"`
+	SystemPrompt       string      `json:"system_prompt"`
+	ExecutionProfileID pgtype.Text `json:"execution_profile_id"`
 }
 
 func (q *Queries) ListAgents(ctx context.Context, arg ListAgentsParams) ([]ListAgentsRow, error) {
@@ -219,6 +228,7 @@ func (q *Queries) ListAgents(ctx context.Context, arg ListAgentsParams) ([]ListA
 			&i.Model,
 			&i.Description,
 			&i.SystemPrompt,
+			&i.ExecutionProfileID,
 		); err != nil {
 			return nil, err
 		}
@@ -231,33 +241,35 @@ func (q *Queries) ListAgents(ctx context.Context, arg ListAgentsParams) ([]ListA
 }
 
 const updateAgent = `-- name: UpdateAgent :one
-UPDATE agents a SET name = $4, runtime = $5, provider = $6, model = $7, description = $8, system_prompt = $9, updated_at = now()
+UPDATE agents a SET name = $4, runtime = $5, provider = $6, model = $7, description = $8, system_prompt = $9, execution_profile_id = $10, updated_at = now()
 FROM workspaces w
 WHERE w.organization_id = $1 AND a.workspace_id = w.id AND a.workspace_id = $2 AND a.id = $3
-RETURNING a.id, a.workspace_id, a.name, a.runtime, a.provider, a.model, a.description, a.system_prompt
+RETURNING a.id, a.workspace_id, a.name, a.runtime, a.provider, a.model, a.description, a.system_prompt, a.execution_profile_id
 `
 
 type UpdateAgentParams struct {
-	OrganizationID string `json:"organization_id"`
-	WorkspaceID    string `json:"workspace_id"`
-	ID             string `json:"id"`
-	Name           string `json:"name"`
-	Runtime        string `json:"runtime"`
-	Provider       string `json:"provider"`
-	Model          string `json:"model"`
-	Description    string `json:"description"`
-	SystemPrompt   string `json:"system_prompt"`
+	OrganizationID     string      `json:"organization_id"`
+	WorkspaceID        string      `json:"workspace_id"`
+	ID                 string      `json:"id"`
+	Name               string      `json:"name"`
+	Runtime            string      `json:"runtime"`
+	Provider           string      `json:"provider"`
+	Model              string      `json:"model"`
+	Description        string      `json:"description"`
+	SystemPrompt       string      `json:"system_prompt"`
+	ExecutionProfileID pgtype.Text `json:"execution_profile_id"`
 }
 
 type UpdateAgentRow struct {
-	ID           string `json:"id"`
-	WorkspaceID  string `json:"workspace_id"`
-	Name         string `json:"name"`
-	Runtime      string `json:"runtime"`
-	Provider     string `json:"provider"`
-	Model        string `json:"model"`
-	Description  string `json:"description"`
-	SystemPrompt string `json:"system_prompt"`
+	ID                 string      `json:"id"`
+	WorkspaceID        string      `json:"workspace_id"`
+	Name               string      `json:"name"`
+	Runtime            string      `json:"runtime"`
+	Provider           string      `json:"provider"`
+	Model              string      `json:"model"`
+	Description        string      `json:"description"`
+	SystemPrompt       string      `json:"system_prompt"`
+	ExecutionProfileID pgtype.Text `json:"execution_profile_id"`
 }
 
 func (q *Queries) UpdateAgent(ctx context.Context, arg UpdateAgentParams) (UpdateAgentRow, error) {
@@ -271,6 +283,7 @@ func (q *Queries) UpdateAgent(ctx context.Context, arg UpdateAgentParams) (Updat
 		arg.Model,
 		arg.Description,
 		arg.SystemPrompt,
+		arg.ExecutionProfileID,
 	)
 	var i UpdateAgentRow
 	err := row.Scan(
@@ -282,6 +295,7 @@ func (q *Queries) UpdateAgent(ctx context.Context, arg UpdateAgentParams) (Updat
 		&i.Model,
 		&i.Description,
 		&i.SystemPrompt,
+		&i.ExecutionProfileID,
 	)
 	return i, err
 }

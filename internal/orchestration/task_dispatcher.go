@@ -24,7 +24,10 @@ type taskAgentGetter interface {
 
 // TaskDispatcher resolves an assigned agent definition and starts its task run.
 type TaskDispatcher struct {
-	agents     taskAgentGetter
+	agents   taskAgentGetter
+	profiles interface {
+		Resolve(context.Context, string, string, agent.Runtime) (string, error)
+	}
 	launches   *LaunchService
 	mcpServers interface {
 		Resolve(context.Context, string, []string) ([]mcpserver.RuntimeServer, error)
@@ -41,6 +44,13 @@ type TaskDispatcher struct {
 	codingCredentials interface {
 		CodingCredential(context.Context, string, string) (coderepository.Credentials, error)
 	}
+}
+
+func (d *TaskDispatcher) SetProfiles(profiles interface {
+	Resolve(context.Context, string, string, agent.Runtime) (string, error)
+},
+) {
+	d.profiles = profiles
 }
 
 func (d *TaskDispatcher) SetEnvironmentResolver(resolver interface {
@@ -116,6 +126,18 @@ func (d *TaskDispatcher) StartTask(ctx context.Context, userID, organizationID s
 			return err
 		}
 		config.TaskSessionID, err = ids.NewUUID()
+		if err != nil {
+			return err
+		}
+	}
+	if !continuing {
+		config.ExecutionProfileID = definition.ExecutionProfileID
+	}
+	if config.ExecutionProfileID != "" {
+		if d.profiles == nil {
+			return errors.New("execution profiles unavailable")
+		}
+		config.ExecutionImage, err = d.profiles.Resolve(ctx, value.WorkspaceID, config.ExecutionProfileID, config.Runtime)
 		if err != nil {
 			return err
 		}

@@ -26,6 +26,7 @@ type Process struct {
 }
 
 type Launch struct {
+	ExecutionImage  string
 	RecoveryBlocked bool
 	ExecutionState  agentrun.ExecutionState
 	QueuePaused     bool

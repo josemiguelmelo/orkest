@@ -76,3 +76,17 @@ make test-docker
 ```
 
 Unit tests use a fake Docker Engine client and do not require Docker access.
+
+## Custom toolchains
+
+Workspace execution profiles can asynchronously compose toolchain images with
+one pinned runtime and publish them using deployment-managed Docker credentials.
+Set `ORKEST_EXECUTION_IMAGE_REPOSITORY` to enable builds and
+`ORKEST_IMAGE_BUILDER=buildkit|docker` to select composition. BuildKit mode
+(default) uses `ORKEST_BUILDKIT_ADDR`; Docker mode builds/pushes through Docker
+without needing buildctl. Docker pulls, validates, and executes published digests
+in both modes. Both
+daemons must reach the input/output registries. See [execution profiles](../execution-profiles.md)
+for configuration, supported foundations, profile permissions, and verification.
+Active runs retain their image; later user-started runs can adopt an update while
+restoring the same session. Registry and local image retention are operator-managed.

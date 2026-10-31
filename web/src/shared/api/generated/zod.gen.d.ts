@@ -152,6 +152,7 @@ export declare const zTaskComment: z.ZodObject<{
     createdAt: z.ZodISODateTime;
 }, z.core.$strip>;
 export declare const zTaskRun: z.ZodObject<{
+    executionImage: z.ZodOptional<z.ZodString>;
     recoveryBlocked: z.ZodOptional<z.ZodBoolean>;
     executionState: z.ZodOptional<z.ZodString>;
     queuePaused: z.ZodOptional<z.ZodBoolean>;
@@ -170,7 +171,57 @@ export declare const zTaskRunEvent: z.ZodObject<{
     sequence: z.ZodInt;
     payload: z.ZodRecord<z.ZodString, z.ZodUnknown>;
 }, z.core.$strip>;
+export declare const zExecutionProfileInput: z.ZodObject<{
+    name: z.ZodString;
+    description: z.ZodString;
+    runtime: z.ZodEnum<{
+        opencode: "opencode";
+        "claude-code": "claude-code";
+    }>;
+    toolchainImage: z.ZodString;
+    generation: z.ZodOptional<z.ZodCoercedBigInt<unknown>>;
+}, z.core.$strip>;
+export declare const zExecutionProfile: z.ZodIntersection<z.ZodObject<{
+    name: z.ZodString;
+    description: z.ZodString;
+    runtime: z.ZodEnum<{
+        opencode: "opencode";
+        "claude-code": "claude-code";
+    }>;
+    toolchainImage: z.ZodString;
+    generation: z.ZodOptional<z.ZodCoercedBigInt<unknown>>;
+}, z.core.$strip>, z.ZodObject<{
+    id: z.ZodString;
+    workspaceId: z.ZodString;
+    generation: z.ZodCoercedBigInt<unknown>;
+    status: z.ZodString;
+    executionImage: z.ZodString;
+    buildError: z.ZodString;
+    createdAt: z.ZodISODateTime;
+    updatedAt: z.ZodISODateTime;
+}, z.core.$strip>>;
+export declare const zExecutionProfileBuild: z.ZodObject<{
+    id: z.ZodString;
+    profileId: z.ZodString;
+    workspaceId: z.ZodString;
+    generation: z.ZodCoercedBigInt<unknown>;
+    runtime: z.ZodEnum<{
+        opencode: "opencode";
+        "claude-code": "claude-code";
+    }>;
+    toolchainImage: z.ZodString;
+    baseImage: z.ZodString;
+    runtimeVersion: z.ZodOptional<z.ZodString>;
+    resolvedToolchain: z.ZodOptional<z.ZodString>;
+    resolvedBase: z.ZodOptional<z.ZodString>;
+    destination: z.ZodString;
+    status: z.ZodString;
+    executionImage: z.ZodString;
+    buildError: z.ZodString;
+    createdAt: z.ZodISODateTime;
+}, z.core.$strip>;
 export declare const zAgent: z.ZodObject<{
+    executionProfileId: z.ZodOptional<z.ZodString>;
     id: z.ZodString;
     workspaceId: z.ZodString;
     name: z.ZodString;
@@ -358,6 +409,7 @@ export declare const zAgentDefinition: z.ZodObject<{
     model: z.ZodString;
     description: z.ZodString;
     systemPrompt: z.ZodString;
+    executionProfileId: z.ZodOptional<z.ZodString>;
     mcpServerIds: z.ZodOptional<z.ZodArray<z.ZodString>>;
     skillIds: z.ZodOptional<z.ZodArray<z.ZodString>>;
 }, z.core.$strip>;
@@ -379,6 +431,133 @@ export declare const zTaskIntegration2: z.ZodObject<{
     interval: z.ZodOptional<z.ZodString>;
     credential: z.ZodOptional<z.ZodString>;
 }, z.core.$strip>;
+export declare const zListExecutionProfilesPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+}, z.core.$strip>;
+/**
+ * Execution profile operation
+ */
+export declare const zListExecutionProfilesResponse: z.ZodArray<z.ZodIntersection<z.ZodObject<{
+    name: z.ZodString;
+    description: z.ZodString;
+    runtime: z.ZodEnum<{
+        opencode: "opencode";
+        "claude-code": "claude-code";
+    }>;
+    toolchainImage: z.ZodString;
+    generation: z.ZodOptional<z.ZodCoercedBigInt<unknown>>;
+}, z.core.$strip>, z.ZodObject<{
+    id: z.ZodString;
+    workspaceId: z.ZodString;
+    generation: z.ZodCoercedBigInt<unknown>;
+    status: z.ZodString;
+    executionImage: z.ZodString;
+    buildError: z.ZodString;
+    createdAt: z.ZodISODateTime;
+    updatedAt: z.ZodISODateTime;
+}, z.core.$strip>>>;
+export declare const zCreateExecutionProfileBody: z.ZodObject<{
+    name: z.ZodString;
+    description: z.ZodString;
+    runtime: z.ZodEnum<{
+        opencode: "opencode";
+        "claude-code": "claude-code";
+    }>;
+    toolchainImage: z.ZodString;
+    generation: z.ZodOptional<z.ZodCoercedBigInt<unknown>>;
+}, z.core.$strip>;
+export declare const zCreateExecutionProfilePath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+}, z.core.$strip>;
+/**
+ * Execution profile operation
+ */
+export declare const zCreateExecutionProfileResponse: z.ZodIntersection<z.ZodObject<{
+    name: z.ZodString;
+    description: z.ZodString;
+    runtime: z.ZodEnum<{
+        opencode: "opencode";
+        "claude-code": "claude-code";
+    }>;
+    toolchainImage: z.ZodString;
+    generation: z.ZodOptional<z.ZodCoercedBigInt<unknown>>;
+}, z.core.$strip>, z.ZodObject<{
+    id: z.ZodString;
+    workspaceId: z.ZodString;
+    generation: z.ZodCoercedBigInt<unknown>;
+    status: z.ZodString;
+    executionImage: z.ZodString;
+    buildError: z.ZodString;
+    createdAt: z.ZodISODateTime;
+    updatedAt: z.ZodISODateTime;
+}, z.core.$strip>>;
+export declare const zUpdateExecutionProfileBody: z.ZodObject<{
+    name: z.ZodString;
+    description: z.ZodString;
+    runtime: z.ZodEnum<{
+        opencode: "opencode";
+        "claude-code": "claude-code";
+    }>;
+    toolchainImage: z.ZodString;
+    generation: z.ZodOptional<z.ZodCoercedBigInt<unknown>>;
+}, z.core.$strip>;
+export declare const zUpdateExecutionProfilePath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+    profileID: z.ZodString;
+}, z.core.$strip>;
+/**
+ * Execution profile operation
+ */
+export declare const zUpdateExecutionProfileResponse: z.ZodIntersection<z.ZodObject<{
+    name: z.ZodString;
+    description: z.ZodString;
+    runtime: z.ZodEnum<{
+        opencode: "opencode";
+        "claude-code": "claude-code";
+    }>;
+    toolchainImage: z.ZodString;
+    generation: z.ZodOptional<z.ZodCoercedBigInt<unknown>>;
+}, z.core.$strip>, z.ZodObject<{
+    id: z.ZodString;
+    workspaceId: z.ZodString;
+    generation: z.ZodCoercedBigInt<unknown>;
+    status: z.ZodString;
+    executionImage: z.ZodString;
+    buildError: z.ZodString;
+    createdAt: z.ZodISODateTime;
+    updatedAt: z.ZodISODateTime;
+}, z.core.$strip>>;
+export declare const zListExecutionProfileBuildsPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+    profileID: z.ZodString;
+}, z.core.$strip>;
+/**
+ * Execution profile operation
+ */
+export declare const zListExecutionProfileBuildsResponse: z.ZodArray<z.ZodObject<{
+    id: z.ZodString;
+    profileId: z.ZodString;
+    workspaceId: z.ZodString;
+    generation: z.ZodCoercedBigInt<unknown>;
+    runtime: z.ZodEnum<{
+        opencode: "opencode";
+        "claude-code": "claude-code";
+    }>;
+    toolchainImage: z.ZodString;
+    baseImage: z.ZodString;
+    runtimeVersion: z.ZodOptional<z.ZodString>;
+    resolvedToolchain: z.ZodOptional<z.ZodString>;
+    resolvedBase: z.ZodOptional<z.ZodString>;
+    destination: z.ZodString;
+    status: z.ZodString;
+    executionImage: z.ZodString;
+    buildError: z.ZodString;
+    createdAt: z.ZodISODateTime;
+}, z.core.$strip>>;
 /**
  * Coding provider catalog
  */
@@ -1103,6 +1282,7 @@ export declare const zListAgentsPath: z.ZodObject<{
  * Workspace agents
  */
 export declare const zListAgentsResponse: z.ZodArray<z.ZodObject<{
+    executionProfileId: z.ZodOptional<z.ZodString>;
     id: z.ZodString;
     workspaceId: z.ZodString;
     name: z.ZodString;
@@ -1127,6 +1307,7 @@ export declare const zCreateAgentBody: z.ZodObject<{
     model: z.ZodString;
     description: z.ZodString;
     systemPrompt: z.ZodString;
+    executionProfileId: z.ZodOptional<z.ZodString>;
     mcpServerIds: z.ZodOptional<z.ZodArray<z.ZodString>>;
     skillIds: z.ZodOptional<z.ZodArray<z.ZodString>>;
 }, z.core.$strip>;
@@ -1138,6 +1319,7 @@ export declare const zCreateAgentPath: z.ZodObject<{
  * Agent created
  */
 export declare const zCreateAgentResponse: z.ZodObject<{
+    executionProfileId: z.ZodOptional<z.ZodString>;
     id: z.ZodString;
     workspaceId: z.ZodString;
     name: z.ZodString;
@@ -1170,6 +1352,7 @@ export declare const zGetAgentPath: z.ZodObject<{
  * Agent definition
  */
 export declare const zGetAgentResponse: z.ZodObject<{
+    executionProfileId: z.ZodOptional<z.ZodString>;
     id: z.ZodString;
     workspaceId: z.ZodString;
     name: z.ZodString;
@@ -1194,6 +1377,7 @@ export declare const zUpdateAgentBody: z.ZodObject<{
     model: z.ZodString;
     description: z.ZodString;
     systemPrompt: z.ZodString;
+    executionProfileId: z.ZodOptional<z.ZodString>;
     mcpServerIds: z.ZodOptional<z.ZodArray<z.ZodString>>;
     skillIds: z.ZodOptional<z.ZodArray<z.ZodString>>;
 }, z.core.$strip>;
@@ -1206,6 +1390,7 @@ export declare const zUpdateAgentPath: z.ZodObject<{
  * Agent updated
  */
 export declare const zUpdateAgentResponse: z.ZodObject<{
+    executionProfileId: z.ZodOptional<z.ZodString>;
     id: z.ZodString;
     workspaceId: z.ZodString;
     name: z.ZodString;
@@ -1399,6 +1584,7 @@ export declare const zListTaskRunsPath: z.ZodObject<{
  * Task run history
  */
 export declare const zListTaskRunsResponse: z.ZodArray<z.ZodObject<{
+    executionImage: z.ZodOptional<z.ZodString>;
     recoveryBlocked: z.ZodOptional<z.ZodBoolean>;
     executionState: z.ZodOptional<z.ZodString>;
     queuePaused: z.ZodOptional<z.ZodBoolean>;

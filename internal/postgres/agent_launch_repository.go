@@ -33,7 +33,7 @@ var (
 )
 
 func (r *AgentLaunchPostgresRepository) CreateLaunch(ctx context.Context, launch orchestration.Launch) error {
-	return r.queries.InsertAgentLaunch(ctx, sqlc.InsertAgentLaunchParams{RunID: launch.RunID, OrganizationID: launch.OrganizationID, WorkspaceID: launch.WorkspaceID, TaskID: launch.TaskID, Status: string(launch.Status), TaskSessionID: pgtype.Text{String: launch.TaskSessionID, Valid: launch.TaskSessionID != ""}})
+	return r.queries.InsertAgentLaunch(ctx, sqlc.InsertAgentLaunchParams{ExecutionImage: launch.ExecutionImage, RunID: launch.RunID, OrganizationID: launch.OrganizationID, WorkspaceID: launch.WorkspaceID, TaskID: launch.TaskID, Status: string(launch.Status), TaskSessionID: pgtype.Text{String: launch.TaskSessionID, Valid: launch.TaskSessionID != ""}})
 }
 
 func (r *AgentLaunchPostgresRepository) UpdateLaunch(ctx context.Context, launch orchestration.Launch) error {
@@ -48,7 +48,7 @@ func (r *AgentLaunchPostgresRepository) ListReconnectableLaunches(ctx context.Co
 	launches := make([]orchestration.Launch, 0, len(rows))
 	for _, row := range rows {
 		launches = append(launches, orchestration.Launch{
-			RunID:          row.RunID,
+			ExecutionImage: row.ExecutionImage, RunID: row.RunID,
 			TaskSessionID:  row.TaskSessionID.String,
 			OrganizationID: row.OrganizationID,
 			WorkspaceID:    row.WorkspaceID,
@@ -120,7 +120,7 @@ func (r *AgentLaunchPostgresRepository) ListTaskLaunches(ctx context.Context, or
 	}
 	items := make([]orchestration.Launch, 0, len(rows))
 	for _, row := range rows {
-		items = append(items, orchestration.Launch{RunID: row.RunID, TaskSessionID: row.TaskSessionID.String, OrganizationID: row.OrganizationID, WorkspaceID: row.WorkspaceID, TaskID: row.TaskID, Status: orchestration.LaunchStatus(row.Status), Endpoint: row.Endpoint, FailureStage: row.FailureStage, FailureReason: row.FailureReason, LastSequence: uint64(row.LastSequence), UpdatedAt: row.UpdatedAt.Time})
+		items = append(items, orchestration.Launch{ExecutionImage: row.ExecutionImage, RunID: row.RunID, TaskSessionID: row.TaskSessionID.String, OrganizationID: row.OrganizationID, WorkspaceID: row.WorkspaceID, TaskID: row.TaskID, Status: orchestration.LaunchStatus(row.Status), Endpoint: row.Endpoint, FailureStage: row.FailureStage, FailureReason: row.FailureReason, LastSequence: uint64(row.LastSequence), UpdatedAt: row.UpdatedAt.Time})
 	}
 	return items, nil
 }

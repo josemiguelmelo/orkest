@@ -133,7 +133,10 @@ func (e *Executor) StartAgentctl(ctx context.Context, config runconfig.RunConfig
 	if err := config.Validate(); err != nil {
 		return orchestration.Process{}, err
 	}
-	image := e.config.Images[config.Runtime]
+	image := config.ExecutionImage
+	if image == "" {
+		image = e.config.Images[config.Runtime]
+	}
 	if image == "" {
 		return orchestration.Process{}, fmt.Errorf("no Docker image configured for runtime %q", config.Runtime)
 	}

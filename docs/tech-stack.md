@@ -80,7 +80,7 @@ Agents create and update pull requests through their permitted runtime capabilit
   - `internal/core` holds only concrete code shared by platform and agentctl, including environment loading (`internal/core/environment`), graceful HTTP server lifecycle (`internal/core/httpserver`), and OpenAPI serving/validation (`internal/core/openapi`).
   - `internal/postgres` owns the shared PostgreSQL database lifecycle and separate per-domain adapters; repository interfaces remain in their domain packages.
   - `cmd/orkest` and `cmd/agentctl` remain thin executable wiring; platform HTTP lives in `internal/app/httpapi` and agentctl HTTP lives in `internal/agentctl/httpapi`. `internal/core/openapi` owns shared serving and validation code.
-- **Docker Compose** currently starts PostgreSQL only. Keycloak and the platform are not Compose services.
+- **Docker Compose** provides PostgreSQL, Keycloak, and a persistent local Docker Registry v3 at `127.0.0.1:5000` by default. Keycloak and the platform are not Compose services.
 
 Avoid introducing microservices or a distributed workflow engine for the initial implementation. Durable execution state, ownership, event replay, and reconciliation are explicit application responsibilities.
 
@@ -140,3 +140,30 @@ History coverage is not qualified for safe interrupted-turn continuation, so
 restoration pauses when the journal cannot establish the outcome. See [runtime host and ACP
 architecture](runtime-providers.md) for compatibility, qualification, and
 verification limits.
+
+## Execution profiles and image preparation
+
+Workspace profiles pair a toolchain image with a supported runtime. Profile saves
+atomically enqueue PostgreSQL-backed image builds. A bounded platform worker uses
+either standalone BuildKit via pinned `buildctl` v0.34.1 (default) or Docker CLI,
+selected with `ORKEST_IMAGE_BUILDER=buildkit|docker`. Both use deployment-managed
+registry authentication, shared pinned runtime installation recipes and build
+contexts, input snapshots, leases, and conditional promotion. Docker
+pulls the exported digest for validation and execution. BuildKit may run separately
+from the execution daemon; inputs must be registry images. Agents
+select profiles; each new run can adopt its profile's latest ready registry digest
+while continuing its existing session. Active prompt queues keep their image.
+See [execution profiles](execution-profiles.md) for setup, trust boundaries, and
+verification limits. Registry provisioning and Kubernetes execution remain deferred.
+
+## Migration numbering repair
+
+The duplicate `0023_gitlab_coding_providers.sql` was moved to
+`0026_gitlab_coding_providers.sql`. Version 0023 remains the task-repository
+migration, matching the inspected local database. Migration 0026 handles the
+provider whitelist already removed by 0020; its rollback restores that
+unrestricted state. It changes constraints only and does not delete registrations.
+Deployments that independently applied a GitLab-only version 23 must reconcile
+that migration history and task-repository schema before using this numbering;
+do not blindly relabel an existing Goose version. Local startup and fresh-schema
+migration verification now succeed.

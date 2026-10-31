@@ -108,6 +108,7 @@ export type TaskComment = {
     createdAt: string;
 };
 export type TaskRun = {
+    executionImage?: string;
     recoveryBlocked?: boolean;
     executionState?: string;
     queuePaused?: boolean;
@@ -128,7 +129,42 @@ export type TaskRunEvent = {
         [key: string]: unknown;
     };
 };
+export type ExecutionProfileInput = {
+    name: string;
+    description: string;
+    runtime: 'opencode' | 'claude-code';
+    toolchainImage: string;
+    generation?: number;
+};
+export type ExecutionProfile = ExecutionProfileInput & {
+    id: string;
+    workspaceId: string;
+    generation: number;
+    status: string;
+    executionImage: string;
+    buildError: string;
+    createdAt: string;
+    updatedAt: string;
+};
+export type ExecutionProfileBuild = {
+    id: string;
+    profileId: string;
+    workspaceId: string;
+    generation: number;
+    runtime: 'opencode' | 'claude-code';
+    toolchainImage: string;
+    baseImage: string;
+    runtimeVersion?: string;
+    resolvedToolchain?: string;
+    resolvedBase?: string;
+    destination: string;
+    status: string;
+    executionImage: string;
+    buildError: string;
+    createdAt: string;
+};
 export type Agent = {
+    executionProfileId?: string;
     id: string;
     workspaceId: string;
     name: string;
@@ -279,6 +315,10 @@ export type AgentDefinition = {
     model: string;
     description: string;
     systemPrompt: string;
+    /**
+     * Profile ID; empty string clears the selection.
+     */
+    executionProfileId?: string;
     mcpServerIds?: Array<string>;
     skillIds?: Array<string>;
 };
@@ -291,6 +331,176 @@ export type McpServerInput = {
 };
 export type CodeRepositoryCreate2 = CodeRepositoryCreate;
 export type TaskIntegration2 = TaskIntegrationInputWritable;
+export type ListExecutionProfilesData = {
+    body?: never;
+    path: {
+        orgID: string;
+        workspaceID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/execution-profiles';
+};
+export type ListExecutionProfilesErrors = {
+    /**
+     * Request body or role is invalid
+     */
+    400: Error;
+    /**
+     * Missing or invalid credentials
+     */
+    401: Error;
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+    /**
+     * Resource is absent or inaccessible
+     */
+    404: Error;
+    /**
+     * Operation conflicts with an existing resource or invariant
+     */
+    409: Error;
+    /**
+     * Image registry not configured
+     */
+    503: Error;
+};
+export type ListExecutionProfilesError = ListExecutionProfilesErrors[keyof ListExecutionProfilesErrors];
+export type ListExecutionProfilesResponses = {
+    /**
+     * Execution profile operation
+     */
+    200: Array<ExecutionProfile>;
+};
+export type ListExecutionProfilesResponse = ListExecutionProfilesResponses[keyof ListExecutionProfilesResponses];
+export type CreateExecutionProfileData = {
+    body: ExecutionProfileInput;
+    path: {
+        orgID: string;
+        workspaceID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/execution-profiles';
+};
+export type CreateExecutionProfileErrors = {
+    /**
+     * Request body or role is invalid
+     */
+    400: Error;
+    /**
+     * Missing or invalid credentials
+     */
+    401: Error;
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+    /**
+     * Resource is absent or inaccessible
+     */
+    404: Error;
+    /**
+     * Operation conflicts with an existing resource or invariant
+     */
+    409: Error;
+    /**
+     * Image registry not configured
+     */
+    503: Error;
+};
+export type CreateExecutionProfileError = CreateExecutionProfileErrors[keyof CreateExecutionProfileErrors];
+export type CreateExecutionProfileResponses = {
+    /**
+     * Execution profile operation
+     */
+    202: ExecutionProfile;
+};
+export type CreateExecutionProfileResponse = CreateExecutionProfileResponses[keyof CreateExecutionProfileResponses];
+export type UpdateExecutionProfileData = {
+    body: ExecutionProfileInput;
+    path: {
+        orgID: string;
+        workspaceID: string;
+        profileID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/execution-profiles/{profileID}';
+};
+export type UpdateExecutionProfileErrors = {
+    /**
+     * Request body or role is invalid
+     */
+    400: Error;
+    /**
+     * Missing or invalid credentials
+     */
+    401: Error;
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+    /**
+     * Resource is absent or inaccessible
+     */
+    404: Error;
+    /**
+     * Operation conflicts with an existing resource or invariant
+     */
+    409: Error;
+    /**
+     * Image registry not configured
+     */
+    503: Error;
+};
+export type UpdateExecutionProfileError = UpdateExecutionProfileErrors[keyof UpdateExecutionProfileErrors];
+export type UpdateExecutionProfileResponses = {
+    /**
+     * Execution profile operation
+     */
+    202: ExecutionProfile;
+};
+export type UpdateExecutionProfileResponse = UpdateExecutionProfileResponses[keyof UpdateExecutionProfileResponses];
+export type ListExecutionProfileBuildsData = {
+    body?: never;
+    path: {
+        orgID: string;
+        workspaceID: string;
+        profileID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/execution-profiles/{profileID}/builds';
+};
+export type ListExecutionProfileBuildsErrors = {
+    /**
+     * Request body or role is invalid
+     */
+    400: Error;
+    /**
+     * Missing or invalid credentials
+     */
+    401: Error;
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+    /**
+     * Resource is absent or inaccessible
+     */
+    404: Error;
+    /**
+     * Operation conflicts with an existing resource or invariant
+     */
+    409: Error;
+};
+export type ListExecutionProfileBuildsError = ListExecutionProfileBuildsErrors[keyof ListExecutionProfileBuildsErrors];
+export type ListExecutionProfileBuildsResponses = {
+    /**
+     * Execution profile operation
+     */
+    200: Array<ExecutionProfileBuild>;
+};
+export type ListExecutionProfileBuildsResponse = ListExecutionProfileBuildsResponses[keyof ListExecutionProfileBuildsResponses];
 export type ListCodingProvidersData = {
     body?: never;
     path?: never;

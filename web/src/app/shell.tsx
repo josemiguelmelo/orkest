@@ -1,17 +1,23 @@
-import type { JSX } from 'react';
+import type { JSX, ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import { Link, Outlet, useNavigate, useParams } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { DropdownMenu as DropdownMenuPrimitive } from 'radix-ui';
 import {
   Bot,
+  Boxes,
+  Building2,
+  Check,
   ChevronRight,
   CircleHelp,
+  ChevronDown,
   FolderGit2,
   Layers,
   LogOut,
   Menu,
   Network,
   NotebookText,
+  PanelsTopLeft,
   Plug,
   Settings,
   Shield,
@@ -153,59 +159,52 @@ function ShellContent({ session }: { session: CurrentUser }) {
             </Button>
           </div>
           <div className="scope-switch">
-            <label htmlFor="organization-switch">Organization</label>
-            <select
-              id="organization-switch"
-              value={scope.orgID}
-              onChange={(e) => {
+            <ScopeDropdown
+              label="Organization"
+              icon={<Building2 size={16} aria-hidden="true" />}
+              value={scope.orgID || '__choose_org__'}
+              options={[
+                { value: '__choose_org__', label: 'Choose organization' },
+                ...(organizations.data?.map((item) => ({ value: item.id, label: item.name })) ??
+                  []),
+              ]}
+              onSelect={(orgID) => {
                 setMobile(false);
                 void navigate(
-                  e.target.value
-                    ? { to: '/organizations/$orgId', params: { orgId: e.target.value } }
-                    : { to: '/' },
+                  orgID === '__choose_org__'
+                    ? { to: '/' }
+                    : { to: '/organizations/$orgId', params: { orgId: orgID } },
                 );
               }}
-            >
-              <option value="">Choose organization</option>
-              {organizations.data?.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.name}
-                </option>
-              ))}
-            </select>
+            />
             {scope.orgID && (
-              <>
-                <label htmlFor="workspace-switch">Workspace</label>
-                <select
-                  id="workspace-switch"
-                  value={scope.workspaceID}
-                  onChange={(e) => {
-                    setMobile(false);
-                    void navigate(
-                      e.target.value
-                        ? {
-                            to: '/organizations/$orgId/workspaces/$workspaceId/tasks',
-                            params: { orgId: scope.orgID, workspaceId: e.target.value },
-                            search: {
-                              view: 'board',
-                              q: '',
-                              status: 'all',
-                              agent: '',
-                              sort: 'updated',
-                            },
-                          }
-                        : { to: '/organizations/$orgId', params: { orgId: scope.orgID } },
-                    );
-                  }}
-                >
-                  <option value="">Choose workspace</option>
-                  {workspaces.data?.map((item) => (
-                    <option key={item.id} value={item.id}>
-                      {item.name}
-                    </option>
-                  ))}
-                </select>
-              </>
+              <ScopeDropdown
+                label="Workspace"
+                icon={<PanelsTopLeft size={16} aria-hidden="true" />}
+                value={scope.workspaceID || '__choose_workspace__'}
+                options={[
+                  { value: '__choose_workspace__', label: 'Choose workspace' },
+                  ...(workspaces.data?.map((item) => ({ value: item.id, label: item.name })) ?? []),
+                ]}
+                onSelect={(workspaceID) => {
+                  setMobile(false);
+                  void navigate(
+                    workspaceID === '__choose_workspace__'
+                      ? { to: '/organizations/$orgId', params: { orgId: scope.orgID } }
+                      : {
+                          to: '/organizations/$orgId/workspaces/$workspaceId/tasks',
+                          params: { orgId: scope.orgID, workspaceId: workspaceID },
+                          search: {
+                            view: 'board',
+                            q: '',
+                            status: 'all',
+                            agent: '',
+                            sort: 'updated',
+                          },
+                        },
+                  );
+                }}
+              />
             )}
           </div>
           {scoped && (
@@ -237,6 +236,14 @@ function ShellContent({ session }: { session: CurrentUser }) {
                 Skills
               </Link>
               <p className="nav-label spacer">Configuration</p>
+              <Link
+                className="nav-link"
+                to="/organizations/$orgId/workspaces/$workspaceId/execution-profiles"
+                params={workspaceParams}
+              >
+                <Boxes size={17} />
+                Execution profiles
+              </Link>
               <Link
                 className="nav-link"
                 to="/organizations/$orgId/workspaces/$workspaceId/repositories"
@@ -376,5 +383,54 @@ function ShellContent({ session }: { session: CurrentUser }) {
         </div>
       </div>
     </AppContext.Provider>
+  );
+}
+
+function ScopeDropdown({
+  label,
+  icon,
+  value,
+  options,
+  onSelect,
+}: {
+  label: string;
+  icon: ReactNode;
+  value: string;
+  options: { value: string; label: string }[];
+  onSelect: (value: string) => void;
+}) {
+  const selected = options.find((option) => option.value === value);
+  return (
+    <div className="scope-dropdown">
+      <span className="scope-dropdown-label">{label}</span>
+      <DropdownMenuPrimitive.Root>
+        <DropdownMenuPrimitive.Trigger className="scope-select-trigger" aria-label={label}>
+          {icon}
+          <span className="scope-select-value">{selected?.label ?? options[0]?.label}</span>
+          <ChevronDown className="scope-select-chevron" size={15} aria-hidden="true" />
+        </DropdownMenuPrimitive.Trigger>
+        <DropdownMenuPrimitive.Portal>
+          <DropdownMenuPrimitive.Content
+            className="scope-select-content"
+            align="start"
+            sideOffset={5}
+          >
+            {options.map((option) => (
+              <DropdownMenuPrimitive.Item
+                key={option.value}
+                className="scope-select-item"
+                data-selected={option.value === value}
+                onSelect={() => onSelect(option.value)}
+              >
+                <span>{option.label}</span>
+                {option.value === value && (
+                  <Check className="scope-select-item-indicator" size={14} strokeWidth={2.5} />
+                )}
+              </DropdownMenuPrimitive.Item>
+            ))}
+          </DropdownMenuPrimitive.Content>
+        </DropdownMenuPrimitive.Portal>
+      </DropdownMenuPrimitive.Root>
+    </div>
   );
 }
