@@ -180,6 +180,7 @@ export const zExecutionProfileBuild = z.object({
 });
 export const zAgent = z.object({
     executionProfileId: z.string().optional(),
+    runtimeProfileId: z.string().optional(),
     id: z.string(),
     workspaceId: z.string(),
     name: z.string(),
@@ -196,6 +197,22 @@ export const zAgent = z.object({
     mcpServerIds: z.array(z.string()),
     skillIds: z.array(z.string())
 });
+export const zAgentRuntimeProfileInput = z.object({
+    name: z.string().min(1).max(200),
+    runtime: z.enum([
+        'opencode',
+        'claude-code',
+        'codex'
+    ]),
+    modelProvider: z.string().min(1).max(200),
+    modelIdentifier: z.string().min(1).max(200)
+});
+export const zAgentRuntimeProfile = zAgentRuntimeProfileInput.and(z.object({
+    id: z.string(),
+    workspaceId: z.string(),
+    createdAt: z.iso.datetime(),
+    updatedAt: z.iso.datetime()
+}));
 export const zMcpServer = z.object({
     id: z.string(),
     workspaceId: z.string(),
@@ -354,6 +371,7 @@ export const zAgentDefinition = z.object({
     systemPrompt: z.string().max(100000),
     permissionPolicy: z.enum(['ask', 'autonomous']),
     executionProfileId: z.string().optional(),
+    runtimeProfileId: z.string().optional(),
     mcpServerIds: z.array(z.string()).optional(),
     skillIds: z.array(z.string()).optional()
 });
@@ -364,6 +382,42 @@ export const zMcpServerInput = z.object({
 });
 export const zCodeRepositoryCreate2 = zCodeRepositoryCreate;
 export const zTaskIntegration2 = zTaskIntegrationInputWritable;
+export const zListAgentRuntimeProfilesPath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string()
+});
+/**
+ * Runtime profiles
+ */
+export const zListAgentRuntimeProfilesResponse = z.array(zAgentRuntimeProfile);
+export const zCreateAgentRuntimeProfileBody = zAgentRuntimeProfileInput;
+export const zCreateAgentRuntimeProfilePath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string()
+});
+/**
+ * Runtime profile created and applied to linked agents
+ */
+export const zCreateAgentRuntimeProfileResponse = zAgentRuntimeProfile;
+export const zDeleteAgentRuntimeProfilePath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string(),
+    profileID: z.string()
+});
+/**
+ * Runtime profile deleted; linked agents retain their last model settings
+ */
+export const zDeleteAgentRuntimeProfileResponse = z.void();
+export const zUpdateAgentRuntimeProfileBody = zAgentRuntimeProfileInput;
+export const zUpdateAgentRuntimeProfilePath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string(),
+    profileID: z.string()
+});
+/**
+ * Runtime profile updated and applied to linked agents
+ */
+export const zUpdateAgentRuntimeProfileResponse = zAgentRuntimeProfile;
 export const zListExecutionProfilesPath = z.object({
     orgID: z.string(),
     workspaceID: z.string()

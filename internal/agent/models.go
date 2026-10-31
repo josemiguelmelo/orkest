@@ -26,6 +26,7 @@ type Agent struct {
 
 type AgentDefinition struct {
 	ExecutionProfileID string           `json:"executionProfileId"`
+	RuntimeProfileID   string           `json:"runtimeProfileId"`
 	Name               string           `json:"name"`
 	Runtime            Runtime          `json:"runtime"`
 	Provider           string           `json:"provider"`

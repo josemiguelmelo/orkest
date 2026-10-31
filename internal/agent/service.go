@@ -18,6 +18,9 @@ type Service struct {
 	profiles   interface {
 		ValidateProfile(context.Context, string, string, Runtime) error
 	}
+	runtimeProfiles interface {
+		ResolveAgentProfile(context.Context, string, string) (Runtime, string, string, error)
+	}
 }
 
 func NewService(repository Repository, workspaces WorkspaceAccess, mcpServers MCPServerAccess, skills SkillAccess) *Service {
@@ -29,6 +32,28 @@ func (s *Service) SetProfiles(profiles interface {
 },
 ) {
 	s.profiles = profiles
+}
+
+func (s *Service) SetRuntimeProfiles(profiles interface {
+	ResolveAgentProfile(context.Context, string, string) (Runtime, string, string, error)
+},
+) {
+	s.runtimeProfiles = profiles
+}
+
+func (s *Service) applyRuntimeProfile(ctx context.Context, workspaceID string, d *AgentDefinition) error {
+	if d.RuntimeProfileID == "" {
+		return nil
+	}
+	if s.runtimeProfiles == nil {
+		return modelerrors.ErrInvalid
+	}
+	runtime, provider, model, err := s.runtimeProfiles.ResolveAgentProfile(ctx, workspaceID, d.RuntimeProfileID)
+	if err != nil {
+		return err
+	}
+	d.Runtime, d.Provider, d.Model = runtime, provider, model
+	return nil
 }
 
 func (s *Service) validateProfile(ctx context.Context, workspaceID string, d AgentDefinition) error {
@@ -57,6 +82,9 @@ func (s *Service) Get(ctx context.Context, userID, orgID, workspaceID, agentID s
 
 func (s *Service) Create(ctx context.Context, userID, orgID, workspaceID string, definition AgentDefinition) (Agent, error) {
 	if err := s.authorize(ctx, userID, orgID, workspaceID); err != nil {
+		return Agent{}, err
+	}
+	if err := s.applyRuntimeProfile(ctx, workspaceID, &definition); err != nil {
 		return Agent{}, err
 	}
 	if err := s.validateProfile(ctx, workspaceID, definition); err != nil {
@@ -95,6 +123,9 @@ func (s *Service) Update(ctx context.Context, userID, orgID, workspaceID, agentI
 			return Agent{}, err
 		}
 		definition.MCPServerIDs = current.MCPServerIDs
+	}
+	if err := s.applyRuntimeProfile(ctx, workspaceID, &definition); err != nil {
+		return Agent{}, err
 	}
 	if err := s.validateProfile(ctx, workspaceID, definition); err != nil {
 		return Agent{}, err

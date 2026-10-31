@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/josemiguelmelo/orkest/internal/agent"
+	"github.com/josemiguelmelo/orkest/internal/agentruntimeprofile"
 	"github.com/josemiguelmelo/orkest/internal/coderepository"
 	"github.com/josemiguelmelo/orkest/internal/core/openapi"
 	"github.com/josemiguelmelo/orkest/internal/executionprofile"
@@ -24,9 +25,12 @@ import (
 )
 
 // NewRouter validates the served OpenAPI contract before exposing routes.
-func NewRouter(users *identity.UserRegistrationService, organizations *organization.OrganizationService, workspaces *workspace.WorkspaceService, agents *agent.Service, codeRepositories *coderepository.Service, tasks *task.Service, integrations *taskintegration.TaskIntegrationService, mcpServers *mcpserver.MCPServerService, skillCatalog *skill.CatalogService, launches *orchestration.LaunchService, profiles *executionprofile.ExecutionProfileService, environment ...*workspaceenv.Service) (*chi.Mux, error) {
+func NewRouter(users *identity.UserRegistrationService, organizations *organization.OrganizationService, workspaces *workspace.WorkspaceService, agents *agent.Service, codeRepositories *coderepository.Service, tasks *task.Service, integrations *taskintegration.TaskIntegrationService, mcpServers *mcpserver.MCPServerService, skillCatalog *skill.CatalogService, launches *orchestration.LaunchService, profiles *executionprofile.ExecutionProfileService, runtimeProfiles *agentruntimeprofile.Service, environment ...*workspaceenv.Service) (*chi.Mux, error) {
 	if profiles == nil {
 		return nil, fmt.Errorf("execution profile service is required")
+	}
+	if runtimeProfiles == nil {
+		return nil, fmt.Errorf("agent runtime profile service is required")
 	}
 	if _, err := openapi.LoadAndValidateOpenAPIDoc(OpenAPIContract, context.Background()); err != nil {
 		return nil, fmt.Errorf("load platform OpenAPI contract: %w", err)
@@ -54,6 +58,7 @@ func NewRouter(users *identity.UserRegistrationService, organizations *organizat
 			organizationAPI{organizations: organizations, workspaces: workspaces}.routes(api)
 			agentAPI{agents: agents}.routes(api)
 			executionProfileAPI{service: profiles}.routes(api)
+			agentRuntimeProfileAPI{service: runtimeProfiles}.routes(api)
 			if skillCatalog != nil {
 				skillAPI{service: skillCatalog, scope: skill.ScopeGlobal}.routes(api, "/skills")
 				skillAPI{service: skillCatalog, scope: skill.ScopeOrganization}.routes(api, "/organizations/{orgID}/skills")

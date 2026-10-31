@@ -145,3 +145,9 @@ export const profilesQuery = (s: WorkspaceScope) =>
         ? 2000
         : false,
   });
+
+export const agentRuntimeProfilesQuery = (s: WorkspaceScope) =>
+  queryOptions({
+    queryKey: [...keys.workspace(s), 'agent-runtime-profiles'],
+    queryFn: ({ signal }) => data(sdk.listAgentRuntimeProfiles({ ...command, path: path(s), signal })),
+  });

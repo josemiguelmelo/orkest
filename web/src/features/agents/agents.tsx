@@ -11,6 +11,7 @@ import { command, data } from '../../shared/api/client';
 import {
   agentsQuery,
   profilesQuery,
+  agentRuntimeProfilesQuery,
   mcpQuery,
   path,
   skillsQuery,
@@ -41,6 +42,7 @@ const schema = z
     mcpServerIds: z.array(z.string()),
     skillIds: z.array(z.string()),
     executionProfileId: z.string(),
+    runtimeProfileId: z.string(),
   })
   .superRefine((value, context) => {
     if (value.runtime === 'claude-code' && value.provider.toLowerCase() !== 'anthropic') {
@@ -178,6 +180,7 @@ function AgentEditor({ item, onClose }: { item: Agent | null; onClose: () => voi
   const action = useAction();
   const servers = useQuery(mcpQuery(scope));
   const profiles = useQuery(profilesQuery(scope));
+  const runtimeProfiles = useQuery(agentRuntimeProfilesQuery(scope));
   const skills = useQuery(skillsQuery(scope));
   const catalog = useQuery(modelCatalogQuery);
   const [customModel, setCustomModel] = useState(false);
@@ -194,6 +197,7 @@ function AgentEditor({ item, onClose }: { item: Agent | null; onClose: () => voi
       mcpServerIds: item?.mcpServerIds ?? [],
       skillIds: item?.skillIds ?? [],
       executionProfileId: item?.executionProfileId ?? '',
+      runtimeProfileId: item?.runtimeProfileId ?? '',
     },
   });
   const runtimeField = form.register('runtime');
@@ -246,6 +250,31 @@ function AgentEditor({ item, onClose }: { item: Agent | null; onClose: () => voi
             <span>Model Configuration</span>
           </div>
           <div className="agent-form-section-content">
+            <Field label="Runtime profile">
+              <select
+                value={form.watch('runtimeProfileId')}
+                onChange={(event) => {
+                  const id = event.target.value;
+                  form.setValue('runtimeProfileId', id, { shouldDirty: true });
+                  const profile = runtimeProfiles.data?.find((p) => p.id === id);
+                  if (profile) {
+                    form.setValue('runtime', profile.runtime, { shouldDirty: true });
+                    form.setValue('provider', profile.modelProvider, { shouldDirty: true });
+                    form.setValue('model', profile.modelIdentifier, { shouldDirty: true });
+                    setCustomModel(true);
+                  }
+                }}
+              >
+                <option value="">Configure runtime and model manually</option>
+                {runtimeProfiles.data?.map((profile) => (
+                  <option key={profile.id} value={profile.id}>
+                    {profile.name} ({runtimeName(profile.runtime)} · {profile.modelProvider}/{profile.modelIdentifier})
+                  </option>
+                ))}
+              </select>
+              {runtimeProfiles.isError && <ErrorState error={runtimeProfiles.error} />}
+              {runtimeProfiles.data?.length === 0 && <p className="muted">No runtime profiles yet. Create one in Runtime profiles.</p>}
+            </Field>
             <Field label="Execution profile">
               <select
                 {...form.register('executionProfileId')}
@@ -275,6 +304,7 @@ function AgentEditor({ item, onClose }: { item: Agent | null; onClose: () => voi
             <Field label="Runtime">
               <select
                 {...runtimeField}
+                disabled={!!form.watch('runtimeProfileId')}
                 onChange={(event: ChangeEvent<HTMLSelectElement>) => {
                   void runtimeField.onChange(event);
                   if (event.currentTarget.value === 'claude-code') {
@@ -298,11 +328,11 @@ function AgentEditor({ item, onClose }: { item: Agent | null; onClose: () => voi
                   <input
                     {...form.register('provider')}
                     placeholder="e.g., anthropic"
-                    disabled={form.watch('runtime') !== 'opencode'}
+                    disabled={form.watch('runtime') !== 'opencode' || !!form.watch('runtimeProfileId')}
                   />
                 </Field>
                 <Field label="Model identifier" error={form.formState.errors.model?.message}>
-                  <input {...form.register('model')} placeholder="e.g., claude-sonnet-4" />
+                  <input {...form.register('model')} placeholder="e.g., claude-sonnet-4" disabled={!!form.watch('runtimeProfileId')} />
                 </Field>
               </div>
             ) : (
@@ -317,7 +347,7 @@ function AgentEditor({ item, onClose }: { item: Agent | null; onClose: () => voi
                             ? 'openai'
                           : form.watch('provider')
                       }
-                      disabled={form.watch('runtime') !== 'opencode'}
+                      disabled={form.watch('runtime') !== 'opencode' || !!form.watch('runtimeProfileId')}
                       onChange={(event) => {
                         form.setValue('provider', event.target.value, { shouldDirty: true });
                         form.setValue('model', '', { shouldDirty: true });
@@ -342,7 +372,7 @@ function AgentEditor({ item, onClose }: { item: Agent | null; onClose: () => voi
                       onChange={(event) =>
                         form.setValue('model', event.target.value, { shouldDirty: true })
                       }
-                      disabled={!form.watch('provider')}
+                      disabled={!form.watch('provider') || !!form.watch('runtimeProfileId')}
                     >
                       <option value="">Select a model</option>
                       {Object.entries(catalog.data?.[form.watch('provider')]?.models ?? {}).map(
@@ -370,6 +400,7 @@ function AgentEditor({ item, onClose }: { item: Agent | null; onClose: () => voi
               <input
                 type="checkbox"
                 checked={customModel}
+                disabled={!!form.watch('runtimeProfileId')}
                 onChange={(event) => setCustomModel(event.target.checked)}
               />
               <span>Enter a custom provider and model</span>
