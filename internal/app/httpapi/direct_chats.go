@@ -38,7 +38,7 @@ func (a directChatAPI) routes(r chi.Router) {
 }
 
 func (a directChatAPI) list(w http.ResponseWriter, r *http.Request) {
-	_, orgID, workspaceID := scopeParams(r)
+	orgID, workspaceID, _ := scopeParams(r)
 	if _, err := a.workspaces.GetWorkspace(r.Context(), currentUserID(r), orgID, workspaceID); err != nil {
 		respond(w, nil, err, http.StatusOK)
 		return
@@ -48,7 +48,7 @@ func (a directChatAPI) list(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a directChatAPI) create(w http.ResponseWriter, r *http.Request) {
-	_, orgID, workspaceID := scopeParams(r)
+	orgID, workspaceID, _ := scopeParams(r)
 	if err := a.authorizeWrite(r, orgID, workspaceID); err != nil {
 		respond(w, nil, err, http.StatusOK)
 		return
@@ -68,7 +68,7 @@ func (a directChatAPI) create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a directChatAPI) runs(w http.ResponseWriter, r *http.Request) {
-	_, orgID, workspaceID := scopeParams(r)
+	orgID, workspaceID, _ := scopeParams(r)
 	if _, err := a.workspaces.GetWorkspace(r.Context(), currentUserID(r), orgID, workspaceID); err != nil {
 		respond(w, nil, err, http.StatusOK)
 		return
@@ -86,7 +86,7 @@ func (a directChatAPI) runs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a directChatAPI) events(w http.ResponseWriter, r *http.Request) {
-	_, orgID, workspaceID := scopeParams(r)
+	orgID, workspaceID, _ := scopeParams(r)
 	if _, err := a.workspaces.GetWorkspace(r.Context(), currentUserID(r), orgID, workspaceID); err != nil {
 		respond(w, nil, err, http.StatusOK)
 		return
@@ -105,7 +105,7 @@ func (a directChatAPI) events(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a directChatAPI) prompt(w http.ResponseWriter, r *http.Request) {
-	_, orgID, workspaceID := scopeParams(r)
+	orgID, workspaceID, _ := scopeParams(r)
 	if err := a.authorizeWrite(r, orgID, workspaceID); err != nil {
 		respond(w, nil, err, http.StatusOK)
 		return
@@ -139,7 +139,7 @@ func (a directChatAPI) prompt(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a directChatAPI) cancel(w http.ResponseWriter, r *http.Request) {
-	_, orgID, workspaceID := scopeParams(r)
+	orgID, workspaceID, _ := scopeParams(r)
 	if err := a.authorizeWrite(r, orgID, workspaceID); err != nil {
 		respond(w, nil, err, http.StatusOK)
 		return
@@ -157,7 +157,7 @@ func (a directChatAPI) cancel(w http.ResponseWriter, r *http.Request) {
 func (a directChatAPI) resumeQueue(w http.ResponseWriter, r *http.Request)  { a.queue(w, r, false) }
 func (a directChatAPI) discardQueue(w http.ResponseWriter, r *http.Request) { a.queue(w, r, true) }
 func (a directChatAPI) queue(w http.ResponseWriter, r *http.Request, discard bool) {
-	_, orgID, workspaceID := scopeParams(r)
+	orgID, workspaceID, _ := scopeParams(r)
 	if err := a.authorizeWrite(r, orgID, workspaceID); err != nil {
 		respond(w, nil, err, http.StatusOK)
 		return
@@ -167,7 +167,7 @@ func (a directChatAPI) queue(w http.ResponseWriter, r *http.Request, discard boo
 }
 
 func (a directChatAPI) respondPermission(w http.ResponseWriter, r *http.Request) {
-	_, orgID, workspaceID := scopeParams(r)
+	orgID, workspaceID, _ := scopeParams(r)
 	if err := a.authorizeWrite(r, orgID, workspaceID); err != nil {
 		respond(w, nil, err, http.StatusOK)
 		return
