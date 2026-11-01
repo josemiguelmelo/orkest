@@ -1,6 +1,7 @@
 import { queryOptions, useQueryClient } from '@tanstack/react-query';
 import * as sdk from './generated/sdk.gen';
 import { command, data } from './client';
+import { directChats } from './direct-chats';
 
 export type OrgScope = { userID: string; orgID: string };
 export type WorkspaceScope = OrgScope & { workspaceID: string };
@@ -73,6 +74,22 @@ export const taskRunEventsQuery = (s: WorkspaceScope, taskID: string, runID: str
     enabled: !!runID,
     refetchInterval: 1500,
   });
+export const directChatsQuery = (s: WorkspaceScope) => queryOptions({
+  queryKey: [...keys.workspace(s), 'agent-conversations'],
+  queryFn: () => directChats.list(s),
+});
+export const directChatRunsQuery = (s: WorkspaceScope, id: string) => queryOptions({
+  queryKey: [...keys.workspace(s), 'agent-conversations', id, 'runs'],
+  queryFn: () => directChats.runs(s, id),
+  refetchInterval: 2000,
+  enabled: !!id,
+});
+export const directChatEventsQuery = (s: WorkspaceScope, id: string, runID: string) => queryOptions({
+  queryKey: [...keys.workspace(s), 'agent-conversations', id, 'runs', runID, 'events'],
+  queryFn: () => directChats.events(s, id, runID),
+  enabled: !!id && !!runID,
+  refetchInterval: 1500,
+});
 export const agentsQuery = (s: WorkspaceScope) =>
   queryOptions({
     queryKey: [...keys.workspace(s), 'agents'],

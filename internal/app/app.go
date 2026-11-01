@@ -139,6 +139,10 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 	dispatcher.SetCodingCredentialResolver(codeRepositories)
 	dispatcher.SetSkillResolver(skillCatalog)
 	dispatcher.SetEnvironmentResolver(workspaceEnvironment)
+	directChats, err := orchestration.NewDirectChatService(launchRepo, dispatcher, launchService)
+	if err != nil {
+		return err
+	}
 	tasks := task.NewService(postgres.NewTaskPostgresRepository(database), workspaces, dispatcher)
 	integrations := taskintegration.NewTaskIntegrationService(postgres.NewPostgresTaskIntegrationRepository(database), secretBox, workspaces, organizations, postgres.NewPostgresImportedTaskRepository(database), githubcloud.NewGitHubCloudProvider(), jiraserver.NewJiraServerProvider())
 	runnerCtx, stopRunner := context.WithCancel(ctx)
@@ -178,7 +182,7 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 	}
 	runnerWG.Add(1)
 	go func() { defer runnerWG.Done(); integrations.Run(runnerCtx) }()
-	router, err := httpapi.NewRouter(users, organizations, workspaces, agents, codeRepositories, tasks, integrations, mcpServerService, skillCatalog, launchService, executionProfileService, agentRuntimeProfiles, workspaceEnvironment)
+	router, err := httpapi.NewRouter(users, organizations, workspaces, agents, codeRepositories, tasks, integrations, mcpServerService, skillCatalog, launchService, executionProfileService, agentRuntimeProfiles, directChats, workspaceEnvironment)
 	if err != nil {
 		stopRunner()
 		runnerWG.Wait()

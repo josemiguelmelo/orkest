@@ -131,6 +131,11 @@ export const zTaskRun = z.object({
     lastSequence: z.int().gte(0),
     updatedAt: z.iso.datetime()
 });
+export const zDirectAgentConversation = z.object({
+    id: z.string(),
+    agentId: z.string(),
+    createdAt: z.iso.datetime()
+});
 export const zTaskRunEvent = z.object({
     runId: z.string(),
     sequence: z.int().gte(1),
@@ -973,6 +978,89 @@ export const zRespondTaskRunPermissionPath = z.object({
     orgID: z.string(),
     workspaceID: z.string(),
     taskID: z.string(),
+    runID: z.string()
+});
+export const zListDirectAgentConversationsPath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string()
+});
+/**
+ * Direct conversations
+ */
+export const zListDirectAgentConversationsResponse = z.array(zDirectAgentConversation);
+export const zCreateDirectAgentConversationBody = z.object({
+    agentId: z.string()
+});
+export const zCreateDirectAgentConversationPath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string()
+});
+/**
+ * Conversation created and agent session started
+ */
+export const zCreateDirectAgentConversationResponse = zDirectAgentConversation;
+export const zListDirectAgentConversationRunsPath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string(),
+    conversationID: z.string()
+});
+/**
+ * Conversation run history
+ */
+export const zListDirectAgentConversationRunsResponse = z.array(zTaskRun);
+export const zListDirectAgentConversationEventsPath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string(),
+    conversationID: z.string(),
+    runID: z.string()
+});
+export const zListDirectAgentConversationEventsQuery = z.object({
+    afterSequence: z.int().gte(0).optional()
+});
+/**
+ * Ordered run activity
+ */
+export const zListDirectAgentConversationEventsResponse = z.array(zTaskRunEvent);
+export const zSendDirectAgentConversationPromptBody = z.object({
+    commandId: z.string().min(1).max(200),
+    text: z.string().min(1).max(262144)
+});
+export const zSendDirectAgentConversationPromptPath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string(),
+    conversationID: z.string(),
+    runID: z.string()
+});
+export const zCancelDirectAgentConversationPromptBody = z.object({
+    commandId: z.string().min(1)
+});
+export const zCancelDirectAgentConversationPromptPath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string(),
+    conversationID: z.string(),
+    runID: z.string()
+});
+export const zResumeDirectAgentConversationQueuePath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string(),
+    conversationID: z.string(),
+    runID: z.string()
+});
+export const zDiscardDirectAgentConversationQueuePath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string(),
+    conversationID: z.string(),
+    runID: z.string()
+});
+export const zRespondDirectAgentConversationPermissionBody = z.object({
+    requestId: z.string(),
+    sessionId: z.string(),
+    optionId: z.string()
+});
+export const zRespondDirectAgentConversationPermissionPath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string(),
+    conversationID: z.string(),
     runID: z.string()
 });
 export const zListTaskCommentsPath = z.object({

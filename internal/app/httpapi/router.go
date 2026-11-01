@@ -25,7 +25,7 @@ import (
 )
 
 // NewRouter validates the served OpenAPI contract before exposing routes.
-func NewRouter(users *identity.UserRegistrationService, organizations *organization.OrganizationService, workspaces *workspace.WorkspaceService, agents *agent.Service, codeRepositories *coderepository.Service, tasks *task.Service, integrations *taskintegration.TaskIntegrationService, mcpServers *mcpserver.MCPServerService, skillCatalog *skill.CatalogService, launches *orchestration.LaunchService, profiles *executionprofile.ExecutionProfileService, runtimeProfiles *agentruntimeprofile.Service, environment ...*workspaceenv.Service) (*chi.Mux, error) {
+func NewRouter(users *identity.UserRegistrationService, organizations *organization.OrganizationService, workspaces *workspace.WorkspaceService, agents *agent.Service, codeRepositories *coderepository.Service, tasks *task.Service, integrations *taskintegration.TaskIntegrationService, mcpServers *mcpserver.MCPServerService, skillCatalog *skill.CatalogService, launches *orchestration.LaunchService, profiles *executionprofile.ExecutionProfileService, runtimeProfiles *agentruntimeprofile.Service, directChats *orchestration.DirectChatService, environment ...*workspaceenv.Service) (*chi.Mux, error) {
 	if profiles == nil {
 		return nil, fmt.Errorf("execution profile service is required")
 	}
@@ -75,6 +75,9 @@ func NewRouter(users *identity.UserRegistrationService, organizations *organizat
 			taskAPI{tasks: tasks}.routes(api)
 			if launches != nil {
 				taskRunAPI{tasks: tasks, launches: launches}.routes(api)
+			}
+			if directChats != nil && launches != nil {
+				directChatAPI{chats: directChats, agents: agents, workspaces: workspaces}.routes(api)
 			}
 			if integrations != nil {
 				taskIntegrationAPI{service: integrations}.routes(api)

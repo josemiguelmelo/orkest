@@ -16,7 +16,8 @@ import { useApp } from '../../app/context';
 import { command, data } from '../../shared/api/client';
 import * as sdk from '../../shared/api/generated/sdk.gen';
 import type { Task } from '../../shared/api/generated/types.gen';
-import { path, taskRunEventsQuery, taskRunsQuery, useRefresh } from '../../shared/api/queries';
+import { directChats } from '../../shared/api/direct-chats';
+import { directChatEventsQuery, directChatRunsQuery, path, taskRunEventsQuery, taskRunsQuery, useRefresh } from '../../shared/api/queries';
 import { Button } from '../../shared/ui/button';
 import { ErrorState } from '../../shared/ui/common';
 import { Markdown } from '../../shared/ui/markdown';
@@ -31,11 +32,11 @@ import {
 import { ToolCard } from './tool-card';
 import type { SessionMode } from './session-choice';
 
-export function TaskChat({ task }: { task: Task }) {
+export function TaskChat({ task, direct = false }: { task: Task; direct?: boolean }) {
   const { scope, permissions } = useApp();
-  const runs = useQuery(taskRunsQuery(scope, task.id));
+  const runs = useQuery(direct ? directChatRunsQuery(scope, task.id) : taskRunsQuery(scope, task.id));
   const latest = runs.data?.[0];
-  const latestEvents = useQuery(taskRunEventsQuery(scope, task.id, latest?.runId ?? ''));
+  const latestEvents = useQuery(direct ? directChatEventsQuery(scope, task.id, latest?.runId ?? '') : taskRunEventsQuery(scope, task.id, latest?.runId ?? ''));
   const [selectedSession, setSelectedSession] = useState<string | null>(null);
   const [text, setText] = useState('');
   const [sessionMode, setSessionMode] = useState<SessionMode>('continue');
@@ -61,7 +62,7 @@ export function TaskChat({ task }: { task: Task }) {
     .reverse();
   const history = useQueries({
     queries: sessionRuns.map((run) => ({
-      ...taskRunEventsQuery(scope, task.id, run.runId),
+      ...(direct ? directChatEventsQuery(scope, task.id, run.runId) : taskRunEventsQuery(scope, task.id, run.runId)),
       refetchInterval: run.runId === latest?.runId ? 1500 : false,
     })),
   });
@@ -107,7 +108,9 @@ export function TaskChat({ task }: { task: Task }) {
     pendingCommand.current = { id: commandId, text: prompt, target };
     follow.current = true;
     await action.run(async () => {
-      if (execution.live) {
+      if (direct) {
+        await directChats.prompt(scope, task.id, latest.runId, commandId, prompt);
+      } else if (execution.live) {
         await data(
           sdk.sendTaskRunPrompt({
             ...command,
@@ -147,6 +150,11 @@ export function TaskChat({ task }: { task: Task }) {
   async function queueAction(discard: boolean) {
     if (!latest) return;
     await action.run(async () => {
+      if (direct) {
+        await directChats.queue(scope, task.id, latest.runId, discard);
+        await refresh(scope);
+        return;
+      }
       const request = {
         ...command,
         path: { ...path(scope), taskID: task.id, runID: latest.runId },
@@ -188,7 +196,7 @@ export function TaskChat({ task }: { task: Task }) {
           : execution.label;
 
   return (
-    <section className="agent-chat" aria-label="Task chat">
+    <section className="agent-chat" aria-label={direct ? 'Direct agent chat' : 'Task chat'}>
       <header className="agent-chat-header">
         <div className="agent-chat-title">
           <span className="agent-avatar">
@@ -196,7 +204,7 @@ export function TaskChat({ task }: { task: Task }) {
           </span>
           <div>
             <h2>Conversation</h2>
-            <p>Agent · Task context preserved</p>
+            <p>{direct ? 'Agent · Direct conversation' : 'Agent · Task context preserved'}</p>
             {latest?.executionImage && (
               <p title={latest.executionImage}>
                 Prepared execution image · {latest.executionImage.split('@')[1]?.slice(0, 19)}
@@ -273,10 +281,11 @@ export function TaskChat({ task }: { task: Task }) {
                 <span className="agent-empty-icon">
                   <Terminal size={26} />
                 </span>
-                <h3>A conversation that stays with your task</h3>
+                <h3>{direct ? 'Start a conversation' : 'A conversation that stays with your task'}</h3>
                 <p>
-                  Ask questions, review the agent’s work, and iterate here. Your context carries
-                  into every follow-up.
+                  {direct
+                    ? 'Ask this agent a question or discuss an idea. No task is created.'
+                    : 'Ask questions, review the agent’s work, and iterate here. Your context carries into every follow-up.'}
                 </p>
               </div>
             )
@@ -338,7 +347,9 @@ export function TaskChat({ task }: { task: Task }) {
                     onClick={() =>
                       void action.run(async () => {
                         if (!latest) return;
-                        await data(
+                        if (direct) {
+                          await directChats.respondPermission(scope, task.id, latest.runId, approval.id, approval.sessionId, option.id);
+                        } else await data(
                           sdk.respondTaskRunPermission({
                             ...command,
                             path: { ...path(scope), taskID: task.id, runID: latest.runId },
@@ -414,9 +425,9 @@ export function TaskChat({ task }: { task: Task }) {
             <div className="agent-composer-context">
               <span className="agent-context-chip">
                 <Terminal size={12} />
-                Task context
+                {direct ? 'Direct chat' : 'Task context'}
               </span>
-              {latest && !archived && permissions.editWorkspace && task.status !== 'done' && (
+              {!direct && latest && !archived && permissions.editWorkspace && task.status !== 'done' && (
                 <select
                   aria-label="Session for next message"
                   value={nextMode}
@@ -452,7 +463,8 @@ export function TaskChat({ task }: { task: Task }) {
                     onClick={() =>
                       void action.run(async () => {
                         if (!latest) return;
-                        await data(
+                        if (direct) await directChats.cancel(scope, task.id, latest.runId, active.commandId);
+                        else await data(
                           sdk.cancelTaskRunPrompt({
                             ...command,
                             path: { ...path(scope), taskID: task.id, runID: latest.runId },

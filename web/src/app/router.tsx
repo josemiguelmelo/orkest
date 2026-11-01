@@ -21,6 +21,9 @@ const AgentRuntimeProfiles = lazy(() =>
 const Agents = lazy(() =>
   import('../features/agents/agents').then((m) => ({ default: m.AgentsPage })),
 );
+const DirectChat = lazy(() =>
+  import('../features/agents/direct-chat-page').then((m) => ({ default: m.DirectChatPage })),
+);
 const Skills = lazy(() =>
   import('../features/skills/skills').then((m) => ({ default: m.SkillsPage })),
 );
@@ -108,6 +111,11 @@ const agents = createRoute({
   path: 'agents',
   component: loading(Agents),
 });
+const directChat = createRoute({
+  getParentRoute: () => workspace,
+  path: 'agents/chats/$conversationId',
+  component: loading(DirectChat),
+});
 const profiles = createRoute({
   getParentRoute: () => workspace,
   path: 'execution-profiles',
@@ -154,6 +162,7 @@ const tree = root.addChildren([
       tasksRoute,
       taskRoute,
       agents,
+      directChat,
       profiles,
       agentRuntimeProfiles,
       skills,
