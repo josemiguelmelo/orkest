@@ -9,25 +9,37 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/agent"
 	"github.com/josemiguelmelo/orkest/internal/agentruntimeprofile"
 	modelerrors "github.com/josemiguelmelo/orkest/internal/core/model/errors"
+	coreruntime "github.com/josemiguelmelo/orkest/internal/core/runtime"
+	"github.com/josemiguelmelo/orkest/internal/core/secretbox"
 )
 
-type AgentRuntimeProfilePostgresRepository struct{ database *PostgresDatabase }
+type AgentRuntimeProfilePostgresRepository struct {
+	database  *PostgresDatabase
+	secretBox *secretbox.Box
+}
 
 func NewAgentRuntimeProfilePostgresRepository(database *PostgresDatabase) *AgentRuntimeProfilePostgresRepository {
 	return &AgentRuntimeProfilePostgresRepository{database: database}
 }
 
+func (r *AgentRuntimeProfilePostgresRepository) SetSecretBox(box *secretbox.Box) { r.secretBox = box }
+
 var _ agentruntimeprofile.Repository = (*AgentRuntimeProfilePostgresRepository)(nil)
 
-func scanAgentRuntimeProfile(row pgx.Row) (agentruntimeprofile.Profile, error) {
+func scanAgentRuntimeProfile(box *secretbox.Box, row pgx.Row) (agentruntimeprofile.Profile, error) {
 	var p agentruntimeprofile.Profile
 	var runtime string
-	err := row.Scan(&p.ID, &p.WorkspaceID, &p.Name, &runtime, &p.ModelProvider, &p.ModelIdentifier, &p.CreatedAt, &p.UpdatedAt)
+	var encrypted []byte
+	err := row.Scan(&p.ID, &p.WorkspaceID, &p.Name, &runtime, &p.ModelProvider, &p.ModelIdentifier, &encrypted, &p.CreatedAt, &p.UpdatedAt)
 	p.Runtime = agent.Runtime(runtime)
+	if err == nil {
+		p.Configuration, err = coreruntime.OpenConfiguration(box, encrypted)
+		p.HasConfiguration = len(p.Configuration) > 0
+	}
 	return p, err
 }
 
-const agentRuntimeProfileColumns = `id, workspace_id, name, runtime, model_provider, model_identifier, created_at, updated_at`
+const agentRuntimeProfileColumns = `id, workspace_id, name, runtime, model_provider, model_identifier, runtime_configuration, created_at, updated_at`
 
 func (r *AgentRuntimeProfilePostgresRepository) List(ctx context.Context, workspaceID string) ([]agentruntimeprofile.Profile, error) {
 	rows, err := r.database.pool.Query(ctx, `SELECT `+agentRuntimeProfileColumns+` FROM agent_runtime_profiles WHERE workspace_id=$1 ORDER BY name,id`, workspaceID)
@@ -37,7 +49,7 @@ func (r *AgentRuntimeProfilePostgresRepository) List(ctx context.Context, worksp
 	defer rows.Close()
 	profiles := make([]agentruntimeprofile.Profile, 0)
 	for rows.Next() {
-		p, scanErr := scanAgentRuntimeProfile(rows)
+		p, scanErr := scanAgentRuntimeProfile(r.secretBox, rows)
 		if scanErr != nil {
 			return nil, scanErr
 		}
@@ -47,7 +59,7 @@ func (r *AgentRuntimeProfilePostgresRepository) List(ctx context.Context, worksp
 }
 
 func (r *AgentRuntimeProfilePostgresRepository) Get(ctx context.Context, workspaceID, id string) (agentruntimeprofile.Profile, error) {
-	p, err := scanAgentRuntimeProfile(r.database.pool.QueryRow(ctx, `SELECT `+agentRuntimeProfileColumns+` FROM agent_runtime_profiles WHERE workspace_id=$1 AND id=$2`, workspaceID, id))
+	p, err := scanAgentRuntimeProfile(r.secretBox, r.database.pool.QueryRow(ctx, `SELECT `+agentRuntimeProfileColumns+` FROM agent_runtime_profiles WHERE workspace_id=$1 AND id=$2`, workspaceID, id))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return agentruntimeprofile.Profile{}, modelerrors.ErrNotFound
 	}
@@ -60,12 +72,16 @@ func (r *AgentRuntimeProfilePostgresRepository) Save(ctx context.Context, p agen
 		return agentruntimeprofile.Profile{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	query := `INSERT INTO agent_runtime_profiles (id,workspace_id,name,runtime,model_provider,model_identifier) VALUES($1,$2,$3,$4,$5,$6) RETURNING ` + agentRuntimeProfileColumns
-	args := []any{p.ID, p.WorkspaceID, p.Name, string(p.Runtime), p.ModelProvider, p.ModelIdentifier}
-	if !create {
-		query = `UPDATE agent_runtime_profiles SET name=$3,runtime=$4,model_provider=$5,model_identifier=$6,updated_at=now() WHERE workspace_id=$2 AND id=$1 RETURNING ` + agentRuntimeProfileColumns
+	encrypted, err := coreruntime.SealConfiguration(r.secretBox, p.Configuration)
+	if err != nil {
+		return agentruntimeprofile.Profile{}, err
 	}
-	updated, err := scanAgentRuntimeProfile(tx.QueryRow(ctx, query, args...))
+	query := `INSERT INTO agent_runtime_profiles (id,workspace_id,name,runtime,model_provider,model_identifier,runtime_configuration) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING ` + agentRuntimeProfileColumns
+	args := []any{p.ID, p.WorkspaceID, p.Name, string(p.Runtime), p.ModelProvider, p.ModelIdentifier, encrypted}
+	if !create {
+		query = `UPDATE agent_runtime_profiles SET name=$3,runtime=$4,model_provider=$5,model_identifier=$6,runtime_configuration=$7,updated_at=now() WHERE workspace_id=$2 AND id=$1 RETURNING ` + agentRuntimeProfileColumns
+	}
+	updated, err := scanAgentRuntimeProfile(r.secretBox, tx.QueryRow(ctx, query, args...))
 	if errors.Is(err, pgx.ErrNoRows) {
 		return agentruntimeprofile.Profile{}, modelerrors.ErrNotFound
 	}
@@ -83,7 +99,7 @@ func (r *AgentRuntimeProfilePostgresRepository) Save(ctx context.Context, p agen
 	if incompatible {
 		return agentruntimeprofile.Profile{}, modelerrors.ErrConflict
 	}
-	if _, err = tx.Exec(ctx, `UPDATE agents SET runtime=$3,provider=$4,model=$5,updated_at=now() WHERE workspace_id=$1 AND runtime_profile_id=$2`, p.WorkspaceID, p.ID, string(p.Runtime), p.ModelProvider, p.ModelIdentifier); err != nil {
+	if _, err = tx.Exec(ctx, `UPDATE agents SET runtime=$3,provider=$4,model=$5,runtime_configuration=$6,updated_at=now() WHERE workspace_id=$1 AND runtime_profile_id=$2`, p.WorkspaceID, p.ID, string(p.Runtime), p.ModelProvider, p.ModelIdentifier, encrypted); err != nil {
 		return agentruntimeprofile.Profile{}, fmt.Errorf("apply runtime profile to agents: %w", err)
 	}
 	if err = tx.Commit(ctx); err != nil {

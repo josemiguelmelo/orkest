@@ -206,7 +206,8 @@ export const zAgent = z.object({
     systemPrompt: z.string(),
     permissionPolicy: z.enum(['ask', 'autonomous']),
     mcpServerIds: z.array(z.string()),
-    skillIds: z.array(z.string())
+    skillIds: z.array(z.string()),
+    hasConfiguration: z.boolean()
 });
 export const zAgentRuntimeProfileInput = z.object({
     name: z.string().min(1).max(200),
@@ -224,8 +225,25 @@ export const zAgentRuntimeProfile = zAgentRuntimeProfileInput.and(z.object({
     id: z.string(),
     workspaceId: z.string(),
     createdAt: z.iso.datetime(),
-    updatedAt: z.iso.datetime()
+    updatedAt: z.iso.datetime(),
+    hasConfiguration: z.boolean().optional()
 }));
+export const zRuntimeConfigurationOption = z.object({
+    name: z.string(),
+    description: z.string(),
+    required: z.boolean(),
+    sensitive: z.boolean()
+});
+export const zRuntimeProvider = z.object({
+    runtime: z.enum([
+        'opencode',
+        'claude-code',
+        'codex',
+        'github-copilot',
+        'kiro'
+    ]),
+    configuration: z.array(zRuntimeConfigurationOption)
+});
 export const zMcpServer = z.object({
     id: z.string(),
     workspaceId: z.string(),
@@ -335,6 +353,26 @@ export const zCurrentUserWritable = z.object({
     user: zUser,
     organizations: z.array(zOrganization)
 });
+export const zAgentRuntimeProfileInputWritable = z.object({
+    name: z.string().min(1).max(200),
+    runtime: z.enum([
+        'opencode',
+        'claude-code',
+        'codex',
+        'github-copilot',
+        'kiro'
+    ]),
+    modelProvider: z.string().min(1).max(200),
+    modelIdentifier: z.string().min(1).max(200),
+    configuration: z.record(z.string(), z.string()).optional()
+});
+export const zAgentRuntimeProfileWritable = zAgentRuntimeProfileInputWritable.and(z.object({
+    id: z.string(),
+    workspaceId: z.string(),
+    createdAt: z.iso.datetime(),
+    updatedAt: z.iso.datetime(),
+    hasConfiguration: z.boolean().optional()
+}));
 export const zCodingIntegrationInputWritable = z.object({
     name: z.string().min(1).max(200),
     providerName: z.enum([
@@ -388,7 +426,8 @@ export const zAgentDefinition = z.object({
     executionProfileId: z.string().optional(),
     runtimeProfileId: z.string().optional(),
     mcpServerIds: z.array(z.string()).optional(),
-    skillIds: z.array(z.string()).optional()
+    skillIds: z.array(z.string()).optional(),
+    configuration: z.record(z.string(), z.string()).optional()
 });
 export const zMcpServerInput = z.object({
     name: z.string().min(1).max(200),
@@ -397,6 +436,10 @@ export const zMcpServerInput = z.object({
 });
 export const zCodeRepositoryCreate2 = zCodeRepositoryCreate;
 export const zTaskIntegration2 = zTaskIntegrationInputWritable;
+/**
+ * Runtime providers and supported environment configuration
+ */
+export const zListRuntimeProvidersResponse = z.array(zRuntimeProvider);
 export const zListAgentRuntimeProfilesPath = z.object({
     orgID: z.string(),
     workspaceID: z.string()
@@ -405,7 +448,7 @@ export const zListAgentRuntimeProfilesPath = z.object({
  * Runtime profiles
  */
 export const zListAgentRuntimeProfilesResponse = z.array(zAgentRuntimeProfile);
-export const zCreateAgentRuntimeProfileBody = zAgentRuntimeProfileInput;
+export const zCreateAgentRuntimeProfileBody = zAgentRuntimeProfileInputWritable;
 export const zCreateAgentRuntimeProfilePath = z.object({
     orgID: z.string(),
     workspaceID: z.string()
@@ -423,7 +466,7 @@ export const zDeleteAgentRuntimeProfilePath = z.object({
  * Runtime profile deleted; linked agents retain their last model settings
  */
 export const zDeleteAgentRuntimeProfileResponse = z.void();
-export const zUpdateAgentRuntimeProfileBody = zAgentRuntimeProfileInput;
+export const zUpdateAgentRuntimeProfileBody = zAgentRuntimeProfileInputWritable;
 export const zUpdateAgentRuntimeProfilePath = z.object({
     orgID: z.string(),
     workspaceID: z.string(),

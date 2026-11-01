@@ -8,8 +8,21 @@ import { useApp } from '../../app/context';
 import * as sdk from '../../shared/api/generated/sdk.gen';
 import type { AgentRuntimeProfile } from '../../shared/api/generated/types.gen';
 import { command, data } from '../../shared/api/client';
-import { agentRuntimeProfilesQuery, path, useRefresh } from '../../shared/api/queries';
-import { Badge, ConfirmButton, CreateButton, Empty, ErrorState, Loading, PageHeader } from '../../shared/ui/common';
+import {
+  agentRuntimeProfilesQuery,
+  path,
+  runtimeProvidersQuery,
+  useRefresh,
+} from '../../shared/api/queries';
+import {
+  Badge,
+  ConfirmButton,
+  CreateButton,
+  Empty,
+  ErrorState,
+  Loading,
+  PageHeader,
+} from '../../shared/ui/common';
 import { Button } from '../../shared/ui/button';
 import { Dialog } from '../../shared/ui/dialog';
 import { Field, Form } from '../../shared/ui/form';
@@ -20,6 +33,7 @@ const schema = z.object({
   runtime: z.enum(['opencode', 'claude-code', 'codex', 'github-copilot', 'kiro']),
   modelProvider: z.string().trim().min(1).max(200),
   modelIdentifier: z.string().trim().min(1).max(200),
+  configuration: z.record(z.string(), z.string()),
 });
 type Values = z.infer<typeof schema>;
 
@@ -28,49 +42,195 @@ export function AgentRuntimeProfilesPage() {
   const profiles = useQuery(agentRuntimeProfilesQuery(scope));
   const refresh = useRefresh();
   const [editing, setEditing] = useState<AgentRuntimeProfile | null | undefined>();
-  return <>
-    <PageHeader title="Runtime profiles" description="Save runtime and model settings as reusable agent presets. Updating a profile applies the new settings to all linked agents.">
-      {permissions.editWorkspace && <CreateButton onClick={() => setEditing(null)}>New runtime profile</CreateButton>}
-    </PageHeader>
-    {profiles.isPending ? <Loading /> : profiles.isError ? <ErrorState error={profiles.error} /> : profiles.data.length === 0 ? (
-      <Empty title="No runtime profiles yet">Create a profile for a runtime, model provider, and model identifier, then select it when creating or editing agents.</Empty>
-    ) : <div className="grid">
-      {profiles.data.map((profile) => <article className="profile-card" key={profile.id}>
-        <div className="profile-card-heading"><div className="repository-card-icon"><Bot size={19} /></div><div className="profile-card-title"><h3>{profile.name}</h3><p>{profile.runtime}</p></div></div>
-        <div className="profile-runtime"><Cpu size={14} /><span>Model</span><code>{profile.modelProvider}/{profile.modelIdentifier}</code></div>
-        <div className="agent-card-actions">
-          {permissions.editWorkspace && <>
-            <Button variant="outline" size="sm" onClick={() => setEditing(profile)}><Pencil size={14} />Edit</Button>
-            <ConfirmButton label="Delete" title="Delete runtime profile?" description="Linked agents keep their current runtime and model settings and become manually configured." onConfirm={async () => { await data(sdk.deleteAgentRuntimeProfile({ ...command, path: { ...path(scope), profileID: profile.id } })); await refresh(scope); }} />
-          </>}
+  return (
+    <>
+      <PageHeader
+        title="Runtime profiles"
+        description="Save runtime and model settings as reusable agent presets. Updating a profile applies the new settings to all linked agents."
+      >
+        {permissions.editWorkspace && (
+          <CreateButton onClick={() => setEditing(null)}>New runtime profile</CreateButton>
+        )}
+      </PageHeader>
+      {profiles.isPending ? (
+        <Loading />
+      ) : profiles.isError ? (
+        <ErrorState error={profiles.error} />
+      ) : profiles.data.length === 0 ? (
+        <Empty title="No runtime profiles yet">
+          Create a profile for a runtime, model provider, and model identifier, then select it when
+          creating or editing agents.
+        </Empty>
+      ) : (
+        <div className="grid">
+          {profiles.data.map((profile) => (
+            <article className="profile-card" key={profile.id}>
+              <div className="profile-card-heading">
+                <div className="repository-card-icon">
+                  <Bot size={19} />
+                </div>
+                <div className="profile-card-title">
+                  <h3>{profile.name}</h3>
+                  <p>{profile.runtime}</p>
+                </div>
+              </div>
+              <div className="profile-runtime">
+                <Cpu size={14} />
+                <span>Model</span>
+                <code>
+                  {profile.modelProvider}/{profile.modelIdentifier}
+                </code>
+              </div>
+              <div className="agent-card-actions">
+                {permissions.editWorkspace && (
+                  <>
+                    <Button variant="outline" size="sm" onClick={() => setEditing(profile)}>
+                      <Pencil size={14} />
+                      Edit
+                    </Button>
+                    <ConfirmButton
+                      label="Delete"
+                      title="Delete runtime profile?"
+                      description="Linked agents keep their current runtime and model settings and become manually configured."
+                      onConfirm={async () => {
+                        await data(
+                          sdk.deleteAgentRuntimeProfile({
+                            ...command,
+                            path: { ...path(scope), profileID: profile.id },
+                          }),
+                        );
+                        await refresh(scope);
+                      }}
+                    />
+                  </>
+                )}
+              </div>
+            </article>
+          ))}
         </div>
-      </article>)}
-    </div>}
-    {editing !== undefined && <ProfileEditor key={editing?.id ?? 'new'} profile={editing} onClose={() => setEditing(undefined)} />}
-  </>;
+      )}
+      {editing !== undefined && (
+        <ProfileEditor
+          key={editing?.id ?? 'new'}
+          profile={editing}
+          onClose={() => setEditing(undefined)}
+        />
+      )}
+    </>
+  );
 }
 
-function ProfileEditor({ profile, onClose }: { profile: AgentRuntimeProfile | null; onClose: () => void }) {
+function ProfileEditor({
+  profile,
+  onClose,
+}: {
+  profile: AgentRuntimeProfile | null;
+  onClose: () => void;
+}) {
   const { scope } = useApp();
   const refresh = useRefresh();
   const action = useAction();
-  const form = useForm<Values>({ resolver: zodResolver(schema), defaultValues: {
-    name: profile?.name ?? '', runtime: profile?.runtime ?? 'opencode',
-    modelProvider: profile?.modelProvider ?? '', modelIdentifier: profile?.modelIdentifier ?? '',
-  } });
-  return <Dialog title={profile ? 'Edit runtime profile' : 'Create runtime profile'} description="Agents linked to this profile receive its updated settings together." open onOpenChange={(open) => { if (!open && !action.pending) onClose(); }}>
-    <Form form={form} error={action.error} onSubmit={async (body) => {
-      if (await action.run(async () => {
-        if (profile) await data(sdk.updateAgentRuntimeProfile({ ...command, path: { ...path(scope), profileID: profile.id }, body }));
-        else await data(sdk.createAgentRuntimeProfile({ ...command, path: path(scope), body }));
-        await refresh(scope);
-      })) onClose();
-    }}>
-      <Field label="Name" error={form.formState.errors.name?.message}><input {...form.register('name')} placeholder="e.g., Claude through LiteLLM" /></Field>
-      <Field label="Runtime"><select {...form.register('runtime', { onChange: (event: ChangeEvent<HTMLSelectElement>) => { if (event.target.value === 'claude-code') form.setValue('modelProvider', 'anthropic', { shouldDirty: true }); if (event.target.value === 'codex') form.setValue('modelProvider', 'openai', { shouldDirty: true }); if (event.target.value === 'github-copilot') form.setValue('modelProvider', 'github-copilot', { shouldDirty: true }); if (event.target.value === 'kiro') form.setValue('modelProvider', 'kiro', { shouldDirty: true }); } })}><option value="opencode">OpenCode</option><option value="claude-code">Claude Code</option><option value="codex">Codex</option><option value="github-copilot">GitHub Copilot</option><option value="kiro">Kiro</option></select></Field>
-      <Field label="Model provider" error={form.formState.errors.modelProvider?.message} hint="Runtime-specific providers are fixed; OpenCode accepts gateway provider names."><input {...form.register('modelProvider')} placeholder="e.g., anthropic or litellm" readOnly={form.watch('runtime') !== 'opencode'} /></Field>
-      <Field label="Model identifier" error={form.formState.errors.modelIdentifier?.message}><input {...form.register('modelIdentifier')} placeholder="e.g., claude-sonnet-4" /></Field>
-      {profile && <Badge>Changes apply to linked agents</Badge>}
-    </Form>
-  </Dialog>;
+  const providerCatalog = useQuery(runtimeProvidersQuery);
+  const form = useForm<Values>({
+    resolver: zodResolver(schema),
+    defaultValues: {
+      name: profile?.name ?? '',
+      runtime: profile?.runtime ?? 'opencode',
+      modelProvider: profile?.modelProvider ?? '',
+      modelIdentifier: profile?.modelIdentifier ?? '',
+      configuration: {},
+    },
+  });
+  return (
+    <Dialog
+      title={profile ? 'Edit runtime profile' : 'Create runtime profile'}
+      description="Agents linked to this profile receive its updated settings together."
+      open
+      onOpenChange={(open) => {
+        if (!open && !action.pending) onClose();
+      }}
+    >
+      <Form
+        form={form}
+        error={action.error}
+        onSubmit={async (body) => {
+          if (
+            await action.run(async () => {
+              if (profile)
+                await data(
+                  sdk.updateAgentRuntimeProfile({
+                    ...command,
+                    path: { ...path(scope), profileID: profile.id },
+                    body,
+                  }),
+                );
+              else
+                await data(sdk.createAgentRuntimeProfile({ ...command, path: path(scope), body }));
+              await refresh(scope);
+            })
+          )
+            onClose();
+        }}
+      >
+        <Field label="Name" error={form.formState.errors.name?.message}>
+          <input {...form.register('name')} placeholder="e.g., Claude through LiteLLM" />
+        </Field>
+        <Field label="Runtime">
+          <select
+            {...form.register('runtime', {
+              onChange: (event: ChangeEvent<HTMLSelectElement>) => {
+                form.setValue('configuration', {}, { shouldDirty: true });
+                if (event.target.value === 'claude-code')
+                  form.setValue('modelProvider', 'anthropic', { shouldDirty: true });
+                if (event.target.value === 'codex')
+                  form.setValue('modelProvider', 'openai', { shouldDirty: true });
+                if (event.target.value === 'github-copilot')
+                  form.setValue('modelProvider', 'github-copilot', { shouldDirty: true });
+                if (event.target.value === 'kiro')
+                  form.setValue('modelProvider', 'kiro', { shouldDirty: true });
+              },
+            })}
+          >
+            <option value="opencode">OpenCode</option>
+            <option value="claude-code">Claude Code</option>
+            <option value="codex">Codex</option>
+            <option value="github-copilot">GitHub Copilot</option>
+            <option value="kiro">Kiro</option>
+          </select>
+        </Field>
+        <Field
+          label="Model provider"
+          error={form.formState.errors.modelProvider?.message}
+          hint="Runtime-specific providers are fixed; OpenCode accepts gateway provider names."
+        >
+          <input
+            {...form.register('modelProvider')}
+            placeholder="e.g., anthropic or litellm"
+            readOnly={form.watch('runtime') !== 'opencode'}
+          />
+        </Field>
+        <Field label="Model identifier" error={form.formState.errors.modelIdentifier?.message}>
+          <input {...form.register('modelIdentifier')} placeholder="e.g., claude-sonnet-4" />
+        </Field>
+        {(
+          providerCatalog.data?.find((provider) => provider.runtime === form.watch('runtime'))
+            ?.configuration ?? []
+        ).map((option) => (
+          <Field
+            key={option.name}
+            label={`${option.name}${option.required ? ' (required if not in workspace)' : ''}`}
+            hint={`${option.description}${profile?.hasConfiguration ? ' A saved value is retained when this field is blank.' : ''}`}
+          >
+            <input
+              type={option.sensitive ? 'password' : 'text'}
+              autoComplete="new-password"
+              {...form.register(`configuration.${option.name}`)}
+              placeholder={profile?.hasConfiguration ? 'Saved value (leave blank to keep)' : ''}
+            />
+          </Field>
+        ))}
+        {profile && <Badge>Changes apply to linked agents</Badge>}
+      </Form>
+    </Dialog>
+  );
 }

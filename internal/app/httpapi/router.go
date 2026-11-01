@@ -55,6 +55,7 @@ func NewRouter(users *identity.UserRegistrationService, organizations *organizat
 		api.Use(auth.middleware)
 		api.Route("/api", func(api chi.Router) {
 			api.Get("/me", auth.currentUser)
+			api.Get("/runtime-providers", listRuntimeProviders)
 			organizationAPI{organizations: organizations, workspaces: workspaces}.routes(api)
 			agentAPI{agents: agents}.routes(api)
 			executionProfileAPI{service: profiles}.routes(api)

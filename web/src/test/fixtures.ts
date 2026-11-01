@@ -30,6 +30,7 @@ export const agent: Agent = {
   permissionPolicy: 'ask',
   mcpServerIds: [],
   skillIds: [],
+  hasConfiguration: false,
 };
 export const task: Task = {
   id: 'task-1',

@@ -257,6 +257,7 @@ export declare const zAgent: z.ZodObject<{
     }>;
     mcpServerIds: z.ZodArray<z.ZodString>;
     skillIds: z.ZodArray<z.ZodString>;
+    hasConfiguration: z.ZodBoolean;
 }, z.core.$strip>;
 export declare const zAgentRuntimeProfileInput: z.ZodObject<{
     name: z.ZodString;
@@ -286,7 +287,29 @@ export declare const zAgentRuntimeProfile: z.ZodIntersection<z.ZodObject<{
     workspaceId: z.ZodString;
     createdAt: z.ZodISODateTime;
     updatedAt: z.ZodISODateTime;
+    hasConfiguration: z.ZodOptional<z.ZodBoolean>;
 }, z.core.$strip>>;
+export declare const zRuntimeConfigurationOption: z.ZodObject<{
+    name: z.ZodString;
+    description: z.ZodString;
+    required: z.ZodBoolean;
+    sensitive: z.ZodBoolean;
+}, z.core.$strip>;
+export declare const zRuntimeProvider: z.ZodObject<{
+    runtime: z.ZodEnum<{
+        opencode: "opencode";
+        "claude-code": "claude-code";
+        codex: "codex";
+        "github-copilot": "github-copilot";
+        kiro: "kiro";
+    }>;
+    configuration: z.ZodArray<z.ZodObject<{
+        name: z.ZodString;
+        description: z.ZodString;
+        required: z.ZodBoolean;
+        sensitive: z.ZodBoolean;
+    }, z.core.$strip>>;
+}, z.core.$strip>;
 export declare const zMcpServer: z.ZodObject<{
     id: z.ZodString;
     workspaceId: z.ZodString;
@@ -414,6 +437,38 @@ export declare const zCurrentUserWritable: z.ZodObject<{
         }>>;
     }, z.core.$strip>>;
 }, z.core.$strip>;
+export declare const zAgentRuntimeProfileInputWritable: z.ZodObject<{
+    name: z.ZodString;
+    runtime: z.ZodEnum<{
+        opencode: "opencode";
+        "claude-code": "claude-code";
+        codex: "codex";
+        "github-copilot": "github-copilot";
+        kiro: "kiro";
+    }>;
+    modelProvider: z.ZodString;
+    modelIdentifier: z.ZodString;
+    configuration: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
+}, z.core.$strip>;
+export declare const zAgentRuntimeProfileWritable: z.ZodIntersection<z.ZodObject<{
+    name: z.ZodString;
+    runtime: z.ZodEnum<{
+        opencode: "opencode";
+        "claude-code": "claude-code";
+        codex: "codex";
+        "github-copilot": "github-copilot";
+        kiro: "kiro";
+    }>;
+    modelProvider: z.ZodString;
+    modelIdentifier: z.ZodString;
+    configuration: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
+}, z.core.$strip>, z.ZodObject<{
+    id: z.ZodString;
+    workspaceId: z.ZodString;
+    createdAt: z.ZodISODateTime;
+    updatedAt: z.ZodISODateTime;
+    hasConfiguration: z.ZodOptional<z.ZodBoolean>;
+}, z.core.$strip>>;
 export declare const zCodingIntegrationInputWritable: z.ZodObject<{
     name: z.ZodString;
     providerName: z.ZodEnum<{
@@ -471,6 +526,7 @@ export declare const zAgentDefinition: z.ZodObject<{
     runtimeProfileId: z.ZodOptional<z.ZodString>;
     mcpServerIds: z.ZodOptional<z.ZodArray<z.ZodString>>;
     skillIds: z.ZodOptional<z.ZodArray<z.ZodString>>;
+    configuration: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
 }, z.core.$strip>;
 export declare const zMcpServerInput: z.ZodObject<{
     name: z.ZodString;
@@ -490,6 +546,24 @@ export declare const zTaskIntegration2: z.ZodObject<{
     interval: z.ZodOptional<z.ZodString>;
     credential: z.ZodOptional<z.ZodString>;
 }, z.core.$strip>;
+/**
+ * Runtime providers and supported environment configuration
+ */
+export declare const zListRuntimeProvidersResponse: z.ZodArray<z.ZodObject<{
+    runtime: z.ZodEnum<{
+        opencode: "opencode";
+        "claude-code": "claude-code";
+        codex: "codex";
+        "github-copilot": "github-copilot";
+        kiro: "kiro";
+    }>;
+    configuration: z.ZodArray<z.ZodObject<{
+        name: z.ZodString;
+        description: z.ZodString;
+        required: z.ZodBoolean;
+        sensitive: z.ZodBoolean;
+    }, z.core.$strip>>;
+}, z.core.$strip>>;
 export declare const zListAgentRuntimeProfilesPath: z.ZodObject<{
     orgID: z.ZodString;
     workspaceID: z.ZodString;
@@ -513,6 +587,7 @@ export declare const zListAgentRuntimeProfilesResponse: z.ZodArray<z.ZodIntersec
     workspaceId: z.ZodString;
     createdAt: z.ZodISODateTime;
     updatedAt: z.ZodISODateTime;
+    hasConfiguration: z.ZodOptional<z.ZodBoolean>;
 }, z.core.$strip>>>;
 export declare const zCreateAgentRuntimeProfileBody: z.ZodObject<{
     name: z.ZodString;
@@ -525,6 +600,7 @@ export declare const zCreateAgentRuntimeProfileBody: z.ZodObject<{
     }>;
     modelProvider: z.ZodString;
     modelIdentifier: z.ZodString;
+    configuration: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
 }, z.core.$strip>;
 export declare const zCreateAgentRuntimeProfilePath: z.ZodObject<{
     orgID: z.ZodString;
@@ -549,6 +625,7 @@ export declare const zCreateAgentRuntimeProfileResponse: z.ZodIntersection<z.Zod
     workspaceId: z.ZodString;
     createdAt: z.ZodISODateTime;
     updatedAt: z.ZodISODateTime;
+    hasConfiguration: z.ZodOptional<z.ZodBoolean>;
 }, z.core.$strip>>;
 export declare const zDeleteAgentRuntimeProfilePath: z.ZodObject<{
     orgID: z.ZodString;
@@ -570,6 +647,7 @@ export declare const zUpdateAgentRuntimeProfileBody: z.ZodObject<{
     }>;
     modelProvider: z.ZodString;
     modelIdentifier: z.ZodString;
+    configuration: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
 }, z.core.$strip>;
 export declare const zUpdateAgentRuntimeProfilePath: z.ZodObject<{
     orgID: z.ZodString;
@@ -595,6 +673,7 @@ export declare const zUpdateAgentRuntimeProfileResponse: z.ZodIntersection<z.Zod
     workspaceId: z.ZodString;
     createdAt: z.ZodISODateTime;
     updatedAt: z.ZodISODateTime;
+    hasConfiguration: z.ZodOptional<z.ZodBoolean>;
 }, z.core.$strip>>;
 export declare const zListExecutionProfilesPath: z.ZodObject<{
     orgID: z.ZodString;
@@ -1487,6 +1566,7 @@ export declare const zListAgentsResponse: z.ZodArray<z.ZodObject<{
     }>;
     mcpServerIds: z.ZodArray<z.ZodString>;
     skillIds: z.ZodArray<z.ZodString>;
+    hasConfiguration: z.ZodBoolean;
 }, z.core.$strip>>;
 export declare const zCreateAgentBody: z.ZodObject<{
     name: z.ZodString;
@@ -1509,6 +1589,7 @@ export declare const zCreateAgentBody: z.ZodObject<{
     runtimeProfileId: z.ZodOptional<z.ZodString>;
     mcpServerIds: z.ZodOptional<z.ZodArray<z.ZodString>>;
     skillIds: z.ZodOptional<z.ZodArray<z.ZodString>>;
+    configuration: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
 }, z.core.$strip>;
 export declare const zCreateAgentPath: z.ZodObject<{
     orgID: z.ZodString;
@@ -1540,6 +1621,7 @@ export declare const zCreateAgentResponse: z.ZodObject<{
     }>;
     mcpServerIds: z.ZodArray<z.ZodString>;
     skillIds: z.ZodArray<z.ZodString>;
+    hasConfiguration: z.ZodBoolean;
 }, z.core.$strip>;
 export declare const zDeleteAgentPath: z.ZodObject<{
     orgID: z.ZodString;
@@ -1581,6 +1663,7 @@ export declare const zGetAgentResponse: z.ZodObject<{
     }>;
     mcpServerIds: z.ZodArray<z.ZodString>;
     skillIds: z.ZodArray<z.ZodString>;
+    hasConfiguration: z.ZodBoolean;
 }, z.core.$strip>;
 export declare const zUpdateAgentBody: z.ZodObject<{
     name: z.ZodString;
@@ -1603,6 +1686,7 @@ export declare const zUpdateAgentBody: z.ZodObject<{
     runtimeProfileId: z.ZodOptional<z.ZodString>;
     mcpServerIds: z.ZodOptional<z.ZodArray<z.ZodString>>;
     skillIds: z.ZodOptional<z.ZodArray<z.ZodString>>;
+    configuration: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
 }, z.core.$strip>;
 export declare const zUpdateAgentPath: z.ZodObject<{
     orgID: z.ZodString;
@@ -1635,6 +1719,7 @@ export declare const zUpdateAgentResponse: z.ZodObject<{
     }>;
     mcpServerIds: z.ZodArray<z.ZodString>;
     skillIds: z.ZodArray<z.ZodString>;
+    hasConfiguration: z.ZodBoolean;
 }, z.core.$strip>;
 export declare const zListTasksPath: z.ZodObject<{
     orgID: z.ZodString;

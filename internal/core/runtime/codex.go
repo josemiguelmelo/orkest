@@ -22,4 +22,8 @@ func (CodexProvider) ValidateDefinition(definition Definition) error {
 	return nil
 }
 
+func (CodexProvider) ConfigurationSchema() []ConfigurationOption {
+	return []ConfigurationOption{{Name: "OPENAI_API_KEY", Description: "OpenAI API key (omit when using the local Codex login)", Sensitive: true}}
+}
+
 var _ Provider = CodexProvider{}

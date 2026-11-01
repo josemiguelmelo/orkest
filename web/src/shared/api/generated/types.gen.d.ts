@@ -182,6 +182,7 @@ export type Agent = {
     permissionPolicy: 'ask' | 'autonomous';
     mcpServerIds: Array<string>;
     skillIds: Array<string>;
+    hasConfiguration: boolean;
 };
 export type AgentRuntimeProfileInput = {
     name: string;
@@ -194,6 +195,17 @@ export type AgentRuntimeProfile = AgentRuntimeProfileInput & {
     workspaceId: string;
     createdAt: string;
     updatedAt: string;
+    hasConfiguration?: boolean;
+};
+export type RuntimeProvider = {
+    runtime: 'opencode' | 'claude-code' | 'codex' | 'github-copilot' | 'kiro';
+    configuration: Array<RuntimeConfigurationOption>;
+};
+export type RuntimeConfigurationOption = {
+    name: string;
+    description: string;
+    required: boolean;
+    sensitive: boolean;
 };
 export type McpServer = {
     id: string;
@@ -301,6 +313,25 @@ export type CurrentUserWritable = {
     user: User;
     organizations: Array<Organization>;
 };
+export type AgentRuntimeProfileInputWritable = {
+    name: string;
+    runtime: 'opencode' | 'claude-code' | 'codex' | 'github-copilot' | 'kiro';
+    modelProvider: string;
+    modelIdentifier: string;
+    /**
+     * Runtime environment values; values are write-only and encrypted at rest.
+     */
+    configuration?: {
+        [key: string]: string;
+    };
+};
+export type AgentRuntimeProfileWritable = AgentRuntimeProfileInputWritable & {
+    id: string;
+    workspaceId: string;
+    createdAt: string;
+    updatedAt: string;
+    hasConfiguration?: boolean;
+};
 export type CodingIntegrationInputWritable = {
     name: string;
     providerName: 'github' | 'gitlab_cloud' | 'gitlab_server';
@@ -348,6 +379,12 @@ export type AgentDefinition = {
     runtimeProfileId?: string;
     mcpServerIds?: Array<string>;
     skillIds?: Array<string>;
+    /**
+     * Runtime environment values; values are write-only and encrypted at rest.
+     */
+    configuration?: {
+        [key: string]: string;
+    };
 };
 export type McpServerInput = {
     name: string;
@@ -358,6 +395,19 @@ export type McpServerInput = {
 };
 export type CodeRepositoryCreate2 = CodeRepositoryCreate;
 export type TaskIntegration2 = TaskIntegrationInputWritable;
+export type ListRuntimeProvidersData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/runtime-providers';
+};
+export type ListRuntimeProvidersResponses = {
+    /**
+     * Runtime providers and supported environment configuration
+     */
+    200: Array<RuntimeProvider>;
+};
+export type ListRuntimeProvidersResponse = ListRuntimeProvidersResponses[keyof ListRuntimeProvidersResponses];
 export type ListAgentRuntimeProfilesData = {
     body?: never;
     path: {
@@ -386,7 +436,7 @@ export type ListAgentRuntimeProfilesResponses = {
 };
 export type ListAgentRuntimeProfilesResponse = ListAgentRuntimeProfilesResponses[keyof ListAgentRuntimeProfilesResponses];
 export type CreateAgentRuntimeProfileData = {
-    body: AgentRuntimeProfileInput;
+    body: AgentRuntimeProfileInputWritable;
     path: {
         orgID: string;
         workspaceID: string;
@@ -449,7 +499,7 @@ export type DeleteAgentRuntimeProfileResponses = {
 };
 export type DeleteAgentRuntimeProfileResponse = DeleteAgentRuntimeProfileResponses[keyof DeleteAgentRuntimeProfileResponses];
 export type UpdateAgentRuntimeProfileData = {
-    body: AgentRuntimeProfileInput;
+    body: AgentRuntimeProfileInputWritable;
     path: {
         orgID: string;
         workspaceID: string;

@@ -28,6 +28,7 @@ import {
   mcpQuery,
   path,
   skillsQuery,
+  runtimeProvidersQuery,
   useRefresh,
 } from '../../shared/api/queries';
 import {
@@ -57,6 +58,7 @@ const schema = z
     skillIds: z.array(z.string()),
     executionProfileId: z.string(),
     runtimeProfileId: z.string(),
+    configuration: z.record(z.string(), z.string()),
   })
   .superRefine((value, context) => {
     if (value.runtime === 'claude-code' && value.provider.toLowerCase() !== 'anthropic') {
@@ -70,10 +72,18 @@ const schema = z
       context.addIssue({ code: 'custom', path: ['provider'], message: 'Codex requires OpenAI.' });
     }
     if (value.runtime === 'github-copilot' && value.provider.toLowerCase() !== 'github-copilot') {
-      context.addIssue({ code: 'custom', path: ['provider'], message: 'GitHub Copilot requires the GitHub Copilot provider.' });
+      context.addIssue({
+        code: 'custom',
+        path: ['provider'],
+        message: 'GitHub Copilot requires the GitHub Copilot provider.',
+      });
     }
     if (value.runtime === 'kiro' && value.provider.toLowerCase() !== 'kiro') {
-      context.addIssue({ code: 'custom', path: ['provider'], message: 'Kiro requires the Kiro provider.' });
+      context.addIssue({
+        code: 'custom',
+        path: ['provider'],
+        message: 'Kiro requires the Kiro provider.',
+      });
     }
   });
 type ModelCatalog = Record<string, { name?: string; models?: Record<string, { name?: string }> }>;
@@ -306,16 +316,28 @@ function AgentEditor({ item, onClose }: { item: Agent | null; onClose: () => voi
   const servers = useQuery(mcpQuery(scope));
   const profiles = useQuery(profilesQuery(scope));
   const runtimeProfiles = useQuery(agentRuntimeProfilesQuery(scope));
+  const runtimeProviders = useQuery(runtimeProvidersQuery);
   const skills = useQuery(skillsQuery(scope));
   const catalog = useQuery(modelCatalogQuery);
-  const [customModel, setCustomModel] = useState(item?.runtime === 'github-copilot' || item?.runtime === 'kiro');
+  const [customModel, setCustomModel] = useState(
+    item?.runtime === 'github-copilot' || item?.runtime === 'kiro',
+  );
   const form = useForm({
     resolver: zodResolver(schema),
     defaultValues: {
       name: item?.name ?? '',
       description: item?.description ?? '',
       runtime: item?.runtime ?? 'opencode',
-      provider: item?.runtime === 'claude-code' ? 'anthropic' : item?.runtime === 'codex' ? 'openai' : item?.runtime === 'github-copilot' ? 'github-copilot' : item?.runtime === 'kiro' ? 'kiro' : (item?.provider ?? ''),
+      provider:
+        item?.runtime === 'claude-code'
+          ? 'anthropic'
+          : item?.runtime === 'codex'
+            ? 'openai'
+            : item?.runtime === 'github-copilot'
+              ? 'github-copilot'
+              : item?.runtime === 'kiro'
+                ? 'kiro'
+                : (item?.provider ?? ''),
       model: item?.model ?? '',
       systemPrompt: item?.systemPrompt ?? '',
       permissionPolicy: item?.permissionPolicy ?? 'ask',
@@ -323,6 +345,7 @@ function AgentEditor({ item, onClose }: { item: Agent | null; onClose: () => voi
       skillIds: item?.skillIds ?? [],
       executionProfileId: item?.executionProfileId ?? '',
       runtimeProfileId: item?.runtimeProfileId ?? '',
+      configuration: {},
     },
   });
   const runtimeField = form.register('runtime');
@@ -371,6 +394,31 @@ function AgentEditor({ item, onClose }: { item: Agent | null; onClose: () => voi
         </div>
         <div className="agent-form-section">
           <div className="agent-form-section-header">
+            <Wrench size={16} />
+            <span>Runtime configuration</span>
+          </div>
+          <div className="agent-form-section-content">
+            {(
+              runtimeProviders.data?.find((provider) => provider.runtime === form.watch('runtime'))
+                ?.configuration ?? []
+            ).map((option) => (
+              <Field
+                key={option.name}
+                label={`${option.name}${option.required ? ' (required if not in workspace)' : ''}`}
+                hint={`${option.description}${item?.hasConfiguration ? ' A saved value is retained when this field is blank.' : ''}`}
+              >
+                <input
+                  type={option.sensitive ? 'password' : 'text'}
+                  autoComplete="new-password"
+                  {...form.register(`configuration.${option.name}`)}
+                  placeholder={item?.hasConfiguration ? 'Saved value (leave blank to keep)' : ''}
+                />
+              </Field>
+            ))}
+          </div>
+        </div>
+        <div className="agent-form-section">
+          <div className="agent-form-section-header">
             <Cpu size={16} />
             <span>Model Configuration</span>
           </div>
@@ -383,6 +431,7 @@ function AgentEditor({ item, onClose }: { item: Agent | null; onClose: () => voi
                   form.setValue('runtimeProfileId', id, { shouldDirty: true });
                   const profile = runtimeProfiles.data?.find((p) => p.id === id);
                   if (profile) {
+                    form.setValue('configuration', {}, { shouldDirty: true });
                     form.setValue('runtime', profile.runtime, { shouldDirty: true });
                     form.setValue('provider', profile.modelProvider, { shouldDirty: true });
                     form.setValue('model', profile.modelIdentifier, { shouldDirty: true });
@@ -393,12 +442,15 @@ function AgentEditor({ item, onClose }: { item: Agent | null; onClose: () => voi
                 <option value="">Configure runtime and model manually</option>
                 {runtimeProfiles.data?.map((profile) => (
                   <option key={profile.id} value={profile.id}>
-                    {profile.name} ({runtimeName(profile.runtime)} · {profile.modelProvider}/{profile.modelIdentifier})
+                    {profile.name} ({runtimeName(profile.runtime)} · {profile.modelProvider}/
+                    {profile.modelIdentifier})
                   </option>
                 ))}
               </select>
               {runtimeProfiles.isError && <ErrorState error={runtimeProfiles.error} />}
-              {runtimeProfiles.data?.length === 0 && <p className="muted">No runtime profiles yet. Create one in Runtime profiles.</p>}
+              {runtimeProfiles.data?.length === 0 && (
+                <p className="muted">No runtime profiles yet. Create one in Runtime profiles.</p>
+              )}
             </Field>
             <Field label="Execution profile">
               <select
@@ -438,6 +490,7 @@ function AgentEditor({ item, onClose }: { item: Agent | null; onClose: () => voi
                 disabled={!!form.watch('runtimeProfileId')}
                 onChange={(event: ChangeEvent<HTMLSelectElement>) => {
                   void runtimeField.onChange(event);
+                  form.setValue('configuration', {}, { shouldDirty: true });
                   if (event.currentTarget.value === 'claude-code') {
                     form.setValue('provider', 'anthropic', { shouldDirty: true });
                     form.setValue('model', '', { shouldDirty: true });
@@ -465,17 +518,25 @@ function AgentEditor({ item, onClose }: { item: Agent | null; onClose: () => voi
                 <option value="kiro">Kiro</option>
               </select>
             </Field>
-            {customModel || form.watch('runtime') === 'github-copilot' || form.watch('runtime') === 'kiro' ? (
+            {customModel ||
+            form.watch('runtime') === 'github-copilot' ||
+            form.watch('runtime') === 'kiro' ? (
               <div className="form-grid">
                 <Field label="Model provider" error={form.formState.errors.provider?.message}>
                   <input
                     {...form.register('provider')}
                     placeholder="e.g., anthropic"
-                    disabled={form.watch('runtime') !== 'opencode' || !!form.watch('runtimeProfileId')}
+                    disabled={
+                      form.watch('runtime') !== 'opencode' || !!form.watch('runtimeProfileId')
+                    }
                   />
                 </Field>
                 <Field label="Model identifier" error={form.formState.errors.model?.message}>
-                  <input {...form.register('model')} placeholder="e.g., claude-sonnet-4" disabled={!!form.watch('runtimeProfileId')} />
+                  <input
+                    {...form.register('model')}
+                    placeholder="e.g., claude-sonnet-4"
+                    disabled={!!form.watch('runtimeProfileId')}
+                  />
                 </Field>
               </div>
             ) : (
@@ -488,20 +549,28 @@ function AgentEditor({ item, onClose }: { item: Agent | null; onClose: () => voi
                           ? 'anthropic'
                           : form.watch('runtime') === 'codex'
                             ? 'openai'
-                          : form.watch('provider')
+                            : form.watch('provider')
                       }
-                      disabled={form.watch('runtime') !== 'opencode' || !!form.watch('runtimeProfileId')}
+                      disabled={
+                        form.watch('runtime') !== 'opencode' || !!form.watch('runtimeProfileId')
+                      }
                       onChange={(event) => {
                         form.setValue('provider', event.target.value, { shouldDirty: true });
                         form.setValue('model', '', { shouldDirty: true });
                       }}
                     >
                       <option value="">Select a provider</option>
-                      {Object.entries(catalog.data ?? {}).filter(([id]) => form.watch('runtime') === 'opencode' || (form.watch('runtime') === 'codex' && id === 'openai')).map(([id, provider]) => (
-                        <option value={id} key={id}>
-                          {provider.name ?? id}
-                        </option>
-                      ))}
+                      {Object.entries(catalog.data ?? {})
+                        .filter(
+                          ([id]) =>
+                            form.watch('runtime') === 'opencode' ||
+                            (form.watch('runtime') === 'codex' && id === 'openai'),
+                        )
+                        .map(([id, provider]) => (
+                          <option value={id} key={id}>
+                            {provider.name ?? id}
+                          </option>
+                        ))}
                       {form.watch('provider') && !catalog.data?.[form.watch('provider')] && (
                         <option value={form.watch('provider')}>
                           {form.watch('provider')} (current)
@@ -576,7 +645,10 @@ function AgentEditor({ item, onClose }: { item: Agent | null; onClose: () => voi
             <span>Permission policy</span>
           </div>
           <div className="agent-form-section-content">
-            <Field label="Agent autonomy" hint="Autonomous mode skips approval prompts. Provider controls vary; Codex uses full access and Copilot allows all tools inside the isolated task environment.">
+            <Field
+              label="Agent autonomy"
+              hint="Autonomous mode skips approval prompts. Provider controls vary; Codex uses full access and Copilot allows all tools inside the isolated task environment."
+            >
               <select {...form.register('permissionPolicy')}>
                 <option value="ask">Ask for permission</option>
                 <option value="autonomous">Autonomous</option>
@@ -651,7 +723,9 @@ function AgentViewer({ item, onClose }: { item: Agent; onClose: () => void }) {
             </div>
             <div className="agent-viewer-row">
               <span className="agent-viewer-label">Permission policy</span>
-              <span>{item.permissionPolicy === 'autonomous' ? 'Autonomous' : 'Ask for permission'}</span>
+              <span>
+                {item.permissionPolicy === 'autonomous' ? 'Autonomous' : 'Ask for permission'}
+              </span>
             </div>
           </div>
         </div>

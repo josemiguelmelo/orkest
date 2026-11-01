@@ -17,6 +17,11 @@ export const meQuery = queryOptions({
   retry: false,
   staleTime: 60_000,
 });
+export const runtimeProvidersQuery = queryOptions({
+  queryKey: ['runtime-providers'],
+  queryFn: ({ signal }) => data(sdk.listRuntimeProviders({ ...command, signal })),
+  staleTime: 60 * 60 * 1000,
+});
 export const organizationsQuery = (userID: string) =>
   queryOptions({
     queryKey: [...keys.user(userID), 'organizations'],
@@ -166,5 +171,6 @@ export const profilesQuery = (s: WorkspaceScope) =>
 export const agentRuntimeProfilesQuery = (s: WorkspaceScope) =>
   queryOptions({
     queryKey: [...keys.workspace(s), 'agent-runtime-profiles'],
-    queryFn: ({ signal }) => data(sdk.listAgentRuntimeProfiles({ ...command, path: path(s), signal })),
+    queryFn: ({ signal }) =>
+      data(sdk.listAgentRuntimeProfiles({ ...command, path: path(s), signal })),
   });

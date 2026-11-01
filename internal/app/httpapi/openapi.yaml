@@ -3,6 +3,8 @@ info:
   title: Orkest API
   version: 0.0.0
 tags:
+  - name: RuntimeProviders
+    description: Supported runtime provider configuration schemas.
   - name: System
     description: Process health and service metadata.
   - name: Authentication
@@ -34,6 +36,13 @@ tags:
   - name: Tasks
     description: Workspace-scoped tasks, comments, and repository associations.
 paths:
+  /api/runtime-providers:
+    get:
+      tags: [RuntimeProviders]
+      operationId: listRuntimeProviders
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      responses:
+        "200": {description: Runtime providers and supported environment configuration, content: {application/json: {schema: {type: array, items: {$ref: "#/components/schemas/RuntimeProvider"}}}}}
   /api/organizations/{orgID}/workspaces/{workspaceID}/agent-runtime-profiles:
     parameters:
       - {name: orgID, in: path, required: true, schema: {type: string}}
@@ -1494,6 +1503,7 @@ components:
               runtimeProfileId: {type: string, description: Runtime profile ID; empty string uses manual model settings.}
               mcpServerIds: {type: array, uniqueItems: true, items: {type: string}}
               skillIds: {type: array, uniqueItems: true, items: {type: string}}
+              configuration: {type: object, description: Runtime environment values; values are write-only and encrypted at rest., writeOnly: true, additionalProperties: {type: string}}
             additionalProperties: false
     MCPServerInput:
       required: true
@@ -1731,7 +1741,7 @@ components:
         createdAt: {type: string, format: date-time}
     Agent:
       type: object
-      required: [id, workspaceId, name, runtime, provider, model, description, systemPrompt, permissionPolicy, mcpServerIds, skillIds]
+      required: [id, workspaceId, name, runtime, provider, model, description, systemPrompt, permissionPolicy, mcpServerIds, skillIds, hasConfiguration]
       properties:
         executionProfileId: {type: string}
         runtimeProfileId: {type: string}
@@ -1746,6 +1756,7 @@ components:
         permissionPolicy: {type: string, enum: [ask, autonomous]}
         mcpServerIds: {type: array, items: {type: string}}
         skillIds: {type: array, items: {type: string}}
+        hasConfiguration: {type: boolean}
     AgentRuntimeProfileInput:
       type: object
       required: [name, runtime, modelProvider, modelIdentifier]
@@ -1754,6 +1765,7 @@ components:
         runtime: {type: string, enum: [opencode, claude-code, codex, github-copilot, kiro]}
         modelProvider: {type: string, minLength: 1, maxLength: 200}
         modelIdentifier: {type: string, minLength: 1, maxLength: 200}
+        configuration: {type: object, description: Runtime environment values; values are write-only and encrypted at rest., writeOnly: true, additionalProperties: {type: string}}
     AgentRuntimeProfile:
       allOf:
         - {$ref: "#/components/schemas/AgentRuntimeProfileInput"}
@@ -1764,6 +1776,21 @@ components:
             workspaceId: {type: string}
             createdAt: {type: string, format: date-time}
             updatedAt: {type: string, format: date-time}
+            hasConfiguration: {type: boolean}
+    RuntimeProvider:
+      type: object
+      required: [runtime, configuration]
+      properties:
+        runtime: {type: string, enum: [opencode, claude-code, codex, github-copilot, kiro]}
+        configuration: {type: array, items: {$ref: "#/components/schemas/RuntimeConfigurationOption"}}
+    RuntimeConfigurationOption:
+      type: object
+      required: [name, description, required, sensitive]
+      properties:
+        name: {type: string}
+        description: {type: string}
+        required: {type: boolean}
+        sensitive: {type: boolean}
     MCPServer:
       type: object
       required: [id, workspaceId, name, url, hasHeaders]

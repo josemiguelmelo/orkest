@@ -9,6 +9,11 @@ import (
 
 type agentRuntimeProfileAPI struct{ service *agentruntimeprofile.Service }
 
+type runtimeProfileRequest struct {
+	agentruntimeprofile.Profile
+	Configuration map[string]string `json:"configuration"`
+}
+
 func (a agentRuntimeProfileAPI) routes(r chi.Router) {
 	r.Route("/organizations/{orgID}/workspaces/{workspaceID}/agent-runtime-profiles", func(r chi.Router) {
 		r.Get("/", a.list)
@@ -24,19 +29,23 @@ func (a agentRuntimeProfileAPI) list(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a agentRuntimeProfileAPI) create(w http.ResponseWriter, r *http.Request) {
-	var input agentruntimeprofile.Profile
-	if !decodeBody(w, r, &input) {
+	var request runtimeProfileRequest
+	if !decodeBody(w, r, &request) {
 		return
 	}
+	input := request.Profile
+	input.Configuration = request.Configuration
 	v, err := a.service.Save(r.Context(), currentUserID(r), chi.URLParam(r, "orgID"), chi.URLParam(r, "workspaceID"), "", input)
 	respond(w, v, err, http.StatusCreated)
 }
 
 func (a agentRuntimeProfileAPI) update(w http.ResponseWriter, r *http.Request) {
-	var input agentruntimeprofile.Profile
-	if !decodeBody(w, r, &input) {
+	var request runtimeProfileRequest
+	if !decodeBody(w, r, &request) {
 		return
 	}
+	input := request.Profile
+	input.Configuration = request.Configuration
 	v, err := a.service.Save(r.Context(), currentUserID(r), chi.URLParam(r, "orgID"), chi.URLParam(r, "workspaceID"), chi.URLParam(r, "profileID"), input)
 	respond(w, v, err, http.StatusOK)
 }

@@ -118,10 +118,18 @@ An agent definition is reusable configuration containing:
 
 An agent definition belongs to a workspace and does not itself supply execution capacity. Its versioning policy remains open.
 
+Runtime providers expose a machine-readable schema for supported environment
+configuration. Agent definitions and reusable runtime profiles may set those
+values directly. Configuration values are encrypted at rest, write-only in
+configuration APIs, and supplied to new runs alongside workspace environment
+values; agent/profile values take precedence for matching variable names.
+
 Workspace runtime profiles are reusable presets containing a name, runtime,
-model provider, and model identifier. Agent definitions can select a runtime
-profile or configure those three settings directly. Updating a runtime profile
-updates every linked agent definition together; deleting it preserves the
+model provider, model identifier, and provider-specific environment
+configuration. Agent definitions can select a runtime profile or configure
+runtime and model settings directly. Updating a runtime profile updates every
+linked agent definition together, including its provider configuration;
+deleting it preserves the
 linked agents' last resolved settings and returns them to direct configuration.
 Execution image/toolchain profiles remain a separate resource.
 

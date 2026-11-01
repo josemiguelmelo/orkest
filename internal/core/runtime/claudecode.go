@@ -24,4 +24,8 @@ func (ClaudeCodeProvider) ValidateDefinition(definition Definition) error {
 	return nil
 }
 
+func (ClaudeCodeProvider) ConfigurationSchema() []ConfigurationOption {
+	return []ConfigurationOption{{Name: "ANTHROPIC_API_KEY", Description: "Anthropic API key", Required: true, Sensitive: true}}
+}
+
 var _ Provider = ClaudeCodeProvider{}
