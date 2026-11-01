@@ -26,6 +26,7 @@ func (a directChatAPI) routes(r chi.Router) {
 		r.Get("/", a.list)
 		r.Post("/", a.create)
 		r.Route("/{conversationID}", func(r chi.Router) {
+			r.Delete("/", a.delete)
 			r.Get("/runs", a.runs)
 			r.Get("/runs/{runID}/events", a.events)
 			r.Post("/runs/{runID}/prompts", a.prompt)
@@ -35,6 +36,15 @@ func (a directChatAPI) routes(r chi.Router) {
 			r.Post("/runs/{runID}/permissions/respond", a.respondPermission)
 		})
 	})
+}
+
+func (a directChatAPI) delete(w http.ResponseWriter, r *http.Request) {
+	orgID, workspaceID, _ := scopeParams(r)
+	if err := a.authorizeWrite(r, orgID, workspaceID); err != nil {
+		respond(w, nil, err, http.StatusOK)
+		return
+	}
+	respond(w, nil, a.chats.Delete(r.Context(), orgID, workspaceID, chi.URLParam(r, "conversationID")), http.StatusNoContent)
 }
 
 func (a directChatAPI) list(w http.ResponseWriter, r *http.Request) {

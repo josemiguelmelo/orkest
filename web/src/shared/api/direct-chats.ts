@@ -7,7 +7,12 @@ const base = (scope: WorkspaceScope) =>
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
   const response = await fetch(url, { credentials: 'same-origin', ...init, headers: { 'Content-Type': 'application/json', ...init?.headers } });
-  if (!response.ok) throw new Error(`Direct conversation request failed (${response.status}).`);
+  if (!response.ok) {
+    if (init?.method === 'DELETE' && response.status === 409) {
+      throw new Error('This chat still has an active or closing run. Wait for it to finish before removing it.');
+    }
+    throw new Error(`Direct conversation request failed (${response.status}).`);
+  }
   if (response.status === 204 || response.status === 202) return undefined as T;
   return (await response.json()) as T;
 }
@@ -16,6 +21,8 @@ export const directChats = {
   list: (scope: WorkspaceScope) => request<DirectConversation[]>(base(scope)),
   create: (scope: WorkspaceScope, agentId: string) =>
     request<DirectConversation>(base(scope), { method: 'POST', body: JSON.stringify({ agentId }) }),
+  remove: (scope: WorkspaceScope, id: string) =>
+    request<void>(`${base(scope)}/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   runs: (scope: WorkspaceScope, id: string) => request<TaskRun[]>(`${base(scope)}/${encodeURIComponent(id)}/runs`),
   events: (scope: WorkspaceScope, id: string, runId: string) =>
     request<TaskRunEvent[]>(`${base(scope)}/${encodeURIComponent(id)}/runs/${encodeURIComponent(runId)}/events`),

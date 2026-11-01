@@ -2974,6 +2974,42 @@ export type ListDirectAgentConversationRunsResponses = {
     200: Array<TaskRun>;
 };
 export type ListDirectAgentConversationRunsResponse = ListDirectAgentConversationRunsResponses[keyof ListDirectAgentConversationRunsResponses];
+export type DeleteDirectAgentConversationData = {
+    body?: never;
+    path: {
+        orgID: string;
+        workspaceID: string;
+        conversationID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/agent-conversations/{conversationID}';
+};
+export type DeleteDirectAgentConversationErrors = {
+    /**
+     * Missing or invalid credentials
+     */
+    401: Error;
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+    /**
+     * Resource is absent or inaccessible
+     */
+    404: Error;
+    /**
+     * The conversation still has an active or closing run
+     */
+    409: Error;
+};
+export type DeleteDirectAgentConversationError = DeleteDirectAgentConversationErrors[keyof DeleteDirectAgentConversationErrors];
+export type DeleteDirectAgentConversationResponses = {
+    /**
+     * Conversation and saved run history deleted
+     */
+    204: void;
+};
+export type DeleteDirectAgentConversationResponse = DeleteDirectAgentConversationResponses[keyof DeleteDirectAgentConversationResponses];
 export type ListDirectAgentConversationEventsData = {
     body?: never;
     path: {

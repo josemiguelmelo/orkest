@@ -48,6 +48,38 @@ func (r *AgentLaunchPostgresRepository) ListDirectConversations(ctx context.Cont
 	return items, nil
 }
 
+func (r *AgentLaunchPostgresRepository) DeleteDirectConversation(ctx context.Context, orgID, workspaceID, conversationID string) error {
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin direct conversation deletion: %w", err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := r.queries.WithTx(tx)
+	if _, err = q.LockDirectConversation(ctx, sqlc.LockDirectConversationParams{OrganizationID: orgID, WorkspaceID: workspaceID, ID: conversationID}); errors.Is(err, pgx.ErrNoRows) {
+		return modelerrors.ErrNotFound
+	} else if err != nil {
+		return fmt.Errorf("lock direct conversation: %w", err)
+	}
+	if _, err = q.ActiveDirectConversationLaunch(ctx, sqlc.ActiveDirectConversationLaunchParams{WorkspaceID: workspaceID, TaskID: conversationID}); err == nil {
+		return modelerrors.ErrConflict
+	} else if !errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("check direct conversation activity: %w", err)
+	}
+	if err = q.DeleteDirectConversationLaunches(ctx, sqlc.DeleteDirectConversationLaunchesParams{OrganizationID: orgID, WorkspaceID: workspaceID, TaskID: conversationID}); err != nil {
+		return fmt.Errorf("delete direct conversation runs: %w", err)
+	}
+	if err = q.DeleteDirectConversationSessions(ctx, sqlc.DeleteDirectConversationSessionsParams{OrganizationID: orgID, WorkspaceID: workspaceID, TaskID: conversationID}); err != nil {
+		return fmt.Errorf("delete direct conversation sessions: %w", err)
+	}
+	if _, err = q.DeleteDirectConversation(ctx, sqlc.DeleteDirectConversationParams{OrganizationID: orgID, WorkspaceID: workspaceID, ID: conversationID}); err != nil {
+		return fmt.Errorf("delete direct conversation: %w", err)
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit direct conversation deletion: %w", err)
+	}
+	return nil
+}
+
 func (r *AgentLaunchPostgresRepository) CurrentDirectSession(ctx context.Context, orgID, workspaceID, conversationID string) (runconfig.RunConfig, bool, error) {
 	return r.CurrentSession(ctx, orgID, workspaceID, conversationID)
 }
