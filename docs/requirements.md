@@ -179,6 +179,7 @@ Required user-facing capabilities:
 - Inspect and answer approval requests.
 - Cancel execution and resume interrupted work, with precise semantics still to be defined.
 - Inspect failures and results without losing prior conversation or execution history.
+- Start a workspace-scoped conversation with an agent definition directly, without creating a task. Direct conversations use the same session and interaction behavior as task chat, but do not receive an initial task-context prompt or change task workflow state.
 
 ### 4.1 Runtime selection
 

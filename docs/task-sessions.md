@@ -5,6 +5,13 @@ older conversations. A run is one explicit work step; several runs can load the
 same runtime session. Infrastructure recovery retains the run ID. Assignment
 and status changes outside an explicit work start do not launch anything.
 
+Direct agent conversations are workspace-scoped records linked to an agent
+definition. They use the same durable runtime sessions, launch history, event
+replay, approval, cancellation, and prompt queue behavior. Creating a direct
+conversation starts the runtime without an initial task-context prompt; the
+first user message is sent as the first prompt. Direct conversations do not
+create workflow tasks or modify task status.
+
 ## Starting and iterating
 
 The task start controls offer **Continue session** (default) and **New session**
@@ -118,3 +125,8 @@ Its active-task unique index intentionally fails if older data already contains
 overlapping active runs: reconcile those executions before applying it. Rolling
 back drops the new session metadata and prompt outbox; it does not delete task
 working files. Complete host/disk loss remains outside the recovery guarantee.
+
+Migration 0032 lets the session table store direct-conversation identities in
+addition to task IDs. Rolling it back deletes persisted direct conversation
+records, their sessions, and their launch history; it does not stop agent
+processes already running in execution environments.

@@ -1165,6 +1165,118 @@ paths:
       security: [{bearerAuth: []}, {cookieAuth: []}]
       requestBody: {required: true, content: {application/json: {schema: {type: object, required: [requestId, sessionId, optionId], properties: {requestId: {type: string}, sessionId: {type: string}, optionId: {type: string}}}}}}
       responses: {"202": {description: Permission response accepted}, "400": {$ref: "#/components/responses/BadRequest"}, "401": {$ref: "#/components/responses/Unauthorized"}, "403": {$ref: "#/components/responses/Forbidden"}, "404": {$ref: "#/components/responses/NotFound"}, "409": {$ref: "#/components/responses/Conflict"}}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/agent-conversations:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [Agents]
+      operationId: listDirectAgentConversations
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      responses:
+        "200": {description: Direct conversations, content: {application/json: {schema: {type: array, items: {$ref: "#/components/schemas/DirectAgentConversation"}}}}}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+    post:
+      tags: [Agents]
+      operationId: createDirectAgentConversation
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [agentId], properties: {agentId: {type: string}}}}}}
+      responses:
+        "201": {description: Conversation created and agent session started, content: {application/json: {schema: {$ref: "#/components/schemas/DirectAgentConversation"}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "409": {$ref: "#/components/responses/Conflict"}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/agent-conversations/{conversationID}/runs:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+      - {name: conversationID, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [Agents]
+      operationId: listDirectAgentConversationRuns
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      responses:
+        "200": {description: Conversation run history, content: {application/json: {schema: {type: array, items: {$ref: "#/components/schemas/TaskRun"}}}}}
+        "404": {$ref: "#/components/responses/NotFound"}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/agent-conversations/{conversationID}/runs/{runID}/events:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+      - {name: conversationID, in: path, required: true, schema: {type: string}}
+      - {name: runID, in: path, required: true, schema: {type: string}}
+      - {name: afterSequence, in: query, required: false, schema: {type: integer, minimum: 0}}
+    get:
+      tags: [Agents]
+      operationId: listDirectAgentConversationEvents
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      responses:
+        "200": {description: Ordered run activity, content: {application/json: {schema: {type: array, items: {$ref: "#/components/schemas/TaskRunEvent"}}}}}
+        "404": {$ref: "#/components/responses/NotFound"}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/agent-conversations/{conversationID}/runs/{runID}/prompts:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+      - {name: conversationID, in: path, required: true, schema: {type: string}}
+      - {name: runID, in: path, required: true, schema: {type: string}}
+    post:
+      tags: [Agents]
+      operationId: sendDirectAgentConversationPrompt
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [commandId, text], properties: {commandId: {type: string, minLength: 1, maxLength: 200}, text: {type: string, minLength: 1, maxLength: 262144}}}}}}
+      responses:
+        "202": {description: Prompt accepted}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/agent-conversations/{conversationID}/runs/{runID}/cancel:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+      - {name: conversationID, in: path, required: true, schema: {type: string}}
+      - {name: runID, in: path, required: true, schema: {type: string}}
+    post:
+      tags: [Agents]
+      operationId: cancelDirectAgentConversationPrompt
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [commandId], properties: {commandId: {type: string, minLength: 1}}}}}}
+      responses: {"202": {description: Cancellation accepted}, "403": {$ref: "#/components/responses/Forbidden"}, "404": {$ref: "#/components/responses/NotFound"}}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/agent-conversations/{conversationID}/runs/{runID}/queue/resume:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+      - {name: conversationID, in: path, required: true, schema: {type: string}}
+      - {name: runID, in: path, required: true, schema: {type: string}}
+    post:
+      tags: [Agents]
+      operationId: resumeDirectAgentConversationQueue
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      responses: {"202": {description: Queue resumed}, "403": {$ref: "#/components/responses/Forbidden"}, "404": {$ref: "#/components/responses/NotFound"}}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/agent-conversations/{conversationID}/runs/{runID}/queue/discard:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+      - {name: conversationID, in: path, required: true, schema: {type: string}}
+      - {name: runID, in: path, required: true, schema: {type: string}}
+    post:
+      tags: [Agents]
+      operationId: discardDirectAgentConversationQueue
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      responses: {"202": {description: Queued prompts discarded}, "403": {$ref: "#/components/responses/Forbidden"}, "404": {$ref: "#/components/responses/NotFound"}}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/agent-conversations/{conversationID}/runs/{runID}/permissions/respond:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+      - {name: conversationID, in: path, required: true, schema: {type: string}}
+      - {name: runID, in: path, required: true, schema: {type: string}}
+    post:
+      tags: [Agents]
+      operationId: respondDirectAgentConversationPermission
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, required: [requestId, sessionId, optionId], properties: {requestId: {type: string}, sessionId: {type: string}, optionId: {type: string}}}}}}
+      responses: {"202": {description: Permission response accepted}, "403": {$ref: "#/components/responses/Forbidden"}, "404": {$ref: "#/components/responses/NotFound"}}
   /api/organizations/{orgID}/workspaces/{workspaceID}/tasks/{taskID}/comments:
     parameters:
       - {name: orgID, in: path, required: true, schema: {type: string}}
@@ -1546,6 +1658,13 @@ components:
         failureReason: {type: string}
         lastSequence: {type: integer, minimum: 0}
         updatedAt: {type: string, format: date-time}
+    DirectAgentConversation:
+      type: object
+      required: [id, agentId, createdAt]
+      properties:
+        id: {type: string}
+        agentId: {type: string}
+        createdAt: {type: string, format: date-time}
     TaskRunEvent:
       type: object
       required: [runId, sequence, payload]

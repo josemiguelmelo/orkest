@@ -3,7 +3,8 @@ import { useQuery } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Bot, Brain, Cpu, Eye, FileText, Sparkles, Wrench, X } from 'lucide-react';
+import { Bot, Brain, Cpu, Eye, FileText, MessageSquare, Sparkles, Wrench, X } from 'lucide-react';
+import { Link, useNavigate } from '@tanstack/react-router';
 import { useApp } from '../../app/context';
 import * as sdk from '../../shared/api/generated/sdk.gen';
 import type { Agent } from '../../shared/api/generated/types.gen';
@@ -12,6 +13,7 @@ import {
   agentsQuery,
   profilesQuery,
   agentRuntimeProfilesQuery,
+  directChatsQuery,
   mcpQuery,
   path,
   skillsQuery,
@@ -30,6 +32,7 @@ import { Button } from '../../shared/ui/button';
 import { Dialog } from '../../shared/ui/dialog';
 import { Field, Form, Selection } from '../../shared/ui/form';
 import { useAction } from '../../shared/use-action';
+import { directChats } from '../../shared/api/direct-chats';
 const schema = z
   .object({
     name: z.string().trim().min(1).max(200),
@@ -81,7 +84,9 @@ function runtimeName(runtime: Agent['runtime']) {
 }
 export function AgentsPage() {
   const { scope, permissions } = useApp();
+  const navigate = useNavigate();
   const agents = useQuery(agentsQuery(scope));
+  const conversations = useQuery(directChatsQuery(scope));
   const refresh = useRefresh();
   const [editing, setEditing] = useState<Agent | null | undefined>();
   const [viewing, setViewing] = useState<Agent>();
@@ -137,6 +142,13 @@ export function AgentsPage() {
               </div>
               {permissions.editWorkspace ? (
                 <div className="agent-card-actions">
+                  <Button variant="outline" size="sm" onClick={() => void (async () => {
+                    const conversation = await directChats.create(scope, item.id);
+                    await navigate({ to: '/organizations/$orgId/workspaces/$workspaceId/agents/chats/$conversationId', params: { orgId: scope.orgID, workspaceId: scope.workspaceID, conversationId: conversation.id } });
+                  })()}>
+                    <MessageSquare size={14} />
+                    Chat
+                  </Button>
                   <Button variant="outline" size="sm" onClick={() => setViewing(item)}>
                     <Eye size={14} />
                     View
@@ -161,6 +173,24 @@ export function AgentsPage() {
                     <FileText size={14} />
                     View instructions
                   </Button>
+                </div>
+              )}
+              {(conversations.data ?? []).some((conversation) => conversation.agentId === item.id) && (
+                <div className="agent-card-actions" aria-label={`${item.name} conversations`}>
+                  {(conversations.data ?? [])
+                    .filter((conversation) => conversation.agentId === item.id)
+                    .slice(0, 3)
+                    .map((conversation, index) => (
+                      <Link
+                        className="button button-ghost button-sm"
+                        key={conversation.id}
+                        to="/organizations/$orgId/workspaces/$workspaceId/agents/chats/$conversationId"
+                        params={{ orgId: scope.orgID, workspaceId: scope.workspaceID, conversationId: conversation.id }}
+                      >
+                        <MessageSquare size={13} />
+                        Conversation {index + 1}
+                      </Link>
+                    ))}
                 </div>
               )}
             </article>

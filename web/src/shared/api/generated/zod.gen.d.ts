@@ -166,6 +166,11 @@ export declare const zTaskRun: z.ZodObject<{
     lastSequence: z.ZodInt;
     updatedAt: z.ZodISODateTime;
 }, z.core.$strip>;
+export declare const zDirectAgentConversation: z.ZodObject<{
+    id: z.ZodString;
+    agentId: z.ZodString;
+    createdAt: z.ZodISODateTime;
+}, z.core.$strip>;
 export declare const zTaskRunEvent: z.ZodObject<{
     runId: z.ZodString;
     sequence: z.ZodInt;
@@ -1875,6 +1880,115 @@ export declare const zRespondTaskRunPermissionPath: z.ZodObject<{
     orgID: z.ZodString;
     workspaceID: z.ZodString;
     taskID: z.ZodString;
+    runID: z.ZodString;
+}, z.core.$strip>;
+export declare const zListDirectAgentConversationsPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+}, z.core.$strip>;
+/**
+ * Direct conversations
+ */
+export declare const zListDirectAgentConversationsResponse: z.ZodArray<z.ZodObject<{
+    id: z.ZodString;
+    agentId: z.ZodString;
+    createdAt: z.ZodISODateTime;
+}, z.core.$strip>>;
+export declare const zCreateDirectAgentConversationBody: z.ZodObject<{
+    agentId: z.ZodString;
+}, z.core.$strip>;
+export declare const zCreateDirectAgentConversationPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+}, z.core.$strip>;
+/**
+ * Conversation created and agent session started
+ */
+export declare const zCreateDirectAgentConversationResponse: z.ZodObject<{
+    id: z.ZodString;
+    agentId: z.ZodString;
+    createdAt: z.ZodISODateTime;
+}, z.core.$strip>;
+export declare const zListDirectAgentConversationRunsPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+    conversationID: z.ZodString;
+}, z.core.$strip>;
+/**
+ * Conversation run history
+ */
+export declare const zListDirectAgentConversationRunsResponse: z.ZodArray<z.ZodObject<{
+    executionImage: z.ZodOptional<z.ZodString>;
+    recoveryBlocked: z.ZodOptional<z.ZodBoolean>;
+    executionState: z.ZodOptional<z.ZodString>;
+    queuePaused: z.ZodOptional<z.ZodBoolean>;
+    queueDepth: z.ZodOptional<z.ZodInt>;
+    runId: z.ZodString;
+    taskSessionId: z.ZodOptional<z.ZodString>;
+    taskId: z.ZodString;
+    status: z.ZodString;
+    failureStage: z.ZodOptional<z.ZodString>;
+    failureReason: z.ZodOptional<z.ZodString>;
+    lastSequence: z.ZodInt;
+    updatedAt: z.ZodISODateTime;
+}, z.core.$strip>>;
+export declare const zListDirectAgentConversationEventsPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+    conversationID: z.ZodString;
+    runID: z.ZodString;
+}, z.core.$strip>;
+export declare const zListDirectAgentConversationEventsQuery: z.ZodObject<{
+    afterSequence: z.ZodOptional<z.ZodInt>;
+}, z.core.$strip>;
+/**
+ * Ordered run activity
+ */
+export declare const zListDirectAgentConversationEventsResponse: z.ZodArray<z.ZodObject<{
+    runId: z.ZodString;
+    sequence: z.ZodInt;
+    payload: z.ZodRecord<z.ZodString, z.ZodUnknown>;
+}, z.core.$strip>>;
+export declare const zSendDirectAgentConversationPromptBody: z.ZodObject<{
+    commandId: z.ZodString;
+    text: z.ZodString;
+}, z.core.$strip>;
+export declare const zSendDirectAgentConversationPromptPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+    conversationID: z.ZodString;
+    runID: z.ZodString;
+}, z.core.$strip>;
+export declare const zCancelDirectAgentConversationPromptBody: z.ZodObject<{
+    commandId: z.ZodString;
+}, z.core.$strip>;
+export declare const zCancelDirectAgentConversationPromptPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+    conversationID: z.ZodString;
+    runID: z.ZodString;
+}, z.core.$strip>;
+export declare const zResumeDirectAgentConversationQueuePath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+    conversationID: z.ZodString;
+    runID: z.ZodString;
+}, z.core.$strip>;
+export declare const zDiscardDirectAgentConversationQueuePath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+    conversationID: z.ZodString;
+    runID: z.ZodString;
+}, z.core.$strip>;
+export declare const zRespondDirectAgentConversationPermissionBody: z.ZodObject<{
+    requestId: z.ZodString;
+    sessionId: z.ZodString;
+    optionId: z.ZodString;
+}, z.core.$strip>;
+export declare const zRespondDirectAgentConversationPermissionPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+    conversationID: z.ZodString;
     runID: z.ZodString;
 }, z.core.$strip>;
 export declare const zListTaskCommentsPath: z.ZodObject<{

@@ -122,6 +122,11 @@ export type TaskRun = {
     lastSequence: number;
     updatedAt: string;
 };
+export type DirectAgentConversation = {
+    id: string;
+    agentId: string;
+    createdAt: string;
+};
 export type TaskRunEvent = {
     runId: string;
     sequence: number;
@@ -2876,6 +2881,278 @@ export type RespondTaskRunPermissionErrors = {
 };
 export type RespondTaskRunPermissionError = RespondTaskRunPermissionErrors[keyof RespondTaskRunPermissionErrors];
 export type RespondTaskRunPermissionResponses = {
+    /**
+     * Permission response accepted
+     */
+    202: unknown;
+};
+export type ListDirectAgentConversationsData = {
+    body?: never;
+    path: {
+        orgID: string;
+        workspaceID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/agent-conversations';
+};
+export type ListDirectAgentConversationsErrors = {
+    /**
+     * Missing or invalid credentials
+     */
+    401: Error;
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+};
+export type ListDirectAgentConversationsError = ListDirectAgentConversationsErrors[keyof ListDirectAgentConversationsErrors];
+export type ListDirectAgentConversationsResponses = {
+    /**
+     * Direct conversations
+     */
+    200: Array<DirectAgentConversation>;
+};
+export type ListDirectAgentConversationsResponse = ListDirectAgentConversationsResponses[keyof ListDirectAgentConversationsResponses];
+export type CreateDirectAgentConversationData = {
+    body: {
+        agentId: string;
+    };
+    path: {
+        orgID: string;
+        workspaceID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/agent-conversations';
+};
+export type CreateDirectAgentConversationErrors = {
+    /**
+     * Request body or role is invalid
+     */
+    400: Error;
+    /**
+     * Missing or invalid credentials
+     */
+    401: Error;
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+    /**
+     * Operation conflicts with an existing resource or invariant
+     */
+    409: Error;
+};
+export type CreateDirectAgentConversationError = CreateDirectAgentConversationErrors[keyof CreateDirectAgentConversationErrors];
+export type CreateDirectAgentConversationResponses = {
+    /**
+     * Conversation created and agent session started
+     */
+    201: DirectAgentConversation;
+};
+export type CreateDirectAgentConversationResponse = CreateDirectAgentConversationResponses[keyof CreateDirectAgentConversationResponses];
+export type ListDirectAgentConversationRunsData = {
+    body?: never;
+    path: {
+        orgID: string;
+        workspaceID: string;
+        conversationID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/agent-conversations/{conversationID}/runs';
+};
+export type ListDirectAgentConversationRunsErrors = {
+    /**
+     * Resource is absent or inaccessible
+     */
+    404: Error;
+};
+export type ListDirectAgentConversationRunsError = ListDirectAgentConversationRunsErrors[keyof ListDirectAgentConversationRunsErrors];
+export type ListDirectAgentConversationRunsResponses = {
+    /**
+     * Conversation run history
+     */
+    200: Array<TaskRun>;
+};
+export type ListDirectAgentConversationRunsResponse = ListDirectAgentConversationRunsResponses[keyof ListDirectAgentConversationRunsResponses];
+export type ListDirectAgentConversationEventsData = {
+    body?: never;
+    path: {
+        orgID: string;
+        workspaceID: string;
+        conversationID: string;
+        runID: string;
+    };
+    query?: {
+        afterSequence?: number;
+    };
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/agent-conversations/{conversationID}/runs/{runID}/events';
+};
+export type ListDirectAgentConversationEventsErrors = {
+    /**
+     * Resource is absent or inaccessible
+     */
+    404: Error;
+};
+export type ListDirectAgentConversationEventsError = ListDirectAgentConversationEventsErrors[keyof ListDirectAgentConversationEventsErrors];
+export type ListDirectAgentConversationEventsResponses = {
+    /**
+     * Ordered run activity
+     */
+    200: Array<TaskRunEvent>;
+};
+export type ListDirectAgentConversationEventsResponse = ListDirectAgentConversationEventsResponses[keyof ListDirectAgentConversationEventsResponses];
+export type SendDirectAgentConversationPromptData = {
+    body: {
+        commandId: string;
+        text: string;
+    };
+    path: {
+        orgID: string;
+        workspaceID: string;
+        conversationID: string;
+        runID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/agent-conversations/{conversationID}/runs/{runID}/prompts';
+};
+export type SendDirectAgentConversationPromptErrors = {
+    /**
+     * Request body or role is invalid
+     */
+    400: Error;
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+    /**
+     * Resource is absent or inaccessible
+     */
+    404: Error;
+    /**
+     * Operation conflicts with an existing resource or invariant
+     */
+    409: Error;
+};
+export type SendDirectAgentConversationPromptError = SendDirectAgentConversationPromptErrors[keyof SendDirectAgentConversationPromptErrors];
+export type SendDirectAgentConversationPromptResponses = {
+    /**
+     * Prompt accepted
+     */
+    202: unknown;
+};
+export type CancelDirectAgentConversationPromptData = {
+    body: {
+        commandId: string;
+    };
+    path: {
+        orgID: string;
+        workspaceID: string;
+        conversationID: string;
+        runID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/agent-conversations/{conversationID}/runs/{runID}/cancel';
+};
+export type CancelDirectAgentConversationPromptErrors = {
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+    /**
+     * Resource is absent or inaccessible
+     */
+    404: Error;
+};
+export type CancelDirectAgentConversationPromptError = CancelDirectAgentConversationPromptErrors[keyof CancelDirectAgentConversationPromptErrors];
+export type CancelDirectAgentConversationPromptResponses = {
+    /**
+     * Cancellation accepted
+     */
+    202: unknown;
+};
+export type ResumeDirectAgentConversationQueueData = {
+    body?: never;
+    path: {
+        orgID: string;
+        workspaceID: string;
+        conversationID: string;
+        runID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/agent-conversations/{conversationID}/runs/{runID}/queue/resume';
+};
+export type ResumeDirectAgentConversationQueueErrors = {
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+    /**
+     * Resource is absent or inaccessible
+     */
+    404: Error;
+};
+export type ResumeDirectAgentConversationQueueError = ResumeDirectAgentConversationQueueErrors[keyof ResumeDirectAgentConversationQueueErrors];
+export type ResumeDirectAgentConversationQueueResponses = {
+    /**
+     * Queue resumed
+     */
+    202: unknown;
+};
+export type DiscardDirectAgentConversationQueueData = {
+    body?: never;
+    path: {
+        orgID: string;
+        workspaceID: string;
+        conversationID: string;
+        runID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/agent-conversations/{conversationID}/runs/{runID}/queue/discard';
+};
+export type DiscardDirectAgentConversationQueueErrors = {
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+    /**
+     * Resource is absent or inaccessible
+     */
+    404: Error;
+};
+export type DiscardDirectAgentConversationQueueError = DiscardDirectAgentConversationQueueErrors[keyof DiscardDirectAgentConversationQueueErrors];
+export type DiscardDirectAgentConversationQueueResponses = {
+    /**
+     * Queued prompts discarded
+     */
+    202: unknown;
+};
+export type RespondDirectAgentConversationPermissionData = {
+    body: {
+        requestId: string;
+        sessionId: string;
+        optionId: string;
+    };
+    path: {
+        orgID: string;
+        workspaceID: string;
+        conversationID: string;
+        runID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/agent-conversations/{conversationID}/runs/{runID}/permissions/respond';
+};
+export type RespondDirectAgentConversationPermissionErrors = {
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+    /**
+     * Resource is absent or inaccessible
+     */
+    404: Error;
+};
+export type RespondDirectAgentConversationPermissionError = RespondDirectAgentConversationPermissionErrors[keyof RespondDirectAgentConversationPermissionErrors];
+export type RespondDirectAgentConversationPermissionResponses = {
     /**
      * Permission response accepted
      */

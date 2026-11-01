@@ -103,6 +103,14 @@ type CodingIntegration struct {
 	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
 }
 
+type DirectAgentConversation struct {
+	ID             string             `json:"id"`
+	OrganizationID string             `json:"organization_id"`
+	WorkspaceID    string             `json:"workspace_id"`
+	AgentID        string             `json:"agent_id"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
 type ExecutionProfile struct {
 	ID             string             `json:"id"`
 	WorkspaceID    string             `json:"workspace_id"`

@@ -12,6 +12,11 @@ type SessionRepository interface {
 	ReserveSessionRun(context.Context, runconfig.RunConfig) error
 }
 
+type directSessionRepository interface {
+	CurrentDirectSession(context.Context, string, string, string) (runconfig.RunConfig, bool, error)
+	ReserveDirectSessionRun(context.Context, runconfig.RunConfig) error
+}
+
 type PromptDelivery struct{ CommandID, Text string }
 
 type PromptOutbox interface {
