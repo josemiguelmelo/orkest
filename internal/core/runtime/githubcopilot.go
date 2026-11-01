@@ -24,4 +24,12 @@ func (GitHubCopilotProvider) ValidateDefinition(definition Definition) error {
 	return nil
 }
 
+func (GitHubCopilotProvider) ConfigurationSchema() []ConfigurationOption {
+	return []ConfigurationOption{
+		{Name: "COPILOT_GITHUB_TOKEN", Description: "GitHub Copilot authentication token", Sensitive: true},
+		{Name: "GH_TOKEN", Description: "GitHub CLI authentication token", Sensitive: true},
+		{Name: "GITHUB_TOKEN", Description: "GitHub authentication token", Sensitive: true},
+	}
+}
+
 var _ Provider = GitHubCopilotProvider{}

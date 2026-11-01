@@ -12,6 +12,7 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
 	"github.com/josemiguelmelo/orkest/internal/coderepository"
 	"github.com/josemiguelmelo/orkest/internal/core/ids"
+	coreruntime "github.com/josemiguelmelo/orkest/internal/core/runtime"
 	"github.com/josemiguelmelo/orkest/internal/mcpserver"
 	"github.com/josemiguelmelo/orkest/internal/skill"
 	"github.com/josemiguelmelo/orkest/internal/task"
@@ -150,6 +151,17 @@ func (d *TaskDispatcher) StartTask(ctx context.Context, userID, organizationID s
 		config.Environment, err = d.environmentResolver.Resolve(ctx, value.WorkspaceID)
 		if err != nil {
 			return fmt.Errorf("resolve workspace environment: %w", err)
+		}
+	}
+	if !continuing {
+		if config.Environment == nil {
+			config.Environment = make(map[string]string)
+		}
+		for name, value := range definition.Configuration {
+			config.Environment[name] = value
+		}
+		if err := coreruntime.ValidateRequiredEnvironment(config.Runtime, config.Environment); err != nil {
+			return fmt.Errorf("resolve runtime configuration: %w", err)
 		}
 	}
 	if d.repositories != nil {

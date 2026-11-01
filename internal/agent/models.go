@@ -27,15 +27,17 @@ type Agent struct {
 }
 
 type AgentDefinition struct {
-	ExecutionProfileID string           `json:"executionProfileId"`
-	RuntimeProfileID   string           `json:"runtimeProfileId"`
-	Name               string           `json:"name"`
-	Runtime            Runtime          `json:"runtime"`
-	Provider           string           `json:"provider"`
-	Model              string           `json:"model"`
-	Description        string           `json:"description"`
-	SystemPrompt       string           `json:"systemPrompt"`
-	MCPServerIDs       []string         `json:"mcpServerIds"`
-	SkillIDs           []string         `json:"skillIds"`
-	PermissionPolicy   PermissionPolicy `json:"permissionPolicy"`
+	ExecutionProfileID string            `json:"executionProfileId"`
+	RuntimeProfileID   string            `json:"runtimeProfileId"`
+	Name               string            `json:"name"`
+	Runtime            Runtime           `json:"runtime"`
+	Provider           string            `json:"provider"`
+	Model              string            `json:"model"`
+	Description        string            `json:"description"`
+	SystemPrompt       string            `json:"systemPrompt"`
+	MCPServerIDs       []string          `json:"mcpServerIds"`
+	SkillIDs           []string          `json:"skillIds"`
+	PermissionPolicy   PermissionPolicy  `json:"permissionPolicy"`
+	Configuration      map[string]string `json:"-"`
+	HasConfiguration   bool              `json:"hasConfiguration"`
 }

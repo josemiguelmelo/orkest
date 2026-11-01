@@ -43,8 +43,8 @@ func (m mcpAccessStub) Exists(context.Context, string, string, []string) (bool, 
 
 type runtimeProfileStub struct{ runtime Runtime }
 
-func (p runtimeProfileStub) ResolveAgentProfile(context.Context, string, string) (Runtime, string, string, error) {
-	return p.runtime, "anthropic", "gateway/claude-sonnet", nil
+func (p runtimeProfileStub) ResolveAgentProfile(context.Context, string, string) (Runtime, string, string, map[string]string, error) {
+	return p.runtime, "anthropic", "gateway/claude-sonnet", nil, nil
 }
 
 func validDefinition() AgentDefinition {

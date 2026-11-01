@@ -22,4 +22,8 @@ func (KiroProvider) ValidateDefinition(definition Definition) error {
 	return nil
 }
 
+func (KiroProvider) ConfigurationSchema() []ConfigurationOption {
+	return []ConfigurationOption{{Name: "KIRO_API_KEY", Description: "Kiro API key", Required: true, Sensitive: true}}
+}
+
 var _ Provider = KiroProvider{}

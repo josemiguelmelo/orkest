@@ -9,17 +9,22 @@ import (
 
 	"github.com/josemiguelmelo/orkest/internal/agent"
 	modelerrors "github.com/josemiguelmelo/orkest/internal/core/model/errors"
+	coreruntime "github.com/josemiguelmelo/orkest/internal/core/runtime"
+	"github.com/josemiguelmelo/orkest/internal/core/secretbox"
 	"github.com/josemiguelmelo/orkest/internal/postgres/sqlc"
 )
 
 type AgentPostgresRepository struct {
-	queries  *sqlc.Queries
-	database *PostgresDatabase
+	queries   *sqlc.Queries
+	database  *PostgresDatabase
+	secretBox *secretbox.Box
 }
 
 func NewAgentPostgresRepository(database *PostgresDatabase) *AgentPostgresRepository {
 	return &AgentPostgresRepository{queries: sqlc.New(database.pool), database: database}
 }
+
+func (r *AgentPostgresRepository) SetSecretBox(box *secretbox.Box) { r.secretBox = box }
 
 var _ agent.Repository = (*AgentPostgresRepository)(nil)
 
@@ -39,6 +44,11 @@ func (r *AgentPostgresRepository) Agents(ctx context.Context, orgID, workspaceID
 		if err != nil {
 			return nil, err
 		}
+		value.Configuration, err = r.configuration(ctx, row.ID)
+		if err != nil {
+			return nil, err
+		}
+		value.HasConfiguration = len(value.Configuration) > 0
 		out = append(out, value)
 	}
 	return out, nil
@@ -50,6 +60,11 @@ func (r *AgentPostgresRepository) Agent(ctx context.Context, orgID, workspaceID,
 		return agent.Agent{}, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
 	}
 	a := agent.Agent{ID: row.ID, WorkspaceID: row.WorkspaceID, AgentDefinition: agent.AgentDefinition{Name: row.Name, Runtime: agent.Runtime(row.Runtime), Provider: row.Provider, Model: row.Model, Description: row.Description, ExecutionProfileID: row.ExecutionProfileID.String, RuntimeProfileID: row.RuntimeProfileID.String, SystemPrompt: row.SystemPrompt, PermissionPolicy: agent.PermissionPolicy(row.PermissionPolicy)}}
+	a.Configuration, err = r.configuration(ctx, id)
+	if err != nil {
+		return agent.Agent{}, err
+	}
+	a.HasConfiguration = len(a.Configuration) > 0
 	a.MCPServerIDs, err = r.mcpServerIDs(ctx, id)
 	if err == nil {
 		a.SkillIDs, err = r.skillIDs(ctx, workspaceID, id)
@@ -66,6 +81,13 @@ func (r *AgentPostgresRepository) CreateAgent(ctx context.Context, id, workspace
 	queries := r.queries.WithTx(tx)
 	row, err := queries.InsertAgent(ctx, sqlc.InsertAgentParams{ID: id, ID_2: workspaceID, Name: definition.Name, Runtime: string(definition.Runtime), Provider: definition.Provider, Model: definition.Model, Description: definition.Description, ExecutionProfileID: pgtype.Text{String: definition.ExecutionProfileID, Valid: definition.ExecutionProfileID != ""}, RuntimeProfileID: pgtype.Text{String: definition.RuntimeProfileID, Valid: definition.RuntimeProfileID != ""}, SystemPrompt: definition.SystemPrompt, PermissionPolicy: string(definition.PermissionPolicy)})
 	if err == nil {
+		var encrypted []byte
+		encrypted, err = coreruntime.SealConfiguration(r.secretBox, definition.Configuration)
+		if err == nil {
+			_, err = tx.Exec(ctx, `UPDATE agents SET runtime_configuration=$3 WHERE workspace_id=$1 AND id=$2`, workspaceID, id, encrypted)
+		}
+	}
+	if err == nil {
 		err = replaceAgentMCPServers(ctx, tx, workspaceID, id, definition.MCPServerIDs)
 	}
 	if err == nil {
@@ -75,6 +97,8 @@ func (r *AgentPostgresRepository) CreateAgent(ctx context.Context, id, workspace
 		err = tx.Commit(ctx)
 	}
 	a := agent.Agent{ID: row.ID, WorkspaceID: row.WorkspaceID, AgentDefinition: agent.AgentDefinition{Name: row.Name, Runtime: agent.Runtime(row.Runtime), Provider: row.Provider, Model: row.Model, Description: row.Description, ExecutionProfileID: row.ExecutionProfileID.String, RuntimeProfileID: row.RuntimeProfileID.String, SystemPrompt: row.SystemPrompt, PermissionPolicy: definition.PermissionPolicy}}
+	a.Configuration = definition.Configuration
+	a.HasConfiguration = len(a.Configuration) > 0
 	a.MCPServerIDs = definition.MCPServerIDs
 	a.SkillIDs = definition.SkillIDs
 	return a, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
@@ -89,6 +113,13 @@ func (r *AgentPostgresRepository) UpdateAgent(ctx context.Context, orgID, worksp
 	queries := r.queries.WithTx(tx)
 	row, err := queries.UpdateAgent(ctx, sqlc.UpdateAgentParams{OrganizationID: orgID, WorkspaceID: workspaceID, ID: id, Name: definition.Name, Runtime: string(definition.Runtime), Provider: definition.Provider, Model: definition.Model, Description: definition.Description, ExecutionProfileID: pgtype.Text{String: definition.ExecutionProfileID, Valid: definition.ExecutionProfileID != ""}, RuntimeProfileID: pgtype.Text{String: definition.RuntimeProfileID, Valid: definition.RuntimeProfileID != ""}, SystemPrompt: definition.SystemPrompt, PermissionPolicy: string(definition.PermissionPolicy)})
 	if err == nil {
+		var encrypted []byte
+		encrypted, err = coreruntime.SealConfiguration(r.secretBox, definition.Configuration)
+		if err == nil {
+			_, err = tx.Exec(ctx, `UPDATE agents SET runtime_configuration=$3 WHERE workspace_id=$1 AND id=$2`, workspaceID, id, encrypted)
+		}
+	}
+	if err == nil {
 		err = replaceAgentMCPServers(ctx, tx, workspaceID, id, definition.MCPServerIDs)
 	}
 	if err == nil {
@@ -98,6 +129,8 @@ func (r *AgentPostgresRepository) UpdateAgent(ctx context.Context, orgID, worksp
 		err = tx.Commit(ctx)
 	}
 	a := agent.Agent{ID: row.ID, WorkspaceID: row.WorkspaceID, AgentDefinition: agent.AgentDefinition{Name: row.Name, Runtime: agent.Runtime(row.Runtime), Provider: row.Provider, Model: row.Model, Description: row.Description, ExecutionProfileID: row.ExecutionProfileID.String, RuntimeProfileID: row.RuntimeProfileID.String, SystemPrompt: row.SystemPrompt, PermissionPolicy: agent.PermissionPolicy(row.PermissionPolicy)}}
+	a.Configuration = definition.Configuration
+	a.HasConfiguration = len(a.Configuration) > 0
 	a.MCPServerIDs = definition.MCPServerIDs
 	a.SkillIDs = definition.SkillIDs
 	return a, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
@@ -111,6 +144,14 @@ func (r *AgentPostgresRepository) skillIDs(ctx context.Context, workspaceID, age
 	ids := make([]string, 0, len(rows))
 	ids = append(ids, rows...)
 	return ids, nil
+}
+
+func (r *AgentPostgresRepository) configuration(ctx context.Context, id string) (map[string]string, error) {
+	var encrypted []byte
+	if err := r.database.pool.QueryRow(ctx, `SELECT runtime_configuration FROM agents WHERE id=$1`, id).Scan(&encrypted); err != nil {
+		return nil, err
+	}
+	return coreruntime.OpenConfiguration(r.secretBox, encrypted)
 }
 
 func (r *AgentPostgresRepository) DeleteAgent(ctx context.Context, orgID, workspaceID, id string) error {

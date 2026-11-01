@@ -25,12 +25,22 @@ type Definition struct {
 	ModelProvider string
 }
 
+// ConfigurationOption describes one environment variable accepted by a runtime.
+// Values marked sensitive are write-only in the platform API.
+type ConfigurationOption struct {
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Required    bool   `json:"required"`
+	Sensitive   bool   `json:"sensitive"`
+}
+
 // Provider owns the runtime-specific validation and release metadata.
 type Provider interface {
 	Runtime() Runtime
 	Version() string
 	DefaultImage() string
 	ValidateDefinition(Definition) error
+	ConfigurationSchema() []ConfigurationOption
 }
 
 // Providers is the canonical catalogue of runtime providers enabled in Orkest.

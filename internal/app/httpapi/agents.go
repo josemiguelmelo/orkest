@@ -9,6 +9,11 @@ import (
 
 type agentAPI struct{ agents *agent.Service }
 
+type agentDefinitionRequest struct {
+	agent.AgentDefinition
+	Configuration map[string]string `json:"configuration"`
+}
+
 func (a agentAPI) routes(r chi.Router) {
 	r.Route("/organizations/{orgID}/workspaces/{workspaceID}/agents", func(r chi.Router) {
 		r.Get("/", a.list)
@@ -32,10 +37,12 @@ func (a agentAPI) get(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a agentAPI) create(w http.ResponseWriter, r *http.Request) {
-	var body agent.AgentDefinition
-	if !decodeBody(w, r, &body) {
+	var request agentDefinitionRequest
+	if !decodeBody(w, r, &request) {
 		return
 	}
+	body := request.AgentDefinition
+	body.Configuration = request.Configuration
 	v, err := a.agents.Create(r.Context(), currentUserID(r), chi.URLParam(r, "orgID"), chi.URLParam(r, "workspaceID"), body)
 	respond(w, v, err, http.StatusCreated)
 }
@@ -43,13 +50,15 @@ func (a agentAPI) create(w http.ResponseWriter, r *http.Request) {
 func (a agentAPI) update(w http.ResponseWriter, r *http.Request) {
 	var request struct {
 		agent.AgentDefinition
-		ExecutionProfileID *string `json:"executionProfileId"`
-		RuntimeProfileID   *string `json:"runtimeProfileId"`
+		Configuration      map[string]string `json:"configuration"`
+		ExecutionProfileID *string           `json:"executionProfileId"`
+		RuntimeProfileID   *string           `json:"runtimeProfileId"`
 	}
 	if !decodeBody(w, r, &request) {
 		return
 	}
 	body := request.AgentDefinition
+	body.Configuration = request.Configuration
 	if request.ExecutionProfileID != nil {
 		body.ExecutionProfileID = *request.ExecutionProfileID
 	} else {

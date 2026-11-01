@@ -19,7 +19,7 @@ type Service struct {
 		ValidateProfile(context.Context, string, string, Runtime) error
 	}
 	runtimeProfiles interface {
-		ResolveAgentProfile(context.Context, string, string) (Runtime, string, string, error)
+		ResolveAgentProfile(context.Context, string, string) (Runtime, string, string, map[string]string, error)
 	}
 }
 
@@ -35,7 +35,7 @@ func (s *Service) SetProfiles(profiles interface {
 }
 
 func (s *Service) SetRuntimeProfiles(profiles interface {
-	ResolveAgentProfile(context.Context, string, string) (Runtime, string, string, error)
+	ResolveAgentProfile(context.Context, string, string) (Runtime, string, string, map[string]string, error)
 },
 ) {
 	s.runtimeProfiles = profiles
@@ -48,11 +48,18 @@ func (s *Service) applyRuntimeProfile(ctx context.Context, workspaceID string, d
 	if s.runtimeProfiles == nil {
 		return modelerrors.ErrInvalid
 	}
-	runtime, provider, model, err := s.runtimeProfiles.ResolveAgentProfile(ctx, workspaceID, d.RuntimeProfileID)
+	runtime, provider, model, configuration, err := s.runtimeProfiles.ResolveAgentProfile(ctx, workspaceID, d.RuntimeProfileID)
 	if err != nil {
 		return err
 	}
+	configuration = coreruntime.NormalizeConfiguration(configuration)
+	for key, value := range d.Configuration {
+		if value != "" {
+			configuration[key] = value
+		}
+	}
 	d.Runtime, d.Provider, d.Model = runtime, provider, model
+	d.Configuration = configuration
 	return nil
 }
 
@@ -87,12 +94,17 @@ func (s *Service) Create(ctx context.Context, userID, orgID, workspaceID string,
 	if err := s.applyRuntimeProfile(ctx, workspaceID, &definition); err != nil {
 		return Agent{}, err
 	}
+	definition.Configuration = coreruntime.NormalizeConfiguration(definition.Configuration)
 	if err := s.validateProfile(ctx, workspaceID, definition); err != nil {
 		return Agent{}, err
 	}
 	if err := s.validateDefinition(&definition); err != nil {
 		return Agent{}, err
 	}
+	if err := coreruntime.ValidateConfiguration(definition.Runtime, definition.Configuration); err != nil {
+		return Agent{}, modelerrors.ErrInvalid
+	}
+	definition.HasConfiguration = len(definition.Configuration) > 0
 	if err := s.validateMCPServers(ctx, orgID, workspaceID, definition.MCPServerIDs); err != nil {
 		return Agent{}, err
 	}
@@ -117,6 +129,34 @@ func (s *Service) Update(ctx context.Context, userID, orgID, workspaceID, agentI
 		}
 		definition.SkillIDs = current.SkillIDs
 	}
+	current, currentErr := s.repository.Agent(ctx, orgID, workspaceID, agentID)
+	if currentErr != nil {
+		return Agent{}, currentErr
+	}
+	requestedConfiguration := coreruntime.NormalizeConfiguration(definition.Configuration)
+	if definition.RuntimeProfileID != "" {
+		definition.Configuration = requestedConfiguration
+	} else {
+		configuration := current.Configuration
+		if configuration == nil {
+			configuration = map[string]string{}
+		}
+		if provider, ok := coreruntime.ProviderFor(definition.Runtime); ok {
+			allowed := make(map[string]bool)
+			for _, option := range provider.ConfigurationSchema() {
+				allowed[option.Name] = true
+			}
+			for key := range configuration {
+				if !allowed[key] {
+					delete(configuration, key)
+				}
+			}
+		}
+		for key, value := range requestedConfiguration {
+			configuration[key] = value
+		}
+		definition.Configuration = configuration
+	}
 	if definition.MCPServerIDs == nil {
 		current, err := s.repository.Agent(ctx, orgID, workspaceID, agentID)
 		if err != nil {
@@ -133,6 +173,10 @@ func (s *Service) Update(ctx context.Context, userID, orgID, workspaceID, agentI
 	if err := s.validateDefinition(&definition); err != nil {
 		return Agent{}, err
 	}
+	if err := coreruntime.ValidateConfiguration(definition.Runtime, definition.Configuration); err != nil {
+		return Agent{}, modelerrors.ErrInvalid
+	}
+	definition.HasConfiguration = len(definition.Configuration) > 0
 	if err := s.validateMCPServers(ctx, orgID, workspaceID, definition.MCPServerIDs); err != nil {
 		return Agent{}, err
 	}

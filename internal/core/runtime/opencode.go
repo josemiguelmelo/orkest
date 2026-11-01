@@ -15,4 +15,12 @@ func (p OpenCodeProvider) DefaultImage() string {
 
 func (OpenCodeProvider) ValidateDefinition(Definition) error { return nil }
 
+func (OpenCodeProvider) ConfigurationSchema() []ConfigurationOption {
+	return []ConfigurationOption{
+		{Name: "OPENAI_API_KEY", Description: "OpenAI API key", Sensitive: true},
+		{Name: "ANTHROPIC_API_KEY", Description: "Anthropic API key", Sensitive: true},
+		{Name: "OPENROUTER_API_KEY", Description: "OpenRouter API key", Sensitive: true},
+	}
+}
+
 var _ Provider = OpenCodeProvider{}
