@@ -23,6 +23,7 @@ type DirectConversationStore interface {
 	CreateDirectConversation(context.Context, string, string, string, string) (DirectConversation, error)
 	GetDirectConversation(context.Context, string, string, string) (DirectConversation, error)
 	ListDirectConversations(context.Context, string, string) ([]DirectConversation, error)
+	DeleteDirectConversation(context.Context, string, string, string) error
 }
 
 // DirectChatService creates workspace-scoped agent conversations and routes
@@ -61,6 +62,10 @@ func (s *DirectChatService) Create(ctx context.Context, userID, orgID, workspace
 
 func (s *DirectChatService) Get(ctx context.Context, orgID, workspaceID, conversationID string) (DirectConversation, error) {
 	return s.store.GetDirectConversation(ctx, orgID, workspaceID, conversationID)
+}
+
+func (s *DirectChatService) Delete(ctx context.Context, orgID, workspaceID, conversationID string) error {
+	return s.store.DeleteDirectConversation(ctx, orgID, workspaceID, conversationID)
 }
 
 func (s *DirectChatService) Runs(ctx context.Context, orgID, workspaceID, conversationID string) ([]Launch, error) {

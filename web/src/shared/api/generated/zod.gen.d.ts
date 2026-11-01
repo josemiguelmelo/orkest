@@ -1932,6 +1932,15 @@ export declare const zListDirectAgentConversationRunsResponse: z.ZodArray<z.ZodO
     lastSequence: z.ZodInt;
     updatedAt: z.ZodISODateTime;
 }, z.core.$strip>>;
+export declare const zDeleteDirectAgentConversationPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+    conversationID: z.ZodString;
+}, z.core.$strip>;
+/**
+ * Conversation and saved run history deleted
+ */
+export declare const zDeleteDirectAgentConversationResponse: z.ZodVoid;
 export declare const zListDirectAgentConversationEventsPath: z.ZodObject<{
     orgID: z.ZodString;
     workspaceID: z.ZodString;

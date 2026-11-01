@@ -3,7 +3,18 @@ import { useQuery } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
-import { Bot, Brain, Cpu, Eye, FileText, MessageSquare, Sparkles, Wrench, X } from 'lucide-react';
+import {
+  ArrowRight,
+  Bot,
+  Brain,
+  Cpu,
+  Eye,
+  FileText,
+  MessageSquare,
+  Sparkles,
+  Wrench,
+  X,
+} from 'lucide-react';
 import { Link, useNavigate } from '@tanstack/react-router';
 import { useApp } from '../../app/context';
 import * as sdk from '../../shared/api/generated/sdk.gen';
@@ -82,6 +93,14 @@ function runtimeName(runtime: Agent['runtime']) {
   if (runtime === 'kiro') return 'Kiro';
   return 'OpenCode';
 }
+function conversationDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'Date unavailable';
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(date);
+}
 export function AgentsPage() {
   const { scope, permissions } = useApp();
   const navigate = useNavigate();
@@ -108,98 +127,166 @@ export function AgentsPage() {
         <Loading />
       ) : agents.isError ? (
         <ErrorState error={agents.error} />
-      ) : agents.data.length ? (
-        <div className="agents-grid">
-          {agents.data.map((item) => (
-            <article className="agent-card" key={item.id}>
-              <div className="agent-card-header">
-                <div className="agent-card-icon">
-                  <Bot size={26} />
-                </div>
-                <Badge>{runtimeName(item.runtime)}</Badge>
-              </div>
-              <div className="agent-card-body">
-                <h3>{item.name}</h3>
-                <p className="agent-card-description">
-                  {item.description || 'A configurable agent definition ready for your tasks.'}
-                </p>
-                <div className="agent-card-model">
-                  <Cpu size={14} />
-                  <span>
-                    {item.provider} / {item.model}
-                  </span>
-                </div>
-                <div className="agent-card-tags">
-                  <span className="agent-tag">
-                    <Wrench size={12} />
-                    {item.skillIds.length} skills
-                  </span>
-                  <span className="agent-tag">
-                    <Brain size={12} />
-                    {item.mcpServerIds.length} MCP servers
-                  </span>
-                </div>
-              </div>
-              {permissions.editWorkspace ? (
-                <div className="agent-card-actions">
-                  <Button variant="outline" size="sm" onClick={() => void (async () => {
-                    const conversation = await directChats.create(scope, item.id);
-                    await navigate({ to: '/organizations/$orgId/workspaces/$workspaceId/agents/chats/$conversationId', params: { orgId: scope.orgID, workspaceId: scope.workspaceID, conversationId: conversation.id } });
-                  })()}>
-                    <MessageSquare size={14} />
-                    Chat
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => setViewing(item)}>
-                    <Eye size={14} />
-                    View
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => setEditing(item)}>
-                    Edit
-                  </Button>
-                  <ConfirmButton
-                    title="Delete agent?"
-                    description="Task assignments to this definition will be cleared. Tasks are preserved."
-                    onConfirm={async () => {
-                      await data(
-                        sdk.deleteAgent({ ...command, path: { ...path(scope), agentID: item.id } }),
-                      );
-                      await refresh(scope);
-                    }}
-                  />
-                </div>
-              ) : (
-                <div className="agent-card-actions">
-                  <Button variant="outline" size="sm" onClick={() => setViewing(item)}>
-                    <FileText size={14} />
-                    View instructions
-                  </Button>
-                </div>
-              )}
-              {(conversations.data ?? []).some((conversation) => conversation.agentId === item.id) && (
-                <div className="agent-card-actions" aria-label={`${item.name} conversations`}>
-                  {(conversations.data ?? [])
-                    .filter((conversation) => conversation.agentId === item.id)
-                    .slice(0, 3)
-                    .map((conversation, index) => (
-                      <Link
-                        className="button button-ghost button-sm"
-                        key={conversation.id}
-                        to="/organizations/$orgId/workspaces/$workspaceId/agents/chats/$conversationId"
-                        params={{ orgId: scope.orgID, workspaceId: scope.workspaceID, conversationId: conversation.id }}
-                      >
-                        <MessageSquare size={13} />
-                        Conversation {index + 1}
-                      </Link>
-                    ))}
-                </div>
-              )}
-            </article>
-          ))}
-        </div>
       ) : (
-        <Empty title="No agent definitions yet">
-          Create an agent with its model, instructions, skills, and MCP connections to get started.
-        </Empty>
+        <>
+          <section className="conversation-history" aria-labelledby="conversation-history-title">
+            <div className="conversation-history-heading">
+              <div>
+                <h2 id="conversation-history-title">Recent conversations</h2>
+                <p>Continue a direct chat with one of your workspace agents.</p>
+              </div>
+              {conversations.isSuccess && (
+                <span className="conversation-count">
+                  {conversations.data.length} {conversations.data.length === 1 ? 'chat' : 'chats'}
+                </span>
+              )}
+            </div>
+            {conversations.isPending ? (
+              <p className="conversation-history-message">Loading conversations…</p>
+            ) : conversations.isError ? (
+              <ErrorState error={conversations.error} />
+            ) : conversations.data.length ? (
+              <div className="conversation-list">
+                {[...conversations.data]
+                  .sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+                  .map((conversation) => {
+                    const agent = agents.data.find((item) => item.id === conversation.agentId);
+                    return (
+                      <div className="conversation-entry" key={conversation.id}>
+                        <Link
+                          className="conversation-row"
+                          to="/organizations/$orgId/workspaces/$workspaceId/agents/chats/$conversationId"
+                          params={{
+                            orgId: scope.orgID,
+                            workspaceId: scope.workspaceID,
+                            conversationId: conversation.id,
+                          }}
+                        >
+                          <span className="conversation-row-icon">
+                            <MessageSquare size={17} />
+                          </span>
+                          <span className="conversation-row-copy">
+                            <strong>Chat with {agent?.name ?? 'Unavailable agent'}</strong>
+                            <span>
+                              {agent ? runtimeName(agent.runtime) : 'Agent'} · Started{' '}
+                              {conversationDate(conversation.createdAt)}
+                            </span>
+                          </span>
+                          <ArrowRight className="conversation-row-arrow" size={16} />
+                        </Link>
+                        {permissions.editWorkspace && (
+                          <div className="conversation-row-actions">
+                            <ConfirmButton
+                              label="Remove"
+                              title="Remove this conversation?"
+                              description="This permanently deletes the conversation and its saved run history. Wait for any running or closing agent run to finish first."
+                              onConfirm={async () => {
+                                await directChats.remove(scope, conversation.id);
+                                await refresh(scope);
+                              }}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+              </div>
+            ) : (
+              <p className="conversation-history-message">
+                No conversations yet. Start a chat from any agent below.
+              </p>
+            )}
+          </section>
+          {agents.data.length ? (
+            <div className="agents-grid">
+              {agents.data.map((item) => (
+                <article className="agent-card" key={item.id}>
+                  <div className="agent-card-header">
+                    <div className="agent-card-icon">
+                      <Bot size={26} />
+                    </div>
+                    <Badge>{runtimeName(item.runtime)}</Badge>
+                  </div>
+                  <div className="agent-card-body">
+                    <h3>{item.name}</h3>
+                    <p className="agent-card-description">
+                      {item.description || 'A configurable agent definition ready for your tasks.'}
+                    </p>
+                    <div className="agent-card-model">
+                      <Cpu size={14} />
+                      <span>
+                        {item.provider} / {item.model}
+                      </span>
+                    </div>
+                    <div className="agent-card-tags">
+                      <span className="agent-tag">
+                        <Wrench size={12} />
+                        {item.skillIds.length} skills
+                      </span>
+                      <span className="agent-tag">
+                        <Brain size={12} />
+                        {item.mcpServerIds.length} MCP servers
+                      </span>
+                    </div>
+                  </div>
+                  {permissions.editWorkspace ? (
+                    <div className="agent-card-actions">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          void (async () => {
+                            const conversation = await directChats.create(scope, item.id);
+                            await navigate({
+                              to: '/organizations/$orgId/workspaces/$workspaceId/agents/chats/$conversationId',
+                              params: {
+                                orgId: scope.orgID,
+                                workspaceId: scope.workspaceID,
+                                conversationId: conversation.id,
+                              },
+                            });
+                          })()
+                        }
+                      >
+                        <MessageSquare size={14} />
+                        Chat
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => setViewing(item)}>
+                        <Eye size={14} />
+                        View
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => setEditing(item)}>
+                        Edit
+                      </Button>
+                      <ConfirmButton
+                        title="Delete agent?"
+                        description="Task assignments to this definition will be cleared. Tasks are preserved."
+                        onConfirm={async () => {
+                          await data(
+                            sdk.deleteAgent({ ...command, path: { ...path(scope), agentID: item.id } }),
+                          );
+                          await refresh(scope);
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <div className="agent-card-actions">
+                      <Button variant="outline" size="sm" onClick={() => setViewing(item)}>
+                        <FileText size={14} />
+                        View instructions
+                      </Button>
+                    </div>
+                  )}
+                </article>
+              ))}
+            </div>
+          ) : (
+            <Empty title="No agent definitions yet">
+              Create an agent with its model, instructions, skills, and MCP connections to get
+              started.
+            </Empty>
+          )}
+        </>
       )}
       {editing !== undefined && (
         <AgentEditor

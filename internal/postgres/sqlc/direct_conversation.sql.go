@@ -61,6 +61,57 @@ func (q *Queries) CreateDirectConversation(ctx context.Context, arg CreateDirect
 	return i, err
 }
 
+const deleteDirectConversation = `-- name: DeleteDirectConversation :execrows
+DELETE FROM direct_agent_conversations
+WHERE organization_id = $1 AND workspace_id = $2 AND id = $3
+`
+
+type DeleteDirectConversationParams struct {
+	OrganizationID string `json:"organization_id"`
+	WorkspaceID    string `json:"workspace_id"`
+	ID             string `json:"id"`
+}
+
+func (q *Queries) DeleteDirectConversation(ctx context.Context, arg DeleteDirectConversationParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteDirectConversation, arg.OrganizationID, arg.WorkspaceID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteDirectConversationLaunches = `-- name: DeleteDirectConversationLaunches :exec
+DELETE FROM agent_launches
+WHERE organization_id = $1 AND workspace_id = $2 AND task_id = $3
+`
+
+type DeleteDirectConversationLaunchesParams struct {
+	OrganizationID string `json:"organization_id"`
+	WorkspaceID    string `json:"workspace_id"`
+	TaskID         string `json:"task_id"`
+}
+
+func (q *Queries) DeleteDirectConversationLaunches(ctx context.Context, arg DeleteDirectConversationLaunchesParams) error {
+	_, err := q.db.Exec(ctx, deleteDirectConversationLaunches, arg.OrganizationID, arg.WorkspaceID, arg.TaskID)
+	return err
+}
+
+const deleteDirectConversationSessions = `-- name: DeleteDirectConversationSessions :exec
+DELETE FROM task_agent_sessions
+WHERE organization_id = $1 AND workspace_id = $2 AND task_id = $3
+`
+
+type DeleteDirectConversationSessionsParams struct {
+	OrganizationID string `json:"organization_id"`
+	WorkspaceID    string `json:"workspace_id"`
+	TaskID         string `json:"task_id"`
+}
+
+func (q *Queries) DeleteDirectConversationSessions(ctx context.Context, arg DeleteDirectConversationSessionsParams) error {
+	_, err := q.db.Exec(ctx, deleteDirectConversationSessions, arg.OrganizationID, arg.WorkspaceID, arg.TaskID)
+	return err
+}
+
 const getDirectConversation = `-- name: GetDirectConversation :one
 SELECT id, agent_id, created_at FROM direct_agent_conversations
 WHERE organization_id = $1 AND workspace_id = $2 AND id = $3

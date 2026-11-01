@@ -1008,6 +1008,15 @@ export const zListDirectAgentConversationRunsPath = z.object({
  * Conversation run history
  */
 export const zListDirectAgentConversationRunsResponse = z.array(zTaskRun);
+export const zDeleteDirectAgentConversationPath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string(),
+    conversationID: z.string()
+});
+/**
+ * Conversation and saved run history deleted
+ */
+export const zDeleteDirectAgentConversationResponse = z.void();
 export const zListDirectAgentConversationEventsPath = z.object({
     orgID: z.string(),
     workspaceID: z.string(),

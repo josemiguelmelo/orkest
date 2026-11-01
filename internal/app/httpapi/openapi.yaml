@@ -1200,6 +1200,21 @@ paths:
       responses:
         "200": {description: Conversation run history, content: {application/json: {schema: {type: array, items: {$ref: "#/components/schemas/TaskRun"}}}}}
         "404": {$ref: "#/components/responses/NotFound"}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/agent-conversations/{conversationID}:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+      - {name: conversationID, in: path, required: true, schema: {type: string}}
+    delete:
+      tags: [Agents]
+      operationId: deleteDirectAgentConversation
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      responses:
+        "204": {description: Conversation and saved run history deleted}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {description: The conversation still has an active or closing run, content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}}
   /api/organizations/{orgID}/workspaces/{workspaceID}/agent-conversations/{conversationID}/runs/{runID}/events:
     parameters:
       - {name: orgID, in: path, required: true, schema: {type: string}}
