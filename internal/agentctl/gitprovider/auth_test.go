@@ -1,7 +1,9 @@
 package gitprovider
 
 import (
+	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -85,6 +87,32 @@ func TestProviderCLIAdaptersScopeSecretsToMatchingCheckout(t *testing.T) {
 	}
 	if strings.Contains(string(gitlabScript), "gitlab-secret") || strings.Contains(string(gitlabScript), "github.com") {
 		t.Fatalf("GitLab CLI wrapper contains an unrelated credential: %s", gitlabScript)
+	}
+}
+
+func TestGitHubCLIWrapperAuthenticatesExplicitRepositoryOutsideCheckout(t *testing.T) {
+	binDir := t.TempDir()
+	ghPath := filepath.Join(binDir, "gh")
+	if err := os.WriteFile(ghPath, []byte("#!/bin/sh\nprintf '%s|%s' \"$GH_TOKEN\" \"$*\"\n"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", binDir)
+	runtimeRoot := t.TempDir()
+	credentials := []runconfig.GitCredential{{
+		ProviderName: "github", RepositoryURL: "https://github.com/acme/project.git", Token: "github-secret",
+	}}
+	environment, err := configureCLIs(runtimeRoot, []string{"PATH=" + binDir}, credentials, DefaultCLIAuthAdapters())
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.CommandContext(context.Background(), "gh", "pr", "create", "--repo", "acme/project")
+	cmd.Dir, cmd.Env = t.TempDir(), environment
+	output, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("run gh wrapper: %v", err)
+	}
+	if got, want := string(output), "github-secret|pr create --repo acme/project"; got != want {
+		t.Fatalf("gh invocation = %q, want %q", got, want)
 	}
 }
 

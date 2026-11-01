@@ -88,11 +88,12 @@ The GitHub coding provider resolves each integration PAT on the platform. It use
 temporary credential helper for checkout, then sends the PAT to agentctl in the
 encrypted task-session configuration. Git receives URL-scoped HTTP authorization
 through process configuration. Agentctl also adds a `gh` wrapper to the runtime
-`PATH`; when run inside a registered checkout, it selects that repository's PAT
-through `GH_TOKEN` without writing credentials to gh's auth file. Run `gh pr create`
-from the repository checkout. Public repository registrations without an
-integration continue to use the legacy checkout adapter and have no authenticated
-push or `gh` access.
+`PATH`; it selects the PAT for the current registered checkout, or for an
+explicit `--repo owner/name` target, through `GH_TOKEN` without writing
+credentials to gh's auth file. This also supports `gh pr create` from the task's
+common work directory when `--repo` is provided. Public repository registrations
+without an integration continue to use the legacy checkout adapter and have no
+authenticated push or `gh` access.
 
 The container does not restart automatically. Agentctl session restoration is
 not implemented, so automatically restarting it after a daemon restart could
