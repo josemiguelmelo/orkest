@@ -394,31 +394,6 @@ function AgentEditor({ item, onClose }: { item: Agent | null; onClose: () => voi
         </div>
         <div className="agent-form-section">
           <div className="agent-form-section-header">
-            <Wrench size={16} />
-            <span>Runtime configuration</span>
-          </div>
-          <div className="agent-form-section-content">
-            {(
-              runtimeProviders.data?.find((provider) => provider.runtime === form.watch('runtime'))
-                ?.configuration ?? []
-            ).map((option) => (
-              <Field
-                key={option.name}
-                label={`${option.name}${option.required ? ' (required if not in workspace)' : ''}`}
-                hint={`${option.description}${item?.hasConfiguration ? ' A saved value is retained when this field is blank.' : ''}`}
-              >
-                <input
-                  type={option.sensitive ? 'password' : 'text'}
-                  autoComplete="new-password"
-                  {...form.register(`configuration.${option.name}`)}
-                  placeholder={item?.hasConfiguration ? 'Saved value (leave blank to keep)' : ''}
-                />
-              </Field>
-            ))}
-          </div>
-        </div>
-        <div className="agent-form-section">
-          <div className="agent-form-section-header">
             <Cpu size={16} />
             <span>Model Configuration</span>
           </div>
@@ -617,6 +592,31 @@ function AgentEditor({ item, onClose }: { item: Agent | null; onClose: () => voi
               />
               <span>Enter a custom provider and model</span>
             </label>
+          </div>
+        </div>
+        <div className="agent-form-section">
+          <div className="agent-form-section-header">
+            <Wrench size={16} />
+            <span>Runtime configuration</span>
+          </div>
+          <div className="agent-form-section-content">
+            {(
+              runtimeProviders.data?.find((provider) => provider.runtime === form.watch('runtime'))
+                ?.configuration ?? []
+            ).map((option) => (
+              <Field
+                key={option.name}
+                label={`${option.name}${option.required ? ' (required if not in workspace)' : ''}`}
+                hint={`${option.description}${item?.hasConfiguration ? ' A saved value is retained when this field is blank.' : ''}`}
+              >
+                <input
+                  type={option.sensitive ? 'password' : 'text'}
+                  autoComplete="new-password"
+                  {...form.register(`configuration.${option.name}`)}
+                  placeholder={item?.hasConfiguration ? 'Saved value (leave blank to keep)' : ''}
+                />
+              </Field>
+            ))}
           </div>
         </div>
         <div className="agent-form-section">
