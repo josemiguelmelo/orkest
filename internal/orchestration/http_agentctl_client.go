@@ -32,6 +32,9 @@ type agentctlHTTPError struct {
 }
 
 func (e *agentctlHTTPError) Error() string {
+	if e.Code == "launch_failed" && e.Message != "" {
+		return fmt.Sprintf("agentctl request returned HTTP %d: %s", e.Status, e.Message)
+	}
 	return fmt.Sprintf("agentctl request returned HTTP %d", e.Status)
 }
 

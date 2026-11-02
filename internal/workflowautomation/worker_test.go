@@ -48,6 +48,17 @@ func TestWorkflowDeliveryPreservesSessionChoiceAndReconciles(t *testing.T) {
 	}
 }
 
+func TestWorkflowDeliveryLeavesUnspecifiedSessionChoiceForDispatcher(t *testing.T) {
+	repo := &taskRepositoryStub{task: task.Task{ID: "task", WorkspaceID: "workspace", Title: "Task", Status: "review", StageVersion: 2, AssigneeAgentID: "agent"}}
+	dispatcher := &sessionDispatcher{}
+	service := testService(repo, "member")
+	command := workflowautomation.ExecutionCommand{ID: "turn", OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", ActorID: "user", StageVersion: 2}
+	delivered, err := deliverCommand(context.Background(), service, dispatcher, command)
+	if err != nil || !delivered || dispatcher.received == nil || dispatcher.received.SessionMode != "" {
+		t.Fatal("unspecified session choice was not preserved", err)
+	}
+}
+
 func TestWorkflowDeliveryRechecksMutationPermission(t *testing.T) {
 	repo := &taskRepositoryStub{task: task.Task{ID: "task", StageVersion: 1}}
 	dispatcher := &sessionDispatcher{}

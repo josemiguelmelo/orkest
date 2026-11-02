@@ -2,11 +2,15 @@
 package docker
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"log/slog"
 	"net/netip"
 	"os"
 	"os/user"
@@ -20,6 +24,7 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/coderepository"
 	coreruntime "github.com/josemiguelmelo/orkest/internal/core/runtime"
 	"github.com/josemiguelmelo/orkest/internal/orchestration"
+	"github.com/moby/moby/api/pkg/stdcopy"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/mount"
 	"github.com/moby/moby/api/types/network"
@@ -39,6 +44,7 @@ type EngineClient interface {
 	ContainerStart(context.Context, string, mobyclient.ContainerStartOptions) (mobyclient.ContainerStartResult, error)
 	ContainerStop(context.Context, string, mobyclient.ContainerStopOptions) (mobyclient.ContainerStopResult, error)
 	ContainerInspect(context.Context, string, mobyclient.ContainerInspectOptions) (mobyclient.ContainerInspectResult, error)
+	ContainerLogs(context.Context, string, mobyclient.ContainerLogsOptions) (mobyclient.ContainerLogsResult, error)
 	ContainerRemove(context.Context, string, mobyclient.ContainerRemoveOptions) (mobyclient.ContainerRemoveResult, error)
 	Close() error
 }
@@ -149,6 +155,7 @@ func (e *Executor) StartAgentctl(ctx context.Context, config runconfig.RunConfig
 	if image == "" {
 		return orchestration.Process{}, fmt.Errorf("no Docker image configured for runtime %q", config.Runtime)
 	}
+	slog.Default().Info("starting agentctl container", "organization_id", config.OrganizationID, "workspace_id", config.WorkspaceID, "task_id", config.TaskID, "run_id", config.RunID, "runtime", config.Runtime, "image", image)
 	workDir, stateDir, err := e.taskDirectories(config)
 	if err != nil {
 		return orchestration.Process{}, err
@@ -343,6 +350,7 @@ func (e *Executor) TerminateAgentctl(ctx context.Context, processID string) erro
 	if inspection.Container.State == nil {
 		return errors.New("docker did not report agentctl container state during shutdown")
 	}
+	e.logStorageDiagnostics(ctx, processID)
 	if inspection.Container.State.Running {
 		timeout := 10
 		if _, err = e.client.ContainerStop(ctx, processID, mobyclient.ContainerStopOptions{Timeout: &timeout}); err != nil {
@@ -356,6 +364,34 @@ func (e *Executor) TerminateAgentctl(ctx context.Context, processID string) erro
 		return fmt.Errorf("remove stopped agentctl container: %w", err)
 	}
 	return nil
+}
+
+// logStorageDiagnostics copies only the targeted startup diagnostics before a
+// failed container is removed. Container logs can contain prompts or provider
+// output, so the rest of the stream is deliberately discarded.
+func (e *Executor) logStorageDiagnostics(ctx context.Context, processID string) {
+	logs, err := e.client.ContainerLogs(ctx, processID, mobyclient.ContainerLogsOptions{ShowStderr: true, Tail: "200"})
+	if err != nil {
+		slog.Default().Warn("read agentctl container diagnostics failed", "container_id", processID, "error", err)
+		return
+	}
+	defer func() { _ = logs.Close() }()
+	var output bytes.Buffer
+	if _, err = stdcopy.StdCopy(&output, io.Discard, logs); err != nil {
+		slog.Default().Warn("decode agentctl container diagnostics failed", "container_id", processID, "error", err)
+		return
+	}
+	scanner := bufio.NewScanner(&output)
+	scanner.Buffer(make([]byte, 1024), 64*1024)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.Contains(line, `"msg":"runtime durable session storage operation failed"`) || strings.Contains(line, `"msg":"runtime task storage ownership failed"`) {
+			slog.Default().Error("agentctl durable storage diagnostic", "container_id", processID, "agentctl_log", line)
+		}
+	}
+	if err = scanner.Err(); err != nil {
+		slog.Default().Warn("scan agentctl container diagnostics failed", "container_id", processID, "error", err)
+	}
 }
 
 // TerminateAgentctlByRunID resolves the deterministic container name used before

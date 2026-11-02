@@ -79,9 +79,6 @@ func (w *WorkflowExecutionService) dispatchCommand(ctx context.Context, c Execut
 		return false, nil
 	}
 	value.CommandID, value.SessionMode, value.PromptText = c.ID, c.Options.SessionMode, c.Options.PromptText
-	if value.SessionMode == "" {
-		value.SessionMode = "new"
-	}
 	if err = w.dispatcher.StartTask(ctx, c.ActorID, c.OrganizationID, value); err != nil {
 		if ctx.Err() != nil {
 			return false, ctx.Err()
@@ -92,7 +89,7 @@ func (w *WorkflowExecutionService) dispatchCommand(ctx context.Context, c Execut
 		if checkErr != nil {
 			return false, checkErr
 		}
-		w.logger.Warn("workflow start requires attention", "workspace_id", c.WorkspaceID, "task_id", c.TaskID, "command_id", c.ID)
+		w.logger.Warn("workflow start requires attention", "workspace_id", c.WorkspaceID, "task_id", c.TaskID, "command_id", c.ID, "reason", err)
 		return accepted, nil
 	}
 	return true, nil

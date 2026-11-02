@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/netip"
 	"os"
 	"path/filepath"
@@ -432,6 +433,10 @@ func (f *fakeEngine) ContainerInspect(_ context.Context, _ string, _ mobyclient.
 		state = &container.State{Running: f.running}
 	}
 	return mobyclient.ContainerInspectResult{Container: container.InspectResponse{State: state, NetworkSettings: &container.NetworkSettings{Ports: network.PortMap{network.MustParsePort("8081/tcp"): {{HostIP: netip.MustParseAddr("127.0.0.1"), HostPort: f.hostPort}}}}}}, nil
+}
+
+func (*fakeEngine) ContainerLogs(context.Context, string, mobyclient.ContainerLogsOptions) (mobyclient.ContainerLogsResult, error) {
+	return io.NopCloser(strings.NewReader("")), nil
 }
 
 func (f *fakeEngine) ContainerRemove(_ context.Context, id string, _ mobyclient.ContainerRemoveOptions) (mobyclient.ContainerRemoveResult, error) {

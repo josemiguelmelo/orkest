@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
 
 	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
@@ -124,8 +125,24 @@ func (s sessionStorage) load(config runconfig.RuntimeConfig) (string, error) {
 	for _, fingerprint := range legacyConfigurationFingerprints(config) {
 		compatibleConfiguration = compatibleConfiguration || manifest.Configuration == fingerprint
 	}
-	if manifest.Version != 1 || manifest.RuntimeVersion != s.RuntimeVersion || manifest.WorkDir != s.WorkDir || !compatibleConfiguration || manifest.SessionID == "" {
-		return "", errors.New("session manifest is incompatible with configuration or working path")
+	var mismatches []string
+	if manifest.Version != 1 {
+		mismatches = append(mismatches, "manifest_version_mismatch")
+	}
+	if manifest.RuntimeVersion != s.RuntimeVersion {
+		mismatches = append(mismatches, "runtime_version_mismatch")
+	}
+	if manifest.WorkDir != s.WorkDir {
+		mismatches = append(mismatches, "working_directory_mismatch")
+	}
+	if !compatibleConfiguration {
+		mismatches = append(mismatches, "configuration_mismatch")
+	}
+	if manifest.SessionID == "" {
+		mismatches = append(mismatches, "native_session_id_missing")
+	}
+	if len(mismatches) != 0 {
+		return "", fmt.Errorf("session manifest compatibility check failed: %s", strings.Join(mismatches, ","))
 	}
 	return manifest.SessionID, nil
 }

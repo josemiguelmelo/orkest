@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -76,6 +77,7 @@ func (h *Host) start(ctx context.Context, config runconfig.RuntimeConfig, restor
 	store := sessionStorage{StateDir: h.environment.StateDir, WorkDir: h.environment.WorkDir, RuntimeVersion: descriptor.Version}
 	owner, err := store.acquire(config)
 	if err != nil {
+		slog.Default().Error("runtime task storage ownership failed", "organization_id", config.OrganizationID, "workspace_id", config.WorkspaceID, "task_id", config.TaskID, "run_id", config.RunID, "task_session_id", config.TaskSessionID, "state_dir", h.environment.StateDir, "error", err)
 		return nil, &agentruntime.LaunchError{Message: "task execution ownership unavailable", Cause: err}
 	}
 	transferred := false
@@ -92,12 +94,29 @@ func (h *Host) start(ctx context.Context, config runconfig.RuntimeConfig, restor
 		err = store.reserveCreation(config)
 	}
 	if err != nil {
+		operation := "load_session"
+		if !restoring {
+			operation = "reserve_session_creation"
+		}
+		slog.Default().Error("runtime durable session storage operation failed",
+			"organization_id", config.OrganizationID,
+			"workspace_id", config.WorkspaceID,
+			"task_id", config.TaskID,
+			"run_id", config.RunID,
+			"task_session_id", config.TaskSessionID,
+			"operation", operation,
+			"restoring", restoring,
+			"storage_root", store.Root(config),
+			"error", err,
+		)
 		message := "could not reserve durable session storage; check storage availability and permissions"
 		switch {
 		case errors.Is(err, errSessionAlreadyExists):
 			message = "saved session already exists; continue that session or explicitly start a new session"
 		case errors.Is(err, os.ErrExist):
 			message = "session creation was already reserved by a previous attempt; reconcile it or explicitly start a new session"
+		default:
+			message += ": " + err.Error()
 		}
 		return nil, &agentruntime.LaunchError{Message: message, Cause: err}
 	}

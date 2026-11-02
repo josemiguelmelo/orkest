@@ -142,148 +142,19 @@ func (d *TaskDispatcher) StartTask(ctx context.Context, userID, organizationID s
 			return err
 		}
 	}
-	var config runconfig.RunConfig
-	var definition agent.Agent
-	var continuing bool
 	sessions := d.launches.repo
+	var config runconfig.RunConfig
+	var continuing bool
 	if value.SessionMode != "new" {
-		config, continuing, err = sessions.CurrentSession(ctx, organizationID, value.WorkspaceID, value.ID)
+		config, continuing, err = d.continueTaskSession(ctx, userID, organizationID, value, runID)
 		if err != nil {
 			return err
 		}
 	}
 	if !continuing {
-		config, definition, err = d.freshConfiguration(ctx, userID, organizationID, value)
+		config, err = d.createTaskSession(ctx, userID, organizationID, value, runID)
 		if err != nil {
 			return err
-		}
-		config.TaskSessionID, err = ids.NewUUID()
-		if err != nil {
-			return err
-		}
-	}
-	if !continuing {
-		config.ExecutionProfileID = definition.ExecutionProfileID
-	}
-	if config.ExecutionProfileID != "" {
-		if d.profiles == nil {
-			return errors.New("execution profiles unavailable")
-		}
-		config.ExecutionImage, err = d.profiles.Resolve(ctx, value.WorkspaceID, config.ExecutionProfileID, config.Runtime)
-		if err != nil {
-			return err
-		}
-	}
-	config.RunID, config.RestoreSession = runID, continuing
-	if d.agentTools != nil {
-		server, serverErr := d.agentTools.RuntimeServer(userID, organizationID, value.WorkspaceID, value.ID)
-		if serverErr != nil {
-			return fmt.Errorf("configure Orkest agent tools: %w", serverErr)
-		}
-		config.MCPServers = append(config.MCPServers, runconfig.MCPServer{ID: server.ID, Name: server.Name, URL: server.URL, Headers: server.Headers})
-	}
-	config.GitCredentials = nil
-	config.GitCredentialsRequired = false
-	config.Repositories = nil
-	if d.environmentResolver != nil {
-		config.Environment, err = d.environmentResolver.Resolve(ctx, value.WorkspaceID)
-		if err != nil {
-			return fmt.Errorf("resolve workspace environment: %w", err)
-		}
-	}
-	if !continuing {
-		if config.Environment == nil {
-			config.Environment = make(map[string]string)
-		}
-		for name, value := range definition.Configuration {
-			config.Environment[name] = value
-		}
-		if err := coreruntime.ValidateRequiredEnvironment(config.Runtime, config.Environment); err != nil {
-			return fmt.Errorf("resolve runtime configuration: %w", err)
-		}
-	}
-	if d.repositories != nil {
-		repositories, resolveErr := d.repositories.List(ctx, userID, organizationID, value.WorkspaceID)
-		if resolveErr != nil {
-			return fmt.Errorf("resolve workspace repositories: %w", resolveErr)
-		}
-		selectedRepositories := make(map[string]struct{}, len(value.Repositories))
-		for _, repository := range value.Repositories {
-			selectedRepositories[repository.ID] = struct{}{}
-		}
-		for _, repository := range repositories {
-			if _, selected := selectedRepositories[repository.ID]; !selected {
-				continue
-			}
-			config.Repositories = append(config.Repositories, runconfig.WorkspaceRepository{
-				ID: repository.ID, ProviderName: repository.ProviderName, URL: repository.URL,
-				IntegrationID: repository.IntegrationID, ProviderRepositoryID: repository.ProviderRepositoryID,
-				DefaultBranch: repository.DefaultBranch, Name: repository.Name,
-			})
-			if repository.IntegrationID != "" {
-				if d.codingCredentials == nil {
-					return errors.New("coding credential resolver is unavailable")
-				}
-				credential, credentialErr := d.codingCredentials.CodingCredential(ctx, value.WorkspaceID, repository.IntegrationID)
-				if credentialErr != nil {
-					return fmt.Errorf("resolve repository push credential: %w", credentialErr)
-				}
-				config.GitCredentials = append(config.GitCredentials, runconfig.GitCredential{ProviderName: repository.ProviderName, ProviderConfig: credential.ProviderConfig, RepositoryURL: repository.URL, RepositoryPath: "repositories/" + repository.ProviderName + "/" + repository.ID, Token: credential.Token})
-				config.GitCredentialsRequired = true
-			}
-		}
-	}
-	if !continuing {
-		if len(definition.SkillIDs) > 0 {
-			if d.skillResolver == nil {
-				return errors.New("agent skill resolver is unavailable")
-			}
-			resolved, resolveErr := d.skillResolver.ResolveForAgent(ctx, organizationID, value.WorkspaceID, definition.SkillIDs)
-			if resolveErr != nil {
-				return fmt.Errorf("resolve agent skills: %w", resolveErr)
-			}
-			for _, item := range resolved {
-				config.Skills = append(config.Skills, runconfig.Skill{ID: item.ID, SkillMD: item.SkillMD})
-			}
-			if len(config.Skills) != len(definition.SkillIDs) {
-				return errors.New("one or more selected agent skills are unavailable")
-			}
-		}
-		if len(definition.MCPServerIDs) > 0 {
-			if d.mcpServers == nil {
-				return errors.New("agent MCP server resolver is unavailable")
-			}
-			servers, resolveErr := d.mcpServers.Resolve(ctx, value.WorkspaceID, definition.MCPServerIDs)
-			if resolveErr != nil {
-				return fmt.Errorf("resolve agent MCP servers: %w", resolveErr)
-			}
-			for _, server := range servers {
-				config.MCPServers = append(config.MCPServers, runconfig.MCPServer{ID: server.ID, Name: server.Name, URL: server.URL, Headers: server.Headers})
-			}
-		}
-	} else if len(config.MCPServers) > 0 {
-		if d.mcpServers == nil {
-			return errors.New("agent MCP server resolver is unavailable")
-		}
-		serverIDs := make([]string, 0, len(config.MCPServers))
-		for _, server := range config.MCPServers {
-			if server.ID != runconfig.OrkestMCPServerID {
-				serverIDs = append(serverIDs, server.ID)
-			}
-		}
-		servers, err := d.mcpServers.Resolve(ctx, value.WorkspaceID, serverIDs)
-		if err != nil {
-			return err
-		}
-		if len(servers) != len(serverIDs) {
-			return errors.New("session MCP server is unavailable")
-		}
-		for i := range config.MCPServers {
-			for _, server := range servers {
-				if config.MCPServers[i].ID == server.ID {
-					config.MCPServers[i].Headers = server.Headers
-				}
-			}
 		}
 	}
 	prompt, err := taskPrompt(value, config.Repositories)
@@ -306,6 +177,220 @@ func (d *TaskDispatcher) StartTask(ctx context.Context, userID, organizationID s
 	config.ReservedRun = true
 	if _, err = d.launches.StartWithPrompt(ctx, config, commandID, prompt); err != nil {
 		return fmt.Errorf("start agent run: %w", err)
+	}
+	return nil
+}
+
+func (d *TaskDispatcher) createTaskSession(ctx context.Context, userID, organizationID string, value task.Task, runID string) (runconfig.RunConfig, error) {
+	config, definition, err := d.freshConfiguration(ctx, userID, organizationID, value)
+	if err != nil {
+		return runconfig.RunConfig{}, err
+	}
+	config.TaskSessionID, err = ids.NewUUID()
+	if err != nil {
+		return runconfig.RunConfig{}, err
+	}
+	config.ExecutionProfileID = definition.ExecutionProfileID
+	if err = d.resolveExecutionImage(ctx, value.WorkspaceID, &config); err != nil {
+		return runconfig.RunConfig{}, err
+	}
+	config.RunID, config.RestoreSession = runID, false
+	config.GitCredentials = nil
+	config.GitCredentialsRequired = false
+	config.Repositories = nil
+
+	if d.environmentResolver != nil {
+		config.Environment, err = d.environmentResolver.Resolve(ctx, value.WorkspaceID)
+		if err != nil {
+			return runconfig.RunConfig{}, fmt.Errorf("resolve workspace environment: %w", err)
+		}
+	}
+	if config.Environment == nil {
+		config.Environment = make(map[string]string)
+	}
+	for name, value := range definition.Configuration {
+		config.Environment[name] = value
+	}
+	if err = coreruntime.ValidateRequiredEnvironment(config.Runtime, config.Environment); err != nil {
+		return runconfig.RunConfig{}, fmt.Errorf("resolve runtime configuration: %w", err)
+	}
+	if err = d.resolveTaskRepositories(ctx, userID, organizationID, value, &config); err != nil {
+		return runconfig.RunConfig{}, err
+	}
+	if len(definition.SkillIDs) > 0 {
+		if d.skillResolver == nil {
+			return runconfig.RunConfig{}, errors.New("agent skill resolver is unavailable")
+		}
+		resolved, resolveErr := d.skillResolver.ResolveForAgent(ctx, organizationID, value.WorkspaceID, definition.SkillIDs)
+		if resolveErr != nil {
+			return runconfig.RunConfig{}, fmt.Errorf("resolve agent skills: %w", resolveErr)
+		}
+		for _, item := range resolved {
+			config.Skills = append(config.Skills, runconfig.Skill{ID: item.ID, SkillMD: item.SkillMD})
+		}
+		if len(config.Skills) != len(definition.SkillIDs) {
+			return runconfig.RunConfig{}, errors.New("one or more selected agent skills are unavailable")
+		}
+	}
+	if len(definition.MCPServerIDs) > 0 {
+		if d.mcpServers == nil {
+			return runconfig.RunConfig{}, errors.New("agent MCP server resolver is unavailable")
+		}
+		servers, resolveErr := d.mcpServers.Resolve(ctx, value.WorkspaceID, definition.MCPServerIDs)
+		if resolveErr != nil {
+			return runconfig.RunConfig{}, fmt.Errorf("resolve agent MCP servers: %w", resolveErr)
+		}
+		for _, server := range servers {
+			config.MCPServers = append(config.MCPServers, runconfig.MCPServer{ID: server.ID, Name: server.Name, URL: server.URL, Headers: server.Headers})
+		}
+	}
+	if err = d.refreshOrkestMCPServer(userID, organizationID, value, &config); err != nil {
+		return runconfig.RunConfig{}, err
+	}
+	return config, nil
+}
+
+func (d *TaskDispatcher) continueTaskSession(ctx context.Context, userID, organizationID string, value task.Task, runID string) (runconfig.RunConfig, bool, error) {
+	config, found, err := d.launches.repo.CurrentSession(ctx, organizationID, value.WorkspaceID, value.ID)
+	if err != nil || !found {
+		return config, found, err
+	}
+	if err = d.resolveExecutionImage(ctx, value.WorkspaceID, &config); err != nil {
+		return runconfig.RunConfig{}, false, err
+	}
+	config.RunID, config.RestoreSession = runID, true
+	config.GitCredentials = nil
+	config.GitCredentialsRequired = false
+	config.Repositories = nil
+	if d.environmentResolver != nil {
+		environment, resolveErr := d.environmentResolver.Resolve(ctx, value.WorkspaceID)
+		if resolveErr != nil {
+			return runconfig.RunConfig{}, false, fmt.Errorf("resolve workspace environment: %w", resolveErr)
+		}
+		if environment == nil {
+			environment = make(map[string]string, len(config.Environment))
+		}
+		for name, oldValue := range config.Environment {
+			if _, exists := environment[name]; !exists {
+				environment[name] = oldValue
+			}
+		}
+		config.Environment = environment
+	}
+	if err = d.resolveTaskRepositories(ctx, userID, organizationID, value, &config); err != nil {
+		return runconfig.RunConfig{}, false, err
+	}
+	if len(config.MCPServers) > 0 {
+		serverIDs := make([]string, 0, len(config.MCPServers))
+		for _, server := range config.MCPServers {
+			if server.ID != runconfig.OrkestMCPServerID {
+				serverIDs = append(serverIDs, server.ID)
+			}
+		}
+		if len(serverIDs) > 0 {
+			if d.mcpServers == nil {
+				return runconfig.RunConfig{}, false, errors.New("session MCP server resolver is unavailable")
+			}
+			servers, resolveErr := d.mcpServers.Resolve(ctx, value.WorkspaceID, serverIDs)
+			if resolveErr != nil {
+				return runconfig.RunConfig{}, false, fmt.Errorf("resolve session MCP server credentials: %w", resolveErr)
+			}
+			if len(servers) != len(serverIDs) {
+				return runconfig.RunConfig{}, false, errors.New("session MCP server is unavailable")
+			}
+			for i := range config.MCPServers {
+				for _, server := range servers {
+					if config.MCPServers[i].ID == server.ID {
+						config.MCPServers[i].Headers = server.Headers
+					}
+				}
+			}
+		}
+	}
+	if err = d.refreshOrkestMCPServer(userID, organizationID, value, &config); err != nil {
+		return runconfig.RunConfig{}, false, err
+	}
+	return config, true, nil
+}
+
+func (d *TaskDispatcher) resolveExecutionImage(ctx context.Context, workspaceID string, config *runconfig.RunConfig) error {
+	if config.ExecutionProfileID == "" {
+		return nil
+	}
+	if d.profiles == nil {
+		return errors.New("execution profiles unavailable")
+	}
+	image, err := d.profiles.Resolve(ctx, workspaceID, config.ExecutionProfileID, config.Runtime)
+	if err != nil {
+		return fmt.Errorf("resolve execution profile: %w", err)
+	}
+	config.ExecutionImage = image
+	return nil
+}
+
+func (d *TaskDispatcher) refreshOrkestMCPServer(userID, organizationID string, value task.Task, config *runconfig.RunConfig) error {
+	if d.agentTools == nil {
+		return nil
+	}
+	server, err := d.agentTools.RuntimeServer(userID, organizationID, value.WorkspaceID, value.ID)
+	if err != nil {
+		return fmt.Errorf("configure Orkest agent tools: %w", err)
+	}
+	servers := make([]runconfig.MCPServer, 0, len(config.MCPServers)+1)
+	found := false
+	for _, existing := range config.MCPServers {
+		if existing.ID == server.ID {
+			if !found {
+				servers = append(servers, runconfig.MCPServer{ID: server.ID, Name: server.Name, URL: server.URL, Headers: server.Headers})
+				found = true
+			}
+			continue
+		}
+		servers = append(servers, existing)
+	}
+	if !found {
+		servers = append(servers, runconfig.MCPServer{ID: server.ID, Name: server.Name, URL: server.URL, Headers: server.Headers})
+	}
+	config.MCPServers = servers
+	return nil
+}
+
+func (d *TaskDispatcher) resolveTaskRepositories(ctx context.Context, userID, organizationID string, value task.Task, config *runconfig.RunConfig) error {
+	config.Repositories = nil
+	config.GitCredentials = nil
+	config.GitCredentialsRequired = false
+	if d.repositories == nil {
+		return nil
+	}
+	repositories, err := d.repositories.List(ctx, userID, organizationID, value.WorkspaceID)
+	if err != nil {
+		return fmt.Errorf("resolve workspace repositories: %w", err)
+	}
+	selectedRepositories := make(map[string]struct{}, len(value.Repositories))
+	for _, repository := range value.Repositories {
+		selectedRepositories[repository.ID] = struct{}{}
+	}
+	for _, repository := range repositories {
+		if _, selected := selectedRepositories[repository.ID]; !selected {
+			continue
+		}
+		config.Repositories = append(config.Repositories, runconfig.WorkspaceRepository{
+			ID: repository.ID, ProviderName: repository.ProviderName, URL: repository.URL,
+			IntegrationID: repository.IntegrationID, ProviderRepositoryID: repository.ProviderRepositoryID,
+			DefaultBranch: repository.DefaultBranch, Name: repository.Name,
+		})
+		if repository.IntegrationID == "" {
+			continue
+		}
+		if d.codingCredentials == nil {
+			return errors.New("coding credential resolver is unavailable")
+		}
+		credential, err := d.codingCredentials.CodingCredential(ctx, value.WorkspaceID, repository.IntegrationID)
+		if err != nil {
+			return fmt.Errorf("resolve repository push credential: %w", err)
+		}
+		config.GitCredentials = append(config.GitCredentials, runconfig.GitCredential{ProviderName: repository.ProviderName, ProviderConfig: credential.ProviderConfig, RepositoryURL: repository.URL, RepositoryPath: "repositories/" + repository.ProviderName + "/" + repository.ID, Token: credential.Token})
+		config.GitCredentialsRequired = true
 	}
 	return nil
 }

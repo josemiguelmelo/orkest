@@ -231,7 +231,8 @@ func (c *RunController) Launch() error {
 
 func (c *RunController) startReservedSession(mode sessionStartMode, config runconfig.RunConfig) error {
 	startedAt := time.Now()
-	c.logger.Info("runtime launch started", runLogAttrs(config)...)
+	launchAttrs := append(runLogAttrs(config), "task_session_id", config.TaskSessionID, "restore_session", mode == restoreSession)
+	c.logger.Info("runtime launch started", launchAttrs...)
 	ctx, cancel := context.WithTimeout(c.ctx, 30*time.Second)
 	defer cancel()
 	var session agentruntime.RuntimeSession
@@ -252,7 +253,7 @@ func (c *RunController) startReservedSession(mode sessionStartMode, config runco
 			c.launchState = StateInterrupted
 			c.recoveryBlocked = true
 		}
-		c.logger.Error("runtime launch failed", append(runLogAttrs(config), "error_type", fmt.Sprintf("%T", err), "duration_ms", time.Since(startedAt).Milliseconds())...)
+		c.logger.Error("runtime launch failed", append(launchAttrs, "error_type", fmt.Sprintf("%T", err), "duration_ms", time.Since(startedAt).Milliseconds())...)
 		c.mu.Unlock()
 		return err
 	}
