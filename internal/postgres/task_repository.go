@@ -2,7 +2,6 @@ package postgres
 
 import (
 	"context"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	modelerrors "github.com/josemiguelmelo/orkest/internal/core/model/errors"
@@ -29,7 +28,7 @@ func (r *TaskPostgresRepository) Tasks(ctx context.Context, orgID, workspaceID s
 	}
 	out := make([]task.Task, 0, len(rows))
 	for _, row := range rows {
-		t := taskFrom(row.ID, row.WorkspaceID, row.WorkflowID, row.Title, row.Description, row.SourceProvider, row.SourceID, row.SourceUrl, row.Status, row.AssigneeAgentID, row.Labels, row.CreatedAt.Time, row.UpdatedAt.Time, row.StageVersion, row.StageWorkState, row.Closed, row.WorkflowSnapshot)
+		t := taskFromRow(sqlc.GetTaskRow(row))
 		if err := r.fillRepositories(ctx, &t); err != nil {
 			return nil, err
 		}
@@ -43,7 +42,7 @@ func (r *TaskPostgresRepository) Task(ctx context.Context, orgID, workspaceID, i
 	if err != nil {
 		return task.Task{}, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
 	}
-	t := taskFrom(row.ID, row.WorkspaceID, row.WorkflowID, row.Title, row.Description, row.SourceProvider, row.SourceID, row.SourceUrl, row.Status, row.AssigneeAgentID, row.Labels, row.CreatedAt.Time, row.UpdatedAt.Time, row.StageVersion, row.StageWorkState, row.Closed, row.WorkflowSnapshot)
+	t := taskFromRow(sqlc.GetTaskRow(row))
 	if err = r.fillRepositories(ctx, &t); err != nil {
 		return task.Task{}, err
 	}
@@ -64,7 +63,7 @@ func (r *TaskPostgresRepository) CreateTask(ctx context.Context, id, workspaceID
 	if e != nil {
 		return task.Task{}, e
 	}
-	definition, e := decodeWorkflow(data)
+	definition, e := workflowDefinition(ctx, q, data)
 	if e != nil {
 		return task.Task{}, e
 	}
@@ -86,14 +85,14 @@ func (r *TaskPostgresRepository) CreateTask(ctx context.Context, id, workspaceID
 		}
 	}
 	if plan.Start && in.ActorID != "" {
-		if err = enqueueStageStart(ctx, q, workspaceID, id, in.ActorID, 1, in); err != nil {
+		if err = enqueueStageStart(ctx, q, workspaceID, id, in.ActorID, 1, task.TransitionInput{Action: "start", CommandID: in.CommandID, SessionMode: in.SessionMode, PromptText: in.PromptText}); err != nil {
 			return task.Task{}, err
 		}
 	}
 	if err = tx.Commit(ctx); err != nil {
 		return task.Task{}, err
 	}
-	t := taskFrom(row.ID, row.WorkspaceID, row.WorkflowID, row.Title, row.Description, row.SourceProvider, row.SourceID, row.SourceUrl, row.Status, row.AssigneeAgentID, row.Labels, row.CreatedAt.Time, row.UpdatedAt.Time, row.StageVersion, row.StageWorkState, row.Closed, row.WorkflowSnapshot)
+	t := taskFromRow(sqlc.GetTaskRow(row))
 	err = r.fillRepositories(ctx, &t)
 	return t, err
 }
@@ -117,11 +116,11 @@ func (r *TaskPostgresRepository) updateTask(ctx context.Context, orgID, workspac
 	if expectedStatus == "" {
 		var row sqlc.UpdateTaskRow
 		row, err = q.UpdateTask(ctx, sqlc.UpdateTaskParams{OrganizationID: orgID, WorkspaceID: workspaceID, ID: id, Title: in.Title, Description: in.Description, Status: in.Status, Column7: in.AssigneeAgentID, Labels: in.Labels})
-		updated = taskFrom(row.ID, row.WorkspaceID, row.WorkflowID, row.Title, row.Description, row.SourceProvider, row.SourceID, row.SourceUrl, row.Status, row.AssigneeAgentID, row.Labels, row.CreatedAt.Time, row.UpdatedAt.Time, row.StageVersion, row.StageWorkState, row.Closed, row.WorkflowSnapshot)
+		updated = taskFromRow(sqlc.GetTaskRow(row))
 	} else {
 		var row sqlc.UpdateTaskIfStatusRow
 		row, err = q.UpdateTaskIfStatus(ctx, sqlc.UpdateTaskIfStatusParams{OrganizationID: orgID, WorkspaceID: workspaceID, ID: id, Status: expectedStatus, Title: in.Title, Description: in.Description, Status_2: in.Status, Column8: in.AssigneeAgentID, Labels: in.Labels})
-		updated = taskFrom(row.ID, row.WorkspaceID, row.WorkflowID, row.Title, row.Description, row.SourceProvider, row.SourceID, row.SourceUrl, row.Status, row.AssigneeAgentID, row.Labels, row.CreatedAt.Time, row.UpdatedAt.Time, row.StageVersion, row.StageWorkState, row.Closed, row.WorkflowSnapshot)
+		updated = taskFromRow(sqlc.GetTaskRow(row))
 	}
 	if err != nil {
 		if expectedStatus != "" {
@@ -170,12 +169,6 @@ func (r *TaskPostgresRepository) CreateComment(ctx context.Context, id, workspac
 }
 
 func (r *TaskPostgresRepository) fillRepositories(ctx context.Context, t *task.Task) error {
-	d, e := decodeWorkflow(t.WorkflowSnapshot)
-	if e != nil {
-		return e
-	}
-	stage, _ := d.Stage(t.Status)
-	t.StageName, t.StageDescription = stage.Name, stage.Description
 	values, err := r.taskRepositories(ctx, t.WorkspaceID, t.ID)
 	t.Repositories = values
 	return err
@@ -193,9 +186,11 @@ func (r *TaskPostgresRepository) taskRepositories(ctx context.Context, workspace
 	return out, nil
 }
 
-func taskFrom(id, workspaceID, workflowID, title, description, sourceProvider, sourceID, sourceURL, status, assignee string, labels []string, created, updated time.Time, stageVersion int64, workState string, closed bool, snapshot []byte) task.Task {
-	if labels == nil {
-		labels = []string{}
+// All task queries return the same projection; conversions at call sites are
+// checked by the compiler when SQL generation changes that projection.
+func taskFromRow(row sqlc.GetTaskRow) task.Task {
+	if row.Labels == nil {
+		row.Labels = []string{}
 	}
-	return task.Task{WorkflowSnapshot: snapshot, StageVersion: stageVersion, StageWorkState: task.WorkState(workState), WorkflowID: workflowID, Closed: closed, ID: id, WorkspaceID: workspaceID, Title: title, Description: description, SourceProvider: sourceProvider, SourceID: sourceID, SourceURL: sourceURL, Status: status, AssigneeAgentID: assignee, Labels: labels, Repositories: []task.RepositoryRef{}, CreatedAt: created, UpdatedAt: updated}
+	return task.Task{ID: row.ID, WorkspaceID: row.WorkspaceID, WorkflowID: row.WorkflowID, Title: row.Title, Description: row.Description, SourceProvider: row.SourceProvider, SourceID: row.SourceID, SourceURL: row.SourceUrl, Status: row.Status, AssigneeAgentID: row.AssigneeAgentID, Labels: row.Labels, CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time, StageVersion: row.StageVersion, StageWorkState: task.WorkState(row.StageWorkState), Closed: row.Closed, StageName: row.StageName, StageDescription: row.StageDescription, Repositories: []task.RepositoryRef{}}
 }

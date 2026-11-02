@@ -3,7 +3,6 @@ package task
 import "time"
 
 type Task struct {
-	WorkflowSnapshot []byte          `json:"-"`
 	StageName        string          `json:"-"`
 	StageDescription string          `json:"-"`
 	Closed           bool            `json:"closed"`

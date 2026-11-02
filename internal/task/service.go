@@ -137,11 +137,8 @@ func normalizeTaskContent(input *TaskInput) error {
 	if input.StageVersion < 0 || (input.StartWork && input.CompleteStage) || len(input.Status) > 100 {
 		return modelerrors.ErrInvalid
 	}
-	if input.SessionMode != "" && input.SessionMode != "continue" && input.SessionMode != "new" {
-		return modelerrors.ErrInvalid
-	}
-	if len(input.PromptText) > 256*1024 || len(input.CommandID) > 200 || (input.CommandID != "" && strings.TrimSpace(input.CommandID) == "") {
-		return modelerrors.ErrInvalid
+	if err := validateExecutionOptions(input.SessionMode, input.PromptText, input.CommandID); err != nil {
+		return err
 	}
 	input.Title = strings.TrimSpace(input.Title)
 	input.Description = strings.TrimSpace(input.Description)
@@ -169,4 +166,14 @@ func normalizeStrings(values []string) []string {
 		out = append(out, value)
 	}
 	return out
+}
+
+func validateExecutionOptions(sessionMode, promptText, commandID string) error {
+	if sessionMode != "" && sessionMode != "continue" && sessionMode != "new" {
+		return modelerrors.ErrInvalid
+	}
+	if len(promptText) > 256*1024 || len(commandID) > 200 || (commandID != "" && strings.TrimSpace(commandID) == "") {
+		return modelerrors.ErrInvalid
+	}
+	return nil
 }

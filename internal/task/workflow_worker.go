@@ -12,7 +12,7 @@ import (
 type WorkflowCommand struct {
 	ID, OrganizationID, WorkspaceID, TaskID, ActorID string
 	StageVersion                                     int64
-	Options                                          TaskInput
+	Options                                          TransitionInput
 }
 
 type CommandRepository interface {

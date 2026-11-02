@@ -25,7 +25,7 @@ func TestWorkflowDeliveryPreservesSessionChoiceAndReconciles(t *testing.T) {
 	repo := &taskRepositoryStub{task: Task{ID: "task", WorkspaceID: "workspace", Title: "Task", Status: "review", StageVersion: 2, AssigneeAgentID: "agent"}}
 	dispatcher := &sessionDispatcher{}
 	worker := NewWorkflowWorker(nil, testService(repo, "member"), dispatcher, slog.New(slog.NewTextHandler(io.Discard, nil)))
-	command := WorkflowCommand{ID: "turn", OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", ActorID: "user", StageVersion: 2, Options: TaskInput{SessionMode: "new", PromptText: "revise this"}}
+	command := WorkflowCommand{ID: "turn", OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", ActorID: "user", StageVersion: 2, Options: TransitionInput{SessionMode: "new", PromptText: "revise this"}}
 	delivered, err := worker.deliver(context.Background(), command)
 	if err != nil || !delivered || dispatcher.received == nil || dispatcher.received.PromptText != "revise this" || dispatcher.received.CommandID != "turn" || dispatcher.received.SessionMode != "new" {
 		t.Fatal("session options were lost", err)

@@ -71,11 +71,11 @@ func (s *Service) Save(ctx context.Context, userID, orgID, workspaceID, workflow
 	if w.Role != "owner" && w.Role != "admin" {
 		return Definition{}, modelerrors.ErrForbidden
 	}
-	current, err := s.repository.Definition(ctx, workspaceID, workflowID)
-	if err != nil {
-		return Definition{}, err
-	}
 	if d.Name == "" {
+		current, err := s.repository.Definition(ctx, workspaceID, workflowID)
+		if err != nil {
+			return Definition{}, err
+		}
 		d.Name = current.Name
 	}
 	d.ConfiguredBy = userID
@@ -93,16 +93,6 @@ func (s *Service) Delete(ctx context.Context, userID, orgID, workspaceID, workfl
 	}
 	if w.Role != "owner" && w.Role != "admin" {
 		return modelerrors.ErrForbidden
-	}
-	if _, err := s.repository.Definition(ctx, workspaceID, workflowID); err != nil {
-		return err
-	}
-	definitions, err := s.repository.Definitions(ctx, workspaceID)
-	if err != nil {
-		return err
-	}
-	if len(definitions) <= 1 {
-		return modelerrors.ErrConflict
 	}
 	return s.repository.Delete(ctx, workspaceID, workflowID)
 }

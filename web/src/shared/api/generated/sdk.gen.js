@@ -1077,7 +1077,7 @@ export const getWorkspaceWorkflow = (options) => (options.client ?? client).get(
     ...options
 });
 /**
- * Admins replace the ordered stage configuration using optimistic version checking. Occupied stages cannot be removed. Changes affect future stage entries.
+ * Admins replace the ordered stage configuration using optimistic version checking. Occupied stages cannot be removed. Transitions use the latest saved configuration, including completion of work already running. Saving configuration does not itself launch work or change active runtime settings.
  */
 export const saveWorkspaceWorkflow = (options) => (options.client ?? client).put({
     requestValidator: async (data) => await z.object({

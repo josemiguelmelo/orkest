@@ -13,7 +13,7 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/workflow"
 )
 
-func enqueueStageStart(ctx context.Context, q *sqlc.Queries, workspaceID, taskID, actorID string, version int64, in task.TaskInput) error {
+func enqueueStageStart(ctx context.Context, q *sqlc.Queries, workspaceID, taskID, actorID string, version int64, in task.TransitionInput) error {
 	if actorID == "" {
 		return q.SetStageWorkState(ctx, sqlc.SetStageWorkStateParams{WorkspaceID: workspaceID, ID: taskID, StageVersion: version, StageWorkState: string(task.WorkStateFailed)})
 	}
@@ -34,10 +34,22 @@ func enqueueStageStart(ctx context.Context, q *sqlc.Queries, workspaceID, taskID
 	return q.SetStageWorkState(ctx, sqlc.SetStageWorkStateParams{WorkspaceID: workspaceID, ID: taskID, StageVersion: version, StageWorkState: string(task.WorkStateQueued)})
 }
 
-func (r *TaskPostgresRepository) TransitionTask(ctx context.Context, userID, orgID, workspaceID, id string, in task.TaskInput) (task.Task, error) {
-	if in.Labels == nil {
-		in.Labels = []string{}
+func (r *TaskPostgresRepository) TransitionTask(ctx context.Context, userID, orgID, workspaceID, id string, in task.TransitionInput) (task.Task, error) {
+	return r.transitionTask(ctx, userID, orgID, workspaceID, id, in, nil)
+}
+
+func (r *TaskPostgresRepository) UpdateWorkflowTask(ctx context.Context, userID, orgID, workspaceID, id string, in task.TaskInput) (task.Task, error) {
+	action := "move"
+	if in.StartWork {
+		action = "start"
+	} else if in.CompleteStage {
+		action = "complete"
 	}
+	command := task.TransitionInput{Action: action, StageID: in.Status, StageVersion: in.StageVersion, CommandID: in.CommandID, SessionMode: in.SessionMode, PromptText: in.PromptText}
+	return r.transitionTask(ctx, userID, orgID, workspaceID, id, command, &in)
+}
+
+func (r *TaskPostgresRepository) transitionTask(ctx context.Context, userID, orgID, workspaceID, id string, in task.TransitionInput, content *task.TaskInput) (task.Task, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return task.Task{}, err
@@ -52,7 +64,7 @@ func (r *TaskPostgresRepository) TransitionTask(ctx context.Context, userID, org
 	if err != nil {
 		return task.Task{}, err
 	}
-	d, err := decodeWorkflow(data)
+	d, err := workflowDefinition(ctx, q, data)
 	if err != nil {
 		return task.Task{}, err
 	}
@@ -63,16 +75,23 @@ func (r *TaskPostgresRepository) TransitionTask(ctx context.Context, userID, org
 	if state.WorkflowID != entry.WorkflowID {
 		return task.Task{}, modelerrors.ErrConflict
 	}
+	if content != nil && content.Status != state.Status {
+		in.Action = "move"
+	}
+	if in.Action != "move" {
+		in.StageID = ""
+	}
 	if in.CommandID != "" {
 		previous, e := q.GetWorkflowCommand(ctx, sqlc.GetWorkflowCommandParams{WorkspaceID: workspaceID, TaskID: id, ID: in.CommandID})
 		if e == nil {
-			var original task.TaskInput
+			var original task.TransitionInput
 			if e = json.Unmarshal(previous.Options, &original); e != nil {
 				return task.Task{}, e
 			}
-			if original.StartWork != in.StartWork || original.CompleteStage != in.CompleteStage || original.StageVersion != in.StageVersion || original.SessionMode != in.SessionMode || original.PromptText != in.PromptText || (!in.StartWork && !in.CompleteStage && original.Status != in.Status) {
+			if original != in {
 				return task.Task{}, modelerrors.ErrConflict
 			}
+
 			return r.Task(ctx, orgID, workspaceID, id)
 		}
 		if !errors.Is(e, pgx.ErrNoRows) {
@@ -82,24 +101,25 @@ func (r *TaskPostgresRepository) TransitionTask(ctx context.Context, userID, org
 	if in.StageVersion != 0 && in.StageVersion != state.StageVersion {
 		return task.Task{}, modelerrors.ErrConflict
 	}
+	target, assignee := state.Status, state.Assignee
+	if in.Action == "move" {
+		target = in.StageID
+	}
+	if content != nil {
+		assignee = content.AssigneeAgentID
+	}
+	changing := target != state.Status
 	trigger := workflow.Enter
-	changing := state.Status != in.Status
-	snapshot, e := decodeWorkflow(state.WorkflowSnapshot)
-	if e != nil {
-		return task.Task{}, e
-	}
-	if changing && state.Status == snapshot.FinalStageID() {
-		return task.Task{}, modelerrors.ErrConflict
-	}
-	if in.CompleteStage {
-		trigger = workflow.Complete
-	} else if in.StartWork {
+	switch in.Action {
+	case "start":
 		trigger = workflow.Start
+	case "complete":
+		trigger = workflow.Complete
+	case "move":
+	default:
+		return task.Task{}, modelerrors.ErrInvalid
 	}
-	if changing && (in.CompleteStage || in.StartWork) {
-		trigger = workflow.Enter
-	}
-	if changing || in.StartWork || in.CompleteStage || state.Assignee != in.AssigneeAgentID {
+	if changing || in.Action != "move" || state.Assignee != assignee {
 		if state.StageWorkState == string(task.WorkStateQueued) || state.StageWorkState == string(task.WorkStateRunning) {
 			return task.Task{}, modelerrors.ErrConflict
 		}
@@ -109,45 +129,34 @@ func (r *TaskPostgresRepository) TransitionTask(ctx context.Context, userID, org
 			return task.Task{}, e
 		}
 	}
-	plan := workflow.Plan{StageID: in.Status, AssigneeAgentID: in.AssigneeAgentID}
-	if changing || in.StartWork || in.CompleteStage {
-		definition := d
-		if in.CompleteStage || in.StartWork {
-			definition, err = decodeWorkflow(state.WorkflowSnapshot)
-			if err != nil {
-				return task.Task{}, err
-			}
-		}
-		plan, err = workflow.PlanTransition(definition, state.Status, in.Status, in.AssigneeAgentID, trigger)
+	plan := workflow.Plan{StageID: target, AssigneeAgentID: assignee}
+	if changing || in.Action != "move" {
+		plan, err = workflow.PlanTransition(d, state.Status, target, assignee, trigger)
 		if err != nil {
 			return task.Task{}, err
 		}
-		if plan.StageID != state.Status {
-			// Entry always uses the current stage configuration.
-			plan, err = workflow.PlanTransition(d, state.Status, plan.StageID, plan.AssigneeAgentID, workflow.Enter)
-			if err != nil {
-				return task.Task{}, err
-			}
+	}
+	if content != nil {
+		row, e := q.GetTask(ctx, sqlc.GetTaskParams{OrganizationID: orgID, WorkspaceID: workspaceID, ID: id})
+		if e != nil {
+			return task.Task{}, e
 		}
-	}
-	row, err := q.GetTask(ctx, sqlc.GetTaskParams{OrganizationID: orgID, WorkspaceID: workspaceID, ID: id})
-	if err != nil {
-		return task.Task{}, err
-	}
-	if row.SourceProvider != "manual" {
-		in.Title, in.Description, in.Labels = row.Title, row.Description, row.Labels
-	}
-	_, err = q.UpdateTask(ctx, sqlc.UpdateTaskParams{OrganizationID: orgID, WorkspaceID: workspaceID, ID: id, Title: in.Title, Description: in.Description, Status: plan.StageID, Column7: plan.AssigneeAgentID, Labels: in.Labels})
-	if err != nil {
-		return task.Task{}, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
-	}
-	if err = q.DeleteTaskRepositories(ctx, sqlc.DeleteTaskRepositoriesParams{WorkspaceID: workspaceID, TaskID: id}); err != nil {
-		return task.Task{}, err
-	}
-	for _, repoID := range in.RepositoryIDs {
-		if err = q.InsertTaskRepository(ctx, sqlc.InsertTaskRepositoryParams{WorkspaceID: workspaceID, TaskID: id, RepositoryID: repoID}); err != nil {
+		if row.SourceProvider != "manual" {
+			content.Title, content.Description, content.Labels = row.Title, row.Description, row.Labels
+		}
+		if _, err = q.UpdateTask(ctx, sqlc.UpdateTaskParams{OrganizationID: orgID, WorkspaceID: workspaceID, ID: id, Title: content.Title, Description: content.Description, Status: plan.StageID, Column7: plan.AssigneeAgentID, Labels: content.Labels}); err != nil {
 			return task.Task{}, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
 		}
+		if err = q.DeleteTaskRepositories(ctx, sqlc.DeleteTaskRepositoriesParams{WorkspaceID: workspaceID, TaskID: id}); err != nil {
+			return task.Task{}, err
+		}
+		for _, repoID := range content.RepositoryIDs {
+			if err = q.InsertTaskRepository(ctx, sqlc.InsertTaskRepositoryParams{WorkspaceID: workspaceID, TaskID: id, RepositoryID: repoID}); err != nil {
+				return task.Task{}, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
+			}
+		}
+	} else if err = q.MoveWorkflowTask(ctx, sqlc.MoveWorkflowTaskParams{WorkspaceID: workspaceID, ID: id, StageVersion: state.StageVersion, Status: plan.StageID, Column5: plan.AssigneeAgentID}); err != nil {
+		return task.Task{}, err
 	}
 	version := state.StageVersion
 	if plan.StageID != state.Status {
@@ -187,7 +196,7 @@ func completeWorkflowRun(ctx context.Context, q *sqlc.Queries, runID string, suc
 	if err != nil {
 		return err
 	}
-	d, err := decodeWorkflow(data)
+	d, err := workflowDefinition(ctx, q, data)
 	if err != nil {
 		return err
 	}
@@ -204,11 +213,7 @@ func completeWorkflowRun(ctx context.Context, q *sqlc.Queries, runID string, suc
 	workState := task.WorkStateFailed
 	if success {
 		workState = task.WorkStateCompleted
-		snapshot, e := decodeWorkflow(state.WorkflowSnapshot)
-		if e != nil {
-			return e
-		}
-		plan, e := workflow.PlanTransition(snapshot, state.Status, "", state.Assignee, workflow.Succeeded)
+		plan, e := workflow.PlanTransition(d, state.Status, "", state.Assignee, workflow.Succeeded)
 		if errors.Is(e, modelerrors.ErrConflict) {
 			return q.SetStageWorkState(ctx, sqlc.SetStageWorkStateParams{WorkspaceID: run.WorkspaceID, ID: run.TaskID, StageVersion: state.StageVersion, StageWorkState: string(task.WorkStateCompleted)})
 		}
@@ -216,22 +221,13 @@ func completeWorkflowRun(ctx context.Context, q *sqlc.Queries, runID string, suc
 			return e
 		}
 		if plan.StageID != state.Status {
-			if _, exists := d.Stage(plan.StageID); exists {
-				plan, e = workflow.PlanTransition(d, state.Status, plan.StageID, plan.AssigneeAgentID, workflow.Enter)
-				if errors.Is(e, modelerrors.ErrConflict) {
-					return q.SetStageWorkState(ctx, sqlc.SetStageWorkStateParams{WorkspaceID: run.WorkspaceID, ID: run.TaskID, StageVersion: state.StageVersion, StageWorkState: string(task.WorkStateCompleted)})
-				}
-				if e != nil {
-					return e
-				}
-				if e = q.MoveWorkflowTask(ctx, sqlc.MoveWorkflowTaskParams{WorkspaceID: run.WorkspaceID, ID: run.TaskID, StageVersion: state.StageVersion, Status: plan.StageID, Column5: plan.AssigneeAgentID}); e != nil {
-					return e
-				}
-				if plan.Start {
-					return enqueueStageStart(ctx, q, run.WorkspaceID, run.TaskID, run.ActorID.String, state.StageVersion+1, task.TaskInput{SessionMode: "new"})
-				}
-				return nil
+			if e = q.MoveWorkflowTask(ctx, sqlc.MoveWorkflowTaskParams{WorkspaceID: run.WorkspaceID, ID: run.TaskID, StageVersion: state.StageVersion, Status: plan.StageID, Column5: plan.AssigneeAgentID}); e != nil {
+				return e
 			}
+			if plan.Start {
+				return enqueueStageStart(ctx, q, run.WorkspaceID, run.TaskID, run.ActorID.String, state.StageVersion+1, task.TransitionInput{Action: "start", SessionMode: "new"})
+			}
+			return nil
 		}
 	}
 	return q.SetStageWorkState(ctx, sqlc.SetStageWorkStateParams{WorkspaceID: run.WorkspaceID, ID: run.TaskID, StageVersion: state.StageVersion, StageWorkState: string(workState)})

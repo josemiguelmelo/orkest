@@ -26,7 +26,7 @@ func (q *Queries) DeleteTaskRepositories(ctx context.Context, arg DeleteTaskRepo
 }
 
 const getTask = `-- name: GetTask :one
-SELECT t.id, t.workspace_id, t.workflow_id, t.title, t.description, t.source_provider, COALESCE(t.source_id, '') AS source_id, COALESCE(t.source_url, '') AS source_url, t.status, COALESCE(t.assignee_agent_id, '') AS assignee_agent_id, t.labels, t.created_at, t.updated_at, t.stage_version, t.stage_work_state, t.workflow_snapshot, COALESCE(t.status = t.workflow_snapshot->'stages'->-1->>'id',false)::boolean AS closed
+SELECT t.id, t.workspace_id, t.workflow_id, t.title, t.description, t.source_provider, COALESCE(t.source_id, '') AS source_id, COALESCE(t.source_url, '') AS source_url, t.status, COALESCE(t.assignee_agent_id, '') AS assignee_agent_id, t.labels, t.created_at, t.updated_at, t.stage_version, t.stage_work_state, COALESCE(t.status = workflow_final_stage(t.workspace_id,t.workflow_id),false)::boolean AS closed, COALESCE((SELECT s.name FROM workflow_stages s WHERE s.workspace_id=t.workspace_id AND s.workflow_id=t.workflow_id AND s.id=t.status),'')::text AS stage_name, COALESCE((SELECT s.description FROM workflow_stages s WHERE s.workspace_id=t.workspace_id AND s.workflow_id=t.workflow_id AND s.id=t.status),'')::text AS stage_description
 FROM tasks t JOIN workspaces w ON w.id = t.workspace_id
 WHERE w.organization_id = $1 AND t.workspace_id = $2 AND t.id = $3
 `
@@ -53,8 +53,9 @@ type GetTaskRow struct {
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
 	StageVersion     int64              `json:"stage_version"`
 	StageWorkState   string             `json:"stage_work_state"`
-	WorkflowSnapshot []byte             `json:"workflow_snapshot"`
 	Closed           bool               `json:"closed"`
+	StageName        string             `json:"stage_name"`
+	StageDescription string             `json:"stage_description"`
 }
 
 func (q *Queries) GetTask(ctx context.Context, arg GetTaskParams) (GetTaskRow, error) {
@@ -76,8 +77,9 @@ func (q *Queries) GetTask(ctx context.Context, arg GetTaskParams) (GetTaskRow, e
 		&i.UpdatedAt,
 		&i.StageVersion,
 		&i.StageWorkState,
-		&i.WorkflowSnapshot,
 		&i.Closed,
+		&i.StageName,
+		&i.StageDescription,
 	)
 	return i, err
 }
@@ -94,9 +96,9 @@ func (q *Queries) GetWorkspaceOrganization(ctx context.Context, id string) (stri
 }
 
 const insertTask = `-- name: InsertTask :one
-INSERT INTO tasks (id, workspace_id, workflow_id, title, description, status, assignee_agent_id, labels)
+INSERT INTO tasks AS t (id, workspace_id, workflow_id, title, description, status, assignee_agent_id, labels)
 SELECT $1, w.id, $3, $4, $5, $6, NULLIF($7, ''), $8 FROM workspaces w WHERE w.id = $2
-RETURNING id, workspace_id, workflow_id, title, description, source_provider, COALESCE(source_id, '') AS source_id, COALESCE(source_url, '') AS source_url, status, COALESCE(assignee_agent_id, '') AS assignee_agent_id, labels, created_at, updated_at, stage_version, stage_work_state, workflow_snapshot, COALESCE(status = workflow_snapshot->'stages'->-1->>'id',false)::boolean AS closed
+RETURNING id, workspace_id, workflow_id, title, description, source_provider, COALESCE(source_id, '') AS source_id, COALESCE(source_url, '') AS source_url, status, COALESCE(assignee_agent_id, '') AS assignee_agent_id, labels, created_at, updated_at, stage_version, stage_work_state, COALESCE(status = workflow_final_stage(workspace_id,workflow_id),false)::boolean AS closed, COALESCE((SELECT s.name FROM workflow_stages s WHERE s.workspace_id=t.workspace_id AND s.workflow_id=t.workflow_id AND s.id=t.status),'')::text AS stage_name, COALESCE((SELECT s.description FROM workflow_stages s WHERE s.workspace_id=t.workspace_id AND s.workflow_id=t.workflow_id AND s.id=t.status),'')::text AS stage_description
 `
 
 type InsertTaskParams struct {
@@ -126,8 +128,9 @@ type InsertTaskRow struct {
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
 	StageVersion     int64              `json:"stage_version"`
 	StageWorkState   string             `json:"stage_work_state"`
-	WorkflowSnapshot []byte             `json:"workflow_snapshot"`
 	Closed           bool               `json:"closed"`
+	StageName        string             `json:"stage_name"`
+	StageDescription string             `json:"stage_description"`
 }
 
 func (q *Queries) InsertTask(ctx context.Context, arg InsertTaskParams) (InsertTaskRow, error) {
@@ -158,8 +161,9 @@ func (q *Queries) InsertTask(ctx context.Context, arg InsertTaskParams) (InsertT
 		&i.UpdatedAt,
 		&i.StageVersion,
 		&i.StageWorkState,
-		&i.WorkflowSnapshot,
 		&i.Closed,
+		&i.StageName,
+		&i.StageDescription,
 	)
 	return i, err
 }
@@ -301,7 +305,7 @@ func (q *Queries) ListTaskRepositories(ctx context.Context, arg ListTaskReposito
 }
 
 const listTasks = `-- name: ListTasks :many
-SELECT t.id, t.workspace_id, t.workflow_id, t.title, t.description, t.source_provider, COALESCE(t.source_id, '') AS source_id, COALESCE(t.source_url, '') AS source_url, t.status, COALESCE(t.assignee_agent_id, '') AS assignee_agent_id, t.labels, t.created_at, t.updated_at, t.stage_version, t.stage_work_state, t.workflow_snapshot, COALESCE(t.status = t.workflow_snapshot->'stages'->-1->>'id',false)::boolean AS closed
+SELECT t.id, t.workspace_id, t.workflow_id, t.title, t.description, t.source_provider, COALESCE(t.source_id, '') AS source_id, COALESCE(t.source_url, '') AS source_url, t.status, COALESCE(t.assignee_agent_id, '') AS assignee_agent_id, t.labels, t.created_at, t.updated_at, t.stage_version, t.stage_work_state, COALESCE(t.status = workflow_final_stage(t.workspace_id,t.workflow_id),false)::boolean AS closed, COALESCE((SELECT s.name FROM workflow_stages s WHERE s.workspace_id=t.workspace_id AND s.workflow_id=t.workflow_id AND s.id=t.status),'')::text AS stage_name, COALESCE((SELECT s.description FROM workflow_stages s WHERE s.workspace_id=t.workspace_id AND s.workflow_id=t.workflow_id AND s.id=t.status),'')::text AS stage_description
 FROM tasks t JOIN workspaces w ON w.id = t.workspace_id
 WHERE w.organization_id = $1 AND t.workspace_id = $2
 ORDER BY t.created_at DESC, t.id
@@ -328,8 +332,9 @@ type ListTasksRow struct {
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
 	StageVersion     int64              `json:"stage_version"`
 	StageWorkState   string             `json:"stage_work_state"`
-	WorkflowSnapshot []byte             `json:"workflow_snapshot"`
 	Closed           bool               `json:"closed"`
+	StageName        string             `json:"stage_name"`
+	StageDescription string             `json:"stage_description"`
 }
 
 func (q *Queries) ListTasks(ctx context.Context, arg ListTasksParams) ([]ListTasksRow, error) {
@@ -357,8 +362,9 @@ func (q *Queries) ListTasks(ctx context.Context, arg ListTasksParams) ([]ListTas
 			&i.UpdatedAt,
 			&i.StageVersion,
 			&i.StageWorkState,
-			&i.WorkflowSnapshot,
 			&i.Closed,
+			&i.StageName,
+			&i.StageDescription,
 		); err != nil {
 			return nil, err
 		}
@@ -374,7 +380,7 @@ const updateTask = `-- name: UpdateTask :one
 UPDATE tasks t SET title = $4, description = $5, status = $6, assignee_agent_id = NULLIF($7, ''), labels = $8, updated_at = now()
 FROM workspaces w
 WHERE w.organization_id = $1 AND t.workspace_id = w.id AND t.workspace_id = $2 AND t.id = $3
-RETURNING t.id, t.workspace_id, t.workflow_id, t.title, t.description, t.source_provider, COALESCE(t.source_id, '') AS source_id, COALESCE(t.source_url, '') AS source_url, t.status, COALESCE(t.assignee_agent_id, '') AS assignee_agent_id, t.labels, t.created_at, t.updated_at, t.stage_version, t.stage_work_state, t.workflow_snapshot, COALESCE(t.status = t.workflow_snapshot->'stages'->-1->>'id',false)::boolean AS closed
+RETURNING t.id, t.workspace_id, t.workflow_id, t.title, t.description, t.source_provider, COALESCE(t.source_id, '') AS source_id, COALESCE(t.source_url, '') AS source_url, t.status, COALESCE(t.assignee_agent_id, '') AS assignee_agent_id, t.labels, t.created_at, t.updated_at, t.stage_version, t.stage_work_state, COALESCE(t.status = workflow_final_stage(t.workspace_id,t.workflow_id),false)::boolean AS closed, COALESCE((SELECT s.name FROM workflow_stages s WHERE s.workspace_id=t.workspace_id AND s.workflow_id=t.workflow_id AND s.id=t.status),'')::text AS stage_name, COALESCE((SELECT s.description FROM workflow_stages s WHERE s.workspace_id=t.workspace_id AND s.workflow_id=t.workflow_id AND s.id=t.status),'')::text AS stage_description
 `
 
 type UpdateTaskParams struct {
@@ -404,8 +410,9 @@ type UpdateTaskRow struct {
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
 	StageVersion     int64              `json:"stage_version"`
 	StageWorkState   string             `json:"stage_work_state"`
-	WorkflowSnapshot []byte             `json:"workflow_snapshot"`
 	Closed           bool               `json:"closed"`
+	StageName        string             `json:"stage_name"`
+	StageDescription string             `json:"stage_description"`
 }
 
 func (q *Queries) UpdateTask(ctx context.Context, arg UpdateTaskParams) (UpdateTaskRow, error) {
@@ -436,8 +443,9 @@ func (q *Queries) UpdateTask(ctx context.Context, arg UpdateTaskParams) (UpdateT
 		&i.UpdatedAt,
 		&i.StageVersion,
 		&i.StageWorkState,
-		&i.WorkflowSnapshot,
 		&i.Closed,
+		&i.StageName,
+		&i.StageDescription,
 	)
 	return i, err
 }
@@ -446,7 +454,7 @@ const updateTaskIfStatus = `-- name: UpdateTaskIfStatus :one
 UPDATE tasks t SET title = $5, description = $6, status = $7, assignee_agent_id = NULLIF($8, ''), labels = $9, updated_at = now()
 FROM workspaces w
 WHERE w.organization_id = $1 AND t.workspace_id = w.id AND t.workspace_id = $2 AND t.id = $3 AND t.status = $4
-RETURNING t.id, t.workspace_id, t.workflow_id, t.title, t.description, t.source_provider, COALESCE(t.source_id, '') AS source_id, COALESCE(t.source_url, '') AS source_url, t.status, COALESCE(t.assignee_agent_id, '') AS assignee_agent_id, t.labels, t.created_at, t.updated_at, t.stage_version, t.stage_work_state, t.workflow_snapshot, COALESCE(t.status = t.workflow_snapshot->'stages'->-1->>'id',false)::boolean AS closed
+RETURNING t.id, t.workspace_id, t.workflow_id, t.title, t.description, t.source_provider, COALESCE(t.source_id, '') AS source_id, COALESCE(t.source_url, '') AS source_url, t.status, COALESCE(t.assignee_agent_id, '') AS assignee_agent_id, t.labels, t.created_at, t.updated_at, t.stage_version, t.stage_work_state, COALESCE(t.status = workflow_final_stage(t.workspace_id,t.workflow_id),false)::boolean AS closed, COALESCE((SELECT s.name FROM workflow_stages s WHERE s.workspace_id=t.workspace_id AND s.workflow_id=t.workflow_id AND s.id=t.status),'')::text AS stage_name, COALESCE((SELECT s.description FROM workflow_stages s WHERE s.workspace_id=t.workspace_id AND s.workflow_id=t.workflow_id AND s.id=t.status),'')::text AS stage_description
 `
 
 type UpdateTaskIfStatusParams struct {
@@ -477,8 +485,9 @@ type UpdateTaskIfStatusRow struct {
 	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
 	StageVersion     int64              `json:"stage_version"`
 	StageWorkState   string             `json:"stage_work_state"`
-	WorkflowSnapshot []byte             `json:"workflow_snapshot"`
 	Closed           bool               `json:"closed"`
+	StageName        string             `json:"stage_name"`
+	StageDescription string             `json:"stage_description"`
 }
 
 func (q *Queries) UpdateTaskIfStatus(ctx context.Context, arg UpdateTaskIfStatusParams) (UpdateTaskIfStatusRow, error) {
@@ -510,8 +519,9 @@ func (q *Queries) UpdateTaskIfStatus(ctx context.Context, arg UpdateTaskIfStatus
 		&i.UpdatedAt,
 		&i.StageVersion,
 		&i.StageWorkState,
-		&i.WorkflowSnapshot,
 		&i.Closed,
+		&i.StageName,
+		&i.StageDescription,
 	)
 	return i, err
 }

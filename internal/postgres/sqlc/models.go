@@ -196,11 +196,10 @@ type Task struct {
 	SourceUrl           pgtype.Text        `json:"source_url"`
 	AssigneeAgentID     pgtype.Text        `json:"assignee_agent_id"`
 	SourceIntegrationID pgtype.Text        `json:"source_integration_id"`
+	WorkflowID          string             `json:"workflow_id"`
 	StageVersion        int64              `json:"stage_version"`
 	StageWorkState      string             `json:"stage_work_state"`
-	WorkflowSnapshot    []byte             `json:"workflow_snapshot"`
 	WorkflowRunID       pgtype.Text        `json:"workflow_run_id"`
-	WorkflowID          string             `json:"workflow_id"`
 }
 
 type TaskAgentSession struct {
@@ -247,12 +246,13 @@ type TaskRepository struct {
 }
 
 type TaskStageHistory struct {
-	WorkspaceID  string             `json:"workspace_id"`
-	TaskID       string             `json:"task_id"`
-	StageVersion int64              `json:"stage_version"`
-	StageID      string             `json:"stage_id"`
-	Definition   []byte             `json:"definition"`
-	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+	WorkspaceID          string             `json:"workspace_id"`
+	TaskID               string             `json:"task_id"`
+	StageVersion         int64              `json:"stage_version"`
+	StageID              string             `json:"stage_id"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	WorkflowID           string             `json:"workflow_id"`
+	ConfigurationVersion int64              `json:"configuration_version"`
 }
 
 type User struct {
@@ -280,6 +280,11 @@ type WorkflowStage struct {
 	ID                 string      `json:"id"`
 	ResponsibleAgentID pgtype.Text `json:"responsible_agent_id"`
 	WorkflowID         string      `json:"workflow_id"`
+	Position           int32       `json:"position"`
+	Name               string      `json:"name"`
+	Description        string      `json:"description"`
+	AutoStart          bool        `json:"auto_start"`
+	AutoAdvance        bool        `json:"auto_advance"`
 }
 
 type Workspace struct {
@@ -306,9 +311,9 @@ type WorkspaceMembership struct {
 }
 
 type WorkspaceWorkflow struct {
-	WorkspaceID string `json:"workspace_id"`
-	Version     int64  `json:"version"`
-	Definition  []byte `json:"definition"`
-	ID          string `json:"id"`
-	Name        string `json:"name"`
+	WorkspaceID  string `json:"workspace_id"`
+	Version      int64  `json:"version"`
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	ConfiguredBy string `json:"configured_by"`
 }

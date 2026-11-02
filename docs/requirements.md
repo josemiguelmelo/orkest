@@ -157,7 +157,7 @@ Workspaces have one or more ordered, configurable workflows. Every task is assoc
 
 Entering a stage applies its configured assignment and optionally queues execution. Successful work advances only when enabled. Manual stage completion follows the same rule. Failures, cancellation, and interaction waits never advance automatically. Tasks in the closed stage cannot reopen. Workflow position and execution health remain separate. Agent completion may continue the same task through configured stages; it never selects another task.
 
-Workspace admins and inherited organization owners/admins configure workflows. Members can transition tasks; viewers are read-only. Configuration updates apply to future stage entries. Commands and entry history are durable, versioned and reconciled before replacement. See [workspace workflows](workflows.md) for transition, migration and recovery semantics.
+Workspace admins and inherited organization owners/admins configure workflows. Members can transition tasks; viewers are read-only. Confirmed: each transition uses the latest saved workflow configuration. Changes to advancement and ordering during execution affect completion; destination entry uses current assignment/start settings. Saving configuration does not itself start execution or change an active runtime configuration. Closed state follows the current final stage. Commands and entry history are durable, versioned and reconciled before replacement. See [workspace workflows](workflows.md) for transition, migration and recovery semantics.
 
 ### 3.11 Task Run — proposed supporting concept
 
@@ -352,7 +352,7 @@ Event retention, recovery time targets, host-loss guarantees, and overall availa
 - Invitations and external identity-to-membership provisioning beyond first-login user creation.
 - Permission policies are selected per agent definition, not workspace-wide. The initial choices are `ask` (the default) and `autonomous`; runtime adapters translate the selected value into native provider configuration. The setting is snapshotted per task session.
 - Pinned releases for supported runtimes, default model selection, and validated recovery behavior.
-- Multiple workflows per workspace and conditional branching remain future extensions; issue #52 confirms one configurable ordered workspace workflow.
+- Multiple workflows per workspace are implemented; conditional branching remains deferred.
 - Internal platform tool exposure mechanism and exact allowed operations; custom tool registration is deferred.
 - GitHub import scope, comment synchronization, webhook/polling behavior, and issue-close semantics.
 - Docker deployment location, environment persistence, resource limits, and credential provisioning.

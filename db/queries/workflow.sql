@@ -1,11 +1,11 @@
 -- name: GetWorkflow :one
-SELECT definition FROM workspace_workflows WHERE workspace_id=$1 AND id=$2;
+SELECT * FROM workspace_workflows WHERE workspace_id=$1 AND id=$2;
 
 -- name: ListWorkflows :many
-SELECT definition FROM workspace_workflows WHERE workspace_id=$1 ORDER BY name,id;
+SELECT * FROM workspace_workflows WHERE workspace_id=$1 ORDER BY name,id;
 
 -- name: CreateWorkflow :exec
-INSERT INTO workspace_workflows(workspace_id,id,name,version,definition) VALUES($1,$2,$3,$4,$5);
+INSERT INTO workspace_workflows(workspace_id,id,name,version,configured_by) VALUES($1,$2,$3,$4,$5);
 
 -- name: DeleteWorkflow :execrows
 DELETE FROM workspace_workflows WHERE workspace_id=$1 AND id=$2;
@@ -14,13 +14,19 @@ DELETE FROM workspace_workflows WHERE workspace_id=$1 AND id=$2;
 SELECT id FROM workspace_workflows WHERE workspace_id=$1 ORDER BY id FOR UPDATE;
 
 -- name: LockWorkflow :one
-SELECT definition FROM workspace_workflows WHERE workspace_id=$1 AND id=$2 FOR UPDATE;
+SELECT * FROM workspace_workflows WHERE workspace_id=$1 AND id=$2 FOR UPDATE;
 
 -- name: SaveWorkflow :execrows
-UPDATE workspace_workflows SET name=$4,definition=$5,version=version+1 WHERE workspace_id=$1 AND id=$2 AND version=$3;
+UPDATE workspace_workflows SET name=$4,configured_by=$5,version=version+1 WHERE workspace_id=$1 AND id=$2 AND version=$3;
+
+-- name: ListWorkflowStages :many
+SELECT * FROM workflow_stages WHERE workspace_id=$1 AND workflow_id=$2 ORDER BY position;
 
 -- name: PutWorkflowStage :exec
-INSERT INTO workflow_stages(workspace_id,workflow_id,id,responsible_agent_id) VALUES($1,$2,$3,NULLIF(sqlc.arg(agent_id)::text,'')) ON CONFLICT(workspace_id,workflow_id,id) DO UPDATE SET responsible_agent_id=EXCLUDED.responsible_agent_id;
+INSERT INTO workflow_stages(workspace_id,workflow_id,id,responsible_agent_id,position,name,description,auto_start,auto_advance)
+VALUES(sqlc.arg(workspace_id),sqlc.arg(workflow_id),sqlc.arg(id),NULLIF(sqlc.arg(agent_id)::text,''),sqlc.arg(position),sqlc.arg(name),sqlc.arg(description),sqlc.arg(auto_start),sqlc.arg(auto_advance))
+ON CONFLICT(workspace_id,workflow_id,id) DO UPDATE SET responsible_agent_id=EXCLUDED.responsible_agent_id,
+position=EXCLUDED.position,name=EXCLUDED.name,description=EXCLUDED.description,auto_start=EXCLUDED.auto_start,auto_advance=EXCLUDED.auto_advance;
 
 -- name: RemoveWorkflowStages :exec
 DELETE FROM workflow_stages WHERE workspace_id=$1 AND workflow_id=$2 AND NOT (id=ANY(sqlc.arg(ids)::text[]));
@@ -29,10 +35,10 @@ DELETE FROM workflow_stages WHERE workspace_id=$1 AND workflow_id=$2 AND NOT (id
 SELECT EXISTS(SELECT 1 FROM agents WHERE workspace_id=$1 AND id=$2);
 
 -- name: TaskWorkflowState :one
-SELECT t.stage_version,t.stage_work_state,t.workflow_snapshot,t.workflow_id FROM tasks t WHERE workspace_id=$1 AND id=$2;
+SELECT t.stage_version,t.stage_work_state,t.workflow_id FROM tasks t WHERE workspace_id=$1 AND id=$2;
 
 -- name: LockWorkflowTask :one
-SELECT t.stage_version,t.stage_work_state,t.workflow_snapshot,t.workflow_id,COALESCE(t.workflow_run_id,'')::text AS workflow_run_id,t.status,COALESCE(t.assignee_agent_id,'')::text AS assignee
+SELECT t.stage_version,t.stage_work_state,t.workflow_id,COALESCE(t.workflow_run_id,'')::text AS workflow_run_id,t.status,COALESCE(t.assignee_agent_id,'')::text AS assignee
 FROM tasks t WHERE workspace_id=$1 AND id=$2 FOR UPDATE;
 
 -- name: SetStageWorkState :exec

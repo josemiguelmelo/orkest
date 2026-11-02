@@ -98,7 +98,7 @@ export declare const createWorkspaceWorkflow: <ThrowOnError extends boolean = fa
 export declare const deleteWorkspaceWorkflow: <ThrowOnError extends boolean = false>(options: Options<DeleteWorkspaceWorkflowData, ThrowOnError>) => RequestResult<DeleteWorkspaceWorkflowResponses, DeleteWorkspaceWorkflowErrors, ThrowOnError>;
 export declare const getWorkspaceWorkflow: <ThrowOnError extends boolean = false>(options: Options<GetWorkspaceWorkflowData, ThrowOnError>) => RequestResult<GetWorkspaceWorkflowResponses, GetWorkspaceWorkflowErrors, ThrowOnError>;
 /**
- * Admins replace the ordered stage configuration using optimistic version checking. Occupied stages cannot be removed. Changes affect future stage entries.
+ * Admins replace the ordered stage configuration using optimistic version checking. Occupied stages cannot be removed. Transitions use the latest saved configuration, including completion of work already running. Saving configuration does not itself launch work or change active runtime settings.
  */
 export declare const saveWorkspaceWorkflow: <ThrowOnError extends boolean = false>(options: Options<SaveWorkspaceWorkflowData, ThrowOnError>) => RequestResult<SaveWorkspaceWorkflowResponses, SaveWorkspaceWorkflowErrors, ThrowOnError>;
 export declare const transitionTask: <ThrowOnError extends boolean = false>(options: Options<TransitionTaskData, ThrowOnError>) => RequestResult<TransitionTaskResponses, TransitionTaskErrors, ThrowOnError>;

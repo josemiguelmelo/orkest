@@ -7,7 +7,8 @@ import (
 )
 
 type TransitionRepository interface {
-	TransitionTask(context.Context, string, string, string, string, TaskInput) (Task, error)
+	TransitionTask(context.Context, string, string, string, string, TransitionInput) (Task, error)
+	UpdateWorkflowTask(context.Context, string, string, string, string, TaskInput) (Task, error)
 }
 
 func (s *Service) updateWorkflowTask(ctx context.Context, userID, orgID, workspaceID, taskID string, in TaskInput) (Task, error) {
@@ -20,7 +21,7 @@ func (s *Service) updateWorkflowTask(ctx context.Context, userID, orgID, workspa
 	if in.Status == "" {
 		return Task{}, modelerrors.ErrInvalid
 	}
-	return s.transitions.TransitionTask(ctx, userID, orgID, workspaceID, taskID, in)
+	return s.transitions.UpdateWorkflowTask(ctx, userID, orgID, workspaceID, taskID, in)
 }
 
 type TransitionInput struct {
@@ -39,17 +40,14 @@ func (s *Service) Transition(ctx context.Context, userID, orgID, workspaceID, ta
 	if err := s.authorize(ctx, userID, orgID, workspaceID); err != nil {
 		return Task{}, err
 	}
-	current, err := s.Get(ctx, userID, orgID, workspaceID, taskID)
-	if err != nil {
+	if in.Action == "move" && (in.StageID == "" || len(in.StageID) > 100) {
+		return Task{}, modelerrors.ErrInvalid
+	}
+	if in.Action != "move" {
+		in.StageID = ""
+	}
+	if err := validateExecutionOptions(in.SessionMode, in.PromptText, in.CommandID); err != nil {
 		return Task{}, err
 	}
-	target := current.Status
-	if in.Action == "move" {
-		target = in.StageID
-	}
-	input := TaskInput{Title: current.Title, Description: current.Description, Status: target, AssigneeAgentID: current.AssigneeAgentID, Labels: current.Labels, StageVersion: in.StageVersion, StartWork: in.Action == "start", CompleteStage: in.Action == "complete", CommandID: in.CommandID, SessionMode: in.SessionMode, PromptText: in.PromptText}
-	for _, r := range current.Repositories {
-		input.RepositoryIDs = append(input.RepositoryIDs, r.ID)
-	}
-	return s.updateWorkflowTask(ctx, userID, orgID, workspaceID, taskID, input)
+	return s.transitions.TransitionTask(ctx, userID, orgID, workspaceID, taskID, in)
 }

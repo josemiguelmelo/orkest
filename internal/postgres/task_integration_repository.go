@@ -126,7 +126,7 @@ func (r *PostgresImportedTaskRepository) UpsertImportedTask(ctx context.Context,
 	if err != nil {
 		return err
 	}
-	d, err := decodeWorkflow(data)
+	d, err := workflowDefinition(ctx, q, data)
 	if err != nil {
 		return err
 	}
@@ -158,7 +158,7 @@ func (r *PostgresImportedTaskRepository) UpsertImportedTask(ctx context.Context,
 				return e
 			}
 			if plan.Start {
-				if e = enqueueStageStart(ctx, q, workspaceID, after.ID, d.ConfiguredBy, state.StageVersion, task.TaskInput{SessionMode: "new"}); e != nil {
+				if e = enqueueStageStart(ctx, q, workspaceID, after.ID, d.ConfiguredBy, state.StageVersion, task.TransitionInput{Action: "start", SessionMode: "new"}); e != nil {
 					return e
 				}
 			}

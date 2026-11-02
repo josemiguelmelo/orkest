@@ -88,7 +88,7 @@ func testWorkspaceWorkflow(t *testing.T, db *PostgresDatabase, orgID, actorID, f
 	if err = repo.Delete(ctx, workspaceID, secondWorkflowID); !errors.Is(err, modelerrors.ErrConflict) {
 		t.Fatal("workflow with an associated task was deleted", err)
 	}
-	input := task.TaskInput{Title: value.Title, Status: "in_progress", StageVersion: value.StageVersion, CommandID: newID()}
+	input := task.TransitionInput{Action: "move", StageID: "in_progress", StageVersion: value.StageVersion, CommandID: newID()}
 	var wg sync.WaitGroup
 	results := make(chan error, 2)
 	for range 2 {
@@ -168,9 +168,9 @@ func testWorkspaceWorkflow(t *testing.T, db *PostgresDatabase, orgID, actorID, f
 		t.Fatal(err)
 	}
 	// Competing moves with distinct command identities must not both win.
-	a := task.TaskInput{Title: value.Title, Status: "in_review", StageVersion: 3}
+	a := task.TransitionInput{Action: "move", StageID: "in_review", StageVersion: 3}
 	b := a
-	b.Status = "todo"
+	b.StageID = "todo"
 	results = make(chan error, 2)
 	wg.Go(func() { _, e := tasks.TransitionTask(ctx, actorID, orgID, workspaceID, taskID, a); results <- e })
 	wg.Go(func() { _, e := tasks.TransitionTask(ctx, actorID, orgID, workspaceID, taskID, b); results <- e })
@@ -264,5 +264,124 @@ func testWorkspaceWorkflow(t *testing.T, db *PostgresDatabase, orgID, actorID, f
 	}
 	if e = db.pool.QueryRow(ctx, "SELECT count(*) FROM workflow_commands WHERE workspace_id=$1 AND task_id=$2", workspaceID, chain.ID).Scan(&count); e != nil || count != 2 {
 		t.Fatal("chain duplicated or lost a start", count, e)
+	}
+	t.Run("latest configuration", func(t *testing.T) { testLatestWorkflowConfiguration(t, db, orgID, actorID, workspaceID, assigned.ID) })
+	t.Run("transitions preserve edits", func(t *testing.T) { testTransitionPreservesContent(t, db, orgID, actorID, workspaceID) })
+}
+
+func testLatestWorkflowConfiguration(t *testing.T, db *PostgresDatabase, orgID, actorID, workspaceID, agentID string) {
+	t.Helper()
+	for _, scenario := range []string{"disable advancement", "reorder stages", "remove future stage", "change destination policy", "manual completion"} {
+		t.Run(scenario, func(t *testing.T) {
+			ctx := context.Background()
+			newID := func() string {
+				id, err := ids.NewUUID()
+				if err != nil {
+					t.Fatal(err)
+				}
+				return id
+			}
+			repo := NewWorkflowPostgresRepository(db)
+			d := workflow.DefaultDefinition(scenario)
+			d.ID = newID()
+			d.Stages[1].AutoStart = scenario != "manual completion"
+			d, err := repo.Create(ctx, workspaceID, d)
+			if err != nil {
+				t.Fatal(err)
+			}
+			tasks := NewTaskPostgresRepository(db)
+			value, err := tasks.CreateTask(ctx, newID(), workspaceID, task.TaskInput{WorkflowID: d.ID, Title: "Original", Status: "in_progress", AssigneeAgentID: agentID, ActorID: actorID})
+			if err != nil {
+				t.Fatal(err)
+			}
+			launches := NewAgentLaunchPostgresRepository(db)
+			q := sqlc.New(db.pool)
+			runID := newID()
+			if scenario != "manual completion" {
+				if err = launches.CreateLaunch(ctx, orchestration.Launch{RunID: runID, OrganizationID: orgID, WorkspaceID: workspaceID, TaskID: value.ID, Status: orchestration.LaunchReady}); err != nil {
+					t.Fatal(err)
+				}
+				if err = q.BindWorkflowRun(ctx, sqlc.BindWorkflowRunParams{WorkspaceID: workspaceID, ID: value.ID, WorkflowRunID: pgtype.Text{String: runID, Valid: true}}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			expectedStage, expectedState := "in_review", task.WorkStateIdle
+			switch scenario {
+			case "disable advancement", "manual completion":
+				d.Stages[1].AutoAdvance = false
+				expectedStage, expectedState = "in_progress", task.WorkStateCompleted
+			case "reorder stages":
+				d.Stages[0], d.Stages[2] = d.Stages[2], d.Stages[0]
+				expectedStage = "todo"
+			case "remove future stage":
+				d.Stages = append(d.Stages[:2], d.Stages[3:]...)
+				expectedStage = "done"
+			case "change destination policy":
+				d.Stages[2].AutoStart = true
+				d.Stages[2].ResponsibleAgentID = agentID
+				expectedState = task.WorkStateQueued
+			}
+			d.Stages[1].Name = "Updated build"
+			if _, err = repo.Save(ctx, workspaceID, d); err != nil {
+				t.Fatal(err)
+			}
+			if scenario == "manual completion" {
+				_, err = tasks.TransitionTask(ctx, actorID, orgID, workspaceID, value.ID, task.TransitionInput{Action: "complete", StageVersion: value.StageVersion, CommandID: newID()})
+			} else {
+				err = launches.SetLaunchStatus(ctx, runID, orchestration.LaunchCompleted)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := tasks.Task(ctx, orgID, workspaceID, value.ID)
+			if err != nil || got.Status != expectedStage || got.StageWorkState != expectedState {
+				t.Fatalf("latest configuration not applied: %+v, %v", got, err)
+			}
+			if got.Status == "in_progress" && got.StageName != "Updated build" {
+				t.Fatal("task metadata uses old configuration", got.StageName)
+			}
+		})
+	}
+}
+
+func testTransitionPreservesContent(t *testing.T, db *PostgresDatabase, orgID, actorID, workspaceID string) {
+	t.Helper()
+	ctx := context.Background()
+	id, err := ids.NewUUID()
+	if err != nil {
+		t.Fatal(err)
+	}
+	tasks := NewTaskPostgresRepository(db)
+	value, err := tasks.CreateTask(ctx, id, workspaceID, task.TaskInput{WorkflowID: workspaceID, Title: "Original", Status: "todo"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Hold configuration lock so transition admission waits while content is edited.
+	tx, err := db.pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err = sqlc.New(tx).LockWorkflow(ctx, sqlc.LockWorkflowParams{WorkspaceID: workspaceID, ID: workspaceID}); err != nil {
+		t.Fatal(err)
+	}
+	result := make(chan error, 1)
+	go func() {
+		_, e := tasks.TransitionTask(ctx, actorID, orgID, workspaceID, id, task.TransitionInput{Action: "move", StageID: "in_review", StageVersion: value.StageVersion, CommandID: id})
+		result <- e
+	}()
+	_, err = tasks.UpdateTask(ctx, orgID, workspaceID, id, task.TaskInput{Title: "Concurrent edit", Description: "Keep this description", Status: "todo", Labels: []string{"keep"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = tx.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if err = <-result; err != nil {
+		t.Fatal(err)
+	}
+	got, err := tasks.Task(ctx, orgID, workspaceID, id)
+	if err != nil || got.Title != "Concurrent edit" || got.Description != "Keep this description" || len(got.Labels) != 1 || got.Labels[0] != "keep" || got.Status != "in_review" {
+		t.Fatalf("transition overwrote content: %+v, %v", got, err)
 	}
 }

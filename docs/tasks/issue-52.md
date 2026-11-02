@@ -8,10 +8,10 @@ Original implementation: one ordered workflow per workspace; stable stage IDs;
 extend this design: tasks select a workflow, and integrations select which one
 their imports use. Stage IDs are scoped to workflow. Stages run left to right:
 tasks start at the first stage and source-closed tasks go to the final stage.
-Stage entry snapshots its workflow. Agent success only advances when enabled;
+Transitions use the latest saved workflow configuration, including changes during execution. Agent success only advances when enabled;
 manual completion follows the same rule. Failures never advance or retry
-automatically. Final-stage tasks cannot reopen. Configuration edits apply to
-future entries. Occupied stages cannot be removed.
+automatically. Tasks in the current final stage cannot reopen through a task
+transition. Occupied stages cannot be removed.
 
 Progress: implemented. Multiple workspace workflows, task workflow association,
 workflow-scoped stages, per-integration selection, configuration UI, dynamic
@@ -20,11 +20,28 @@ boards and durable transition delivery are complete.
 Verification:
 - `make check` passed (lint, backend/frontend tests, generated contract check,
   frontend types, Go and Vite builds).
-- PostgreSQL integration tests were not available in this verification run because
-  no test database or Docker daemon was configured.
+- `make test-postgres` passed against an isolated local PostgreSQL database,
+  including workflow configuration changes, concurrent edits and migration rollback.
+- Race detection passed for workflow, task, orchestration and PostgreSQL packages.
 - `git diff --check` passed.
 
 Limitations: live multi-stage model-provider execution and a browser journey were
 not exercised. The worker currently dispatches sequentially per platform process;
 team-member slot allocation remains the separately documented unfinished feature.
 Vite reports the existing large-bundle and dependency directive warnings.
+
+PR review simplification: relational workflow/stage configuration replaces JSONB
+and duplicated reference catalogs (consolidated migration 0035). Dedicated transition inputs
+preserve concurrent task content edits. Latest configuration governs completion,
+with durable command IDs, stage-entry/run fencing and runtime recovery retained.
+Branch migrations 0035–0039 are consolidated into a single final relational
+0035, with a local reset script for previously applied versions. Added coverage for configuration edits
+during execution, concurrent content edits and workflow migration up/down/up.
+Verification: `make check`, `make test-postgres`, race detection, and
+`git diff --check` passed. Live provider execution and browser journeys remain
+unverified.
+
+Migration consolidation verification: `make check` and `make test-postgres`
+passed. Fresh schema, rollback/reapply and local version reset are covered by
+PostgreSQL tests. The reset script was also exercised against each superseded
+schema version 35–39 (including extra workflows), followed by final 0035 apply.

@@ -191,7 +191,9 @@ migration verification now succeed.
 Issue #52 adds `internal/workflow` for versioned workspace workflow definitions
 and pure transition rules. Tasks and source integrations select a workflow;
 PostgreSQL stage catalogs scope stage IDs to that workflow and prevent removal
-while referenced. Entry snapshots, history and an outbox make
+while referenced. Editable definitions use relational workflow/stage columns;
+transitions use the latest configuration under the workflow row lock. History
+records configuration versions rather than full definitions. History and an outbox make
 assignment/start/advance durable. The task service and existing orchestration
 dispatcher share the rules through explicit repository contracts. The React
 board, task editor, source integrations and workflow settings use the same API

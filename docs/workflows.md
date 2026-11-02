@@ -36,11 +36,13 @@ stage cannot reopen.
 Stage movement and reassignment are rejected while a start is queued or execution
 is active. Ordinary content edits remain possible.
 
-Stage entry snapshots the workflow. Its completion and next-stage choice use that
-snapshot. Destination entry uses the current destination configuration. Editing
-configuration does not launch existing tasks or alter an active run. If an
-unoccupied future stage is removed while a preceding run is active, completion
-stays in the current stage, marked complete, for a user to select a destination.
+Every transition uses the latest saved workflow configuration, including successful
+run completion and manual stage completion. Changing auto-advance or stage order
+while an agent runs changes its next transition. Destination assignment and
+start settings also use the current configuration. Saving configuration does not
+itself launch work or rewrite an active agent's instructions/runtime settings.
+Task closed state follows the current final stage. Moving a stage away from the
+final position therefore makes tasks in that stage open under the new definition.
 Deleting a stage occupied by one or more tasks is rejected by the task stage
 foreign key. Deleting a workflow referenced by tasks or source integrations is
 rejected; a workspace must retain at least one workflow. An agent referenced by
@@ -60,12 +62,14 @@ independently; a source change does not prove process termination.
 `internal/workflow` owns configuration validation and the pure transition planner.
 The task service owns task access and user commands. Consumer-owned repository
 contracts and constructor injection connect these to PostgreSQL and orchestration.
-Stage variants are data. Additional completion strategies can be introduced when
+Workflow metadata and ordered stage properties are relational rows, with one
+source of truth. Stage variants are data. Additional completion strategies can be introduced when
 there is a concrete second completion mechanism.
 
 PostgreSQL transactions serialize workflow configuration and task transitions,
-check versions, change assignment/stage, record history and persist commands
-atomically. Settings saves use the workflow version; transition commands require
+check versions, change assignment/stage, record history with the configuration version used and persist commands
+atomically. Settings saves use the workflow version; transition commands carry only action,
+target stage and execution options, never task content or repository links. They require
 the task's stage version and a command ID. Reusing a command ID with a different
 transition payload is rejected. Task reads include stage identity, work state and
 version from the same database row snapshot.
@@ -86,8 +90,9 @@ does not own the agentctl lifecycle and never auto-approves runtime permissions.
 The worker currently processes commands sequentially per platform process and
 holds a database connection while dispatching. This bounds concurrent startup
 work; a lease-based claim can replace that transaction boundary if dispatch
-throughput requires it. Configuration changes and stage moves serialize per
-workspace to keep configuration reads and entry snapshots consistent.
+throughput requires it. Configuration changes and transitions serialize per workflow to keep configuration
+reads consistent. Read-only configuration requests use a repeatable-read transaction
+to assemble workflow metadata and ordered stages from the same database snapshot.
 
 ## API and UI
 
@@ -109,24 +114,24 @@ Continuing intentionally retains the saved runtime session's effective settings.
 
 ## Migrations and operations
 
-0035 seeds existing and future workspaces with Todo, In progress, In review, Done;
-existing tasks retain their stage keys. The seeded In progress stage explicitly
-enables start and advance to preserve entering-stage execution/review behavior.
-Custom stages default both automation switches off.
+0035 creates the final relational model directly from the main-branch v34 schema.
+It seeds existing and future workspaces with Todo, In progress, In review, Done;
+existing tasks retain their stage keys. The seeded In progress stage enables
+start and advance to preserve entering-stage execution/review behavior. Custom
+stages default both automation switches off. Existing tasks and source integrations
+bind to their workspace's seeded default workflow. Runs bind to their stage entry;
+responsible agents are constrained to their workspace. Reference checks for stage,
+agent and repository links are deferred until commit so workspace deletion can
+cascade in any order. No migration deletes task working files or stops processes.
 
-0036 binds runs to their stage entry and constrains responsible agents to their
-workspace. 0037 defers reference checks for repository/stage links until commit so
-workspace deletion can cascade in any order while individual referenced resource
-deletion remains prohibited. No migration deletes task working files or stops
-external processes. 0038 promotes the seeded workspace workflow to a named
-workflow, associates existing tasks and integrations with it, and adds
-workflow-scoped stage identities. Its rollback refuses to proceed while extra
-workflows or resources reference them.
+Rollback deletes workflow configuration, stage history and workflow commands,
+removes workflow associations, and maps custom stage keys to `todo`. Tasks,
+source integrations, runtime sessions and working files remain. Back up before
+rollback. Stop platform command delivery and reconcile active runs first.
 
-Rollback of 0035 deletes workflow configuration, stage history and workflow
-commands, and maps custom stage keys to `todo`. Back up before rollback. Rolling
-back during active automation requires stopping platform command delivery and
-reconciling existing runs first.
+The superseded branch migrations 0035–0039 must be reset locally before running
+this rewritten 0035. See [local rollback commands](local-workflow-migration-reset.md).
+Do not change only Goose's version records: the schema must return to v34 too.
 
 Verification: `make check`; `make test-postgres` with documented PostgreSQL
 settings; race detection for workflow, task, orchestration and PostgreSQL tests.

@@ -27,15 +27,15 @@ func (q *Queries) BindWorkflowRun(ctx context.Context, arg BindWorkflowRunParams
 }
 
 const createWorkflow = `-- name: CreateWorkflow :exec
-INSERT INTO workspace_workflows(workspace_id,id,name,version,definition) VALUES($1,$2,$3,$4,$5)
+INSERT INTO workspace_workflows(workspace_id,id,name,version,configured_by) VALUES($1,$2,$3,$4,$5)
 `
 
 type CreateWorkflowParams struct {
-	WorkspaceID string `json:"workspace_id"`
-	ID          string `json:"id"`
-	Name        string `json:"name"`
-	Version     int64  `json:"version"`
-	Definition  []byte `json:"definition"`
+	WorkspaceID  string `json:"workspace_id"`
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	Version      int64  `json:"version"`
+	ConfiguredBy string `json:"configured_by"`
 }
 
 func (q *Queries) CreateWorkflow(ctx context.Context, arg CreateWorkflowParams) error {
@@ -44,7 +44,7 @@ func (q *Queries) CreateWorkflow(ctx context.Context, arg CreateWorkflowParams) 
 		arg.ID,
 		arg.Name,
 		arg.Version,
-		arg.Definition,
+		arg.ConfiguredBy,
 	)
 	return err
 }
@@ -92,7 +92,7 @@ func (q *Queries) EnqueueWorkflowCommand(ctx context.Context, arg EnqueueWorkflo
 }
 
 const getWorkflow = `-- name: GetWorkflow :one
-SELECT definition FROM workspace_workflows WHERE workspace_id=$1 AND id=$2
+SELECT workspace_id, version, id, name, configured_by FROM workspace_workflows WHERE workspace_id=$1 AND id=$2
 `
 
 type GetWorkflowParams struct {
@@ -100,11 +100,17 @@ type GetWorkflowParams struct {
 	ID          string `json:"id"`
 }
 
-func (q *Queries) GetWorkflow(ctx context.Context, arg GetWorkflowParams) ([]byte, error) {
+func (q *Queries) GetWorkflow(ctx context.Context, arg GetWorkflowParams) (WorkspaceWorkflow, error) {
 	row := q.db.QueryRow(ctx, getWorkflow, arg.WorkspaceID, arg.ID)
-	var definition []byte
-	err := row.Scan(&definition)
-	return definition, err
+	var i WorkspaceWorkflow
+	err := row.Scan(
+		&i.WorkspaceID,
+		&i.Version,
+		&i.ID,
+		&i.Name,
+		&i.ConfiguredBy,
+	)
+	return i, err
 }
 
 const getWorkflowCommand = `-- name: GetWorkflowCommand :one
@@ -159,23 +165,68 @@ func (q *Queries) ImportedWorkflowTask(ctx context.Context, arg ImportedWorkflow
 	return i, err
 }
 
-const listWorkflows = `-- name: ListWorkflows :many
-SELECT definition FROM workspace_workflows WHERE workspace_id=$1 ORDER BY name,id
+const listWorkflowStages = `-- name: ListWorkflowStages :many
+SELECT workspace_id, id, responsible_agent_id, workflow_id, position, name, description, auto_start, auto_advance FROM workflow_stages WHERE workspace_id=$1 AND workflow_id=$2 ORDER BY position
 `
 
-func (q *Queries) ListWorkflows(ctx context.Context, workspaceID string) ([][]byte, error) {
+type ListWorkflowStagesParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	WorkflowID  string `json:"workflow_id"`
+}
+
+func (q *Queries) ListWorkflowStages(ctx context.Context, arg ListWorkflowStagesParams) ([]WorkflowStage, error) {
+	rows, err := q.db.Query(ctx, listWorkflowStages, arg.WorkspaceID, arg.WorkflowID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []WorkflowStage
+	for rows.Next() {
+		var i WorkflowStage
+		if err := rows.Scan(
+			&i.WorkspaceID,
+			&i.ID,
+			&i.ResponsibleAgentID,
+			&i.WorkflowID,
+			&i.Position,
+			&i.Name,
+			&i.Description,
+			&i.AutoStart,
+			&i.AutoAdvance,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listWorkflows = `-- name: ListWorkflows :many
+SELECT workspace_id, version, id, name, configured_by FROM workspace_workflows WHERE workspace_id=$1 ORDER BY name,id
+`
+
+func (q *Queries) ListWorkflows(ctx context.Context, workspaceID string) ([]WorkspaceWorkflow, error) {
 	rows, err := q.db.Query(ctx, listWorkflows, workspaceID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items [][]byte
+	var items []WorkspaceWorkflow
 	for rows.Next() {
-		var definition []byte
-		if err := rows.Scan(&definition); err != nil {
+		var i WorkspaceWorkflow
+		if err := rows.Scan(
+			&i.WorkspaceID,
+			&i.Version,
+			&i.ID,
+			&i.Name,
+			&i.ConfiguredBy,
+		); err != nil {
 			return nil, err
 		}
-		items = append(items, definition)
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -184,7 +235,7 @@ func (q *Queries) ListWorkflows(ctx context.Context, workspaceID string) ([][]by
 }
 
 const lockWorkflow = `-- name: LockWorkflow :one
-SELECT definition FROM workspace_workflows WHERE workspace_id=$1 AND id=$2 FOR UPDATE
+SELECT workspace_id, version, id, name, configured_by FROM workspace_workflows WHERE workspace_id=$1 AND id=$2 FOR UPDATE
 `
 
 type LockWorkflowParams struct {
@@ -192,15 +243,21 @@ type LockWorkflowParams struct {
 	ID          string `json:"id"`
 }
 
-func (q *Queries) LockWorkflow(ctx context.Context, arg LockWorkflowParams) ([]byte, error) {
+func (q *Queries) LockWorkflow(ctx context.Context, arg LockWorkflowParams) (WorkspaceWorkflow, error) {
 	row := q.db.QueryRow(ctx, lockWorkflow, arg.WorkspaceID, arg.ID)
-	var definition []byte
-	err := row.Scan(&definition)
-	return definition, err
+	var i WorkspaceWorkflow
+	err := row.Scan(
+		&i.WorkspaceID,
+		&i.Version,
+		&i.ID,
+		&i.Name,
+		&i.ConfiguredBy,
+	)
+	return i, err
 }
 
 const lockWorkflowTask = `-- name: LockWorkflowTask :one
-SELECT t.stage_version,t.stage_work_state,t.workflow_snapshot,t.workflow_id,COALESCE(t.workflow_run_id,'')::text AS workflow_run_id,t.status,COALESCE(t.assignee_agent_id,'')::text AS assignee
+SELECT t.stage_version,t.stage_work_state,t.workflow_id,COALESCE(t.workflow_run_id,'')::text AS workflow_run_id,t.status,COALESCE(t.assignee_agent_id,'')::text AS assignee
 FROM tasks t WHERE workspace_id=$1 AND id=$2 FOR UPDATE
 `
 
@@ -210,13 +267,12 @@ type LockWorkflowTaskParams struct {
 }
 
 type LockWorkflowTaskRow struct {
-	StageVersion     int64  `json:"stage_version"`
-	StageWorkState   string `json:"stage_work_state"`
-	WorkflowSnapshot []byte `json:"workflow_snapshot"`
-	WorkflowID       string `json:"workflow_id"`
-	WorkflowRunID    string `json:"workflow_run_id"`
-	Status           string `json:"status"`
-	Assignee         string `json:"assignee"`
+	StageVersion   int64  `json:"stage_version"`
+	StageWorkState string `json:"stage_work_state"`
+	WorkflowID     string `json:"workflow_id"`
+	WorkflowRunID  string `json:"workflow_run_id"`
+	Status         string `json:"status"`
+	Assignee       string `json:"assignee"`
 }
 
 func (q *Queries) LockWorkflowTask(ctx context.Context, arg LockWorkflowTaskParams) (LockWorkflowTaskRow, error) {
@@ -225,7 +281,6 @@ func (q *Queries) LockWorkflowTask(ctx context.Context, arg LockWorkflowTaskPara
 	err := row.Scan(
 		&i.StageVersion,
 		&i.StageWorkState,
-		&i.WorkflowSnapshot,
 		&i.WorkflowID,
 		&i.WorkflowRunID,
 		&i.Status,
@@ -317,7 +372,10 @@ func (q *Queries) PendingWorkflowCommand(ctx context.Context) (PendingWorkflowCo
 }
 
 const putWorkflowStage = `-- name: PutWorkflowStage :exec
-INSERT INTO workflow_stages(workspace_id,workflow_id,id,responsible_agent_id) VALUES($1,$2,$3,NULLIF($4::text,'')) ON CONFLICT(workspace_id,workflow_id,id) DO UPDATE SET responsible_agent_id=EXCLUDED.responsible_agent_id
+INSERT INTO workflow_stages(workspace_id,workflow_id,id,responsible_agent_id,position,name,description,auto_start,auto_advance)
+VALUES($1,$2,$3,NULLIF($4::text,''),$5,$6,$7,$8,$9)
+ON CONFLICT(workspace_id,workflow_id,id) DO UPDATE SET responsible_agent_id=EXCLUDED.responsible_agent_id,
+position=EXCLUDED.position,name=EXCLUDED.name,description=EXCLUDED.description,auto_start=EXCLUDED.auto_start,auto_advance=EXCLUDED.auto_advance
 `
 
 type PutWorkflowStageParams struct {
@@ -325,6 +383,11 @@ type PutWorkflowStageParams struct {
 	WorkflowID  string `json:"workflow_id"`
 	ID          string `json:"id"`
 	AgentID     string `json:"agent_id"`
+	Position    int32  `json:"position"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	AutoStart   bool   `json:"auto_start"`
+	AutoAdvance bool   `json:"auto_advance"`
 }
 
 func (q *Queries) PutWorkflowStage(ctx context.Context, arg PutWorkflowStageParams) error {
@@ -333,6 +396,11 @@ func (q *Queries) PutWorkflowStage(ctx context.Context, arg PutWorkflowStagePara
 		arg.WorkflowID,
 		arg.ID,
 		arg.AgentID,
+		arg.Position,
+		arg.Name,
+		arg.Description,
+		arg.AutoStart,
+		arg.AutoAdvance,
 	)
 	return err
 }
@@ -406,15 +474,15 @@ func (q *Queries) RunWorkflowEntry(ctx context.Context, runID string) (RunWorkfl
 }
 
 const saveWorkflow = `-- name: SaveWorkflow :execrows
-UPDATE workspace_workflows SET name=$4,definition=$5,version=version+1 WHERE workspace_id=$1 AND id=$2 AND version=$3
+UPDATE workspace_workflows SET name=$4,configured_by=$5,version=version+1 WHERE workspace_id=$1 AND id=$2 AND version=$3
 `
 
 type SaveWorkflowParams struct {
-	WorkspaceID string `json:"workspace_id"`
-	ID          string `json:"id"`
-	Version     int64  `json:"version"`
-	Name        string `json:"name"`
-	Definition  []byte `json:"definition"`
+	WorkspaceID  string `json:"workspace_id"`
+	ID           string `json:"id"`
+	Version      int64  `json:"version"`
+	Name         string `json:"name"`
+	ConfiguredBy string `json:"configured_by"`
 }
 
 func (q *Queries) SaveWorkflow(ctx context.Context, arg SaveWorkflowParams) (int64, error) {
@@ -423,7 +491,7 @@ func (q *Queries) SaveWorkflow(ctx context.Context, arg SaveWorkflowParams) (int
 		arg.ID,
 		arg.Version,
 		arg.Name,
-		arg.Definition,
+		arg.ConfiguredBy,
 	)
 	if err != nil {
 		return 0, err
@@ -488,7 +556,7 @@ func (q *Queries) SetWorkflowCommandState(ctx context.Context, arg SetWorkflowCo
 }
 
 const taskWorkflowState = `-- name: TaskWorkflowState :one
-SELECT t.stage_version,t.stage_work_state,t.workflow_snapshot,t.workflow_id FROM tasks t WHERE workspace_id=$1 AND id=$2
+SELECT t.stage_version,t.stage_work_state,t.workflow_id FROM tasks t WHERE workspace_id=$1 AND id=$2
 `
 
 type TaskWorkflowStateParams struct {
@@ -497,21 +565,15 @@ type TaskWorkflowStateParams struct {
 }
 
 type TaskWorkflowStateRow struct {
-	StageVersion     int64  `json:"stage_version"`
-	StageWorkState   string `json:"stage_work_state"`
-	WorkflowSnapshot []byte `json:"workflow_snapshot"`
-	WorkflowID       string `json:"workflow_id"`
+	StageVersion   int64  `json:"stage_version"`
+	StageWorkState string `json:"stage_work_state"`
+	WorkflowID     string `json:"workflow_id"`
 }
 
 func (q *Queries) TaskWorkflowState(ctx context.Context, arg TaskWorkflowStateParams) (TaskWorkflowStateRow, error) {
 	row := q.db.QueryRow(ctx, taskWorkflowState, arg.WorkspaceID, arg.ID)
 	var i TaskWorkflowStateRow
-	err := row.Scan(
-		&i.StageVersion,
-		&i.StageWorkState,
-		&i.WorkflowSnapshot,
-		&i.WorkflowID,
-	)
+	err := row.Scan(&i.StageVersion, &i.StageWorkState, &i.WorkflowID)
 	return i, err
 }
 
