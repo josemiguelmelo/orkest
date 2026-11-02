@@ -24,7 +24,7 @@ func (p Profile) Descriptor() agentruntime.RuntimeDescriptor {
 	return agentruntime.RuntimeDescriptor{
 		Runtime: coreruntime.Codex, Version: Version, VersionOutputPrefix: "@agentclientprotocol/codex-acp ", Executable: binary,
 		VersionArguments: []string{"--version"},
-		ReservedEnvNames: []string{"HOME", "CODEX_PATH", "CODEX_CONFIG", "MODEL_PROVIDER", "APP_SERVER_LOGS", "NO_BROWSER", "INITIAL_AGENT_MODE", "DEFAULT_AUTH_REQUEST", "ORKEST_CODEX_AUTH_FILE"},
+		ReservedEnvNames: []string{"HOME", "CODEX_HOME", "CODEX_PATH", "CODEX_CONFIG", "MODEL_PROVIDER", "APP_SERVER_LOGS", "NO_BROWSER", "INITIAL_AGENT_MODE", "DEFAULT_AUTH_REQUEST", "ORKEST_CODEX_AUTH_FILE"},
 	}
 }
 
@@ -57,6 +57,7 @@ func (Profile) BuildProvisioningPlan(settings agentruntime.ResolvedRuntimeSettin
 		Environment: []string{
 			"PATH=" + agentruntime.DefaultRuntimePath,
 			"HOME=" + filepath.ToSlash(filepath.Join(paths.RuntimeRoot, "home")),
+			"CODEX_HOME=" + filepath.ToSlash(filepath.Join(paths.RuntimeRoot, "home", ".codex")),
 			"XDG_DATA_HOME=" + filepath.ToSlash(filepath.Join(paths.RuntimeRoot, "data")),
 			"CODEX_CONFIG=" + string(encodedConfig),
 			"MODEL_PROVIDER=openai",

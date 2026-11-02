@@ -18,6 +18,7 @@ Orkest is a platform for orchestrating, monitoring, and interacting with AI agen
 - Require users to assign tasks to specific team members and manually move tasks to in progress.
 - Support reusable agent definitions and workspace teams with individual members providing execution slots.
 - Execute agents using Docker behind an executor abstraction suitable for future implementations such as Kubernetes.
+- Provide a Local executor for trusted single-user development that starts host processes without task isolation; Docker remains the default executor.
 - Build agentctl as the bridge between the platform and agent ACP sessions in execution environments.
 - Support task-specific chat, agent approval requests, cancellation, and recovery after platform or executor interruption. Recovery proposals and provider limitations are described in section 7.
 - Support HTTP MCP servers; stdio MCP servers are outside the MVP.
@@ -25,12 +26,13 @@ Orkest is a platform for orchestrating, monitoring, and interacting with AI agen
 - Allow a task to involve multiple repositories registered in its workspace.
 - Treat external systems as authoritative for imported task content; users edit that content at the source.
 
-Automatic assignment and automatic movement into in progress are outside the MVP. OpenCode, Claude Code, Codex, GitHub Copilot CLI, and Kiro CLI are supported through pinned runtime adapters. Codex uses the ACP adapter and an OpenAI model selection; API-key credentials are provided through workspace secrets. GitHub Copilot CLI uses ACP and a GitHub Copilot model selection; credentials are provided through workspace secrets. Kiro CLI uses ACP V3 and the `kiro` model provider; `KIRO_API_KEY` is supplied through workspace secrets.
+Automatic assignment and automatic movement into in progress are outside the MVP. OpenCode, Claude Code, Codex, GitHub Copilot CLI, and Kiro CLI are supported through pinned runtime adapters. Codex uses the ACP adapter and an OpenAI model selection; API-key credentials are provided through workspace secrets, and Local development can use the host Codex login described above. GitHub Copilot CLI uses ACP and a GitHub Copilot model selection; credentials are provided through workspace secrets. Kiro CLI uses ACP V3 and the `kiro` model provider; `KIRO_API_KEY` is supplied through workspace secrets.
 
-For local Docker development only, operators may set `ORKEST_CODEX_AUTH_FILE`
-to mount their host Codex auth file into Codex task containers. This is an
-opt-in local convenience and does not add platform-managed ChatGPT login or
-shared account connections.
+For Local development, Orkest uses the host Codex auth file at
+`~/.codex/auth.json` when present; `ORKEST_CODEX_AUTH_FILE` overrides the path.
+Docker development may also set this variable to mount the file into Codex task
+containers. This local convenience does not add platform-managed ChatGPT login
+or shared account connections.
 
 ## 3. Domain model
 
@@ -145,9 +147,9 @@ Slot allocation must be atomic so concurrent user actions cannot launch two task
 
 ### 3.9 Executor
 
-An executor provisions and manages a task execution environment. Docker is the first implementation; orchestration must use an abstraction that can later support Kubernetes and other executors.
+An executor provisions and manages a task execution environment. Docker is the default implementation; a Local executor is available for trusted single-user development and launches host processes without task isolation. Orchestration uses an abstraction suitable for further executors such as Kubernetes.
 
-The executor contract must cover environment creation, startup, connectivity, status inspection, stopping, and cleanup. Task environments must be isolated from other tasks. Resource limits, network policy, persistence, and cleanup timing remain open.
+The executor contract must cover environment creation, startup, connectivity, status inspection, stopping, and cleanup. Docker task environments must be isolated from other tasks. Local is an explicit development exception and provides no task isolation. Resource limits, network policy, persistence, and cleanup timing remain open.
 
 ### 3.10 Workflow
 
@@ -191,7 +193,7 @@ Required user-facing capabilities:
 
 ### 4.1 Runtime selection
 
-OpenCode, Claude Code, Codex, GitHub Copilot CLI, and Kiro CLI are supported runtimes. The platform must distinguish the agent runtime from the model provider and model identifier. Model selection remains configurable on agent definitions, allowing available free models without depending on a permanently free hardcoded model. Claude Code definitions use provider `anthropic` and a configured Claude model identifier. Codex definitions use provider `openai` and a configured Codex model identifier. GitHub Copilot CLI definitions use provider `github-copilot` and a configured Copilot model identifier. Kiro CLI definitions use provider `kiro` and a configured Kiro model identifier. Codex runs use API-key authentication from workspace secrets; browser-based ChatGPT login is not part of the supported headless flow. GitHub Copilot and Kiro CLI credentials are supplied through workspace secrets.
+OpenCode, Claude Code, Codex, GitHub Copilot CLI, and Kiro CLI are supported runtimes. The platform must distinguish the agent runtime from the model provider and model identifier. Model selection remains configurable on agent definitions, allowing available free models without depending on a permanently free hardcoded model. Claude Code definitions use provider `anthropic` and a configured Claude model identifier. Codex definitions use provider `openai` and a configured Codex model identifier. GitHub Copilot CLI definitions use provider `github-copilot` and a configured Copilot model identifier. Kiro CLI definitions use provider `kiro` and a configured Kiro model identifier. Codex runs use API-key authentication from workspace secrets; Local development can instead reuse the host Codex login. Browser-based login remains outside the platform-managed headless flow. GitHub Copilot and Kiro CLI credentials are supplied through workspace secrets.
 
 ### 4.1.1 OpenCode runtime requirements
 
