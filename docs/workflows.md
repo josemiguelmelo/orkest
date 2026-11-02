@@ -1,7 +1,7 @@
 # Workspace workflows
 
-Issue #52 replaces the fixed stage catalog with ordered, versioned workflows
-per workspace. Every task is bound to one workflow. Manual task creation selects
+Workspaces support ordered, versioned workflows. Every task is bound to one
+workflow. Manual task creation selects
 the workflow, and each source integration selects the workflow for imported
 tasks. Stage IDs are stable keys within a workflow; task `status` contains the
 stage key for API compatibility. Names, descriptions and order are configurable.
