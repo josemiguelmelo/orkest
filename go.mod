@@ -23,6 +23,12 @@ require (
 )
 
 require (
+	github.com/google/jsonschema-go v0.3.0 // indirect
+	github.com/modelcontextprotocol/go-sdk v1.2.0
+	github.com/yosida95/uritemplate/v3 v3.0.2 // indirect
+)
+
+require (
 	dario.cat/mergo v1.0.2 // indirect
 	github.com/Microsoft/go-winio v0.6.3 // indirect
 	github.com/air-verse/air v1.67.4 // indirect

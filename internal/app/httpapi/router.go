@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/josemiguelmelo/orkest/internal/agent"
 	"github.com/josemiguelmelo/orkest/internal/agentruntimeprofile"
+	appmcp "github.com/josemiguelmelo/orkest/internal/app/mcp"
 	"github.com/josemiguelmelo/orkest/internal/coderepository"
 	"github.com/josemiguelmelo/orkest/internal/core/openapi"
 	"github.com/josemiguelmelo/orkest/internal/executionprofile"
@@ -28,7 +29,7 @@ import (
 )
 
 // NewRouter validates the served OpenAPI contract before exposing routes.
-func NewRouter(users *identity.UserRegistrationService, organizations *organization.OrganizationService, workspaces *workspace.WorkspaceService, agents *agent.Service, codeRepositories *coderepository.Service, tasks *task.TaskService, integrations *taskintegration.TaskIntegrationService, mcpServers *mcpserver.MCPServerService, skillCatalog *skill.CatalogService, launches *orchestration.LaunchService, profiles *executionprofile.ExecutionProfileService, runtimeProfiles *agentruntimeprofile.Service, directChats *orchestration.DirectChatService, workflows *workflow.WorkflowConfigurationService, automation *workflowautomation.WorkflowAutomationService, environment ...*workspaceenv.Service) (*chi.Mux, error) {
+func NewRouter(users *identity.UserRegistrationService, organizations *organization.OrganizationService, workspaces *workspace.WorkspaceService, agents *agent.Service, codeRepositories *coderepository.Service, tasks *task.TaskService, integrations *taskintegration.TaskIntegrationService, mcpServers *mcpserver.MCPServerService, skillCatalog *skill.CatalogService, launches *orchestration.LaunchService, profiles *executionprofile.ExecutionProfileService, runtimeProfiles *agentruntimeprofile.Service, directChats *orchestration.DirectChatService, workflows *workflow.WorkflowConfigurationService, automation *workflowautomation.WorkflowAutomationService, environment []*workspaceenv.Service, agentTools ...*appmcp.AgentTools) (*chi.Mux, error) {
 	if profiles == nil {
 		return nil, fmt.Errorf("execution profile service is required")
 	}
@@ -66,6 +67,9 @@ func NewRouter(users *identity.UserRegistrationService, organizations *organizat
 	router.Get("/auth/login", auth.login)
 	router.Get("/auth/callback", auth.callback)
 	router.Post("/auth/logout", auth.logout)
+	if len(agentTools) > 0 && agentTools[0] != nil {
+		router.Handle("/mcp/agent-tools", agentTools[0].Handler())
+	}
 	router.Group(func(api chi.Router) {
 		api.Use(auth.middleware)
 		api.Route("/api", func(api chi.Router) {

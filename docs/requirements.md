@@ -95,11 +95,11 @@ MVP does not change source status. Imported title, description, labels, and sour
 
 ### 3.5 Tool
 
-MVP tools are built-in capabilities that let an agent communicate with the core platform. Initial capabilities include listing tasks, getting task details, and retrieving workspace repository information. Calls must be authenticated and scoped to the agent's workspace and allowed operations.
+MVP tools are built-in capabilities that let an agent communicate with the core platform. Initial capabilities include getting task details and listing repositories registered in the agent's workspace. Calls must be authenticated and scoped to the agent's workspace and allowed operations.
 
 User-defined tool registration, custom scripts/commands as platform tools, and a configurable Tool catalog are outside the MVP. External MCP servers remain separately configurable; native runtime capabilities such as shell execution and file editing remain available subject to permissions.
 
-The exposure mechanism for internal tools remains an implementation decision; an internal HTTP MCP endpoint is a candidate, not a confirmed requirement. Agents must not use internal tools to bypass manual assignment/start controls or user-only completion and reopening rules.
+The platform exposes built-in read-only tools through its internal Streamable HTTP MCP endpoint. It provides `list_workspace_repositories` and `get_task`, scoped to the workspace and user that started the run. Calls are authenticated with short-lived run credentials. Agents must not use internal tools to bypass manual assignment/start controls or user-only completion and reopening rules.
 
 ### 3.6 MCP Server
 

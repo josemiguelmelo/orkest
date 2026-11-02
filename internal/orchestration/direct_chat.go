@@ -200,7 +200,9 @@ func (d *TaskDispatcher) StartDirectChat(ctx context.Context, userID, organizati
 		}
 		serverIDs := make([]string, 0, len(config.MCPServers))
 		for _, server := range config.MCPServers {
-			serverIDs = append(serverIDs, server.ID)
+			if server.ID != runconfig.OrkestMCPServerID {
+				serverIDs = append(serverIDs, server.ID)
+			}
 		}
 		servers, resolveErr := d.mcpServers.Resolve(ctx, workspaceID, serverIDs)
 		if resolveErr != nil {
@@ -224,6 +226,22 @@ func (d *TaskDispatcher) StartDirectChat(ctx context.Context, userID, organizati
 		}
 	}
 	config.RunID, config.RestoreSession = runID, continuing
+	if d.agentTools != nil {
+		server, serverErr := d.agentTools.RuntimeServer(userID, organizationID, workspaceID, conversationID)
+		if serverErr != nil {
+			return fmt.Errorf("configure Orkest agent tools: %w", serverErr)
+		}
+		found := false
+		for i := range config.MCPServers {
+			if config.MCPServers[i].ID == server.ID {
+				config.MCPServers[i] = runconfig.MCPServer{ID: server.ID, Name: server.Name, URL: server.URL, Headers: server.Headers}
+				found = true
+			}
+		}
+		if !found {
+			config.MCPServers = append(config.MCPServers, runconfig.MCPServer{ID: server.ID, Name: server.Name, URL: server.URL, Headers: server.Headers})
+		}
+	}
 	config.InitialCommandID, config.InitialPrompt = commandID, prompt
 	if err := config.Validate(); err != nil {
 		return err

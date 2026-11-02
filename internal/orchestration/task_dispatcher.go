@@ -63,9 +63,19 @@ type TaskDispatcher struct {
 	repositories interface {
 		List(context.Context, string, string, string) ([]coderepository.CodeRepository, error)
 	}
+	agentTools interface {
+		RuntimeServer(string, string, string, string) (mcpserver.RuntimeServer, error)
+	}
 	codingCredentials interface {
 		CodingCredential(context.Context, string, string) (coderepository.Credentials, error)
 	}
+}
+
+func (d *TaskDispatcher) SetAgentTools(tools interface {
+	RuntimeServer(string, string, string, string) (mcpserver.RuntimeServer, error)
+},
+) {
+	d.agentTools = tools
 }
 
 func (d *TaskDispatcher) SetProfiles(profiles interface {
@@ -165,6 +175,13 @@ func (d *TaskDispatcher) StartTask(ctx context.Context, userID, organizationID s
 		}
 	}
 	config.RunID, config.RestoreSession = runID, continuing
+	if d.agentTools != nil {
+		server, serverErr := d.agentTools.RuntimeServer(userID, organizationID, value.WorkspaceID, value.ID)
+		if serverErr != nil {
+			return fmt.Errorf("configure Orkest agent tools: %w", serverErr)
+		}
+		config.MCPServers = append(config.MCPServers, runconfig.MCPServer{ID: server.ID, Name: server.Name, URL: server.URL, Headers: server.Headers})
+	}
 	config.GitCredentials = nil
 	config.GitCredentialsRequired = false
 	config.Repositories = nil
@@ -250,7 +267,9 @@ func (d *TaskDispatcher) StartTask(ctx context.Context, userID, organizationID s
 		}
 		serverIDs := make([]string, 0, len(config.MCPServers))
 		for _, server := range config.MCPServers {
-			serverIDs = append(serverIDs, server.ID)
+			if server.ID != runconfig.OrkestMCPServerID {
+				serverIDs = append(serverIDs, server.ID)
+			}
 		}
 		servers, err := d.mcpServers.Resolve(ctx, value.WorkspaceID, serverIDs)
 		if err != nil {
