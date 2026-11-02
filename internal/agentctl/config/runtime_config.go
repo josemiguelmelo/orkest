@@ -40,6 +40,8 @@ type MCPServer struct {
 	Headers map[string]string `json:"headers,omitempty"`
 }
 
+const OrkestMCPServerID = "orkest-agent-tools"
+
 // Skill is an immutable run snapshot of one selected SKILL.md definition.
 type Skill struct {
 	ID      string `json:"id"`

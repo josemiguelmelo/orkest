@@ -15,6 +15,7 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/agent"
 	"github.com/josemiguelmelo/orkest/internal/agentruntimeprofile"
 	"github.com/josemiguelmelo/orkest/internal/app/httpapi"
+	appmcp "github.com/josemiguelmelo/orkest/internal/app/mcp"
 	"github.com/josemiguelmelo/orkest/internal/coderepository"
 	githubprovider "github.com/josemiguelmelo/orkest/internal/coderepository/providers/github"
 	gitlabprovider "github.com/josemiguelmelo/orkest/internal/coderepository/providers/gitlab"
@@ -162,6 +163,19 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 	workflows := workflow.NewWorkflowConfigurationService(postgres.NewWorkflowDefinitionPostgresRepository(database), workspaces)
 	taskWorkflows := workflowautomation.NewWorkflowAutomationService(postgres.NewTaskTransitionPostgresRepository(database), postgres.NewAutomationEventPostgresRepository(database), workspaces, workflowautomation.WorkflowRuleEvaluator{})
 	tasks := task.NewTaskService(taskRepository, postgres.NewTaskCreationPostgresRepository(database), postgres.NewTaskUpdatePostgresRepository(database), taskWorkflows, workspaces)
+	mcpEndpoint := strings.TrimSpace(os.Getenv("ORKEST_AGENT_MCP_URL"))
+	if mcpEndpoint == "" {
+		mcpEndpoint = "http://127.0.0.1:8080"
+	}
+	mcpKey, err := appmcp.AgentToolsTokenKey(dataRoot, os.Getenv("ORKEST_AGENT_MCP_TOKEN_KEY"))
+	if err != nil {
+		return fmt.Errorf("load agent MCP token key: %w", err)
+	}
+	agentTools, err := appmcp.NewAgentTools(mcpKey, mcpEndpoint, codeRepositories, tasks)
+	if err != nil {
+		return fmt.Errorf("initialize agent MCP tools: %w", err)
+	}
+	dispatcher.SetAgentTools(agentTools)
 	integrations := taskintegration.NewTaskIntegrationService(postgres.NewPostgresTaskIntegrationRepository(database), secretBox, workspaces, organizations, postgres.NewPostgresImportedTaskRepository(database), tasks, githubcloud.NewGitHubCloudProvider(), jiraserver.NewJiraServerProvider())
 	runnerCtx, stopRunner := context.WithCancel(ctx)
 	var runnerWG sync.WaitGroup
@@ -204,7 +218,7 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 	worker := workflowautomation.NewWorkflowAutomationWorker(taskWorkflows, execution, logger)
 	runnerWG.Add(1)
 	go func() { defer runnerWG.Done(); worker.Run(runnerCtx) }()
-	router, err := httpapi.NewRouter(users, organizations, workspaces, agents, codeRepositories, tasks, integrations, mcpServerService, skillCatalog, launchService, executionProfileService, agentRuntimeProfiles, directChats, workflows, taskWorkflows, workspaceEnvironment)
+	router, err := httpapi.NewRouter(users, organizations, workspaces, agents, codeRepositories, tasks, integrations, mcpServerService, skillCatalog, launchService, executionProfileService, agentRuntimeProfiles, directChats, workflows, taskWorkflows, []*workspaceenv.Service{workspaceEnvironment}, agentTools)
 	if err != nil {
 		stopRunner()
 		runnerWG.Wait()

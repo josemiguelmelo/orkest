@@ -170,6 +170,8 @@ make docker-agentctl-push-local  # also pushes images to the local registry
 | `KEYCLOAK_PORT` | Local Keycloak host port; defaults to `8082` in Compose. |
 | `ORKEST_WEB_DIR` | Built frontend directory served by Go; defaults to `web/dist`. |
 | `ORKEST_DATA_DIR` | Durable host directory for workspace files, task checkouts, and agent state. |
+| `ORKEST_AGENT_MCP_URL` | Agent-container-reachable URL for Orkest's built-in HTTP MCP tools; Compose sets `http://orkest:8080`. |
+| `ORKEST_AGENT_MCP_TOKEN_KEY` | Optional stable signing key override; otherwise Orkest creates a private key in `ORKEST_DATA_DIR`. |
 | `ORKEST_EXECUTOR` | Agent executor: `docker` (default) or `local`. Local does not isolate task processes. |
 | `ORKEST_AGENTCTL_BINARY` | Absolute path to the installed `agentctl` executable; required when using Local. `make build` creates `bin/agentctl`. |
 | `ORKEST_AGENT_PROVIDER_ENV` | Comma-separated host environment variable names explicitly passed to agent runtimes. |
