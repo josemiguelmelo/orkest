@@ -3,6 +3,8 @@ package taskintegration
 import (
 	"context"
 	"time"
+
+	"github.com/josemiguelmelo/orkest/internal/task"
 )
 
 // TaskIntegrationRepository persists workspace-scoped provider configurations.
@@ -18,6 +20,11 @@ type TaskIntegrationRepository interface {
 
 // ImportedTaskRepository owns idempotent persistence and source reconciliation.
 type ImportedTaskRepository interface {
-	UpsertImportedTask(context.Context, string, string, string, string, DiscoveredTask) error
+	UpsertImportedTask(context.Context, string, string, string, string, DiscoveredTask, func(task.ImportedTaskSnapshot) (task.ImportedTaskEffects, error)) error
 	RemoveMissingImportedTasks(context.Context, string, string, []string) error
+}
+
+// ImportedTaskPolicy is supplied by the task service.
+type ImportedTaskPolicy interface {
+	PlanImportedTask(task.ImportedTaskSnapshot) (task.ImportedTaskEffects, error)
 }

@@ -10,13 +10,13 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/workflow"
 )
 
-type WorkflowPostgresRepository struct {
+type WorkflowDefinitionPostgresRepository struct {
 	pool    *pgxpool.Pool
 	queries *sqlc.Queries
 }
 
-func NewWorkflowPostgresRepository(database *PostgresDatabase) *WorkflowPostgresRepository {
-	return &WorkflowPostgresRepository{pool: database.pool, queries: sqlc.New(database.pool)}
+func NewWorkflowDefinitionPostgresRepository(database *PostgresDatabase) *WorkflowDefinitionPostgresRepository {
+	return &WorkflowDefinitionPostgresRepository{pool: database.pool, queries: sqlc.New(database.pool)}
 }
 
 func workflowDefinition(ctx context.Context, q *sqlc.Queries, row sqlc.WorkspaceWorkflow) (workflow.Definition, error) {
@@ -38,7 +38,7 @@ func workflowDefinition(ctx context.Context, q *sqlc.Queries, row sqlc.Workspace
 	return d, nil
 }
 
-func (r *WorkflowPostgresRepository) Definitions(ctx context.Context, workspaceID string) ([]workflow.Definition, error) {
+func (r *WorkflowDefinitionPostgresRepository) Definitions(ctx context.Context, workspaceID string) ([]workflow.Definition, error) {
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 	if err != nil {
 		return nil, err
@@ -60,7 +60,7 @@ func (r *WorkflowPostgresRepository) Definitions(ctx context.Context, workspaceI
 	return definitions, tx.Commit(ctx)
 }
 
-func (r *WorkflowPostgresRepository) Definition(ctx context.Context, workspaceID, workflowID string) (workflow.Definition, error) {
+func (r *WorkflowDefinitionPostgresRepository) Definition(ctx context.Context, workspaceID, workflowID string) (workflow.Definition, error) {
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 	if err != nil {
 		return workflow.Definition{}, err
@@ -78,13 +78,22 @@ func (r *WorkflowPostgresRepository) Definition(ctx context.Context, workspaceID
 	return d, tx.Commit(ctx)
 }
 
-func (r *WorkflowPostgresRepository) Create(ctx context.Context, workspaceID string, d workflow.Definition) (workflow.Definition, error) {
+func (r *WorkflowDefinitionPostgresRepository) Create(ctx context.Context, workspaceID string, d workflow.Definition, decide func(workflow.ConfigurationSnapshot, workflow.Definition) (workflow.Definition, error)) (workflow.Definition, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return workflow.Definition{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := r.queries.WithTx(tx)
+	snapshot, err := configurationSnapshot(ctx, q, workspaceID, d.ID, nil)
+	if err != nil {
+		return workflow.Definition{}, err
+	}
+	d, err = decide(snapshot, d)
+	if err != nil {
+		return workflow.Definition{}, err
+	}
+
 	if err = q.CreateWorkflow(ctx, sqlc.CreateWorkflowParams{WorkspaceID: workspaceID, ID: d.ID, Name: d.Name, Version: d.Version, ConfiguredBy: d.ConfiguredBy, InitialStageID: d.InitialStageID, ClosedStageID: d.ClosedStageID}); err != nil {
 		return workflow.Definition{}, mapError(err, modelerrors.ErrConflict, modelerrors.ErrConflict)
 	}
@@ -97,7 +106,7 @@ func (r *WorkflowPostgresRepository) Create(ctx context.Context, workspaceID str
 	return d, nil
 }
 
-func (r *WorkflowPostgresRepository) Save(ctx context.Context, workspaceID string, d workflow.Definition) (workflow.Definition, error) {
+func (r *WorkflowDefinitionPostgresRepository) Save(ctx context.Context, workspaceID string, d workflow.Definition, decide func(workflow.ConfigurationSnapshot, workflow.Definition) (workflow.Definition, error)) (workflow.Definition, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return workflow.Definition{}, err
@@ -108,9 +117,19 @@ func (r *WorkflowPostgresRepository) Save(ctx context.Context, workspaceID strin
 	if err != nil {
 		return workflow.Definition{}, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
 	}
-	if current.Version != d.Version {
-		return workflow.Definition{}, modelerrors.ErrConflict
+	definition, err := workflowDefinition(ctx, q, current)
+	if err != nil {
+		return workflow.Definition{}, err
 	}
+	snapshot, err := configurationSnapshot(ctx, q, workspaceID, d.ID, &definition)
+	if err != nil {
+		return workflow.Definition{}, err
+	}
+	d, err = decide(snapshot, d)
+	if err != nil {
+		return workflow.Definition{}, err
+	}
+
 	if err = r.saveStages(ctx, q, workspaceID, d); err != nil {
 		return workflow.Definition{}, err
 	}
@@ -128,24 +147,12 @@ func (r *WorkflowPostgresRepository) Save(ctx context.Context, workspaceID strin
 	return d, nil
 }
 
-func (r *WorkflowPostgresRepository) saveStages(ctx context.Context, q *sqlc.Queries, workspaceID string, d workflow.Definition) error {
-	if err := d.Validate(); err != nil {
-		return err
-	}
+func (r *WorkflowDefinitionPostgresRepository) saveStages(ctx context.Context, q *sqlc.Queries, workspaceID string, d workflow.Definition) error {
 	if err := q.DeleteWorkflowRules(ctx, sqlc.DeleteWorkflowRulesParams{WorkspaceID: workspaceID, WorkflowID: d.ID}); err != nil {
 		return err
 	}
 	ids := make([]string, 0, len(d.Stages))
 	for i, s := range d.Stages {
-		if s.ResponsibleAgentID != "" {
-			exists, err := q.ValidateWorkflowAgent(ctx, sqlc.ValidateWorkflowAgentParams{WorkspaceID: workspaceID, ID: s.ResponsibleAgentID})
-			if err != nil {
-				return err
-			}
-			if !exists {
-				return modelerrors.ErrInvalid
-			}
-		}
 		ids = append(ids, s.ID)
 		if err := q.PutWorkflowStage(ctx, sqlc.PutWorkflowStageParams{WorkspaceID: workspaceID, WorkflowID: d.ID, ID: s.ID, AgentID: s.ResponsibleAgentID, Position: int32(i), Name: s.Name, Description: s.Description}); err != nil {
 			return err
@@ -162,7 +169,7 @@ func (r *WorkflowPostgresRepository) saveStages(ctx context.Context, q *sqlc.Que
 	return nil
 }
 
-func (r *WorkflowPostgresRepository) Delete(ctx context.Context, workspaceID, workflowID string) error {
+func (r *WorkflowDefinitionPostgresRepository) Delete(ctx context.Context, workspaceID, workflowID string, decide func(workflow.WorkflowDeletionSnapshot, string) error) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -173,19 +180,14 @@ func (r *WorkflowPostgresRepository) Delete(ctx context.Context, workspaceID, wo
 	if err != nil {
 		return err
 	}
-	exists := false
-	for _, id := range workflows {
-		if id == workflowID {
-			exists = true
-			break
-		}
+	referenced, err := q.WorkflowHasReferences(ctx, sqlc.WorkflowHasReferencesParams{WorkspaceID: workspaceID, WorkflowID: workflowID})
+	if err != nil {
+		return err
 	}
-	if !exists {
-		return modelerrors.ErrNotFound
+	if err = decide(workflow.WorkflowDeletionSnapshot{WorkflowIDs: workflows, Referenced: referenced.Bool}, workflowID); err != nil {
+		return err
 	}
-	if len(workflows) <= 1 {
-		return modelerrors.ErrConflict
-	}
+
 	count, err := q.DeleteWorkflow(ctx, sqlc.DeleteWorkflowParams{WorkspaceID: workspaceID, ID: workflowID})
 	if err != nil {
 		return mapError(err, modelerrors.ErrConflict, modelerrors.ErrConflict)
@@ -197,4 +199,16 @@ func (r *WorkflowPostgresRepository) Delete(ctx context.Context, workspaceID, wo
 		return mapError(err, modelerrors.ErrConflict, modelerrors.ErrConflict)
 	}
 	return nil
+}
+
+func configurationSnapshot(ctx context.Context, q *sqlc.Queries, workspaceID, workflowID string, current *workflow.Definition) (workflow.ConfigurationSnapshot, error) {
+	agents, err := q.WorkflowConfigurationAgents(ctx, workspaceID)
+	if err != nil {
+		return workflow.ConfigurationSnapshot{}, err
+	}
+	stages, err := q.OccupiedWorkflowStages(ctx, sqlc.OccupiedWorkflowStagesParams{WorkspaceID: workspaceID, WorkflowID: workflowID})
+	if err != nil {
+		return workflow.ConfigurationSnapshot{}, err
+	}
+	return workflow.ConfigurationSnapshot{Current: current, AgentIDs: agents, OccupiedStageIDs: stages}, nil
 }

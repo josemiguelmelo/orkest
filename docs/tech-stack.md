@@ -188,13 +188,20 @@ migration verification now succeed.
 
 ## Workspace workflows
 
-The `internal/workflow` package owns board/stage/rule entities and pure automation
-matcher/action interfaces. Explicit initial/closed stages and movement destinations
-are independent of column order. PostgreSQL stores relational configuration,
-a durable event inbox and the existing execution command outbox. The platform
-worker asks the task service to evaluate events against a locked snapshot of the
-latest workflow configuration. A repository transaction callback persists the
-service decision and acknowledgement atomically; external execution remains in the reconciled command delivery path.
-Stage-entry history and processed events retain configuration versions. No broker
-or generic workflow engine is introduced. Artifacts and normalized PR events are
-future extensions. See [workflow architecture and propagation](workflows.md).
+`internal/workflow` owns board, stage and rule configuration through
+`WorkflowConfigurationService`. `internal/task` owns task CRUD, imported content
+and lifecycle through `TaskService`. Creation initializes the configured first
+stage and emits a durable entry event. Updates keep content and requested stage
+changes in one transaction, using a task-owned `TaskWorkflowPlanner` interface.
+
+`internal/workflowautomation` implements stage transitions and rule evaluation in
+`WorkflowAutomationService`; `WorkflowExecutionService` reconciles and delivers
+start commands through orchestration. `WorkflowAutomationWorker` only schedules
+these services. Neither task nor workflow imports the automation package.
+
+PostgreSQL adapters load locked snapshots and persist service decisions, history,
+inbox acknowledgements and command intent atomically. Definition reference checks
+also run as service policy against locked facts. Source import stage decisions
+are explicit SQL inputs; query code is generated with sqlc. Agent launch and
+recovery remain in orchestration. No broker or generic workflow engine is added.
+See [workflow architecture and propagation](workflows.md).

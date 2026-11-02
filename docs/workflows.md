@@ -102,19 +102,36 @@ claims remain a possible throughput improvement, not part of this change.
 
 ## Architecture and extension boundaries
 
-`internal/workflow` owns entities, validation, pure transition planning and the
-`AutomationEvaluator`, `EventMatcher`, and `AutomationAction` interfaces. Concrete
-stage-event matchers and move/start actions implement the initial behavior.
-The task service owns user commands, stale-event/active-run policy, actor selection
-and automation evaluation. Its injected evaluator produces a persistence-independent
-decision. `WithWorkflowEvent` loads a locked snapshot and invokes the service's
-pure decision callback inside the transaction, then persists that decision and
-acknowledges the event atomically. Repository adapters never invoke the evaluator
-or decide whether a business conflict should fail or skip automation.
-PostgreSQL adapters own transactions, relational configuration and durable inbox/
-outbox persistence. Runtime orchestration only publishes terminal run facts.
-Public transition requests, internal events and execution command payloads are
-separate types. No dependency registry or external workflow engine is used.
+`internal/workflow` owns definitions, stages, rule configuration and structural
+validation through `WorkflowConfigurationService`. It never imports task or
+automation services. Configuration saves and deletions validate service-owned
+policy against locked snapshots of versions, registered agents, occupied stages
+and task/integration references. Database constraints remain the final guard.
+
+`internal/task` owns task CRUD, comments, repository links and imported-content
+protection through `TaskService`. Creation selects the configured initial stage
+and assignment under the workflow lock, then persists the task and entry event
+atomically. Source synchronization uses task-owned import policy to retain local
+state or apply source closure; SQL receives the explicit destination.
+
+`internal/workflowautomation` owns stage movement, rule evaluation and start
+coordination. `WorkflowAutomationService` implements the task-owned
+`TaskWorkflowPlanner` interface for stage-change requests within combined updates.
+`WorkflowExecutionService` rechecks access, stage versions and accepted command
+identities before dispatching through orchestration. It returns explicit delivery
+and work-state effects. Execution health reads retain task/run locks until those
+effects commit. `WorkflowAutomationWorker` only schedules these services.
+Neither task nor workflow imports automation; app constructs and connects them.
+
+Task creation, task updates, stage transitions, automation events and execution
+commands have separate repository contracts and PostgreSQL adapters. Task updates
+and explicit transitions share data-access code that locks the latest workflow
+and task and invokes a supplied service callback. The callback performs no I/O.
+Replay comparison precedes new effects, and task changes, history, events and
+command intent commit atomically. Imported-content decisions and execution
+conflicts stay in services. Persisted command JSON and public API payloads retain
+their existing shapes. This package refactor changes queries and generated code
+without changing the database schema.
 
 Future artifacts belong to tasks, with optional producing run and stage-entry
 references; movement will not remove outputs. Artifact storage and APIs are not

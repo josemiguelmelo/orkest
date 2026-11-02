@@ -18,69 +18,13 @@ const (
 	StartWork ActionType = "start_work"
 )
 
-// Event is normalized domain data. Runtime identity and delivery metadata live in
-// the task event envelope, and are checked before evaluating automation.
-type (
-	Event          struct{ Type EventType }
-	AutomationRule struct {
-		ID            string     `json:"id"`
-		Enabled       bool       `json:"enabled"`
-		Event         EventType  `json:"event"`
-		SourceStageID string     `json:"sourceStageId"`
-		Action        ActionType `json:"action"`
-		TargetStageID string     `json:"targetStageId,omitempty"`
-	}
-)
-
-type (
-	EventMatcher     interface{ Matches(Event, Plan) bool }
-	AutomationAction interface {
-		Plan(Definition, Plan) (Plan, error)
-	}
-	AutomationEvaluator interface {
-		Evaluate(Definition, Plan, Event) (Plan, error)
-	}
-)
-
-type StageEventMatcher struct {
-	Event   EventType
-	StageID string
-}
-
-func (m StageEventMatcher) Matches(e Event, p Plan) bool {
-	return e.Type == m.Event && p.StageID == m.StageID
-}
-
-type MoveTaskAction struct{ TargetStageID string }
-
-func (a MoveTaskAction) Plan(d Definition, p Plan) (Plan, error) {
-	return PlanTransition(d, p.StageID, a.TargetStageID, p.AssigneeAgentID, Enter)
-}
-
-type StartWorkAction struct{}
-
-func (StartWorkAction) Plan(d Definition, p Plan) (Plan, error) {
-	return PlanTransition(d, p.StageID, "", p.AssigneeAgentID, Start)
-}
-
-type RuleEvaluator struct{}
-
-func (RuleEvaluator) Evaluate(d Definition, p Plan, e Event) (Plan, error) {
-	p.Completed = e.Type == RunSucceeded || e.Type == StageCompleted
-	for _, r := range d.Rules {
-		var matcher EventMatcher = StageEventMatcher{Event: r.Event, StageID: r.SourceStageID}
-		if !r.Enabled || !matcher.Matches(e, p) {
-			continue
-		}
-		var action AutomationAction = MoveTaskAction{TargetStageID: r.TargetStageID}
-		if r.Action == StartWork {
-			action = StartWorkAction{}
-		}
-		result, err := action.Plan(d, p)
-		result.RuleID = r.ID
-		return result, err
-	}
-	return p, nil
+type AutomationRule struct {
+	ID            string     `json:"id"`
+	Enabled       bool       `json:"enabled"`
+	Event         EventType  `json:"event"`
+	SourceStageID string     `json:"sourceStageId"`
+	Action        ActionType `json:"action"`
+	TargetStageID string     `json:"targetStageId,omitempty"`
 }
 
 func validateRules(d Definition) error {

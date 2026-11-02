@@ -7,24 +7,14 @@ import (
 
 	"github.com/josemiguelmelo/orkest/internal/core/ids"
 	modelerrors "github.com/josemiguelmelo/orkest/internal/core/model/errors"
-	"github.com/josemiguelmelo/orkest/internal/workflow"
 )
 
-type WorkflowReader interface {
-	Get(context.Context, string, string, string, string) (workflow.Definition, error)
-}
-
-type Service struct {
-	repository  Repository
-	workspaces  WorkspaceAccess
-	workflows   WorkflowReader
-	transitions TransitionRepository
-	evaluator   workflow.AutomationEvaluator
-}
-
-type TaskDispatcher interface {
-	StartTask(context.Context, string, string, Task) error
-	TaskCommandAccepted(context.Context, string, string, string, string, string) (bool, error)
+type TaskService struct {
+	repository TaskRepository
+	workspaces WorkspaceAccess
+	creations  TaskCreationRepository
+	updates    TaskUpdateRepository
+	workflow   TaskWorkflowPlanner
 }
 
 type DispatchError struct{ Cause error }
@@ -32,18 +22,18 @@ type DispatchError struct{ Cause error }
 func (e *DispatchError) Error() string { return e.Cause.Error() }
 func (e *DispatchError) Unwrap() error { return e.Cause }
 
-func NewService(repository Repository, workspaces WorkspaceAccess, workflows WorkflowReader, transitions TransitionRepository, evaluator workflow.AutomationEvaluator) *Service {
-	return &Service{repository: repository, workspaces: workspaces, workflows: workflows, transitions: transitions, evaluator: evaluator}
+func NewTaskService(repository TaskRepository, creations TaskCreationRepository, updates TaskUpdateRepository, workflow TaskWorkflowPlanner, workspaces WorkspaceAccess) *TaskService {
+	return &TaskService{repository: repository, creations: creations, updates: updates, workflow: workflow, workspaces: workspaces}
 }
 
-func (s *Service) List(ctx context.Context, userID, orgID, workspaceID string) ([]Task, error) {
+func (s *TaskService) List(ctx context.Context, userID, orgID, workspaceID string) ([]Task, error) {
 	if _, err := s.workspaces.GetWorkspace(ctx, userID, orgID, workspaceID); err != nil {
 		return nil, err
 	}
 	return s.repository.Tasks(ctx, orgID, workspaceID)
 }
 
-func (s *Service) Get(ctx context.Context, userID, orgID, workspaceID, taskID string) (Task, error) {
+func (s *TaskService) Get(ctx context.Context, userID, orgID, workspaceID, taskID string) (Task, error) {
 	if _, err := s.workspaces.GetWorkspace(ctx, userID, orgID, workspaceID); err != nil {
 		return Task{}, err
 	}
@@ -51,7 +41,7 @@ func (s *Service) Get(ctx context.Context, userID, orgID, workspaceID, taskID st
 }
 
 // AuthorizeExecution checks task visibility and whether the caller may interact with its run.
-func (s *Service) AuthorizeExecution(ctx context.Context, userID, orgID, workspaceID, taskID string, mutate bool) error {
+func (s *TaskService) AuthorizeExecution(ctx context.Context, userID, orgID, workspaceID, taskID string, mutate bool) error {
 	if _, err := s.repository.Task(ctx, orgID, workspaceID, taskID); err != nil {
 		return err
 	}
@@ -65,37 +55,7 @@ func (s *Service) AuthorizeExecution(ctx context.Context, userID, orgID, workspa
 	return nil
 }
 
-func (s *Service) Create(ctx context.Context, userID, orgID, workspaceID string, input TaskInput) (Task, error) {
-	if err := s.authorize(ctx, userID, orgID, workspaceID); err != nil {
-		return Task{}, err
-	}
-	if input.WorkflowID == "" {
-		return Task{}, modelerrors.ErrInvalid
-	}
-	d, e := s.workflows.Get(ctx, userID, orgID, workspaceID, input.WorkflowID)
-	if e != nil {
-		return Task{}, e
-	}
-	if input.Status != "" && input.Status != d.StartStageID() {
-		return Task{}, modelerrors.ErrInvalid
-	}
-	input.Status = d.StartStageID()
-	input.ActorID = userID
-	if err := normalizeTaskContent(&input); err != nil {
-		return Task{}, err
-	}
-	id, err := ids.NewUUID()
-	if err != nil {
-		return Task{}, fmt.Errorf("generate task ID: %w", err)
-	}
-	return s.repository.CreateTask(ctx, id, workspaceID, input)
-}
-
-func (s *Service) Update(ctx context.Context, userID, orgID, workspaceID, taskID string, input TaskInput) (Task, error) {
-	return s.updateWorkflowTask(ctx, userID, orgID, workspaceID, taskID, input)
-}
-
-func (s *Service) Comments(ctx context.Context, userID, orgID, workspaceID, taskID string) ([]Comment, error) {
+func (s *TaskService) Comments(ctx context.Context, userID, orgID, workspaceID, taskID string) ([]Comment, error) {
 	if _, err := s.workspaces.GetWorkspace(ctx, userID, orgID, workspaceID); err != nil {
 		return nil, err
 	}
@@ -105,7 +65,7 @@ func (s *Service) Comments(ctx context.Context, userID, orgID, workspaceID, task
 	return s.repository.Comments(ctx, orgID, workspaceID, taskID)
 }
 
-func (s *Service) AddComment(ctx context.Context, userID, orgID, workspaceID, taskID, body string) (Comment, error) {
+func (s *TaskService) AddComment(ctx context.Context, userID, orgID, workspaceID, taskID, body string) (Comment, error) {
 	if err := s.authorize(ctx, userID, orgID, workspaceID); err != nil {
 		return Comment{}, err
 	}
@@ -123,7 +83,7 @@ func (s *Service) AddComment(ctx context.Context, userID, orgID, workspaceID, ta
 	return s.repository.CreateComment(ctx, id, workspaceID, taskID, userID, body)
 }
 
-func (s *Service) authorize(ctx context.Context, userID, orgID, workspaceID string) error {
+func (s *TaskService) authorize(ctx context.Context, userID, orgID, workspaceID string) error {
 	w, err := s.workspaces.GetWorkspace(ctx, userID, orgID, workspaceID)
 	if err != nil {
 		return err
@@ -134,12 +94,9 @@ func (s *Service) authorize(ctx context.Context, userID, orgID, workspaceID stri
 	return nil
 }
 
-func normalizeTaskContent(input *TaskInput) error {
+func NormalizeTaskContent(input *TaskInput) error {
 	if input.StageVersion < 0 || (input.StartWork && input.CompleteStage) || len(input.Status) > 100 {
 		return modelerrors.ErrInvalid
-	}
-	if err := validateExecutionOptions(input.SessionMode, input.PromptText, input.CommandID); err != nil {
-		return err
 	}
 	input.Title = strings.TrimSpace(input.Title)
 	input.Description = strings.TrimSpace(input.Description)
@@ -167,14 +124,4 @@ func normalizeStrings(values []string) []string {
 		out = append(out, value)
 	}
 	return out
-}
-
-func validateExecutionOptions(sessionMode, promptText, commandID string) error {
-	if sessionMode != "" && sessionMode != "continue" && sessionMode != "new" {
-		return modelerrors.ErrInvalid
-	}
-	if len(promptText) > 256*1024 || len(commandID) > 200 || (commandID != "" && strings.TrimSpace(commandID) == "") {
-		return modelerrors.ErrInvalid
-	}
-	return nil
 }

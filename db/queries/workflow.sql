@@ -69,7 +69,11 @@ WHERE workspace_id=$1 AND id=$2 AND stage_version=$3;
 SELECT EXISTS(SELECT 1 FROM agent_prompt_outbox WHERE command_id=$1);
 
 -- name: SetQueuedStageState :exec
-UPDATE tasks AS t SET stage_work_state=CASE WHEN EXISTS(SELECT 1 FROM agent_launches WHERE run_id=t.workflow_run_id AND status='failed') THEN 'failed' ELSE $4 END WHERE t.workspace_id=$1 AND t.id=$2 AND t.stage_version=$3 AND t.stage_work_state='queued';
+UPDATE tasks SET stage_work_state=$4 WHERE workspace_id=$1 AND id=$2 AND stage_version=$3 AND stage_work_state='queued';
+
+-- name: TaskExecutionFailed :one
+SELECT (l.status='failed')::boolean AS failed FROM tasks t JOIN agent_launches l ON l.run_id=t.workflow_run_id
+WHERE t.workspace_id=$1 AND t.id=$2 FOR SHARE OF t,l;
 
 -- name: BindWorkflowRun :exec
 UPDATE tasks SET workflow_run_id=$3 WHERE workspace_id=$1 AND id=$2;
@@ -103,3 +107,13 @@ SELECT * FROM workflow_events WHERE processed_at IS NULL ORDER BY occurred_at,id
 
 -- name: AcknowledgeWorkflowEvent :exec
 UPDATE workflow_events SET processed_at=now(),configuration_version=$2,matched_rule_id=$3 WHERE id=$1;
+
+-- name: WorkflowConfigurationAgents :many
+SELECT id FROM agents WHERE workspace_id=$1 ORDER BY id FOR KEY SHARE;
+
+-- name: OccupiedWorkflowStages :many
+SELECT DISTINCT status FROM tasks WHERE workspace_id=$1 AND workflow_id=$2;
+
+-- name: WorkflowHasReferences :one
+SELECT EXISTS(SELECT 1 FROM tasks t WHERE t.workspace_id=sqlc.arg(workspace_id)::text AND t.workflow_id=sqlc.arg(workflow_id)::text)
+ OR EXISTS(SELECT 1 FROM task_integrations i WHERE i.workspace_id=sqlc.arg(workspace_id)::text AND i.workflow_id=sqlc.arg(workflow_id)::text);

@@ -7,7 +7,9 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/workflow"
 )
 
-type workflowAPI struct{ service *workflow.Service }
+type workflowAPI struct {
+	service *workflow.WorkflowConfigurationService
+}
 
 func (a workflowAPI) routes(r chi.Router) {
 	r.Route("/organizations/{orgID}/workspaces/{workspaceID}/workflows", func(r chi.Router) {

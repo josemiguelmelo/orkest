@@ -3,11 +3,16 @@ package httpapi
 import (
 	"net/http"
 
+	workflowautomation "github.com/josemiguelmelo/orkest/internal/workflowautomation"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/josemiguelmelo/orkest/internal/task"
 )
 
-type taskAPI struct{ tasks *task.Service }
+type taskAPI struct {
+	tasks      *task.TaskService
+	automation *workflowautomation.WorkflowAutomationService
+}
 
 func (a taskAPI) routes(r chi.Router) {
 	const prefix = "/organizations/{orgID}/workspaces/{workspaceID}"
@@ -69,10 +74,10 @@ func (a taskAPI) addComment(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a taskAPI) transition(w http.ResponseWriter, r *http.Request) {
-	var in task.TransitionInput
+	var in workflowautomation.TransitionRequest
 	if !decodeBody(w, r, &in) {
 		return
 	}
-	value, err := a.tasks.Transition(r.Context(), currentUserID(r), chi.URLParam(r, "orgID"), chi.URLParam(r, "workspaceID"), chi.URLParam(r, "taskID"), in)
+	value, err := a.automation.Transition(r.Context(), currentUserID(r), chi.URLParam(r, "orgID"), chi.URLParam(r, "workspaceID"), chi.URLParam(r, "taskID"), in)
 	respond(w, value, err, http.StatusOK)
 }

@@ -23,12 +23,6 @@ FROM workspaces w
 WHERE w.organization_id = $1 AND t.workspace_id = w.id AND t.workspace_id = $2 AND t.id = $3
 RETURNING t.id, t.workspace_id, t.workflow_id, t.title, t.description, t.source_provider, COALESCE(t.source_id, '') AS source_id, COALESCE(t.source_url, '') AS source_url, t.status, COALESCE(t.assignee_agent_id, '') AS assignee_agent_id, t.labels, t.created_at, t.updated_at, t.stage_version, t.stage_work_state, COALESCE(t.status = workflow_final_stage(t.workspace_id,t.workflow_id),false)::boolean AS closed, COALESCE((SELECT s.name FROM workflow_stages s WHERE s.workspace_id=t.workspace_id AND s.workflow_id=t.workflow_id AND s.id=t.status),'')::text AS stage_name, COALESCE((SELECT s.description FROM workflow_stages s WHERE s.workspace_id=t.workspace_id AND s.workflow_id=t.workflow_id AND s.id=t.status),'')::text AS stage_description, EXISTS(SELECT 1 FROM workflow_events e WHERE e.workspace_id=t.workspace_id AND e.task_id=t.id AND e.stage_version=t.stage_version AND e.processed_at IS NULL) AS automation_pending;
 
--- name: UpdateTaskIfStatus :one
-UPDATE tasks t SET title = $5, description = $6, status = $7, assignee_agent_id = NULLIF($8, ''), labels = $9, updated_at = now()
-FROM workspaces w
-WHERE w.organization_id = $1 AND t.workspace_id = w.id AND t.workspace_id = $2 AND t.id = $3 AND t.status = $4
-RETURNING t.id, t.workspace_id, t.workflow_id, t.title, t.description, t.source_provider, COALESCE(t.source_id, '') AS source_id, COALESCE(t.source_url, '') AS source_url, t.status, COALESCE(t.assignee_agent_id, '') AS assignee_agent_id, t.labels, t.created_at, t.updated_at, t.stage_version, t.stage_work_state, COALESCE(t.status = workflow_final_stage(t.workspace_id,t.workflow_id),false)::boolean AS closed, COALESCE((SELECT s.name FROM workflow_stages s WHERE s.workspace_id=t.workspace_id AND s.workflow_id=t.workflow_id AND s.id=t.status),'')::text AS stage_name, COALESCE((SELECT s.description FROM workflow_stages s WHERE s.workspace_id=t.workspace_id AND s.workflow_id=t.workflow_id AND s.id=t.status),'')::text AS stage_description, EXISTS(SELECT 1 FROM workflow_events e WHERE e.workspace_id=t.workspace_id AND e.task_id=t.id AND e.stage_version=t.stage_version AND e.processed_at IS NULL) AS automation_pending;
-
 -- name: DeleteTaskRepositories :exec
 DELETE FROM task_repositories WHERE workspace_id = $1 AND task_id = $2;
 

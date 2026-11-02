@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/josemiguelmelo/orkest/internal/task"
+
 	stderrors "errors"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -13,9 +15,7 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/core/ids"
 	"github.com/josemiguelmelo/orkest/internal/core/model/errors"
 	"github.com/josemiguelmelo/orkest/internal/postgres/sqlc"
-	"github.com/josemiguelmelo/orkest/internal/task"
 	"github.com/josemiguelmelo/orkest/internal/taskintegration"
-	"github.com/josemiguelmelo/orkest/internal/workflow"
 )
 
 type PostgresTaskIntegrationRepository struct{ queries *sqlc.Queries }
@@ -108,9 +108,9 @@ func NewPostgresImportedTaskRepository(database *PostgresDatabase) *PostgresImpo
 
 var _ taskintegration.ImportedTaskRepository = (*PostgresImportedTaskRepository)(nil)
 
-func (r *PostgresImportedTaskRepository) UpsertImportedTask(ctx context.Context, workspaceID, integrationID, workflowID, provider string, item taskintegration.DiscoveredTask) error {
-	if item.ID == "" || item.Title == "" {
-		return fmt.Errorf("source task is missing identity or title")
+func (r *PostgresImportedTaskRepository) UpsertImportedTask(ctx context.Context, workspaceID, integrationID, workflowID, provider string, item taskintegration.DiscoveredTask, decide func(task.ImportedTaskSnapshot) (task.ImportedTaskEffects, error)) error {
+	if decide == nil {
+		return fmt.Errorf("imported task entry decider is required")
 	}
 	id, err := ids.NewUUID()
 	if err != nil {
@@ -135,7 +135,20 @@ func (r *PostgresImportedTaskRepository) UpsertImportedTask(ctx context.Context,
 	if err != nil && !stderrors.Is(err, pgx.ErrNoRows) {
 		return err
 	}
-	err = q.UpsertImportedTask(ctx, sqlc.UpsertImportedTaskParams{ID: id, WorkspaceID: workspaceID, WorkflowID: workflowID, Title: item.Title, Description: item.Description, SourceProvider: provider, SourceIntegrationID: pgtype.Text{String: integrationID, Valid: true}, SourceID: pgtype.Text{String: item.ID, Valid: true}, SourceUrl: pgtype.Text{String: item.URL, Valid: item.URL != ""}, Labels: item.Labels, Closed: item.Closed})
+	snapshot := task.ImportedTaskSnapshot{Workflow: d, SourceID: item.ID, Title: item.Title, Exists: before.ID != "", SourceClosed: item.Closed, StageID: before.Status}
+	if before.ID != "" {
+		state, e := q.LockWorkflowTask(ctx, sqlc.LockWorkflowTaskParams{WorkspaceID: workspaceID, ID: before.ID})
+		if e != nil {
+			return e
+		}
+		snapshot.AssigneeAgentID = state.Assignee
+	}
+	decision, err := decide(snapshot)
+	if err != nil {
+		return err
+	}
+
+	err = q.UpsertImportedTask(ctx, sqlc.UpsertImportedTaskParams{ID: id, WorkspaceID: workspaceID, WorkflowID: workflowID, Title: item.Title, Description: item.Description, SourceProvider: provider, SourceIntegrationID: pgtype.Text{String: integrationID, Valid: true}, SourceID: pgtype.Text{String: item.ID, Valid: true}, SourceUrl: pgtype.Text{String: item.URL, Valid: item.URL != ""}, Labels: item.Labels, Status: decision.StageID})
 	if err != nil {
 		return err
 	}
@@ -143,18 +156,18 @@ func (r *PostgresImportedTaskRepository) UpsertImportedTask(ctx context.Context,
 	if err != nil {
 		return err
 	}
-	if before.ID == "" || before.Status != after.Status {
+	if decision.EmitStageEntry || decision.WorkState != "" {
 		state, e := q.LockWorkflowTask(ctx, sqlc.LockWorkflowTaskParams{WorkspaceID: workspaceID, ID: after.ID})
 		if e != nil {
 			return e
 		}
-		plan, e := workflow.PlanTransition(d, after.Status, after.Status, state.Assignee, workflow.Enter)
-		if e != nil {
-			if e = q.SetStageWorkState(ctx, sqlc.SetStageWorkStateParams{WorkspaceID: workspaceID, ID: after.ID, StageVersion: state.StageVersion, StageWorkState: string(task.WorkStateFailed)}); e != nil {
+		if decision.WorkState != "" {
+			if e = q.SetStageWorkState(ctx, sqlc.SetStageWorkStateParams{WorkspaceID: workspaceID, ID: after.ID, StageVersion: state.StageVersion, StageWorkState: string(decision.WorkState)}); e != nil {
 				return e
 			}
-		} else {
-			if e = q.MoveWorkflowTask(ctx, sqlc.MoveWorkflowTaskParams{WorkspaceID: workspaceID, ID: after.ID, StageVersion: state.StageVersion, Status: after.Status, Column5: plan.AssigneeAgentID}); e != nil {
+		}
+		if decision.EmitStageEntry {
+			if e = q.MoveWorkflowTask(ctx, sqlc.MoveWorkflowTaskParams{WorkspaceID: workspaceID, ID: after.ID, StageVersion: state.StageVersion, Status: decision.StageID, Column5: decision.AssigneeAgentID}); e != nil {
 				return e
 			}
 			if e = enqueueStageEntry(ctx, q, workspaceID, after.ID, d.ConfiguredBy, state.StageVersion, ""); e != nil {
@@ -162,6 +175,7 @@ func (r *PostgresImportedTaskRepository) UpsertImportedTask(ctx context.Context,
 			}
 		}
 	}
+
 	return tx.Commit(ctx)
 }
 

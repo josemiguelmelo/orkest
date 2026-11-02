@@ -7,6 +7,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/josemiguelmelo/orkest/internal/workflowautomation"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/josemiguelmelo/orkest/internal/agent"
 	"github.com/josemiguelmelo/orkest/internal/agentruntimeprofile"
@@ -26,7 +28,7 @@ import (
 )
 
 // NewRouter validates the served OpenAPI contract before exposing routes.
-func NewRouter(users *identity.UserRegistrationService, organizations *organization.OrganizationService, workspaces *workspace.WorkspaceService, agents *agent.Service, codeRepositories *coderepository.Service, tasks *task.Service, integrations *taskintegration.TaskIntegrationService, mcpServers *mcpserver.MCPServerService, skillCatalog *skill.CatalogService, launches *orchestration.LaunchService, profiles *executionprofile.ExecutionProfileService, runtimeProfiles *agentruntimeprofile.Service, directChats *orchestration.DirectChatService, workflows *workflow.Service, environment ...*workspaceenv.Service) (*chi.Mux, error) {
+func NewRouter(users *identity.UserRegistrationService, organizations *organization.OrganizationService, workspaces *workspace.WorkspaceService, agents *agent.Service, codeRepositories *coderepository.Service, tasks *task.TaskService, integrations *taskintegration.TaskIntegrationService, mcpServers *mcpserver.MCPServerService, skillCatalog *skill.CatalogService, launches *orchestration.LaunchService, profiles *executionprofile.ExecutionProfileService, runtimeProfiles *agentruntimeprofile.Service, directChats *orchestration.DirectChatService, workflows *workflow.WorkflowConfigurationService, automation *workflowautomation.WorkflowAutomationService, environment ...*workspaceenv.Service) (*chi.Mux, error) {
 	if profiles == nil {
 		return nil, fmt.Errorf("execution profile service is required")
 	}
@@ -86,7 +88,7 @@ func NewRouter(users *identity.UserRegistrationService, organizations *organizat
 			}
 			codeRepositoryAPI{repositories: codeRepositories}.routes(api)
 			codingIntegrationAPI{service: codeRepositories}.routes(api)
-			taskAPI{tasks: tasks}.routes(api)
+			taskAPI{tasks: tasks, automation: automation}.routes(api)
 			workflowAPI{service: workflows}.routes(api)
 			taskRunAPI{tasks: tasks, launches: launches}.routes(api)
 			directChatAPI{chats: directChats, agents: agents, workspaces: workspaces}.routes(api)

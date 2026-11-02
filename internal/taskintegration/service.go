@@ -24,6 +24,7 @@ type TaskIntegrationService struct {
 	workspaces    WorkspaceAccess
 	organizations OrganizationAccess
 	importer      ImportedTaskRepository
+	taskPolicy    ImportedTaskPolicy
 	mu            sync.Mutex
 	inFlight      map[string]bool
 }
@@ -35,8 +36,8 @@ type OrganizationAccess interface {
 	RoleForUser(context.Context, string, string) (string, error)
 }
 
-func NewTaskIntegrationService(repo TaskIntegrationRepository, box *secretbox.Box, workspaces WorkspaceAccess, organizations OrganizationAccess, importer ImportedTaskRepository, providers ...SourceIntegrationProvider) *TaskIntegrationService {
-	s := &TaskIntegrationService{repo: repo, box: box, workspaces: workspaces, organizations: organizations, importer: importer, providers: map[TaskIntegrationSourceProvider]SourceIntegrationProvider{}, inFlight: map[string]bool{}}
+func NewTaskIntegrationService(repo TaskIntegrationRepository, box *secretbox.Box, workspaces WorkspaceAccess, organizations OrganizationAccess, importer ImportedTaskRepository, taskPolicy ImportedTaskPolicy, providers ...SourceIntegrationProvider) *TaskIntegrationService {
+	s := &TaskIntegrationService{repo: repo, box: box, workspaces: workspaces, organizations: organizations, importer: importer, taskPolicy: taskPolicy, providers: map[TaskIntegrationSourceProvider]SourceIntegrationProvider{}, inFlight: map[string]bool{}}
 	for _, p := range providers {
 		s.providers[p.Provider()] = p
 	}
@@ -267,7 +268,7 @@ func (s *TaskIntegrationService) sync(ctx context.Context, source TaskIntegratio
 	if err == nil {
 		seen := make([]string, 0, len(items))
 		for _, item := range items {
-			if e := s.importer.UpsertImportedTask(ctx, source.WorkspaceID, source.ID, source.WorkflowID, string(source.Provider), item); e != nil {
+			if e := s.importer.UpsertImportedTask(ctx, source.WorkspaceID, source.ID, source.WorkflowID, string(source.Provider), item, s.taskPolicy.PlanImportedTask); e != nil {
 				err = e
 				break
 			}

@@ -5,6 +5,10 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	workflowautomation "github.com/josemiguelmelo/orkest/internal/workflowautomation"
+
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/josemiguelmelo/orkest/internal/postgres/sqlc"
@@ -31,9 +35,9 @@ func enqueueStageEntry(ctx context.Context, q *sqlc.Queries, workspaceID, taskID
 	return enqueueTaskEvent(ctx, q, workspaceID, taskID, actorID, version, workflow.StageEntered, cause, correlation...)
 }
 
-// WithWorkflowEvent owns one transaction from claim through acknowledgement.
+// WithAutomationEvent owns one transaction from claim through acknowledgement.
 // Only database effects occur here; external execution uses the command outbox.
-func (r *TaskPostgresRepository) WithWorkflowEvent(ctx context.Context, decide func(task.WorkflowEventSnapshot) (task.WorkflowEventDecision, error)) (bool, error) {
+func (r *AutomationEventPostgresRepository) WithAutomationEvent(ctx context.Context, decide func(workflowautomation.AutomationEventSnapshot) (workflowautomation.AutomationEventEffects, error)) (bool, error) {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return false, err
@@ -69,8 +73,8 @@ func (r *TaskPostgresRepository) WithWorkflowEvent(ctx context.Context, decide f
 	} else if !errors.Is(err, pgx.ErrNoRows) {
 		return false, err
 	}
-	decision, err := decide(task.WorkflowEventSnapshot{
-		Workflow: d, Event: task.WorkflowEvent{Type: workflow.EventType(e.EventType), StageVersion: e.StageVersion, RunID: e.RunID, ActorID: e.ActorID},
+	decision, err := decide(workflowautomation.AutomationEventSnapshot{
+		Workflow: d, Event: workflowautomation.AutomationEvent{Type: workflow.EventType(e.EventType), StageVersion: e.StageVersion, RunID: e.RunID, ActorID: e.ActorID},
 		StageID: state.Status, AssigneeAgentID: state.Assignee, RunID: state.WorkflowRunID, StageVersion: state.StageVersion, WorkState: task.WorkState(state.StageWorkState), ActiveLaunch: active,
 	})
 	if err != nil {
@@ -92,7 +96,7 @@ func (r *TaskPostgresRepository) WithWorkflowEvent(ctx context.Context, decide f
 	return true, tx.Commit(ctx)
 }
 
-func applyWorkflowPlan(ctx context.Context, q *sqlc.Queries, e sqlc.WorkflowEvent, actor string, plan workflow.Plan, current string) error {
+func applyWorkflowPlan(ctx context.Context, q *sqlc.Queries, e sqlc.WorkflowEvent, actor string, plan workflowautomation.StageTransitionPlan, current string) error {
 	version := e.StageVersion
 	moved := plan.StageID != current
 	if moved {
@@ -101,5 +105,14 @@ func applyWorkflowPlan(ctx context.Context, q *sqlc.Queries, e sqlc.WorkflowEven
 		}
 		version++
 	}
-	return persistWorkflowEffects(ctx, q, e.WorkspaceID, e.TaskID, actor, version, moved, plan, task.TransitionInput{CommandID: e.ID + ":start", SessionMode: "new"}, e.ID, e.CorrelationID)
+	return persistWorkflowEffects(ctx, q, e.WorkspaceID, e.TaskID, actor, version, moved, plan, workflowautomation.TransitionRequest{CommandID: e.ID + ":start", SessionMode: "new"}, e.ID, e.CorrelationID)
+}
+
+type AutomationEventPostgresRepository struct {
+	pool    *pgxpool.Pool
+	queries *sqlc.Queries
+}
+
+func NewAutomationEventPostgresRepository(database *PostgresDatabase) *AutomationEventPostgresRepository {
+	return &AutomationEventPostgresRepository{pool: database.pool, queries: sqlc.New(database.pool)}
 }

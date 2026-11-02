@@ -7,7 +7,6 @@ import (
 	modelerrors "github.com/josemiguelmelo/orkest/internal/core/model/errors"
 	"github.com/josemiguelmelo/orkest/internal/postgres/sqlc"
 	"github.com/josemiguelmelo/orkest/internal/task"
-	"github.com/josemiguelmelo/orkest/internal/workflow"
 )
 
 type TaskPostgresRepository struct {
@@ -19,7 +18,7 @@ func NewTaskPostgresRepository(database *PostgresDatabase) *TaskPostgresReposito
 	return &TaskPostgresRepository{queries: sqlc.New(database.pool), pool: database.pool}
 }
 
-var _ task.Repository = (*TaskPostgresRepository)(nil)
+var _ task.TaskRepository = (*TaskPostgresRepository)(nil)
 
 func (r *TaskPostgresRepository) Tasks(ctx context.Context, orgID, workspaceID string) ([]task.Task, error) {
 	rows, err := r.queries.ListTasks(ctx, sqlc.ListTasksParams{OrganizationID: orgID, WorkspaceID: workspaceID})
@@ -47,99 +46,6 @@ func (r *TaskPostgresRepository) Task(ctx context.Context, orgID, workspaceID, i
 		return task.Task{}, err
 	}
 	return t, nil
-}
-
-func (r *TaskPostgresRepository) CreateTask(ctx context.Context, id, workspaceID string, in task.TaskInput) (task.Task, error) {
-	if in.Labels == nil {
-		in.Labels = []string{}
-	}
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return task.Task{}, err
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	q := r.queries.WithTx(tx)
-	data, e := q.LockWorkflow(ctx, sqlc.LockWorkflowParams{WorkspaceID: workspaceID, ID: in.WorkflowID})
-	if e != nil {
-		return task.Task{}, e
-	}
-	definition, e := workflowDefinition(ctx, q, data)
-	if e != nil {
-		return task.Task{}, e
-	}
-	if in.Status == "" {
-		in.Status = definition.StartStageID()
-	}
-	plan, e := workflow.PlanTransition(definition, in.Status, in.Status, in.AssigneeAgentID, workflow.Enter)
-	if e != nil {
-		return task.Task{}, e
-	}
-	in.AssigneeAgentID = plan.AssigneeAgentID
-	row, err := q.InsertTask(ctx, sqlc.InsertTaskParams{ID: id, ID_2: workspaceID, WorkflowID: in.WorkflowID, Title: in.Title, Description: in.Description, Status: in.Status, Column7: in.AssigneeAgentID, Labels: in.Labels})
-	if err != nil {
-		return task.Task{}, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
-	}
-	for _, repositoryID := range in.RepositoryIDs {
-		if err = q.InsertTaskRepository(ctx, sqlc.InsertTaskRepositoryParams{WorkspaceID: workspaceID, TaskID: id, RepositoryID: repositoryID}); err != nil {
-			return task.Task{}, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
-		}
-	}
-	if err = enqueueStageEntry(ctx, q, workspaceID, id, in.ActorID, 1, in.CommandID); err != nil {
-		return task.Task{}, err
-	}
-	if err = tx.Commit(ctx); err != nil {
-		return task.Task{}, err
-	}
-	t := taskFromRow(sqlc.GetTaskRow(row))
-	t.AutomationPending = true
-	err = r.fillRepositories(ctx, &t)
-	return t, err
-}
-
-func (r *TaskPostgresRepository) UpdateTask(ctx context.Context, orgID, workspaceID, id string, in task.TaskInput) (task.Task, error) {
-	return r.updateTask(ctx, orgID, workspaceID, id, in, "")
-}
-
-func (r *TaskPostgresRepository) UpdateTaskIfStatus(ctx context.Context, orgID, workspaceID, id, expectedStatus string, in task.TaskInput) (task.Task, error) {
-	return r.updateTask(ctx, orgID, workspaceID, id, in, expectedStatus)
-}
-
-func (r *TaskPostgresRepository) updateTask(ctx context.Context, orgID, workspaceID, id string, in task.TaskInput, expectedStatus string) (task.Task, error) {
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return task.Task{}, err
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	q := r.queries.WithTx(tx)
-	var updated task.Task
-	if expectedStatus == "" {
-		var row sqlc.UpdateTaskRow
-		row, err = q.UpdateTask(ctx, sqlc.UpdateTaskParams{OrganizationID: orgID, WorkspaceID: workspaceID, ID: id, Title: in.Title, Description: in.Description, Status: in.Status, Column7: in.AssigneeAgentID, Labels: in.Labels})
-		updated = taskFromRow(sqlc.GetTaskRow(row))
-	} else {
-		var row sqlc.UpdateTaskIfStatusRow
-		row, err = q.UpdateTaskIfStatus(ctx, sqlc.UpdateTaskIfStatusParams{OrganizationID: orgID, WorkspaceID: workspaceID, ID: id, Status: expectedStatus, Title: in.Title, Description: in.Description, Status_2: in.Status, Column8: in.AssigneeAgentID, Labels: in.Labels})
-		updated = taskFromRow(sqlc.GetTaskRow(row))
-	}
-	if err != nil {
-		if expectedStatus != "" {
-			return task.Task{}, mapError(err, modelerrors.ErrConflict, modelerrors.ErrConflict)
-		}
-		return task.Task{}, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
-	}
-	if err = q.DeleteTaskRepositories(ctx, sqlc.DeleteTaskRepositoriesParams{WorkspaceID: workspaceID, TaskID: id}); err != nil {
-		return task.Task{}, err
-	}
-	for _, repositoryID := range in.RepositoryIDs {
-		if err = q.InsertTaskRepository(ctx, sqlc.InsertTaskRepositoryParams{WorkspaceID: workspaceID, TaskID: id, RepositoryID: repositoryID}); err != nil {
-			return task.Task{}, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
-		}
-	}
-	if err = tx.Commit(ctx); err != nil {
-		return task.Task{}, err
-	}
-	updated.Repositories, err = r.taskRepositories(ctx, workspaceID, id)
-	return updated, err
 }
 
 func (r *TaskPostgresRepository) Comments(ctx context.Context, orgID, workspaceID, taskID string) ([]task.Comment, error) {

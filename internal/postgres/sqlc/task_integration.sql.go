@@ -277,7 +277,7 @@ WITH legacy AS (
     UPDATE tasks SET source_integration_id = $7, title = $4,
         description = $5, source_url = $9, labels = $10,
         workflow_id = $3,
-        status = CASE WHEN $11::boolean THEN (SELECT workflow_final_stage(tasks.workspace_id,$3)) ELSE status END, updated_at = now()
+        status = $11, updated_at = now()
     WHERE workspace_id = $2 AND source_provider = $6
       AND source_id = $8 AND source_integration_id IS NULL
     RETURNING id
@@ -285,11 +285,11 @@ WITH legacy AS (
 INSERT INTO tasks (id, workspace_id, workflow_id, title, description, source_provider, source_integration_id, source_id, source_url, labels, status)
 SELECT $1, $2, $3, $4, $5, $6,
     $7, $8, $9, $10,
-    (SELECT CASE WHEN $11::boolean THEN closed_stage_id ELSE initial_stage_id END FROM workspace_workflows WHERE workspace_id=$2 AND id=$3)
+    $11
 WHERE NOT EXISTS (SELECT 1 FROM legacy)
 ON CONFLICT (workspace_id, source_provider, source_integration_id, source_id)
 DO UPDATE SET title=EXCLUDED.title, description=EXCLUDED.description, source_url=EXCLUDED.source_url, labels=EXCLUDED.labels,
-    status=CASE WHEN $11::boolean THEN (SELECT workflow_final_stage(tasks.workspace_id,$3)) ELSE tasks.status END, updated_at=now()
+    status=EXCLUDED.status, updated_at=now()
 `
 
 type UpsertImportedTaskParams struct {
@@ -303,7 +303,7 @@ type UpsertImportedTaskParams struct {
 	SourceID            pgtype.Text `json:"source_id"`
 	SourceUrl           pgtype.Text `json:"source_url"`
 	Labels              []string    `json:"labels"`
-	Closed              bool        `json:"closed"`
+	Status              string      `json:"status"`
 }
 
 func (q *Queries) UpsertImportedTask(ctx context.Context, arg UpsertImportedTaskParams) error {
@@ -318,7 +318,7 @@ func (q *Queries) UpsertImportedTask(ctx context.Context, arg UpsertImportedTask
 		arg.SourceID,
 		arg.SourceUrl,
 		arg.Labels,
-		arg.Closed,
+		arg.Status,
 	)
 	return err
 }

@@ -167,7 +167,7 @@ func TestPostgresRepositories(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	createdTask, err := taskRepository.CreateTask(ctx, taskID, workspaceID, task.TaskInput{WorkflowID: workspaceID, Title: "Add endpoint", Description: "Task body", Status: "todo", AssigneeAgentID: worker.ID, Labels: []string{"api"}, RepositoryIDs: []string{codeRepositoryID}})
+	createdTask, err := createWorkflowTask(ctx, taskRepository, taskID, workspaceID, task.TaskInput{WorkflowID: workspaceID, Title: "Add endpoint", Description: "Task body", Status: "todo", AssigneeAgentID: worker.ID, Labels: []string{"api"}, RepositoryIDs: []string{codeRepositoryID}})
 	if err != nil || createdTask.SourceProvider != "manual" || createdTask.AssigneeAgentID != worker.ID || len(createdTask.Repositories) != 1 || createdTask.Repositories[0].ID != codeRepositoryID {
 		t.Fatalf("create task: task=%+v err=%v", createdTask, err)
 	}

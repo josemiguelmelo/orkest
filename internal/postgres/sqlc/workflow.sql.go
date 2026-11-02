@@ -474,6 +474,35 @@ func (q *Queries) MoveWorkflowTask(ctx context.Context, arg MoveWorkflowTaskPara
 	return err
 }
 
+const occupiedWorkflowStages = `-- name: OccupiedWorkflowStages :many
+SELECT DISTINCT status FROM tasks WHERE workspace_id=$1 AND workflow_id=$2
+`
+
+type OccupiedWorkflowStagesParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	WorkflowID  string `json:"workflow_id"`
+}
+
+func (q *Queries) OccupiedWorkflowStages(ctx context.Context, arg OccupiedWorkflowStagesParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, occupiedWorkflowStages, arg.WorkspaceID, arg.WorkflowID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var status string
+		if err := rows.Scan(&status); err != nil {
+			return nil, err
+		}
+		items = append(items, status)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const pendingWorkflowCommand = `-- name: PendingWorkflowCommand :one
 SELECT c.id, c.workspace_id, c.task_id, c.stage_version, c.actor_id, c.options, c.state, c.created_at,w.organization_id FROM workflow_commands c JOIN workspaces w ON w.id=c.workspace_id
 WHERE state='pending' ORDER BY c.created_at,c.id LIMIT 1 FOR UPDATE OF c SKIP LOCKED
@@ -662,7 +691,7 @@ func (q *Queries) SaveWorkflow(ctx context.Context, arg SaveWorkflowParams) (int
 }
 
 const setQueuedStageState = `-- name: SetQueuedStageState :exec
-UPDATE tasks AS t SET stage_work_state=CASE WHEN EXISTS(SELECT 1 FROM agent_launches WHERE run_id=t.workflow_run_id AND status='failed') THEN 'failed' ELSE $4 END WHERE t.workspace_id=$1 AND t.id=$2 AND t.stage_version=$3 AND t.stage_work_state='queued'
+UPDATE tasks SET stage_work_state=$4 WHERE workspace_id=$1 AND id=$2 AND stage_version=$3 AND stage_work_state='queued'
 `
 
 type SetQueuedStageStateParams struct {
@@ -717,6 +746,23 @@ func (q *Queries) SetWorkflowCommandState(ctx context.Context, arg SetWorkflowCo
 	return err
 }
 
+const taskExecutionFailed = `-- name: TaskExecutionFailed :one
+SELECT (l.status='failed')::boolean AS failed FROM tasks t JOIN agent_launches l ON l.run_id=t.workflow_run_id
+WHERE t.workspace_id=$1 AND t.id=$2 FOR SHARE OF t,l
+`
+
+type TaskExecutionFailedParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	ID          string `json:"id"`
+}
+
+func (q *Queries) TaskExecutionFailed(ctx context.Context, arg TaskExecutionFailedParams) (bool, error) {
+	row := q.db.QueryRow(ctx, taskExecutionFailed, arg.WorkspaceID, arg.ID)
+	var failed bool
+	err := row.Scan(&failed)
+	return failed, err
+}
+
 const taskWorkflowState = `-- name: TaskWorkflowState :one
 SELECT t.stage_version,t.stage_work_state,t.workflow_id FROM tasks t WHERE workspace_id=$1 AND id=$2
 `
@@ -764,4 +810,45 @@ func (q *Queries) WorkflowCommandAccepted(ctx context.Context, commandID string)
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
+}
+
+const workflowConfigurationAgents = `-- name: WorkflowConfigurationAgents :many
+SELECT id FROM agents WHERE workspace_id=$1 ORDER BY id FOR KEY SHARE
+`
+
+func (q *Queries) WorkflowConfigurationAgents(ctx context.Context, workspaceID string) ([]string, error) {
+	rows, err := q.db.Query(ctx, workflowConfigurationAgents, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const workflowHasReferences = `-- name: WorkflowHasReferences :one
+SELECT EXISTS(SELECT 1 FROM tasks t WHERE t.workspace_id=$1::text AND t.workflow_id=$2::text)
+ OR EXISTS(SELECT 1 FROM task_integrations i WHERE i.workspace_id=$1::text AND i.workflow_id=$2::text)
+`
+
+type WorkflowHasReferencesParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	WorkflowID  string `json:"workflow_id"`
+}
+
+func (q *Queries) WorkflowHasReferences(ctx context.Context, arg WorkflowHasReferencesParams) (pgtype.Bool, error) {
+	row := q.db.QueryRow(ctx, workflowHasReferences, arg.WorkspaceID, arg.WorkflowID)
+	var column_1 pgtype.Bool
+	err := row.Scan(&column_1)
+	return column_1, err
 }
