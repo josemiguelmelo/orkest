@@ -2,18 +2,23 @@ package task
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/josemiguelmelo/orkest/internal/core/ids"
 	modelerrors "github.com/josemiguelmelo/orkest/internal/core/model/errors"
+	"github.com/josemiguelmelo/orkest/internal/workflow"
 )
 
+type WorkflowReader interface {
+	Get(context.Context, string, string, string, string) (workflow.Definition, error)
+}
+
 type Service struct {
-	repository Repository
-	workspaces WorkspaceAccess
-	dispatcher TaskDispatcher
+	repository  Repository
+	workspaces  WorkspaceAccess
+	workflows   WorkflowReader
+	transitions TransitionRepository
 }
 
 type TaskDispatcher interface {
@@ -26,12 +31,8 @@ type DispatchError struct{ Cause error }
 func (e *DispatchError) Error() string { return e.Cause.Error() }
 func (e *DispatchError) Unwrap() error { return e.Cause }
 
-func NewService(repository Repository, workspaces WorkspaceAccess, dispatchers ...TaskDispatcher) *Service {
-	service := &Service{repository: repository, workspaces: workspaces}
-	if len(dispatchers) > 0 {
-		service.dispatcher = dispatchers[0]
-	}
-	return service
+func NewService(repository Repository, workspaces WorkspaceAccess, workflows WorkflowReader, transitions TransitionRepository) *Service {
+	return &Service{repository: repository, workspaces: workspaces, workflows: workflows, transitions: transitions}
 }
 
 func (s *Service) List(ctx context.Context, userID, orgID, workspaceID string) ([]Task, error) {
@@ -67,7 +68,19 @@ func (s *Service) Create(ctx context.Context, userID, orgID, workspaceID string,
 	if err := s.authorize(ctx, userID, orgID, workspaceID); err != nil {
 		return Task{}, err
 	}
-	if err := normalizeTask(&input, true); err != nil {
+	if input.WorkflowID == "" {
+		return Task{}, modelerrors.ErrInvalid
+	}
+	d, e := s.workflows.Get(ctx, userID, orgID, workspaceID, input.WorkflowID)
+	if e != nil {
+		return Task{}, e
+	}
+	if input.Status != "" && input.Status != d.StartStageID() {
+		return Task{}, modelerrors.ErrInvalid
+	}
+	input.Status = d.StartStageID()
+	input.ActorID = userID
+	if err := normalizeTaskContent(&input); err != nil {
 		return Task{}, err
 	}
 	id, err := ids.NewUUID()
@@ -78,60 +91,7 @@ func (s *Service) Create(ctx context.Context, userID, orgID, workspaceID string,
 }
 
 func (s *Service) Update(ctx context.Context, userID, orgID, workspaceID, taskID string, input TaskInput) (Task, error) {
-	if err := s.authorize(ctx, userID, orgID, workspaceID); err != nil {
-		return Task{}, err
-	}
-	if err := normalizeTask(&input, false); err != nil {
-		return Task{}, err
-	}
-	current, err := s.repository.Task(ctx, orgID, workspaceID, taskID)
-	if err != nil {
-		return Task{}, err
-	}
-	if input.CommandID != "" && input.Status == "in_progress" {
-		if s.dispatcher != nil {
-			accepted, err := s.dispatcher.TaskCommandAccepted(ctx, orgID, workspaceID, taskID, input.CommandID, input.PromptText)
-			if err != nil {
-				return Task{}, err
-			}
-			if accepted {
-				return current, nil
-			}
-		}
-	}
-	if current.SourceProvider != "manual" {
-		// Source-managed fields can change during a sync while the user is editing.
-		// Keep the latest source values and apply only local workflow fields.
-		input.Title = current.Title
-		input.Description = current.Description
-		input.Labels = current.Labels
-	}
-	if current.Status == "done" && input.Status != "done" {
-		return Task{}, modelerrors.ErrConflict
-	}
-	starting := (current.Status != "in_progress" || input.StartWork) && input.Status == "in_progress"
-	if starting && strings.TrimSpace(input.AssigneeAgentID) == "" {
-		return Task{}, modelerrors.ErrConflict
-	}
-	if starting && s.dispatcher == nil {
-		return Task{}, errors.New("task execution dispatcher is not configured")
-	}
-	var updated Task
-	if starting {
-		updated, err = s.repository.UpdateTaskIfStatus(ctx, orgID, workspaceID, taskID, current.Status, input)
-	} else {
-		updated, err = s.repository.UpdateTask(ctx, orgID, workspaceID, taskID, input)
-	}
-	if err != nil {
-		return Task{}, err
-	}
-	if starting && s.dispatcher != nil {
-		updated.SessionMode, updated.PromptText, updated.CommandID = input.SessionMode, input.PromptText, input.CommandID
-		if err = s.dispatcher.StartTask(ctx, userID, orgID, updated); err != nil {
-			return updated, &DispatchError{Cause: fmt.Errorf("task moved to in_progress but agent dispatch failed: %w", err)}
-		}
-	}
-	return updated, nil
+	return s.updateWorkflowTask(ctx, userID, orgID, workspaceID, taskID, input)
 }
 
 func (s *Service) Comments(ctx context.Context, userID, orgID, workspaceID, taskID string) ([]Comment, error) {
@@ -173,7 +133,10 @@ func (s *Service) authorize(ctx context.Context, userID, orgID, workspaceID stri
 	return nil
 }
 
-func normalizeTask(input *TaskInput, creating bool) error {
+func normalizeTaskContent(input *TaskInput) error {
+	if input.StageVersion < 0 || (input.StartWork && input.CompleteStage) || len(input.Status) > 100 {
+		return modelerrors.ErrInvalid
+	}
 	if input.SessionMode != "" && input.SessionMode != "continue" && input.SessionMode != "new" {
 		return modelerrors.ErrInvalid
 	}
@@ -183,14 +146,6 @@ func normalizeTask(input *TaskInput, creating bool) error {
 	input.Title = strings.TrimSpace(input.Title)
 	input.Description = strings.TrimSpace(input.Description)
 	if input.Title == "" || len(input.Title) > 500 || len(input.Description) > 100000 {
-		return modelerrors.ErrInvalid
-	}
-	if creating && input.Status == "" {
-		input.Status = "todo"
-	}
-	switch input.Status {
-	case "todo", "in_progress", "in_review", "done":
-	default:
 		return modelerrors.ErrInvalid
 	}
 	input.AssigneeAgentID = strings.TrimSpace(input.AssigneeAgentID)

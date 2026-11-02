@@ -12,14 +12,15 @@ import (
 )
 
 const createTaskIntegration = `-- name: CreateTaskIntegration :one
-INSERT INTO task_integrations (id, workspace_id, provider, name, enabled, provider_config, labels, interval_seconds, encrypted_credential)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-RETURNING id, workspace_id, provider, name, enabled, labels, interval_seconds, encrypted_credential, last_synced_at, last_error, created_at, updated_at, provider_config
+INSERT INTO task_integrations (id, workspace_id, workflow_id, provider, name, enabled, provider_config, labels, interval_seconds, encrypted_credential)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
+RETURNING id, workspace_id, provider, name, enabled, labels, interval_seconds, encrypted_credential, last_synced_at, last_error, created_at, updated_at, provider_config, workflow_id
 `
 
 type CreateTaskIntegrationParams struct {
 	ID                  string   `json:"id"`
 	WorkspaceID         string   `json:"workspace_id"`
+	WorkflowID          string   `json:"workflow_id"`
 	Provider            string   `json:"provider"`
 	Name                string   `json:"name"`
 	Enabled             bool     `json:"enabled"`
@@ -33,6 +34,7 @@ func (q *Queries) CreateTaskIntegration(ctx context.Context, arg CreateTaskInteg
 	row := q.db.QueryRow(ctx, createTaskIntegration,
 		arg.ID,
 		arg.WorkspaceID,
+		arg.WorkflowID,
 		arg.Provider,
 		arg.Name,
 		arg.Enabled,
@@ -56,6 +58,7 @@ func (q *Queries) CreateTaskIntegration(ctx context.Context, arg CreateTaskInteg
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ProviderConfig,
+		&i.WorkflowID,
 	)
 	return i, err
 }
@@ -78,7 +81,7 @@ func (q *Queries) DeleteTaskIntegration(ctx context.Context, arg DeleteTaskInteg
 }
 
 const dueTaskIntegrations = `-- name: DueTaskIntegrations :many
-SELECT id, workspace_id, provider, name, enabled, labels, interval_seconds, encrypted_credential, last_synced_at, last_error, created_at, updated_at, provider_config FROM task_integrations WHERE enabled AND (last_synced_at IS NULL OR last_synced_at <= $1::timestamptz - interval_seconds * interval '1 second') ORDER BY last_synced_at NULLS FIRST
+SELECT id, workspace_id, provider, name, enabled, labels, interval_seconds, encrypted_credential, last_synced_at, last_error, created_at, updated_at, provider_config, workflow_id FROM task_integrations WHERE enabled AND (last_synced_at IS NULL OR last_synced_at <= $1::timestamptz - interval_seconds * interval '1 second') ORDER BY last_synced_at NULLS FIRST
 `
 
 func (q *Queries) DueTaskIntegrations(ctx context.Context, now pgtype.Timestamptz) ([]TaskIntegration, error) {
@@ -104,6 +107,7 @@ func (q *Queries) DueTaskIntegrations(ctx context.Context, now pgtype.Timestampt
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.ProviderConfig,
+			&i.WorkflowID,
 		); err != nil {
 			return nil, err
 		}
@@ -116,7 +120,7 @@ func (q *Queries) DueTaskIntegrations(ctx context.Context, now pgtype.Timestampt
 }
 
 const getTaskIntegration = `-- name: GetTaskIntegration :one
-SELECT id, workspace_id, provider, name, enabled, labels, interval_seconds, encrypted_credential, last_synced_at, last_error, created_at, updated_at, provider_config FROM task_integrations WHERE workspace_id=$1 AND id=$2
+SELECT id, workspace_id, provider, name, enabled, labels, interval_seconds, encrypted_credential, last_synced_at, last_error, created_at, updated_at, provider_config, workflow_id FROM task_integrations WHERE workspace_id=$1 AND id=$2
 `
 
 type GetTaskIntegrationParams struct {
@@ -141,12 +145,13 @@ func (q *Queries) GetTaskIntegration(ctx context.Context, arg GetTaskIntegration
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ProviderConfig,
+		&i.WorkflowID,
 	)
 	return i, err
 }
 
 const listTaskIntegrations = `-- name: ListTaskIntegrations :many
-SELECT id, workspace_id, provider, name, enabled, labels, interval_seconds, encrypted_credential, last_synced_at, last_error, created_at, updated_at, provider_config FROM task_integrations WHERE workspace_id=$1 ORDER BY created_at, id
+SELECT id, workspace_id, provider, name, enabled, labels, interval_seconds, encrypted_credential, last_synced_at, last_error, created_at, updated_at, provider_config, workflow_id FROM task_integrations WHERE workspace_id=$1 ORDER BY created_at, id
 `
 
 func (q *Queries) ListTaskIntegrations(ctx context.Context, workspaceID string) ([]TaskIntegration, error) {
@@ -172,6 +177,7 @@ func (q *Queries) ListTaskIntegrations(ctx context.Context, workspaceID string) 
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.ProviderConfig,
+			&i.WorkflowID,
 		); err != nil {
 			return nil, err
 		}
@@ -216,13 +222,14 @@ func (q *Queries) RemoveMissingImportedTasks(ctx context.Context, arg RemoveMiss
 }
 
 const updateTaskIntegration = `-- name: UpdateTaskIntegration :one
-UPDATE task_integrations SET provider=$3, name=$4, enabled=$5, provider_config=$6, labels=$7, interval_seconds=$8, encrypted_credential=$9, updated_at=now()
-WHERE workspace_id=$1 AND id=$2 RETURNING id, workspace_id, provider, name, enabled, labels, interval_seconds, encrypted_credential, last_synced_at, last_error, created_at, updated_at, provider_config
+UPDATE task_integrations SET workflow_id=$3, provider=$4, name=$5, enabled=$6, provider_config=$7, labels=$8, interval_seconds=$9, encrypted_credential=$10, updated_at=now()
+WHERE workspace_id=$1 AND id=$2 RETURNING id, workspace_id, provider, name, enabled, labels, interval_seconds, encrypted_credential, last_synced_at, last_error, created_at, updated_at, provider_config, workflow_id
 `
 
 type UpdateTaskIntegrationParams struct {
 	WorkspaceID         string   `json:"workspace_id"`
 	ID                  string   `json:"id"`
+	WorkflowID          string   `json:"workflow_id"`
 	Provider            string   `json:"provider"`
 	Name                string   `json:"name"`
 	Enabled             bool     `json:"enabled"`
@@ -236,6 +243,7 @@ func (q *Queries) UpdateTaskIntegration(ctx context.Context, arg UpdateTaskInteg
 	row := q.db.QueryRow(ctx, updateTaskIntegration,
 		arg.WorkspaceID,
 		arg.ID,
+		arg.WorkflowID,
 		arg.Provider,
 		arg.Name,
 		arg.Enabled,
@@ -259,32 +267,35 @@ func (q *Queries) UpdateTaskIntegration(ctx context.Context, arg UpdateTaskInteg
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.ProviderConfig,
+		&i.WorkflowID,
 	)
 	return i, err
 }
 
 const upsertImportedTask = `-- name: UpsertImportedTask :exec
 WITH legacy AS (
-    UPDATE tasks SET source_integration_id = $6, title = $3,
-        description = $4, source_url = $8, labels = $9,
-        status = CASE WHEN $10::boolean THEN 'done' ELSE status END, updated_at = now()
-    WHERE workspace_id = $2 AND source_provider = $5
-      AND source_id = $7 AND source_integration_id IS NULL
+    UPDATE tasks SET source_integration_id = $7, title = $4,
+        description = $5, source_url = $9, labels = $10,
+        workflow_id = $3,
+        status = CASE WHEN $11::boolean THEN (SELECT definition->'stages'->-1->>'id' FROM workspace_workflows WHERE workspace_id=tasks.workspace_id AND id=$3) ELSE status END, updated_at = now()
+    WHERE workspace_id = $2 AND source_provider = $6
+      AND source_id = $8 AND source_integration_id IS NULL
     RETURNING id
 )
-INSERT INTO tasks (id, workspace_id, title, description, source_provider, source_integration_id, source_id, source_url, labels, status)
-SELECT $1, $2, $3, $4, $5,
-    $6, $7, $8, $9,
-    CASE WHEN $10::boolean THEN 'done' ELSE 'todo' END
+INSERT INTO tasks (id, workspace_id, workflow_id, title, description, source_provider, source_integration_id, source_id, source_url, labels, status)
+SELECT $1, $2, $3, $4, $5, $6,
+    $7, $8, $9, $10,
+    (SELECT CASE WHEN $11::boolean THEN definition->'stages'->-1->>'id' ELSE definition->'stages'->0->>'id' END FROM workspace_workflows WHERE workspace_id=$2 AND id=$3)
 WHERE NOT EXISTS (SELECT 1 FROM legacy)
 ON CONFLICT (workspace_id, source_provider, source_integration_id, source_id)
 DO UPDATE SET title=EXCLUDED.title, description=EXCLUDED.description, source_url=EXCLUDED.source_url, labels=EXCLUDED.labels,
-    status=CASE WHEN $10::boolean THEN 'done' ELSE tasks.status END, updated_at=now()
+    status=CASE WHEN $11::boolean THEN (SELECT definition->'stages'->-1->>'id' FROM workspace_workflows WHERE workspace_id=tasks.workspace_id AND id=$3) ELSE tasks.status END, updated_at=now()
 `
 
 type UpsertImportedTaskParams struct {
 	ID                  string      `json:"id"`
 	WorkspaceID         string      `json:"workspace_id"`
+	WorkflowID          string      `json:"workflow_id"`
 	Title               string      `json:"title"`
 	Description         string      `json:"description"`
 	SourceProvider      string      `json:"source_provider"`
@@ -299,6 +310,7 @@ func (q *Queries) UpsertImportedTask(ctx context.Context, arg UpsertImportedTask
 	_, err := q.db.Exec(ctx, upsertImportedTask,
 		arg.ID,
 		arg.WorkspaceID,
+		arg.WorkflowID,
 		arg.Title,
 		arg.Description,
 		arg.SourceProvider,

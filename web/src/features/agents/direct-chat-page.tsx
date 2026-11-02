@@ -21,6 +21,7 @@ export function DirectChatPage() {
   const chatTask: Task = {
     id: conversation.id,
     workspaceId: scope.workspaceID,
+    workflowId: '',
     title: agent.name,
     description: agent.description,
     sourceProvider: '',

@@ -46,3 +46,9 @@ Commands:
 - Dependency audit: zero known vulnerabilities with the pinned transitive YAML fix. Checks ran on Node 26.0.0; the documented Node 22 baseline is updated to 22.22.2 to satisfy the test tooling.
 
 External GitHub/Jira synchronization with real credentials, private repositories, agent execution/approvals and OpenCode recovery are not claimed as verified. The existing recovery suite remains unimplemented. No migration is required by this change.
+
+
+Workspace workflow settings and the task board now use configurable stage IDs,
+ordering and labels from the workflow API. Explicit task transitions support
+manual completion and version checks; configured stage entry can assign/start
+work and successful completion may advance. See [workflows](workflows.md).

@@ -1,6 +1,6 @@
 -- name: InsertAgentLaunch :exec
-INSERT INTO agent_launches (run_id, organization_id, workspace_id, task_id, status, task_session_id, execution_image)
-VALUES ($1, $2, $3, $4, $5, $6, $7);
+INSERT INTO agent_launches (run_id, organization_id, workspace_id, task_id, status, task_session_id, execution_image, stage_version)
+VALUES ($1, $2, $3, $4, $5, $6, $7, COALESCE((SELECT stage_version FROM tasks WHERE workspace_id=$3 AND id=$4),0));
 
 -- name: UpdateAgentLaunch :exec
 UPDATE agent_launches

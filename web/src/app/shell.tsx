@@ -1,6 +1,6 @@
 import type { JSX, ReactNode } from 'react';
 import { useEffect, useState } from 'react';
-import { Link, Outlet, useNavigate, useParams } from '@tanstack/react-router';
+import { Link, Outlet, useNavigate, useParams, useRouterState } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { DropdownMenu as DropdownMenuPrimitive } from 'radix-ui';
 import {
@@ -33,8 +33,10 @@ import {
   meQuery,
   organizationsQuery,
   organizationQuery,
+  taskQuery,
   workspaceQuery,
   workspacesQuery,
+  workflowsQuery,
   type WorkspaceScope,
 } from '../shared/api/queries';
 import { Button } from '../shared/ui/button';
@@ -91,6 +93,9 @@ function AuthenticatedShell({ session }: { session: CurrentUser }) {
 }
 function ShellContent({ session }: { session: CurrentUser }) {
   const params = useParams({ strict: false });
+  const location = useRouterState({
+    select: (state) => ({ pathname: state.location.pathname, search: state.location.search }),
+  });
   const navigate = useNavigate();
   const client = useQueryClient();
   const scope: WorkspaceScope = {
@@ -102,6 +107,9 @@ function ShellContent({ session }: { session: CurrentUser }) {
   const organization = useQuery(organizationQuery(scope));
   const workspaces = useQuery(workspacesQuery(scope));
   const workspace = useQuery(workspaceQuery(scope));
+  const workflows = useQuery(workflowsQuery(scope));
+  const taskID = params.taskId ?? '';
+  const currentTask = useQuery({ ...taskQuery(scope, taskID), enabled: !!taskID });
   const [mobile, setMobile] = useState(false);
   const [logoutError, setLogoutError] = useState<unknown>();
   const permissions = capabilities(
@@ -126,6 +134,18 @@ function ShellContent({ session }: { session: CurrentUser }) {
   }
   const scoped = !!scope.orgID && !!scope.workspaceID;
   const workspaceParams = { orgId: scope.orgID, workspaceId: scope.workspaceID };
+  const workspacePath = `/organizations/${scope.orgID}/workspaces/${scope.workspaceID}`;
+  const isTaskBoard =
+    location.pathname === `${workspacePath}/tasks` || location.pathname === workspacePath;
+  const isTaskPage = location.pathname.startsWith(`${workspacePath}/tasks/`);
+  const isWorkflowSettings = location.pathname === `${workspacePath}/workflow`;
+  const search = location.search as { workflow?: unknown };
+  const selectedWorkflowID = isTaskPage
+    ? currentTask.data?.workflowId
+    : typeof search.workflow === 'string'
+      ? search.workflow
+      : '';
+  const [workflowsExpanded, setWorkflowsExpanded] = useState(true);
   const blocked = (scope.orgID && organization.isError) || (scope.workspaceID && workspace.isError);
   const waiting =
     (scope.orgID && organization.isPending) || (scope.workspaceID && workspace.isPending);
@@ -196,6 +216,7 @@ function ShellContent({ session }: { session: CurrentUser }) {
                           params: { orgId: scope.orgID, workspaceId: workspaceID },
                           search: {
                             view: 'board',
+                            workflow: '',
                             q: '',
                             status: 'all',
                             agent: '',
@@ -208,17 +229,56 @@ function ShellContent({ session }: { session: CurrentUser }) {
             )}
           </div>
           {scoped && (
-            <nav className="nav-group" onClick={() => setMobile(false)}>
-              <p className="nav-label">Workspace</p>
-              <Link
-                className="nav-link"
-                to="/organizations/$orgId/workspaces/$workspaceId/tasks"
-                params={workspaceParams}
-                search={{ view: 'board', q: '', status: 'all', agent: '', sort: 'updated' }}
+            <nav
+              className="nav-group"
+              onClick={(event) => {
+                if (event.target instanceof Element && event.target.closest('a')) setMobile(false);
+              }}
+            >
+              <p className="nav-label">Work</p>
+              <button
+                type="button"
+                className="nav-link nav-disclosure"
+                aria-expanded={workflowsExpanded}
+                aria-controls="workflow-navigation"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setWorkflowsExpanded((expanded) => !expanded);
+                }}
               >
                 <Workflow size={17} />
-                Tasks
-              </Link>
+                <span>Workflows</span>
+                <ChevronDown
+                  className={workflowsExpanded ? 'nav-disclosure-icon is-open' : 'nav-disclosure-icon'}
+                  size={15}
+                  aria-hidden="true"
+                />
+              </button>
+              {workflowsExpanded && (
+                <div className="nav-subgroup" id="workflow-navigation">
+                  {workflows.data?.map((item) => (
+                    <Link
+                      key={item.id}
+                      className={`nav-link nav-sub-link${selectedWorkflowID === item.id && (isTaskBoard || isTaskPage) ? ' is-current' : ''}`}
+                      to="/organizations/$orgId/workspaces/$workspaceId/tasks"
+                      params={workspaceParams}
+                      search={{ view: 'board', workflow: item.id, q: '', status: 'all', agent: '', sort: 'updated' }}
+                      activeOptions={{ exact: true, includeSearch: true }}
+                    >
+                      <PanelsTopLeft size={15} />
+                      <span>{item.name}</span>
+                    </Link>
+                  ))}
+                  <Link
+                    className={`nav-link nav-sub-link nav-manage-link${isWorkflowSettings ? ' is-current' : ''}`}
+                    to="/organizations/$orgId/workspaces/$workspaceId/workflow"
+                    params={workspaceParams}
+                  >
+                    <Settings size={15} />
+                    <span>Manage workflows</span>
+                  </Link>
+                </div>
+              )}
               <Link
                 className="nav-link"
                 to="/organizations/$orgId/workspaces/$workspaceId/agents"

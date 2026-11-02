@@ -54,13 +54,42 @@ export type Membership = {
     user: User;
     role: 'owner' | 'admin' | 'member' | 'viewer';
 };
+export type WorkflowStage = {
+    id: string;
+    name: string;
+    description: string;
+    responsibleAgentId: string;
+    autoStart: boolean;
+    autoAdvance: boolean;
+};
+export type WorkflowInput = {
+    name: string;
+};
+export type WorkspaceWorkflow = {
+    id: string;
+    name: string;
+    version: number;
+    /**
+     * User who last configured automation; assigned by the server.
+     */
+    configuredBy?: string;
+    stages: Array<WorkflowStage>;
+};
+export type TaskTransition = {
+    stageId?: string;
+    stageVersion: number;
+    action: 'move' | 'start' | 'complete';
+    commandId: string;
+    sessionMode?: 'continue' | 'new';
+    promptText?: string;
+};
 export type TaskInput = {
     /**
      * Explicitly start another work step after a failed run; active execution conflicts.
      */
     startWork?: boolean;
     /**
-     * Session choice when explicitly starting work. Defaults to continue when a session exists.
+     * Session choice when explicitly starting work. Defaults to a fresh session; continue explicitly to reuse a saved session.
      */
     sessionMode?: 'continue' | 'new';
     /**
@@ -69,8 +98,16 @@ export type TaskInput = {
     promptText?: string;
     commandId?: string;
     title: string;
+    /**
+     * Required when creating a task; immutable after creation.
+     */
+    workflowId?: string;
     description?: string;
-    status?: 'todo' | 'in_progress' | 'in_review' | 'done';
+    stageVersion?: number;
+    /**
+     * Stable workspace workflow stage ID
+     */
+    status?: string;
     assigneeAgentId?: string;
     labels?: Array<string>;
     repositoryIds?: Array<string>;
@@ -78,6 +115,7 @@ export type TaskInput = {
 export type Task = {
     id: string;
     workspaceId: string;
+    workflowId: string;
     title: string;
     description: string;
     sourceProvider: string;
@@ -86,13 +124,20 @@ export type Task = {
      * Source link, possibly empty for draft items.
      */
     sourceUrl?: string;
-    status: 'todo' | 'in_progress' | 'in_review' | 'done';
+    stageVersion?: number;
+    stageWorkState?: StageWorkState;
+    closed?: boolean;
+    /**
+     * Stable workspace workflow stage ID
+     */
+    status: string;
     assigneeAgentId?: string;
     labels: Array<string>;
     repositories: Array<TaskRepository>;
     createdAt: string;
     updatedAt: string;
 };
+export type StageWorkState = 'idle' | 'queued' | 'running' | 'completed' | 'failed';
 export type TaskRepository = {
     id: string;
     providerName: string;
@@ -267,6 +312,7 @@ export type CodeRepositoryCreate = {
     providerRepositoryId: string;
 };
 export type TaskIntegrationInput = {
+    workflowId: string;
     provider: string;
     name: string;
     enabled?: boolean;
@@ -277,6 +323,7 @@ export type TaskIntegrationInput = {
 export type TaskIntegration = {
     id: string;
     workspaceId: string;
+    workflowId: string;
     provider: string;
     name: string;
     enabled: boolean;
@@ -341,6 +388,7 @@ export type CodingIntegrationInputWritable = {
     credential?: string;
 };
 export type TaskIntegrationInputWritable = {
+    workflowId: string;
     provider: string;
     name: string;
     enabled?: boolean;
@@ -2571,6 +2619,188 @@ export type UpdateAgentResponses = {
     200: Agent;
 };
 export type UpdateAgentResponse = UpdateAgentResponses[keyof UpdateAgentResponses];
+export type ListWorkspaceWorkflowsData = {
+    body?: never;
+    path: {
+        orgID: string;
+        workspaceID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/workflows';
+};
+export type ListWorkspaceWorkflowsErrors = {
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+    /**
+     * Resource is absent or inaccessible
+     */
+    404: Error;
+};
+export type ListWorkspaceWorkflowsError = ListWorkspaceWorkflowsErrors[keyof ListWorkspaceWorkflowsErrors];
+export type ListWorkspaceWorkflowsResponses = {
+    /**
+     * Workspace workflows
+     */
+    200: Array<WorkspaceWorkflow>;
+};
+export type ListWorkspaceWorkflowsResponse = ListWorkspaceWorkflowsResponses[keyof ListWorkspaceWorkflowsResponses];
+export type CreateWorkspaceWorkflowData = {
+    body: WorkflowInput;
+    path: {
+        orgID: string;
+        workspaceID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/workflows';
+};
+export type CreateWorkspaceWorkflowErrors = {
+    /**
+     * Request body or role is invalid
+     */
+    400: Error;
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+};
+export type CreateWorkspaceWorkflowError = CreateWorkspaceWorkflowErrors[keyof CreateWorkspaceWorkflowErrors];
+export type CreateWorkspaceWorkflowResponses = {
+    /**
+     * Created workflow
+     */
+    201: WorkspaceWorkflow;
+};
+export type CreateWorkspaceWorkflowResponse = CreateWorkspaceWorkflowResponses[keyof CreateWorkspaceWorkflowResponses];
+export type DeleteWorkspaceWorkflowData = {
+    body?: never;
+    path: {
+        orgID: string;
+        workspaceID: string;
+        workflowID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/workflows/{workflowID}';
+};
+export type DeleteWorkspaceWorkflowErrors = {
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+    /**
+     * Resource is absent or inaccessible
+     */
+    404: Error;
+    /**
+     * Operation conflicts with an existing resource or invariant
+     */
+    409: Error;
+};
+export type DeleteWorkspaceWorkflowError = DeleteWorkspaceWorkflowErrors[keyof DeleteWorkspaceWorkflowErrors];
+export type DeleteWorkspaceWorkflowResponses = {
+    /**
+     * Workflow deleted
+     */
+    204: void;
+};
+export type DeleteWorkspaceWorkflowResponse = DeleteWorkspaceWorkflowResponses[keyof DeleteWorkspaceWorkflowResponses];
+export type GetWorkspaceWorkflowData = {
+    body?: never;
+    path: {
+        orgID: string;
+        workspaceID: string;
+        workflowID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/workflows/{workflowID}';
+};
+export type GetWorkspaceWorkflowErrors = {
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+    /**
+     * Resource is absent or inaccessible
+     */
+    404: Error;
+};
+export type GetWorkspaceWorkflowError = GetWorkspaceWorkflowErrors[keyof GetWorkspaceWorkflowErrors];
+export type GetWorkspaceWorkflowResponses = {
+    /**
+     * Ordered workspace workflow
+     */
+    200: WorkspaceWorkflow;
+};
+export type GetWorkspaceWorkflowResponse = GetWorkspaceWorkflowResponses[keyof GetWorkspaceWorkflowResponses];
+export type SaveWorkspaceWorkflowData = {
+    body: WorkspaceWorkflow;
+    path: {
+        orgID: string;
+        workspaceID: string;
+        workflowID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/workflows/{workflowID}';
+};
+export type SaveWorkspaceWorkflowErrors = {
+    /**
+     * Request body or role is invalid
+     */
+    400: Error;
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+    /**
+     * Operation conflicts with an existing resource or invariant
+     */
+    409: Error;
+};
+export type SaveWorkspaceWorkflowError = SaveWorkspaceWorkflowErrors[keyof SaveWorkspaceWorkflowErrors];
+export type SaveWorkspaceWorkflowResponses = {
+    /**
+     * Saved workflow with incremented version
+     */
+    200: WorkspaceWorkflow;
+};
+export type SaveWorkspaceWorkflowResponse = SaveWorkspaceWorkflowResponses[keyof SaveWorkspaceWorkflowResponses];
+export type TransitionTaskData = {
+    body: TaskTransition;
+    path: {
+        orgID: string;
+        workspaceID: string;
+        taskID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/tasks/{taskID}/transitions';
+};
+export type TransitionTaskErrors = {
+    /**
+     * Request body or role is invalid
+     */
+    400: Error;
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+    /**
+     * Resource is absent or inaccessible
+     */
+    404: Error;
+    /**
+     * Operation conflicts with an existing resource or invariant
+     */
+    409: Error;
+};
+export type TransitionTaskError = TransitionTaskErrors[keyof TransitionTaskErrors];
+export type TransitionTaskResponses = {
+    /**
+     * Task after the transition; any execution start is durably queued
+     */
+    200: Task;
+};
+export type TransitionTaskResponse = TransitionTaskResponses[keyof TransitionTaskResponses];
 export type ListTasksData = {
     body?: never;
     path: {

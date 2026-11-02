@@ -1028,6 +1028,75 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "500":
           $ref: "#/components/responses/InternalServerError"
+  /api/organizations/{orgID}/workspaces/{workspaceID}/workflows:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+    get:
+      operationId: listWorkspaceWorkflows
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      responses:
+        "200": {description: Workspace workflows, content: {application/json: {schema: {type: array, items: {$ref: "#/components/schemas/WorkspaceWorkflow"}}}}}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+    post:
+      operationId: createWorkspaceWorkflow
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/WorkflowInput"}
+      responses:
+        "201": {description: Created workflow, content: {application/json: {schema: {$ref: "#/components/schemas/WorkspaceWorkflow"}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/workflows/{workflowID}:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+      - {name: workflowID, in: path, required: true, schema: {type: string}}
+    get:
+      operationId: getWorkspaceWorkflow
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      responses:
+        "200": {description: Ordered workspace workflow, content: {application/json: {schema: {$ref: "#/components/schemas/WorkspaceWorkflow"}}}}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+    put:
+      operationId: saveWorkspaceWorkflow
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      description: Admins replace the ordered stage configuration using optimistic version checking. Occupied stages cannot be removed. Changes affect future stage entries.
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/WorkspaceWorkflow"}}}}
+      responses:
+        "200": {description: Saved workflow with incremented version, content: {application/json: {schema: {$ref: "#/components/schemas/WorkspaceWorkflow"}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "409": {$ref: "#/components/responses/Conflict"}
+    delete:
+      operationId: deleteWorkspaceWorkflow
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      description: A workflow cannot be deleted while tasks or source integrations use it.
+      responses:
+        "204": {description: Workflow deleted}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/tasks/{taskID}/transitions:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+      - {name: taskID, in: path, required: true, schema: {type: string}}
+    post:
+      operationId: transitionTask
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/TaskTransition"}}}}
+      responses:
+        "200": {description: Task after the transition; any execution start is durably queued, content: {application/json: {schema: {$ref: "#/components/schemas/Task"}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
   /api/organizations/{orgID}/workspaces/{workspaceID}/tasks:
     parameters:
       - {name: orgID, in: path, required: true, schema: {type: string}}
@@ -1084,7 +1153,7 @@ paths:
     put:
       tags: [Tasks]
       operationId: updateTask
-      description: Moving an assigned task from todo to in_progress starts its assigned agent with the task title, description, labels, and component details. A dispatch failure leaves the task in_progress and returns 502.
+      description: Updates task content and workspace stage. Stage entry applies configured assignment and queues automatic starts durably. Explicit transitions use the transitions endpoint.
       security: [{bearerAuth: []}, {cookieAuth: []}]
       requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/TaskInput"}}}}
       responses:
@@ -1614,27 +1683,65 @@ components:
       properties:
         user: {$ref: "#/components/schemas/User"}
         role: {type: string, enum: [owner, admin, member, viewer]}
+    WorkflowStage:
+      type: object
+      required: [id, name, description, responsibleAgentId, autoStart, autoAdvance]
+      properties:
+        id: {type: string, minLength: 1, maxLength: 100}
+        name: {type: string, minLength: 1, maxLength: 200}
+        description: {type: string, maxLength: 2000}
+        responsibleAgentId: {type: string}
+        autoStart: {type: boolean, default: false}
+        autoAdvance: {type: boolean, default: false}
+    WorkflowInput:
+      type: object
+      required: [name]
+      additionalProperties: false
+      properties:
+        name: {type: string, minLength: 1, maxLength: 200}
+    WorkspaceWorkflow:
+      type: object
+      required: [id, name, version, stages]
+      properties:
+        id: {type: string}
+        name: {type: string, minLength: 1, maxLength: 200}
+        version: {type: integer, format: int64, minimum: 1}
+        configuredBy: {type: string, description: User who last configured automation; assigned by the server.}
+        stages: {type: array, minItems: 1, maxItems: 50, items: {$ref: "#/components/schemas/WorkflowStage"}}
+    TaskTransition:
+      type: object
+      required: [stageVersion, action, commandId]
+      properties:
+        stageId: {type: string}
+        stageVersion: {type: integer, format: int64, minimum: 1}
+        action: {type: string, enum: [move, start, complete]}
+        commandId: {type: string, minLength: 1, maxLength: 200}
+        sessionMode: {type: string, enum: [continue, new]}
+        promptText: {type: string, maxLength: 262144}
     TaskInput:
       type: object
       required: [title]
       properties:
         startWork: {type: boolean, description: Explicitly start another work step after a failed run; active execution conflicts.}
-        sessionMode: {type: string, enum: [continue, new], description: Session choice when explicitly starting work. Defaults to continue when a session exists.}
+        sessionMode: {type: string, enum: [continue, new], description: Session choice when explicitly starting work. Defaults to a fresh session; continue explicitly to reuse a saved session.}
         promptText: {type: string, maxLength: 262144, description: Optional initial prompt for a user-started work step.}
         commandId: {type: string, maxLength: 200}
         title: {type: string, minLength: 1, maxLength: 500}
+        workflowId: {type: string, description: Required when creating a task; immutable after creation.}
         description: {type: string, maxLength: 100000}
-        status: {type: string, enum: [todo, in_progress, in_review, done]}
+        stageVersion: {type: integer, format: int64}
+        status: {type: string, description: Stable workspace workflow stage ID}
         assigneeAgentId: {type: string}
         labels: {type: array, items: {type: string}}
         repositoryIds: {type: array, items: {type: string}}
       additionalProperties: false
     Task:
       type: object
-      required: [id, workspaceId, title, description, sourceProvider, status, labels, repositories, createdAt, updatedAt]
+      required: [id, workspaceId, workflowId, title, description, sourceProvider, status, labels, repositories, createdAt, updatedAt]
       properties:
         id: {type: string}
         workspaceId: {type: string}
+        workflowId: {type: string}
         title: {type: string}
         description: {type: string}
         sourceProvider: {type: string}
@@ -1642,12 +1749,18 @@ components:
         sourceUrl:
           type: string
           description: Source link, possibly empty for draft items.
-        status: {type: string, enum: [todo, in_progress, in_review, done]}
+        stageVersion: {type: integer, format: int64}
+        stageWorkState: {$ref: "#/components/schemas/StageWorkState"}
+        closed: {type: boolean}
+        status: {type: string, description: Stable workspace workflow stage ID}
         assigneeAgentId: {type: string}
         labels: {type: array, items: {type: string}}
         repositories: {type: array, items: {$ref: "#/components/schemas/TaskRepository"}}
         createdAt: {type: string, format: date-time}
         updatedAt: {type: string, format: date-time}
+    StageWorkState:
+      type: string
+      enum: [idle, queued, running, completed, failed]
     TaskRepository:
       type: object
       required: [id, providerName, name, url]
@@ -1867,8 +1980,9 @@ components:
         providerRepositoryId: {type: string}
     TaskIntegrationInput:
       type: object
-      required: [provider, name, config]
+      required: [workflowId, provider, name, config]
       properties:
+        workflowId: {type: string}
         provider: {type: string}
         name: {type: string, minLength: 1, maxLength: 200}
         enabled: {type: boolean}
@@ -1879,10 +1993,11 @@ components:
       additionalProperties: false
     TaskIntegration:
       type: object
-      required: [id, workspaceId, provider, name, enabled, config, labels, interval, createdAt, updatedAt]
+      required: [id, workspaceId, workflowId, provider, name, enabled, config, labels, interval, createdAt, updatedAt]
       properties:
         id: {type: string}
         workspaceId: {type: string}
+        workflowId: {type: string}
         provider: {type: string}
         name: {type: string}
         enabled: {type: boolean}

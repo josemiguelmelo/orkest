@@ -17,6 +17,7 @@ func (a taskAPI) routes(r chi.Router) {
 		r.Route("/{taskID}", func(r chi.Router) {
 			r.Get("/", a.getTask)
 			r.Put("/", a.updateTask)
+			r.Post("/transitions", a.transition)
 			r.Get("/comments", a.listComments)
 			r.Post("/comments", a.addComment)
 		})
@@ -65,4 +66,13 @@ func (a taskAPI) addComment(w http.ResponseWriter, r *http.Request) {
 	}
 	v, e := a.tasks.AddComment(r.Context(), currentUserID(r), chi.URLParam(r, "orgID"), chi.URLParam(r, "workspaceID"), chi.URLParam(r, "taskID"), in.Body)
 	respond(w, v, e, http.StatusCreated)
+}
+
+func (a taskAPI) transition(w http.ResponseWriter, r *http.Request) {
+	var in task.TransitionInput
+	if !decodeBody(w, r, &in) {
+		return
+	}
+	value, err := a.tasks.Transition(r.Context(), currentUserID(r), chi.URLParam(r, "orgID"), chi.URLParam(r, "workspaceID"), chi.URLParam(r, "taskID"), in)
+	respond(w, value, err, http.StatusOK)
 }

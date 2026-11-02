@@ -5,7 +5,7 @@ env_files = [".env"]
 [build]
 cmd = "go build -o ./tmp/orkest ./cmd/orkest"
 entrypoint = ["./tmp/orkest"]
-include_ext = ["go", "yaml"]
+include_ext = ["go", "sql", "yaml"]
 exclude_dir = [".git", "bin", "docs", "tmp", "web", "tests"]
 exclude_regex = ["_test\\.go$"]
 exclude_unchanged = true

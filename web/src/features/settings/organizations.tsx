@@ -194,7 +194,7 @@ export function OrganizationPage() {
                 key={ws.id}
                 to="/organizations/$orgId/workspaces/$workspaceId/tasks"
                 params={{ orgId: scope.orgID, workspaceId: ws.id }}
-                search={{ view: 'board', q: '', status: 'all', agent: '', sort: 'updated' }}
+                search={{ view: 'board', workflow: '', q: '', status: 'all', agent: '', sort: 'updated' }}
               >
                 <h3>{ws.name}</h3>
                 <div>

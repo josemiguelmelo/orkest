@@ -44,6 +44,7 @@ describe('provider configuration', () => {
   });
   it('omits unchanged credentials instead of overwriting them', () => {
     const values = {
+      workflowId: 'workflow-1',
       provider: 'github_cloud',
       name: 'GitHub',
       enabled: true,

@@ -6,11 +6,16 @@ import (
 	"fmt"
 	"time"
 
+	stderrors "errors"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/josemiguelmelo/orkest/internal/core/ids"
 	"github.com/josemiguelmelo/orkest/internal/core/model/errors"
 	"github.com/josemiguelmelo/orkest/internal/postgres/sqlc"
+	"github.com/josemiguelmelo/orkest/internal/task"
 	"github.com/josemiguelmelo/orkest/internal/taskintegration"
+	"github.com/josemiguelmelo/orkest/internal/workflow"
 )
 
 type PostgresTaskIntegrationRepository struct{ queries *sqlc.Queries }
@@ -26,8 +31,11 @@ func (r *PostgresTaskIntegrationRepository) Create(ctx context.Context, s taskin
 	if err != nil {
 		return taskintegration.TaskIntegration{}, err
 	}
-	row, err := r.queries.CreateTaskIntegration(ctx, sqlc.CreateTaskIntegrationParams{ID: s.ID, WorkspaceID: s.WorkspaceID, Provider: string(s.Provider), Name: s.Name, Enabled: s.Enabled, ProviderConfig: s.Config, Labels: s.Labels, IntervalSeconds: seconds, EncryptedCredential: secret})
-	return taskIntegrationFromRow(row), err
+	row, err := r.queries.CreateTaskIntegration(ctx, sqlc.CreateTaskIntegrationParams{ID: s.ID, WorkspaceID: s.WorkspaceID, WorkflowID: s.WorkflowID, Provider: string(s.Provider), Name: s.Name, Enabled: s.Enabled, ProviderConfig: s.Config, Labels: s.Labels, IntervalSeconds: seconds, EncryptedCredential: secret})
+	if err != nil {
+		return taskintegration.TaskIntegration{}, mapError(err, errors.ErrNotFound, errors.ErrConflict)
+	}
+	return taskIntegrationFromRow(row), nil
 }
 
 func (r *PostgresTaskIntegrationRepository) Update(ctx context.Context, workspaceID, id string, s taskintegration.TaskIntegration, secret string) (taskintegration.TaskIntegration, error) {
@@ -35,7 +43,7 @@ func (r *PostgresTaskIntegrationRepository) Update(ctx context.Context, workspac
 	if err != nil {
 		return taskintegration.TaskIntegration{}, err
 	}
-	row, err := r.queries.UpdateTaskIntegration(ctx, sqlc.UpdateTaskIntegrationParams{WorkspaceID: workspaceID, ID: id, Provider: string(s.Provider), Name: s.Name, Enabled: s.Enabled, ProviderConfig: s.Config, Labels: s.Labels, IntervalSeconds: seconds, EncryptedCredential: secret})
+	row, err := r.queries.UpdateTaskIntegration(ctx, sqlc.UpdateTaskIntegrationParams{WorkspaceID: workspaceID, ID: id, WorkflowID: s.WorkflowID, Provider: string(s.Provider), Name: s.Name, Enabled: s.Enabled, ProviderConfig: s.Config, Labels: s.Labels, IntervalSeconds: seconds, EncryptedCredential: secret})
 	if err != nil {
 		return taskintegration.TaskIntegration{}, mapError(err, errors.ErrNotFound, errors.ErrConflict)
 	}
@@ -89,15 +97,18 @@ func (r *PostgresTaskIntegrationRepository) RecordSync(ctx context.Context, id s
 	return r.queries.RecordTaskIntegrationSync(ctx, sqlc.RecordTaskIntegrationSyncParams{ID: id, LastSyncedAt: pgtype.Timestamptz{Time: at, Valid: true}, LastError: message})
 }
 
-type PostgresImportedTaskRepository struct{ queries *sqlc.Queries }
+type PostgresImportedTaskRepository struct {
+	queries *sqlc.Queries
+	pool    *pgxpool.Pool
+}
 
 func NewPostgresImportedTaskRepository(database *PostgresDatabase) *PostgresImportedTaskRepository {
-	return &PostgresImportedTaskRepository{queries: sqlc.New(database.pool)}
+	return &PostgresImportedTaskRepository{queries: sqlc.New(database.pool), pool: database.pool}
 }
 
 var _ taskintegration.ImportedTaskRepository = (*PostgresImportedTaskRepository)(nil)
 
-func (r *PostgresImportedTaskRepository) UpsertImportedTask(ctx context.Context, workspaceID, integrationID, provider string, item taskintegration.DiscoveredTask) error {
+func (r *PostgresImportedTaskRepository) UpsertImportedTask(ctx context.Context, workspaceID, integrationID, workflowID, provider string, item taskintegration.DiscoveredTask) error {
 	if item.ID == "" || item.Title == "" {
 		return fmt.Errorf("source task is missing identity or title")
 	}
@@ -105,7 +116,55 @@ func (r *PostgresImportedTaskRepository) UpsertImportedTask(ctx context.Context,
 	if err != nil {
 		return err
 	}
-	return r.queries.UpsertImportedTask(ctx, sqlc.UpsertImportedTaskParams{ID: id, WorkspaceID: workspaceID, Title: item.Title, Description: item.Description, SourceProvider: provider, SourceIntegrationID: pgtype.Text{String: integrationID, Valid: true}, SourceID: pgtype.Text{String: item.ID, Valid: true}, SourceUrl: pgtype.Text{String: item.URL, Valid: item.URL != ""}, Labels: item.Labels, Closed: item.Closed})
+	tx, err := r.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := r.queries.WithTx(tx)
+	data, err := q.LockWorkflow(ctx, sqlc.LockWorkflowParams{WorkspaceID: workspaceID, ID: workflowID})
+	if err != nil {
+		return err
+	}
+	d, err := decodeWorkflow(data)
+	if err != nil {
+		return err
+	}
+	lookup := sqlc.ImportedWorkflowTaskParams{WorkspaceID: workspaceID, SourceProvider: provider, SourceID: pgtype.Text{String: item.ID, Valid: true}, SourceIntegrationID: pgtype.Text{String: integrationID, Valid: true}}
+	before, err := q.ImportedWorkflowTask(ctx, lookup)
+	if err != nil && !stderrors.Is(err, pgx.ErrNoRows) {
+		return err
+	}
+	err = q.UpsertImportedTask(ctx, sqlc.UpsertImportedTaskParams{ID: id, WorkspaceID: workspaceID, WorkflowID: workflowID, Title: item.Title, Description: item.Description, SourceProvider: provider, SourceIntegrationID: pgtype.Text{String: integrationID, Valid: true}, SourceID: pgtype.Text{String: item.ID, Valid: true}, SourceUrl: pgtype.Text{String: item.URL, Valid: item.URL != ""}, Labels: item.Labels, Closed: item.Closed})
+	if err != nil {
+		return err
+	}
+	after, err := q.ImportedWorkflowTask(ctx, lookup)
+	if err != nil {
+		return err
+	}
+	if before.ID == "" || before.Status != after.Status {
+		state, e := q.LockWorkflowTask(ctx, sqlc.LockWorkflowTaskParams{WorkspaceID: workspaceID, ID: after.ID})
+		if e != nil {
+			return e
+		}
+		plan, e := workflow.PlanTransition(d, after.Status, after.Status, state.Assignee, workflow.Enter)
+		if e != nil {
+			if e = q.SetStageWorkState(ctx, sqlc.SetStageWorkStateParams{WorkspaceID: workspaceID, ID: after.ID, StageVersion: state.StageVersion, StageWorkState: string(task.WorkStateFailed)}); e != nil {
+				return e
+			}
+		} else {
+			if e = q.MoveWorkflowTask(ctx, sqlc.MoveWorkflowTaskParams{WorkspaceID: workspaceID, ID: after.ID, StageVersion: state.StageVersion, Status: after.Status, Column5: plan.AssigneeAgentID}); e != nil {
+				return e
+			}
+			if plan.Start {
+				if e = enqueueStageStart(ctx, q, workspaceID, after.ID, d.ConfiguredBy, state.StageVersion, task.TaskInput{SessionMode: "new"}); e != nil {
+					return e
+				}
+			}
+		}
+	}
+	return tx.Commit(ctx)
 }
 
 func (r *PostgresImportedTaskRepository) RemoveMissingImportedTasks(ctx context.Context, workspaceID, integrationID string, sourceIDs []string) error {
@@ -114,7 +173,7 @@ func (r *PostgresImportedTaskRepository) RemoveMissingImportedTasks(ctx context.
 
 func taskIntegrationFromRow(row sqlc.TaskIntegration) taskintegration.TaskIntegration {
 	interval := time.Duration(row.IntervalSeconds) * time.Second
-	s := taskintegration.TaskIntegration{ID: row.ID, WorkspaceID: row.WorkspaceID, Provider: taskintegration.TaskIntegrationSourceProvider(row.Provider), Name: row.Name, Enabled: row.Enabled, Config: json.RawMessage(row.ProviderConfig), Labels: row.Labels, Interval: interval.String(), LastError: row.LastError, CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time}
+	s := taskintegration.TaskIntegration{ID: row.ID, WorkspaceID: row.WorkspaceID, WorkflowID: row.WorkflowID, Provider: taskintegration.TaskIntegrationSourceProvider(row.Provider), Name: row.Name, Enabled: row.Enabled, Config: json.RawMessage(row.ProviderConfig), Labels: row.Labels, Interval: interval.String(), LastError: row.LastError, CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time}
 	if row.LastSyncedAt.Valid {
 		lastSynced := row.LastSyncedAt.Time
 		s.LastSynced = &lastSynced

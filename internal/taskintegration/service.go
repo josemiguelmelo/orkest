@@ -124,6 +124,9 @@ func (s *TaskIntegrationService) Update(ctx context.Context, userID, orgID, work
 	if in.Name == "" {
 		in.Name = old.Name
 	}
+	if in.WorkflowID == "" {
+		in.WorkflowID = old.WorkflowID
+	}
 	if in.Labels == nil {
 		in.Labels = old.Labels
 	}
@@ -264,7 +267,7 @@ func (s *TaskIntegrationService) sync(ctx context.Context, source TaskIntegratio
 	if err == nil {
 		seen := make([]string, 0, len(items))
 		for _, item := range items {
-			if e := s.importer.UpsertImportedTask(ctx, source.WorkspaceID, source.ID, string(source.Provider), item); e != nil {
+			if e := s.importer.UpsertImportedTask(ctx, source.WorkspaceID, source.ID, source.WorkflowID, string(source.Provider), item); e != nil {
 				err = e
 				break
 			}
@@ -321,9 +324,13 @@ func (s *TaskIntegrationService) authorize(ctx context.Context, userID, orgID, w
 
 func normalizeCommonFields(in *TaskIntegrationInput) error {
 	in.Name = strings.TrimSpace(in.Name)
+	in.WorkflowID = strings.TrimSpace(in.WorkflowID)
 	in.Labels = normalizeValues(in.Labels)
 	if in.Name == "" || len(in.Name) > 200 {
 		return &ConfigurationError{Code: "integration_name_required"}
+	}
+	if in.WorkflowID == "" {
+		return &ConfigurationError{Code: "integration_workflow_required"}
 	}
 	if in.Interval == "" {
 		in.Interval = DefaultInterval.String()
@@ -337,7 +344,7 @@ func normalizeCommonFields(in *TaskIntegrationInput) error {
 }
 
 func toTaskIntegration(id, workspaceID string, in TaskIntegrationInput) TaskIntegration {
-	return TaskIntegration{ID: id, WorkspaceID: workspaceID, Provider: in.Provider, Name: in.Name, Enabled: in.Enabled, Config: in.Config, Labels: in.Labels, Interval: in.Interval}
+	return TaskIntegration{ID: id, WorkspaceID: workspaceID, WorkflowID: in.WorkflowID, Provider: in.Provider, Name: in.Name, Enabled: in.Enabled, Config: in.Config, Labels: in.Labels, Interval: in.Interval}
 }
 
 func normalizeValues(values []string) []string {

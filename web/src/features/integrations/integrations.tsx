@@ -1,10 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { KeyRound, Plug, RefreshCw } from 'lucide-react';
 import { useApp } from '../../app/context';
+import { useWorkflow } from '../workflow/workflow';
 import * as sdk from '../../shared/api/generated/sdk.gen';
 import type {
   TaskIntegration,
@@ -34,6 +35,7 @@ import {
   type ProviderFields,
 } from './schema';
 const schema = z.object({
+  workflowId: z.string().min(1, 'Choose a workflow.'),
   provider: z.string().min(1, 'Choose a provider.'),
   name: z.string().trim().min(1).max(200),
   enabled: z.boolean(),
@@ -252,11 +254,13 @@ function IntegrationEditor({
   onClose: () => void;
 }) {
   const { scope } = useApp();
+  const workflows = useWorkflow();
   const refresh = useRefresh();
   const action = useAction();
   const form = useForm({
     resolver: zodResolver(schema),
     defaultValues: {
+      workflowId: item?.workflowId ?? workflows.data?.id ?? '',
       provider: item?.provider ?? providers[0]?.provider ?? '',
       name: item?.name ?? '',
       enabled: item?.enabled ?? true,
@@ -265,6 +269,11 @@ function IntegrationEditor({
       credential: '',
     },
   });
+  useEffect(() => {
+    if (!item && !form.getValues('workflowId') && workflows.workflows[0])
+      form.setValue('workflowId', workflows.workflows[0].id);
+  }, [form, item, workflows.workflows]);
+  const selectedWorkflow = useWorkflow(form.watch('workflowId'));
   const provider = providers.find((p) => p.provider === form.watch('provider'));
   const initial = configSchema.safeParse(item?.config ?? {});
   const [config, setConfig] = useState<Record<string, JsonValue>>(
@@ -324,6 +333,15 @@ function IntegrationEditor({
             onClose();
         }}
       >
+        <Field label="Workflow" error={form.formState.errors.workflowId?.message}>
+          <select {...form.register('workflowId')}>
+            {selectedWorkflow.workflows.map((workflow) => (
+              <option key={workflow.id} value={workflow.id}>
+                {workflow.name}
+              </option>
+            ))}
+          </select>
+        </Field>
         <div className="form-grid">
           <Field
             label="Provider"

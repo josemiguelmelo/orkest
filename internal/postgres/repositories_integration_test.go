@@ -167,13 +167,14 @@ func TestPostgresRepositories(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	createdTask, err := taskRepository.CreateTask(ctx, taskID, workspaceID, task.TaskInput{Title: "Add endpoint", Description: "Task body", Status: "todo", AssigneeAgentID: worker.ID, Labels: []string{"api"}, RepositoryIDs: []string{codeRepositoryID}})
+	createdTask, err := taskRepository.CreateTask(ctx, taskID, workspaceID, task.TaskInput{WorkflowID: workspaceID, Title: "Add endpoint", Description: "Task body", Status: "todo", AssigneeAgentID: worker.ID, Labels: []string{"api"}, RepositoryIDs: []string{codeRepositoryID}})
 	if err != nil || createdTask.SourceProvider != "manual" || createdTask.AssigneeAgentID != worker.ID || len(createdTask.Repositories) != 1 || createdTask.Repositories[0].ID != codeRepositoryID {
 		t.Fatalf("create task: task=%+v err=%v", createdTask, err)
 	}
 	if err = codeRepositoryRepository.DeleteCodeRepository(ctx, org.ID, workspaceID, codeRepositoryID); !errors.Is(err, modelerrors.ErrConflict) {
 		t.Fatalf("expected task-referenced repository deletion conflict, got %v", err)
 	}
+	t.Run("workspace workflow transitions", func(t *testing.T) { testWorkspaceWorkflow(t, database, org.ID, owner.ID, worker.ID) })
 	t.Run("task sessions and prompt delivery", func(t *testing.T) { testTaskSessions(t, database, org.ID, workspaceID, taskID) })
 	commentID, err := ids.NewUUID()
 	if err != nil {

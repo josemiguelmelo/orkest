@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from 'react';
-import { AlertCircle, Inbox, LoaderCircle, Plus } from 'lucide-react';
+import { AlertCircle, Inbox, LoaderCircle, Plus, Trash2 } from 'lucide-react';
 import { Button } from './button';
 import { Dialog } from './dialog';
 
@@ -73,12 +73,16 @@ export function ConfirmButton({
   description,
   onConfirm,
   pending = false,
+  triggerVariant = 'destructive',
+  triggerSize = 'sm',
 }: {
   label?: string;
   title: string;
   description: string;
   onConfirm: () => Promise<unknown>;
   pending?: boolean;
+  triggerVariant?: 'outline' | 'destructive';
+  triggerSize?: 'default' | 'sm' | 'icon';
 }) {
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<unknown>();
@@ -97,7 +101,8 @@ export function ConfirmButton({
   }
   return (
     <>
-      <Button variant="outline" size="sm" disabled={pending} onClick={() => setOpen(true)}>
+      <Button variant={triggerVariant} size={triggerSize} disabled={pending} onClick={() => setOpen(true)}>
+        {triggerVariant === 'destructive' && <Trash2 size={14} aria-hidden="true" />}
         {label}
       </Button>
       <Dialog

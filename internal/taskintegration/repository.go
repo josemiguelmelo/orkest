@@ -18,6 +18,6 @@ type TaskIntegrationRepository interface {
 
 // ImportedTaskRepository owns idempotent persistence and source reconciliation.
 type ImportedTaskRepository interface {
-	UpsertImportedTask(context.Context, string, string, string, DiscoveredTask) error
+	UpsertImportedTask(context.Context, string, string, string, string, DiscoveredTask) error
 	RemoveMissingImportedTasks(context.Context, string, string, []string) error
 }

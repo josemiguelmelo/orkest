@@ -56,7 +56,7 @@ func (r *AgentLaunchPostgresRepository) CurrentSession(ctx context.Context, orgI
 	return config, true, nil
 }
 
-func (r *AgentLaunchPostgresRepository) ReserveSessionRun(ctx context.Context, config runconfig.RunConfig) error {
+func (r *AgentLaunchPostgresRepository) ReserveSessionRun(ctx context.Context, config runconfig.RunConfig, expectedStageVersion int64) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -65,6 +65,24 @@ func (r *AgentLaunchPostgresRepository) ReserveSessionRun(ctx context.Context, c
 	q := r.queries.WithTx(tx)
 	if err := q.LockTaskSessionScope(ctx, sqlc.LockTaskSessionScopeParams{ID: config.TaskID, WorkspaceID: config.WorkspaceID}); err != nil {
 		return err
+	}
+	if expectedStageVersion > 0 {
+		state, e := q.TaskWorkflowState(ctx, sqlc.TaskWorkflowStateParams{WorkspaceID: config.WorkspaceID, ID: config.TaskID})
+		if e != nil {
+			return e
+		}
+		if state.StageVersion != expectedStageVersion {
+			return modelerrors.ErrConflict
+		}
+	}
+	if config.InitialCommandID != "" && expectedStageVersion > 0 {
+		exists, e := q.WorkflowCommandAccepted(ctx, config.InitialCommandID)
+		if e != nil {
+			return e
+		}
+		if exists {
+			return modelerrors.ErrConflict
+		}
 	}
 	if _, err := q.ActiveTaskLaunch(ctx, sqlc.ActiveTaskLaunchParams{WorkspaceID: config.WorkspaceID, TaskID: config.TaskID}); !errors.Is(err, pgx.ErrNoRows) {
 		if err != nil {
@@ -100,6 +118,9 @@ func (r *AgentLaunchPostgresRepository) ReserveSessionRun(ctx context.Context, c
 		}
 	}
 	if err := q.InsertAgentLaunch(ctx, sqlc.InsertAgentLaunchParams{ExecutionImage: config.ExecutionImage, RunID: config.RunID, OrganizationID: config.OrganizationID, WorkspaceID: config.WorkspaceID, TaskID: config.TaskID, TaskSessionID: pgtype.Text{String: config.TaskSessionID, Valid: true}, Status: string(orchestration.LaunchStarting)}); err != nil {
+		return err
+	}
+	if err := q.BindWorkflowRun(ctx, sqlc.BindWorkflowRunParams{WorkspaceID: config.WorkspaceID, ID: config.TaskID, WorkflowRunID: pgtype.Text{String: config.RunID, Valid: true}}); err != nil {
 		return err
 	}
 	if config.InitialCommandID != "" {

@@ -47,14 +47,22 @@ export const workspaceQuery = (s: WorkspaceScope) =>
     queryFn: ({ signal }) => data(sdk.getWorkspace({ ...command, path: path(s), signal })),
     enabled: !!s.workspaceID,
   });
+export const workflowsQuery = (s: WorkspaceScope) =>
+  queryOptions({
+    queryKey: [...keys.workspace(s), 'workflows'],
+    queryFn: ({ signal }) => data(sdk.listWorkspaceWorkflows({ ...command, path: path(s), signal })),
+    enabled: !!s.workspaceID,
+  });
 export const tasksQuery = (s: WorkspaceScope) =>
   queryOptions({
     queryKey: [...keys.workspace(s), 'tasks'],
+    refetchInterval: 2000,
     queryFn: ({ signal }) => data(sdk.listTasks({ ...command, path: path(s), signal })),
   });
 export const taskQuery = (s: WorkspaceScope, taskID: string) =>
   queryOptions({
     queryKey: [...keys.workspace(s), 'tasks', taskID],
+    refetchInterval: 2000,
     queryFn: ({ signal }) =>
       data(sdk.getTask({ ...command, path: { ...path(s), taskID }, signal })),
   });

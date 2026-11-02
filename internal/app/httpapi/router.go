@@ -20,17 +20,30 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/skill"
 	"github.com/josemiguelmelo/orkest/internal/task"
 	"github.com/josemiguelmelo/orkest/internal/taskintegration"
+	"github.com/josemiguelmelo/orkest/internal/workflow"
 	"github.com/josemiguelmelo/orkest/internal/workspace"
 	"github.com/josemiguelmelo/orkest/internal/workspaceenv"
 )
 
 // NewRouter validates the served OpenAPI contract before exposing routes.
-func NewRouter(users *identity.UserRegistrationService, organizations *organization.OrganizationService, workspaces *workspace.WorkspaceService, agents *agent.Service, codeRepositories *coderepository.Service, tasks *task.Service, integrations *taskintegration.TaskIntegrationService, mcpServers *mcpserver.MCPServerService, skillCatalog *skill.CatalogService, launches *orchestration.LaunchService, profiles *executionprofile.ExecutionProfileService, runtimeProfiles *agentruntimeprofile.Service, directChats *orchestration.DirectChatService, environment ...*workspaceenv.Service) (*chi.Mux, error) {
+func NewRouter(users *identity.UserRegistrationService, organizations *organization.OrganizationService, workspaces *workspace.WorkspaceService, agents *agent.Service, codeRepositories *coderepository.Service, tasks *task.Service, integrations *taskintegration.TaskIntegrationService, mcpServers *mcpserver.MCPServerService, skillCatalog *skill.CatalogService, launches *orchestration.LaunchService, profiles *executionprofile.ExecutionProfileService, runtimeProfiles *agentruntimeprofile.Service, directChats *orchestration.DirectChatService, workflows *workflow.Service, environment ...*workspaceenv.Service) (*chi.Mux, error) {
 	if profiles == nil {
 		return nil, fmt.Errorf("execution profile service is required")
 	}
 	if runtimeProfiles == nil {
 		return nil, fmt.Errorf("agent runtime profile service is required")
+	}
+	if launches == nil {
+		return nil, fmt.Errorf("task launch service is required")
+	}
+	if directChats == nil {
+		return nil, fmt.Errorf("direct chat service is required")
+	}
+	if workflows == nil {
+		return nil, fmt.Errorf("workflow service is required")
+	}
+	if integrations == nil {
+		return nil, fmt.Errorf("task integration service is required")
 	}
 	if _, err := openapi.LoadAndValidateOpenAPIDoc(OpenAPIContract, context.Background()); err != nil {
 		return nil, fmt.Errorf("load platform OpenAPI contract: %w", err)
@@ -74,15 +87,10 @@ func NewRouter(users *identity.UserRegistrationService, organizations *organizat
 			codeRepositoryAPI{repositories: codeRepositories}.routes(api)
 			codingIntegrationAPI{service: codeRepositories}.routes(api)
 			taskAPI{tasks: tasks}.routes(api)
-			if launches != nil {
-				taskRunAPI{tasks: tasks, launches: launches}.routes(api)
-			}
-			if directChats != nil && launches != nil {
-				directChatAPI{chats: directChats, agents: agents, workspaces: workspaces}.routes(api)
-			}
-			if integrations != nil {
-				taskIntegrationAPI{service: integrations}.routes(api)
-			}
+			workflowAPI{service: workflows}.routes(api)
+			taskRunAPI{tasks: tasks, launches: launches}.routes(api)
+			directChatAPI{chats: directChats, agents: agents, workspaces: workspaces}.routes(api)
+			taskIntegrationAPI{service: integrations}.routes(api)
 		})
 	})
 	openapi.Enable(router, "Orkest API", OpenAPIContract)

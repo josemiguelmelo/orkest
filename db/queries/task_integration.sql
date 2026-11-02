@@ -1,10 +1,10 @@
 -- name: CreateTaskIntegration :one
-INSERT INTO task_integrations (id, workspace_id, provider, name, enabled, provider_config, labels, interval_seconds, encrypted_credential)
-VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+INSERT INTO task_integrations (id, workspace_id, workflow_id, provider, name, enabled, provider_config, labels, interval_seconds, encrypted_credential)
+VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)
 RETURNING *;
 
 -- name: UpdateTaskIntegration :one
-UPDATE task_integrations SET provider=$3, name=$4, enabled=$5, provider_config=$6, labels=$7, interval_seconds=$8, encrypted_credential=$9, updated_at=now()
+UPDATE task_integrations SET workflow_id=$3, provider=$4, name=$5, enabled=$6, provider_config=$7, labels=$8, interval_seconds=$9, encrypted_credential=$10, updated_at=now()
 WHERE workspace_id=$1 AND id=$2 RETURNING *;
 
 -- name: GetTaskIntegration :one
@@ -26,19 +26,20 @@ UPDATE task_integrations SET last_synced_at=$2, last_error=$3, updated_at=now() 
 WITH legacy AS (
     UPDATE tasks SET source_integration_id = sqlc.arg(source_integration_id), title = sqlc.arg(title),
         description = sqlc.arg(description), source_url = sqlc.narg(source_url), labels = sqlc.arg(labels),
-        status = CASE WHEN sqlc.arg(closed)::boolean THEN 'done' ELSE status END, updated_at = now()
+        workflow_id = sqlc.arg(workflow_id),
+        status = CASE WHEN sqlc.arg(closed)::boolean THEN (SELECT definition->'stages'->-1->>'id' FROM workspace_workflows WHERE workspace_id=tasks.workspace_id AND id=sqlc.arg(workflow_id)) ELSE status END, updated_at = now()
     WHERE workspace_id = sqlc.arg(workspace_id) AND source_provider = sqlc.arg(source_provider)
       AND source_id = sqlc.arg(source_id) AND source_integration_id IS NULL
     RETURNING id
 )
-INSERT INTO tasks (id, workspace_id, title, description, source_provider, source_integration_id, source_id, source_url, labels, status)
-SELECT sqlc.arg(id), sqlc.arg(workspace_id), sqlc.arg(title), sqlc.arg(description), sqlc.arg(source_provider),
+INSERT INTO tasks (id, workspace_id, workflow_id, title, description, source_provider, source_integration_id, source_id, source_url, labels, status)
+SELECT sqlc.arg(id), sqlc.arg(workspace_id), sqlc.arg(workflow_id), sqlc.arg(title), sqlc.arg(description), sqlc.arg(source_provider),
     sqlc.arg(source_integration_id), sqlc.arg(source_id), sqlc.narg(source_url), sqlc.arg(labels),
-    CASE WHEN sqlc.arg(closed)::boolean THEN 'done' ELSE 'todo' END
+    (SELECT CASE WHEN sqlc.arg(closed)::boolean THEN definition->'stages'->-1->>'id' ELSE definition->'stages'->0->>'id' END FROM workspace_workflows WHERE workspace_id=sqlc.arg(workspace_id) AND id=sqlc.arg(workflow_id))
 WHERE NOT EXISTS (SELECT 1 FROM legacy)
 ON CONFLICT (workspace_id, source_provider, source_integration_id, source_id)
 DO UPDATE SET title=EXCLUDED.title, description=EXCLUDED.description, source_url=EXCLUDED.source_url, labels=EXCLUDED.labels,
-    status=CASE WHEN sqlc.arg(closed)::boolean THEN 'done' ELSE tasks.status END, updated_at=now();
+    status=CASE WHEN sqlc.arg(closed)::boolean THEN (SELECT definition->'stages'->-1->>'id' FROM workspace_workflows WHERE workspace_id=tasks.workspace_id AND id=sqlc.arg(workflow_id)) ELSE tasks.status END, updated_at=now();
 
 -- name: RemoveMissingImportedTasks :exec
 DELETE FROM tasks

@@ -2,25 +2,18 @@ package task
 
 import (
 	"context"
+	"io"
+	"log/slog"
 	"testing"
 )
-
-type sessionTaskRepository struct{ taskRepositoryStub }
-
-func (r *sessionTaskRepository) UpdateTaskIfStatus(_ context.Context, _, _, _, _ string, input TaskInput) (Task, error) {
-	r.updated = true
-	result := r.task
-	result.Status = input.Status
-	return result, nil
-}
 
 type sessionDispatcher struct {
 	received *Task
 	accepted bool
 }
 
-func (d *sessionDispatcher) StartTask(_ context.Context, _, _ string, task Task) error {
-	d.received = &task
+func (d *sessionDispatcher) StartTask(_ context.Context, _, _ string, value Task) error {
+	d.received = &value
 	return nil
 }
 
@@ -28,24 +21,33 @@ func (d *sessionDispatcher) TaskCommandAccepted(context.Context, string, string,
 	return d.accepted, nil
 }
 
-func TestSessionChoiceStartsReviewIteration(t *testing.T) {
-	repo := &sessionTaskRepository{taskRepositoryStub{task: Task{ID: "task", WorkspaceID: "workspace", Title: "Task", Status: "in_review", AssigneeAgentID: "agent", SourceProvider: "manual"}}}
+func TestWorkflowDeliveryPreservesSessionChoiceAndReconciles(t *testing.T) {
+	repo := &taskRepositoryStub{task: Task{ID: "task", WorkspaceID: "workspace", Title: "Task", Status: "review", StageVersion: 2, AssigneeAgentID: "agent"}}
 	dispatcher := &sessionDispatcher{}
-	service := NewService(repo, workspaceAccessStub{role: "member"}, dispatcher)
-	input := TaskInput{Title: "Task", Status: "in_progress", AssigneeAgentID: "agent", SessionMode: "new", PromptText: "revise this", CommandID: "turn"}
-	if _, err := service.Update(context.Background(), "user", "org", "workspace", "task", input); err != nil {
-		t.Fatal(err)
-	}
-	if dispatcher.received == nil || dispatcher.received.SessionMode != "new" || dispatcher.received.PromptText != "revise this" || dispatcher.received.CommandID != "turn" {
-		t.Fatal("session choice or prompt lost")
+	worker := NewWorkflowWorker(nil, testService(repo, "member"), dispatcher, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	command := WorkflowCommand{ID: "turn", OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", ActorID: "user", StageVersion: 2, Options: TaskInput{SessionMode: "new", PromptText: "revise this"}}
+	delivered, err := worker.deliver(context.Background(), command)
+	if err != nil || !delivered || dispatcher.received == nil || dispatcher.received.PromptText != "revise this" || dispatcher.received.CommandID != "turn" || dispatcher.received.SessionMode != "new" {
+		t.Fatal("session options were lost", err)
 	}
 	dispatcher.received = nil
 	dispatcher.accepted = true
-	repo.updated = false
-	if _, err := service.Update(context.Background(), "user", "org", "workspace", "task", input); err != nil {
-		t.Fatal(err)
+	if delivered, err = worker.deliver(context.Background(), command); err != nil || !delivered || dispatcher.received != nil {
+		t.Fatal("accepted delivery was dispatched again", err)
 	}
-	if dispatcher.received != nil || repo.updated {
-		t.Fatal("duplicate start command changed workflow or created another run")
+	dispatcher.accepted = false
+	command.StageVersion = 1
+	if delivered, err = worker.deliver(context.Background(), command); err != nil || delivered || dispatcher.received != nil {
+		t.Fatal("stale stage entry was started", err)
+	}
+}
+
+func TestWorkflowDeliveryRechecksMutationPermission(t *testing.T) {
+	repo := &taskRepositoryStub{task: Task{ID: "task", StageVersion: 1}}
+	dispatcher := &sessionDispatcher{}
+	worker := NewWorkflowWorker(nil, testService(repo, "viewer"), dispatcher, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	delivered, err := worker.deliver(context.Background(), WorkflowCommand{StageVersion: 1})
+	if err != nil || delivered || dispatcher.received != nil {
+		t.Fatal("viewer automation started work", err)
 	}
 }

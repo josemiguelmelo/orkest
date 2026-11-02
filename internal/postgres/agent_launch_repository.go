@@ -105,8 +105,8 @@ func (r *AgentLaunchPostgresRepository) SetLaunchStatus(ctx context.Context, run
 	if err := q.SetAgentLaunchStatus(ctx, sqlc.SetAgentLaunchStatusParams{RunID: runID, Status: string(status)}); err != nil {
 		return err
 	}
-	if status == orchestration.LaunchCompleted {
-		if err := q.CompleteTaskForRun(ctx, runID); err != nil {
+	if status == orchestration.LaunchCompleted || status == orchestration.LaunchFailed {
+		if err := completeWorkflowRun(ctx, q, runID, status == orchestration.LaunchCompleted); err != nil {
 			return err
 		}
 	}

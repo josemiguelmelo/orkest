@@ -9,19 +9,20 @@ import (
 )
 
 type Agent struct {
-	ID                 string             `json:"id"`
-	WorkspaceID        string             `json:"workspace_id"`
-	Name               string             `json:"name"`
-	Runtime            string             `json:"runtime"`
-	Provider           string             `json:"provider"`
-	Model              string             `json:"model"`
-	Description        string             `json:"description"`
-	SystemPrompt       string             `json:"system_prompt"`
-	CreatedAt          pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
-	ExecutionProfileID pgtype.Text        `json:"execution_profile_id"`
-	PermissionPolicy   string             `json:"permission_policy"`
-	RuntimeProfileID   pgtype.Text        `json:"runtime_profile_id"`
+	ID                   string             `json:"id"`
+	WorkspaceID          string             `json:"workspace_id"`
+	Name                 string             `json:"name"`
+	Runtime              string             `json:"runtime"`
+	Provider             string             `json:"provider"`
+	Model                string             `json:"model"`
+	Description          string             `json:"description"`
+	SystemPrompt         string             `json:"system_prompt"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+	ExecutionProfileID   pgtype.Text        `json:"execution_profile_id"`
+	PermissionPolicy     string             `json:"permission_policy"`
+	RuntimeProfileID     pgtype.Text        `json:"runtime_profile_id"`
+	RuntimeConfiguration []byte             `json:"runtime_configuration"`
 }
 
 type AgentLaunch struct {
@@ -39,6 +40,7 @@ type AgentLaunch struct {
 	UpdatedAt      pgtype.Timestamptz `json:"updated_at"`
 	TaskSessionID  pgtype.Text        `json:"task_session_id"`
 	ExecutionImage string             `json:"execution_image"`
+	StageVersion   int64              `json:"stage_version"`
 }
 
 type AgentLaunchEvent struct {
@@ -63,14 +65,15 @@ type AgentPromptOutbox struct {
 }
 
 type AgentRuntimeProfile struct {
-	ID              string             `json:"id"`
-	WorkspaceID     string             `json:"workspace_id"`
-	Name            string             `json:"name"`
-	Runtime         string             `json:"runtime"`
-	ModelProvider   string             `json:"model_provider"`
-	ModelIdentifier string             `json:"model_identifier"`
-	CreatedAt       pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	ID                   string             `json:"id"`
+	WorkspaceID          string             `json:"workspace_id"`
+	Name                 string             `json:"name"`
+	Runtime              string             `json:"runtime"`
+	ModelProvider        string             `json:"model_provider"`
+	ModelIdentifier      string             `json:"model_identifier"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+	RuntimeConfiguration []byte             `json:"runtime_configuration"`
 }
 
 type AgentSkill struct {
@@ -193,6 +196,11 @@ type Task struct {
 	SourceUrl           pgtype.Text        `json:"source_url"`
 	AssigneeAgentID     pgtype.Text        `json:"assignee_agent_id"`
 	SourceIntegrationID pgtype.Text        `json:"source_integration_id"`
+	StageVersion        int64              `json:"stage_version"`
+	StageWorkState      string             `json:"stage_work_state"`
+	WorkflowSnapshot    []byte             `json:"workflow_snapshot"`
+	WorkflowRunID       pgtype.Text        `json:"workflow_run_id"`
+	WorkflowID          string             `json:"workflow_id"`
 }
 
 type TaskAgentSession struct {
@@ -229,12 +237,22 @@ type TaskIntegration struct {
 	CreatedAt           pgtype.Timestamptz `json:"created_at"`
 	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
 	ProviderConfig      []byte             `json:"provider_config"`
+	WorkflowID          string             `json:"workflow_id"`
 }
 
 type TaskRepository struct {
 	WorkspaceID  string `json:"workspace_id"`
 	TaskID       string `json:"task_id"`
 	RepositoryID string `json:"repository_id"`
+}
+
+type TaskStageHistory struct {
+	WorkspaceID  string             `json:"workspace_id"`
+	TaskID       string             `json:"task_id"`
+	StageVersion int64              `json:"stage_version"`
+	StageID      string             `json:"stage_id"`
+	Definition   []byte             `json:"definition"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 }
 
 type User struct {
@@ -244,6 +262,24 @@ type User struct {
 	Email           string             `json:"email"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 	PlatformAdmin   bool               `json:"platform_admin"`
+}
+
+type WorkflowCommand struct {
+	ID           string             `json:"id"`
+	WorkspaceID  string             `json:"workspace_id"`
+	TaskID       string             `json:"task_id"`
+	StageVersion int64              `json:"stage_version"`
+	ActorID      string             `json:"actor_id"`
+	Options      []byte             `json:"options"`
+	State        string             `json:"state"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+}
+
+type WorkflowStage struct {
+	WorkspaceID        string      `json:"workspace_id"`
+	ID                 string      `json:"id"`
+	ResponsibleAgentID pgtype.Text `json:"responsible_agent_id"`
+	WorkflowID         string      `json:"workflow_id"`
 }
 
 type Workspace struct {
@@ -267,4 +303,12 @@ type WorkspaceMembership struct {
 	UserID         string             `json:"user_id"`
 	Role           string             `json:"role"`
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+}
+
+type WorkspaceWorkflow struct {
+	WorkspaceID string `json:"workspace_id"`
+	Version     int64  `json:"version"`
+	Definition  []byte `json:"definition"`
+	ID          string `json:"id"`
+	Name        string `json:"name"`
 }

@@ -1,30 +1,25 @@
 import { z } from 'zod';
 import type { Task, TaskInput } from '../../shared/api/generated/types.gen';
-export const statuses = ['todo', 'in_progress', 'in_review', 'done'] as const;
-export const statusNames: Record<Task['status'], string> = {
-  todo: 'Todo',
-  in_progress: 'In progress',
-  in_review: 'In review',
-  done: 'Done',
-};
 export const taskFormSchema = z.object({
   title: z.string().trim().min(1, 'Enter a title.').max(500),
   description: z.string().max(100000),
-  status: z.enum(statuses),
+  workflowId: z.string().min(1),
+  status: z.string().min(1),
   assigneeAgentId: z.string(),
   labels: z.string(),
   repositoryIds: z.array(z.string()),
 });
 export type TaskFormValues = z.infer<typeof taskFormSchema>;
 export function taskInput(values: TaskFormValues, current?: Task): TaskInput {
-  if (!current && values.status !== 'todo') throw new Error('New tasks must start in todo.');
-  if (current?.status === 'done' && values.status !== 'done')
+  if (current?.closed && values.status !== current.status)
     throw new Error('Done tasks cannot be reopened.');
   return {
     title: current && current.sourceProvider !== 'manual' ? current.title : values.title,
     description:
       current && current.sourceProvider !== 'manual' ? current.description : values.description,
     status: values.status,
+    workflowId: current?.workflowId ?? values.workflowId,
+    ...(current?.stageVersion ? { stageVersion: current.stageVersion } : {}),
     assigneeAgentId: values.assigneeAgentId,
     labels:
       current && current.sourceProvider !== 'manual'

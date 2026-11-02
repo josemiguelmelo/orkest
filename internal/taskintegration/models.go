@@ -14,6 +14,7 @@ const (
 type TaskIntegration struct {
 	ID          string                        `json:"id"`
 	WorkspaceID string                        `json:"workspaceId"`
+	WorkflowID  string                        `json:"workflowId"`
 	Provider    TaskIntegrationSourceProvider `json:"provider"`
 	Name        string                        `json:"name"`
 	Enabled     bool                          `json:"enabled"`
@@ -27,6 +28,7 @@ type TaskIntegration struct {
 }
 
 type TaskIntegrationInput struct {
+	WorkflowID string                        `json:"workflowId"`
 	Provider   TaskIntegrationSourceProvider `json:"provider"`
 	Name       string                        `json:"name"`
 	Enabled    bool                          `json:"enabled"`

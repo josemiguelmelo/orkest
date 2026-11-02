@@ -185,3 +185,15 @@ Deployments that independently applied a GitLab-only version 23 must reconcile
 that migration history and task-repository schema before using this numbering;
 do not blindly relabel an existing Goose version. Local startup and fresh-schema
 migration verification now succeed.
+
+## Workspace workflows
+
+Issue #52 adds `internal/workflow` for versioned workspace workflow definitions
+and pure transition rules. Tasks and source integrations select a workflow;
+PostgreSQL stage catalogs scope stage IDs to that workflow and prevent removal
+while referenced. Entry snapshots, history and an outbox make
+assignment/start/advance durable. The task service and existing orchestration
+dispatcher share the rules through explicit repository contracts. The React
+board, task editor, source integrations and workflow settings use the same API
+contract. See [workspace workflows](workflows.md) for behavior, concurrency,
+recovery boundaries and migration rollback effects.

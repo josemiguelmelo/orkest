@@ -44,7 +44,7 @@ func testTaskSessions(t *testing.T, database *PostgresDatabase, orgID, workspace
 	results := make(chan int, 2)
 	for i := range configs {
 		wg.Go(func() {
-			if err := repo.ReserveSessionRun(ctx, configs[i]); err == nil {
+			if err := repo.ReserveSessionRun(ctx, configs[i], 0); err == nil {
 				results <- i
 			}
 		})
@@ -103,7 +103,7 @@ func testTaskSessions(t *testing.T, database *PostgresDatabase, orgID, workspace
 	next.RunID = newID()
 	next.RestoreSession = true
 	next.Environment = map[string]string{"TOKEN": "rotated-secret"}
-	if err := repo.ReserveSessionRun(ctx, next); err != nil {
+	if err := repo.ReserveSessionRun(ctx, next, 0); err != nil {
 		t.Fatal("session could not continue in a new run", err)
 	}
 	current, exists, err = repo.CurrentSession(ctx, orgID, workspaceID, taskID)

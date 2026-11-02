@@ -2,8 +2,8 @@
 import type { TaskInput } from '../shared/api/generated/types.gen';
 import { router } from '../app/router';
 import { taskInput } from '../features/tasks/model';
-// @ts-expect-error task status is a closed API enum
-const invalid: TaskInput = { title: 'Example', status: 'finished' };
+// @ts-expect-error task stage IDs are strings
+const invalid: TaskInput = { title: 'Example', status: 123 };
 function invalidNavigation() {
   // @ts-expect-error route parameters must match the route
   void router.navigate({ to: '/organizations/$orgId', params: { workspaceId: 'wrong' } });
