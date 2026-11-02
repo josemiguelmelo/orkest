@@ -26,18 +26,6 @@ func (q *Queries) ActiveTaskLaunch(ctx context.Context, arg ActiveTaskLaunchPara
 	return run_id, err
 }
 
-const completeTaskForRun = `-- name: CompleteTaskForRun :exec
-UPDATE tasks SET status = 'in_review', updated_at = now()
-FROM agent_launches AS launch
-WHERE launch.run_id = $1 AND tasks.id = launch.task_id
-AND tasks.workspace_id = launch.workspace_id AND tasks.status = 'in_progress'
-`
-
-func (q *Queries) CompleteTaskForRun(ctx context.Context, runID string) error {
-	_, err := q.db.Exec(ctx, completeTaskForRun, runID)
-	return err
-}
-
 const currentTaskAgentSession = `-- name: CurrentTaskAgentSession :one
 SELECT id, configuration FROM task_agent_sessions
 WHERE organization_id = $1 AND workspace_id = $2 AND task_id = $3 AND is_current

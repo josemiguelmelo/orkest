@@ -3,22 +3,29 @@ package task
 import "time"
 
 type Task struct {
-	SessionMode     string          `json:"-"`
-	PromptText      string          `json:"-"`
-	CommandID       string          `json:"-"`
-	ID              string          `json:"id"`
-	WorkspaceID     string          `json:"workspaceId"`
-	Title           string          `json:"title"`
-	Description     string          `json:"description"`
-	SourceProvider  string          `json:"sourceProvider"`
-	SourceID        string          `json:"sourceId,omitempty"`
-	SourceURL       string          `json:"sourceUrl,omitempty"`
-	Status          string          `json:"status"`
-	AssigneeAgentID string          `json:"assigneeAgentId,omitempty"`
-	Labels          []string        `json:"labels"`
-	Repositories    []RepositoryRef `json:"repositories"`
-	CreatedAt       time.Time       `json:"createdAt"`
-	UpdatedAt       time.Time       `json:"updatedAt"`
+	AutomationPending bool            `json:"automationPending"`
+	StageName         string          `json:"-"`
+	StageDescription  string          `json:"-"`
+	Closed            bool            `json:"closed"`
+	StageVersion      int64           `json:"stageVersion"`
+	WorkflowID        string          `json:"workflowId"`
+	StageWorkState    WorkState       `json:"stageWorkState"`
+	SessionMode       string          `json:"-"`
+	PromptText        string          `json:"-"`
+	CommandID         string          `json:"-"`
+	ID                string          `json:"id"`
+	WorkspaceID       string          `json:"workspaceId"`
+	Title             string          `json:"title"`
+	Description       string          `json:"description"`
+	SourceProvider    string          `json:"sourceProvider"`
+	SourceID          string          `json:"sourceId,omitempty"`
+	SourceURL         string          `json:"sourceUrl,omitempty"`
+	Status            string          `json:"status"`
+	AssigneeAgentID   string          `json:"assigneeAgentId,omitempty"`
+	Labels            []string        `json:"labels"`
+	Repositories      []RepositoryRef `json:"repositories"`
+	CreatedAt         time.Time       `json:"createdAt"`
+	UpdatedAt         time.Time       `json:"updatedAt"`
 }
 
 type RepositoryRef struct {
@@ -38,6 +45,10 @@ type Comment struct {
 }
 
 type TaskInput struct {
+	StageVersion    int64    `json:"stageVersion,omitempty"`
+	WorkflowID      string   `json:"workflowId"`
+	CompleteStage   bool     `json:"completeStage,omitempty"`
+	ActorID         string   `json:"-"`
 	StartWork       bool     `json:"startWork,omitempty"`
 	SessionMode     string   `json:"sessionMode,omitempty"`
 	PromptText      string   `json:"promptText,omitempty"`
@@ -49,3 +60,14 @@ type TaskInput struct {
 	Labels          []string `json:"labels"`
 	RepositoryIDs   []string `json:"repositoryIds"`
 }
+
+// WorkState describes the execution state of a task's current workflow stage.
+type WorkState string
+
+const (
+	WorkStateIdle      WorkState = "idle"
+	WorkStateQueued    WorkState = "queued"
+	WorkStateRunning   WorkState = "running"
+	WorkStateCompleted WorkState = "completed"
+	WorkStateFailed    WorkState = "failed"
+)

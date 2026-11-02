@@ -35,6 +35,7 @@ export const agent: Agent = {
 export const task: Task = {
   id: 'task-1',
   workspaceId: 'ws-1',
+  workflowId: 'ws-1',
   title: 'Build the management workbench',
   description: 'Create a clear, accessible place to manage project work.',
   sourceProvider: 'manual',

@@ -233,24 +233,27 @@ export function chatExecution(task: Task, latest: TaskRun | undefined, events: T
       (latest.status === 'ready' && ended));
   const starting = !!latest && ['starting', 'process_started'].includes(latest.status);
   const canSend =
+    task.stageWorkState !== 'queued' &&
     !!task.assigneeAgentId &&
-    task.status !== 'done' &&
+    !(task.closed ?? task.status === 'done') &&
     !!latest &&
     (live || ['completed', 'failed'].includes(latest.status)) &&
     !paused &&
     !finishing &&
     !starting;
   const label =
-    task.status === 'done'
+    (task.closed ?? task.status === 'done')
       ? 'Task done'
-      : paused
-        ? 'Needs attention'
-        : finishing
-          ? 'Finishing turn'
-          : starting
-            ? 'Starting agent'
-            : live
-              ? 'Agent connected'
-              : 'Ready for follow-up';
+      : task.stageWorkState === 'queued'
+        ? 'Queued to start'
+        : paused
+          ? 'Needs attention'
+          : finishing
+            ? 'Finishing turn'
+            : starting
+              ? 'Starting agent'
+              : live
+                ? 'Agent connected'
+                : 'Ready for follow-up';
   return { live, paused, finishing, starting, canSend, label };
 }

@@ -262,7 +262,9 @@ func (r *launchRepoFake) CurrentSession(context.Context, string, string, string)
 	return runconfig.RunConfig{}, false, nil
 }
 
-func (r *launchRepoFake) ReserveSessionRun(context.Context, runconfig.RunConfig) error { return nil }
+func (r *launchRepoFake) ReserveSessionRun(context.Context, runconfig.RunConfig, int64) error {
+	return nil
+}
 
 func (r *launchRepoFake) RecordPrompt(context.Context, string, string, string) (bool, error) {
 	return false, nil

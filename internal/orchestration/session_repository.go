@@ -9,7 +9,7 @@ import (
 // SessionRepository owns task session selection and atomic run reservation.
 type SessionRepository interface {
 	CurrentSession(context.Context, string, string, string) (runconfig.RunConfig, bool, error)
-	ReserveSessionRun(context.Context, runconfig.RunConfig) error
+	ReserveSessionRun(context.Context, runconfig.RunConfig, int64) error
 }
 
 type directSessionRepository interface {

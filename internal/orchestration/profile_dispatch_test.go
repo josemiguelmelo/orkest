@@ -23,7 +23,7 @@ func (r *profileSessionRepo) CurrentSession(context.Context, string, string, str
 	return r.current, r.exists, nil
 }
 
-func (r *profileSessionRepo) ReserveSessionRun(_ context.Context, c runconfig.RunConfig) error {
+func (r *profileSessionRepo) ReserveSessionRun(_ context.Context, c runconfig.RunConfig, _ int64) error {
 	r.reserved = append(r.reserved, c)
 	return errReservedForTest
 }

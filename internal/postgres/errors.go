@@ -18,7 +18,7 @@ func mapError(err error, notFound, conflict error) error {
 	switch pgErr.Code {
 	case "23503":
 		return notFound
-	case "23505":
+	case "23505", "23001":
 		return conflict
 	default:
 		return err

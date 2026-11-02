@@ -26,7 +26,7 @@ func (q *Queries) DeleteTaskRepositories(ctx context.Context, arg DeleteTaskRepo
 }
 
 const getTask = `-- name: GetTask :one
-SELECT t.id, t.workspace_id, t.title, t.description, t.source_provider, COALESCE(t.source_id, '') AS source_id, COALESCE(t.source_url, '') AS source_url, t.status, COALESCE(t.assignee_agent_id, '') AS assignee_agent_id, t.labels, t.created_at, t.updated_at
+SELECT t.id, t.workspace_id, t.workflow_id, t.title, t.description, t.source_provider, COALESCE(t.source_id, '') AS source_id, COALESCE(t.source_url, '') AS source_url, t.status, COALESCE(t.assignee_agent_id, '') AS assignee_agent_id, t.labels, t.created_at, t.updated_at, t.stage_version, t.stage_work_state, COALESCE(t.status = workflow_final_stage(t.workspace_id,t.workflow_id),false)::boolean AS closed, COALESCE((SELECT s.name FROM workflow_stages s WHERE s.workspace_id=t.workspace_id AND s.workflow_id=t.workflow_id AND s.id=t.status),'')::text AS stage_name, COALESCE((SELECT s.description FROM workflow_stages s WHERE s.workspace_id=t.workspace_id AND s.workflow_id=t.workflow_id AND s.id=t.status),'')::text AS stage_description, EXISTS(SELECT 1 FROM workflow_events e WHERE e.workspace_id=t.workspace_id AND e.task_id=t.id AND e.stage_version=t.stage_version AND e.processed_at IS NULL) AS automation_pending
 FROM tasks t JOIN workspaces w ON w.id = t.workspace_id
 WHERE w.organization_id = $1 AND t.workspace_id = $2 AND t.id = $3
 `
@@ -38,18 +38,25 @@ type GetTaskParams struct {
 }
 
 type GetTaskRow struct {
-	ID              string             `json:"id"`
-	WorkspaceID     string             `json:"workspace_id"`
-	Title           string             `json:"title"`
-	Description     string             `json:"description"`
-	SourceProvider  string             `json:"source_provider"`
-	SourceID        string             `json:"source_id"`
-	SourceUrl       string             `json:"source_url"`
-	Status          string             `json:"status"`
-	AssigneeAgentID string             `json:"assignee_agent_id"`
-	Labels          []string           `json:"labels"`
-	CreatedAt       pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	ID                string             `json:"id"`
+	WorkspaceID       string             `json:"workspace_id"`
+	WorkflowID        string             `json:"workflow_id"`
+	Title             string             `json:"title"`
+	Description       string             `json:"description"`
+	SourceProvider    string             `json:"source_provider"`
+	SourceID          string             `json:"source_id"`
+	SourceUrl         string             `json:"source_url"`
+	Status            string             `json:"status"`
+	AssigneeAgentID   string             `json:"assignee_agent_id"`
+	Labels            []string           `json:"labels"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	StageVersion      int64              `json:"stage_version"`
+	StageWorkState    string             `json:"stage_work_state"`
+	Closed            bool               `json:"closed"`
+	StageName         string             `json:"stage_name"`
+	StageDescription  string             `json:"stage_description"`
+	AutomationPending bool               `json:"automation_pending"`
 }
 
 func (q *Queries) GetTask(ctx context.Context, arg GetTaskParams) (GetTaskRow, error) {
@@ -58,6 +65,7 @@ func (q *Queries) GetTask(ctx context.Context, arg GetTaskParams) (GetTaskRow, e
 	err := row.Scan(
 		&i.ID,
 		&i.WorkspaceID,
+		&i.WorkflowID,
 		&i.Title,
 		&i.Description,
 		&i.SourceProvider,
@@ -68,6 +76,12 @@ func (q *Queries) GetTask(ctx context.Context, arg GetTaskParams) (GetTaskRow, e
 		&i.Labels,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.StageVersion,
+		&i.StageWorkState,
+		&i.Closed,
+		&i.StageName,
+		&i.StageDescription,
+		&i.AutomationPending,
 	)
 	return i, err
 }
@@ -84,50 +98,60 @@ func (q *Queries) GetWorkspaceOrganization(ctx context.Context, id string) (stri
 }
 
 const insertTask = `-- name: InsertTask :one
-INSERT INTO tasks (id, workspace_id, title, description, status, assignee_agent_id, labels)
-SELECT $1, w.id, $3, $4, $5, NULLIF($6, ''), $7 FROM workspaces w WHERE w.id = $2
-RETURNING id, workspace_id, title, description, source_provider, COALESCE(source_id, '') AS source_id, COALESCE(source_url, '') AS source_url, status, COALESCE(assignee_agent_id, '') AS assignee_agent_id, labels, created_at, updated_at
+INSERT INTO tasks AS t (id, workspace_id, workflow_id, title, description, status, assignee_agent_id, labels)
+SELECT $1, w.id, $3, $4, $5, $6, NULLIF($7, ''), $8 FROM workspaces w WHERE w.id = $2
+RETURNING id, workspace_id, workflow_id, title, description, source_provider, COALESCE(source_id, '') AS source_id, COALESCE(source_url, '') AS source_url, status, COALESCE(assignee_agent_id, '') AS assignee_agent_id, labels, created_at, updated_at, stage_version, stage_work_state, COALESCE(status = workflow_final_stage(workspace_id,workflow_id),false)::boolean AS closed, COALESCE((SELECT s.name FROM workflow_stages s WHERE s.workspace_id=t.workspace_id AND s.workflow_id=t.workflow_id AND s.id=t.status),'')::text AS stage_name, COALESCE((SELECT s.description FROM workflow_stages s WHERE s.workspace_id=t.workspace_id AND s.workflow_id=t.workflow_id AND s.id=t.status),'')::text AS stage_description, EXISTS(SELECT 1 FROM workflow_events e WHERE e.workspace_id=t.workspace_id AND e.task_id=t.id AND e.stage_version=t.stage_version AND e.processed_at IS NULL) AS automation_pending
 `
 
 type InsertTaskParams struct {
 	ID          string      `json:"id"`
 	ID_2        string      `json:"id_2"`
+	WorkflowID  string      `json:"workflow_id"`
 	Title       string      `json:"title"`
 	Description string      `json:"description"`
 	Status      string      `json:"status"`
-	Column6     interface{} `json:"column_6"`
+	Column7     interface{} `json:"column_7"`
 	Labels      []string    `json:"labels"`
 }
 
 type InsertTaskRow struct {
-	ID              string             `json:"id"`
-	WorkspaceID     string             `json:"workspace_id"`
-	Title           string             `json:"title"`
-	Description     string             `json:"description"`
-	SourceProvider  string             `json:"source_provider"`
-	SourceID        string             `json:"source_id"`
-	SourceUrl       string             `json:"source_url"`
-	Status          string             `json:"status"`
-	AssigneeAgentID string             `json:"assignee_agent_id"`
-	Labels          []string           `json:"labels"`
-	CreatedAt       pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	ID                string             `json:"id"`
+	WorkspaceID       string             `json:"workspace_id"`
+	WorkflowID        string             `json:"workflow_id"`
+	Title             string             `json:"title"`
+	Description       string             `json:"description"`
+	SourceProvider    string             `json:"source_provider"`
+	SourceID          string             `json:"source_id"`
+	SourceUrl         string             `json:"source_url"`
+	Status            string             `json:"status"`
+	AssigneeAgentID   string             `json:"assignee_agent_id"`
+	Labels            []string           `json:"labels"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	StageVersion      int64              `json:"stage_version"`
+	StageWorkState    string             `json:"stage_work_state"`
+	Closed            bool               `json:"closed"`
+	StageName         string             `json:"stage_name"`
+	StageDescription  string             `json:"stage_description"`
+	AutomationPending bool               `json:"automation_pending"`
 }
 
 func (q *Queries) InsertTask(ctx context.Context, arg InsertTaskParams) (InsertTaskRow, error) {
 	row := q.db.QueryRow(ctx, insertTask,
 		arg.ID,
 		arg.ID_2,
+		arg.WorkflowID,
 		arg.Title,
 		arg.Description,
 		arg.Status,
-		arg.Column6,
+		arg.Column7,
 		arg.Labels,
 	)
 	var i InsertTaskRow
 	err := row.Scan(
 		&i.ID,
 		&i.WorkspaceID,
+		&i.WorkflowID,
 		&i.Title,
 		&i.Description,
 		&i.SourceProvider,
@@ -138,6 +162,12 @@ func (q *Queries) InsertTask(ctx context.Context, arg InsertTaskParams) (InsertT
 		&i.Labels,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.StageVersion,
+		&i.StageWorkState,
+		&i.Closed,
+		&i.StageName,
+		&i.StageDescription,
+		&i.AutomationPending,
 	)
 	return i, err
 }
@@ -279,7 +309,7 @@ func (q *Queries) ListTaskRepositories(ctx context.Context, arg ListTaskReposito
 }
 
 const listTasks = `-- name: ListTasks :many
-SELECT t.id, t.workspace_id, t.title, t.description, t.source_provider, COALESCE(t.source_id, '') AS source_id, COALESCE(t.source_url, '') AS source_url, t.status, COALESCE(t.assignee_agent_id, '') AS assignee_agent_id, t.labels, t.created_at, t.updated_at
+SELECT t.id, t.workspace_id, t.workflow_id, t.title, t.description, t.source_provider, COALESCE(t.source_id, '') AS source_id, COALESCE(t.source_url, '') AS source_url, t.status, COALESCE(t.assignee_agent_id, '') AS assignee_agent_id, t.labels, t.created_at, t.updated_at, t.stage_version, t.stage_work_state, COALESCE(t.status = workflow_final_stage(t.workspace_id,t.workflow_id),false)::boolean AS closed, COALESCE((SELECT s.name FROM workflow_stages s WHERE s.workspace_id=t.workspace_id AND s.workflow_id=t.workflow_id AND s.id=t.status),'')::text AS stage_name, COALESCE((SELECT s.description FROM workflow_stages s WHERE s.workspace_id=t.workspace_id AND s.workflow_id=t.workflow_id AND s.id=t.status),'')::text AS stage_description, EXISTS(SELECT 1 FROM workflow_events e WHERE e.workspace_id=t.workspace_id AND e.task_id=t.id AND e.stage_version=t.stage_version AND e.processed_at IS NULL) AS automation_pending
 FROM tasks t JOIN workspaces w ON w.id = t.workspace_id
 WHERE w.organization_id = $1 AND t.workspace_id = $2
 ORDER BY t.created_at DESC, t.id
@@ -291,18 +321,25 @@ type ListTasksParams struct {
 }
 
 type ListTasksRow struct {
-	ID              string             `json:"id"`
-	WorkspaceID     string             `json:"workspace_id"`
-	Title           string             `json:"title"`
-	Description     string             `json:"description"`
-	SourceProvider  string             `json:"source_provider"`
-	SourceID        string             `json:"source_id"`
-	SourceUrl       string             `json:"source_url"`
-	Status          string             `json:"status"`
-	AssigneeAgentID string             `json:"assignee_agent_id"`
-	Labels          []string           `json:"labels"`
-	CreatedAt       pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	ID                string             `json:"id"`
+	WorkspaceID       string             `json:"workspace_id"`
+	WorkflowID        string             `json:"workflow_id"`
+	Title             string             `json:"title"`
+	Description       string             `json:"description"`
+	SourceProvider    string             `json:"source_provider"`
+	SourceID          string             `json:"source_id"`
+	SourceUrl         string             `json:"source_url"`
+	Status            string             `json:"status"`
+	AssigneeAgentID   string             `json:"assignee_agent_id"`
+	Labels            []string           `json:"labels"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	StageVersion      int64              `json:"stage_version"`
+	StageWorkState    string             `json:"stage_work_state"`
+	Closed            bool               `json:"closed"`
+	StageName         string             `json:"stage_name"`
+	StageDescription  string             `json:"stage_description"`
+	AutomationPending bool               `json:"automation_pending"`
 }
 
 func (q *Queries) ListTasks(ctx context.Context, arg ListTasksParams) ([]ListTasksRow, error) {
@@ -317,6 +354,7 @@ func (q *Queries) ListTasks(ctx context.Context, arg ListTasksParams) ([]ListTas
 		if err := rows.Scan(
 			&i.ID,
 			&i.WorkspaceID,
+			&i.WorkflowID,
 			&i.Title,
 			&i.Description,
 			&i.SourceProvider,
@@ -327,6 +365,12 @@ func (q *Queries) ListTasks(ctx context.Context, arg ListTasksParams) ([]ListTas
 			&i.Labels,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.StageVersion,
+			&i.StageWorkState,
+			&i.Closed,
+			&i.StageName,
+			&i.StageDescription,
+			&i.AutomationPending,
 		); err != nil {
 			return nil, err
 		}
@@ -342,7 +386,7 @@ const updateTask = `-- name: UpdateTask :one
 UPDATE tasks t SET title = $4, description = $5, status = $6, assignee_agent_id = NULLIF($7, ''), labels = $8, updated_at = now()
 FROM workspaces w
 WHERE w.organization_id = $1 AND t.workspace_id = w.id AND t.workspace_id = $2 AND t.id = $3
-RETURNING t.id, t.workspace_id, t.title, t.description, t.source_provider, COALESCE(t.source_id, '') AS source_id, COALESCE(t.source_url, '') AS source_url, t.status, COALESCE(t.assignee_agent_id, '') AS assignee_agent_id, t.labels, t.created_at, t.updated_at
+RETURNING t.id, t.workspace_id, t.workflow_id, t.title, t.description, t.source_provider, COALESCE(t.source_id, '') AS source_id, COALESCE(t.source_url, '') AS source_url, t.status, COALESCE(t.assignee_agent_id, '') AS assignee_agent_id, t.labels, t.created_at, t.updated_at, t.stage_version, t.stage_work_state, COALESCE(t.status = workflow_final_stage(t.workspace_id,t.workflow_id),false)::boolean AS closed, COALESCE((SELECT s.name FROM workflow_stages s WHERE s.workspace_id=t.workspace_id AND s.workflow_id=t.workflow_id AND s.id=t.status),'')::text AS stage_name, COALESCE((SELECT s.description FROM workflow_stages s WHERE s.workspace_id=t.workspace_id AND s.workflow_id=t.workflow_id AND s.id=t.status),'')::text AS stage_description, EXISTS(SELECT 1 FROM workflow_events e WHERE e.workspace_id=t.workspace_id AND e.task_id=t.id AND e.stage_version=t.stage_version AND e.processed_at IS NULL) AS automation_pending
 `
 
 type UpdateTaskParams struct {
@@ -357,18 +401,25 @@ type UpdateTaskParams struct {
 }
 
 type UpdateTaskRow struct {
-	ID              string             `json:"id"`
-	WorkspaceID     string             `json:"workspace_id"`
-	Title           string             `json:"title"`
-	Description     string             `json:"description"`
-	SourceProvider  string             `json:"source_provider"`
-	SourceID        string             `json:"source_id"`
-	SourceUrl       string             `json:"source_url"`
-	Status          string             `json:"status"`
-	AssigneeAgentID string             `json:"assignee_agent_id"`
-	Labels          []string           `json:"labels"`
-	CreatedAt       pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
+	ID                string             `json:"id"`
+	WorkspaceID       string             `json:"workspace_id"`
+	WorkflowID        string             `json:"workflow_id"`
+	Title             string             `json:"title"`
+	Description       string             `json:"description"`
+	SourceProvider    string             `json:"source_provider"`
+	SourceID          string             `json:"source_id"`
+	SourceUrl         string             `json:"source_url"`
+	Status            string             `json:"status"`
+	AssigneeAgentID   string             `json:"assignee_agent_id"`
+	Labels            []string           `json:"labels"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt         pgtype.Timestamptz `json:"updated_at"`
+	StageVersion      int64              `json:"stage_version"`
+	StageWorkState    string             `json:"stage_work_state"`
+	Closed            bool               `json:"closed"`
+	StageName         string             `json:"stage_name"`
+	StageDescription  string             `json:"stage_description"`
+	AutomationPending bool               `json:"automation_pending"`
 }
 
 func (q *Queries) UpdateTask(ctx context.Context, arg UpdateTaskParams) (UpdateTaskRow, error) {
@@ -386,6 +437,7 @@ func (q *Queries) UpdateTask(ctx context.Context, arg UpdateTaskParams) (UpdateT
 	err := row.Scan(
 		&i.ID,
 		&i.WorkspaceID,
+		&i.WorkflowID,
 		&i.Title,
 		&i.Description,
 		&i.SourceProvider,
@@ -396,70 +448,12 @@ func (q *Queries) UpdateTask(ctx context.Context, arg UpdateTaskParams) (UpdateT
 		&i.Labels,
 		&i.CreatedAt,
 		&i.UpdatedAt,
-	)
-	return i, err
-}
-
-const updateTaskIfStatus = `-- name: UpdateTaskIfStatus :one
-UPDATE tasks t SET title = $5, description = $6, status = $7, assignee_agent_id = NULLIF($8, ''), labels = $9, updated_at = now()
-FROM workspaces w
-WHERE w.organization_id = $1 AND t.workspace_id = w.id AND t.workspace_id = $2 AND t.id = $3 AND t.status = $4
-RETURNING t.id, t.workspace_id, t.title, t.description, t.source_provider, COALESCE(t.source_id, '') AS source_id, COALESCE(t.source_url, '') AS source_url, t.status, COALESCE(t.assignee_agent_id, '') AS assignee_agent_id, t.labels, t.created_at, t.updated_at
-`
-
-type UpdateTaskIfStatusParams struct {
-	OrganizationID string      `json:"organization_id"`
-	WorkspaceID    string      `json:"workspace_id"`
-	ID             string      `json:"id"`
-	Status         string      `json:"status"`
-	Title          string      `json:"title"`
-	Description    string      `json:"description"`
-	Status_2       string      `json:"status_2"`
-	Column8        interface{} `json:"column_8"`
-	Labels         []string    `json:"labels"`
-}
-
-type UpdateTaskIfStatusRow struct {
-	ID              string             `json:"id"`
-	WorkspaceID     string             `json:"workspace_id"`
-	Title           string             `json:"title"`
-	Description     string             `json:"description"`
-	SourceProvider  string             `json:"source_provider"`
-	SourceID        string             `json:"source_id"`
-	SourceUrl       string             `json:"source_url"`
-	Status          string             `json:"status"`
-	AssigneeAgentID string             `json:"assignee_agent_id"`
-	Labels          []string           `json:"labels"`
-	CreatedAt       pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt       pgtype.Timestamptz `json:"updated_at"`
-}
-
-func (q *Queries) UpdateTaskIfStatus(ctx context.Context, arg UpdateTaskIfStatusParams) (UpdateTaskIfStatusRow, error) {
-	row := q.db.QueryRow(ctx, updateTaskIfStatus,
-		arg.OrganizationID,
-		arg.WorkspaceID,
-		arg.ID,
-		arg.Status,
-		arg.Title,
-		arg.Description,
-		arg.Status_2,
-		arg.Column8,
-		arg.Labels,
-	)
-	var i UpdateTaskIfStatusRow
-	err := row.Scan(
-		&i.ID,
-		&i.WorkspaceID,
-		&i.Title,
-		&i.Description,
-		&i.SourceProvider,
-		&i.SourceID,
-		&i.SourceUrl,
-		&i.Status,
-		&i.AssigneeAgentID,
-		&i.Labels,
-		&i.CreatedAt,
-		&i.UpdatedAt,
+		&i.StageVersion,
+		&i.StageWorkState,
+		&i.Closed,
+		&i.StageName,
+		&i.StageDescription,
+		&i.AutomationPending,
 	)
 	return i, err
 }

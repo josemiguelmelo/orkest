@@ -4,14 +4,15 @@ import { filterTasks, taskInput, type TaskFormValues } from './model';
 const values: TaskFormValues = {
   title: 'Edited',
   description: 'Changed',
+  workflowId: 'workspace',
   status: 'todo',
   assigneeAgentId: '',
   labels: 'new',
   repositoryIds: [],
 };
 describe('task updates', () => {
-  it('requires an existing task for a work-start transition', () => {
-    expect(() => taskInput({ ...values, status: 'in_progress' })).toThrow();
+  it('accepts configured stage IDs', () => {
+    expect(taskInput({ ...values, status: 'custom-stage' }).status).toBe('custom-stage');
     expect(taskInput({ ...values, status: 'in_progress' }, task).status).toBe('in_progress');
     expect(
       taskInput({ ...values, status: 'in_progress' }, { ...task, status: 'in_progress' }).status,
@@ -26,7 +27,9 @@ describe('task updates', () => {
     expect(input.status).toBe('in_review');
   });
   it('does not reopen done tasks', () => {
-    expect(() => taskInput(values, { ...task, status: 'done' })).toThrow('cannot be reopened');
+    expect(() => taskInput(values, { ...task, status: 'done', closed: true })).toThrow(
+      'cannot be reopened',
+    );
   });
   it('filters by text, status and agent together', () => {
     expect(

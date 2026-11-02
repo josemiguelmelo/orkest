@@ -10,6 +10,9 @@ const Home = lazy(() =>
 const Organization = lazy(() =>
   import('../features/settings/organizations').then((m) => ({ default: m.OrganizationPage })),
 );
+const WorkflowSettings = lazy(() =>
+  import('../features/workflow/workflow').then((m) => ({ default: m.WorkflowPage })),
+);
 const Tasks = lazy(() => import('../features/tasks/tasks').then((m) => ({ default: m.TasksPage })));
 const Task = lazy(() => import('../features/tasks/tasks').then((m) => ({ default: m.TaskPage })));
 const Profiles = lazy(() =>
@@ -84,8 +87,9 @@ const workspace = createRoute({
 });
 export const taskSearchSchema = z.object({
   view: z.enum(['board', 'list']).catch('board'),
+  workflow: z.string().catch(''),
   q: z.string().catch(''),
-  status: z.enum(['all', 'todo', 'in_progress', 'in_review', 'done']).catch('all'),
+  status: z.string().catch('all'),
   agent: z.string().catch(''),
   sort: z.enum(['updated', 'title']).catch('updated'),
 });
@@ -146,6 +150,11 @@ const integrations = createRoute({
   path: 'integrations',
   component: loading(Integrations),
 });
+const workflowSettings = createRoute({
+  getParentRoute: () => workspace,
+  path: 'workflow',
+  component: loading(WorkflowSettings),
+});
 const settings = createRoute({
   getParentRoute: () => workspace,
   path: 'settings',
@@ -170,6 +179,7 @@ const tree = root.addChildren([
       mcp,
       integrations,
       settings,
+      workflowSettings,
     ]),
   ]),
 ]);

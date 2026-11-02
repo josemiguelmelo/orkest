@@ -37,6 +37,8 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/taskintegration"
 	githubcloud "github.com/josemiguelmelo/orkest/internal/taskintegration/providers/githubcloud"
 	jiraserver "github.com/josemiguelmelo/orkest/internal/taskintegration/providers/jiraserver"
+	"github.com/josemiguelmelo/orkest/internal/workflow"
+	workflowautomation "github.com/josemiguelmelo/orkest/internal/workflowautomation"
 	"github.com/josemiguelmelo/orkest/internal/workspace"
 	"github.com/josemiguelmelo/orkest/internal/workspaceenv"
 )
@@ -156,8 +158,11 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	tasks := task.NewService(postgres.NewTaskPostgresRepository(database), workspaces, dispatcher)
-	integrations := taskintegration.NewTaskIntegrationService(postgres.NewPostgresTaskIntegrationRepository(database), secretBox, workspaces, organizations, postgres.NewPostgresImportedTaskRepository(database), githubcloud.NewGitHubCloudProvider(), jiraserver.NewJiraServerProvider())
+	taskRepository := postgres.NewTaskPostgresRepository(database)
+	workflows := workflow.NewWorkflowConfigurationService(postgres.NewWorkflowDefinitionPostgresRepository(database), workspaces)
+	taskWorkflows := workflowautomation.NewWorkflowAutomationService(postgres.NewTaskTransitionPostgresRepository(database), postgres.NewAutomationEventPostgresRepository(database), workspaces, workflowautomation.WorkflowRuleEvaluator{})
+	tasks := task.NewTaskService(taskRepository, postgres.NewTaskCreationPostgresRepository(database), postgres.NewTaskUpdatePostgresRepository(database), taskWorkflows, workspaces)
+	integrations := taskintegration.NewTaskIntegrationService(postgres.NewPostgresTaskIntegrationRepository(database), secretBox, workspaces, organizations, postgres.NewPostgresImportedTaskRepository(database), tasks, githubcloud.NewGitHubCloudProvider(), jiraserver.NewJiraServerProvider())
 	runnerCtx, stopRunner := context.WithCancel(ctx)
 	var runnerWG sync.WaitGroup
 	if os.Getenv("ORKEST_EXECUTION_IMAGE_REPOSITORY") != "" {
@@ -195,7 +200,11 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 	}
 	runnerWG.Add(1)
 	go func() { defer runnerWG.Done(); integrations.Run(runnerCtx) }()
-	router, err := httpapi.NewRouter(users, organizations, workspaces, agents, codeRepositories, tasks, integrations, mcpServerService, skillCatalog, launchService, executionProfileService, agentRuntimeProfiles, directChats, workspaceEnvironment)
+	execution := workflowautomation.NewWorkflowExecutionService(postgres.NewExecutionCommandPostgresRepository(database), tasks, dispatcher, logger)
+	worker := workflowautomation.NewWorkflowAutomationWorker(taskWorkflows, execution, logger)
+	runnerWG.Add(1)
+	go func() { defer runnerWG.Done(); worker.Run(runnerCtx) }()
+	router, err := httpapi.NewRouter(users, organizations, workspaces, agents, codeRepositories, tasks, integrations, mcpServerService, skillCatalog, launchService, executionProfileService, agentRuntimeProfiles, directChats, workflows, taskWorkflows, workspaceEnvironment)
 	if err != nil {
 		stopRunner()
 		runnerWG.Wait()

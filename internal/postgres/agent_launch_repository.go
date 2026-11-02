@@ -11,6 +11,7 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/core/secretbox"
 	"github.com/josemiguelmelo/orkest/internal/orchestration"
 	"github.com/josemiguelmelo/orkest/internal/postgres/sqlc"
+	"github.com/josemiguelmelo/orkest/internal/workflow"
 )
 
 type AgentLaunchPostgresRepository struct {
@@ -105,12 +106,24 @@ func (r *AgentLaunchPostgresRepository) SetLaunchStatus(ctx context.Context, run
 	if err := q.SetAgentLaunchStatus(ctx, sqlc.SetAgentLaunchStatusParams{RunID: runID, Status: string(status)}); err != nil {
 		return err
 	}
-	if status == orchestration.LaunchCompleted {
-		if err := q.CompleteTaskForRun(ctx, runID); err != nil {
+	if status == orchestration.LaunchCompleted || status == orchestration.LaunchFailed {
+		if err := enqueueWorkflowOutcome(ctx, q, runID, status == orchestration.LaunchCompleted); err != nil {
 			return err
 		}
 	}
 	return tx.Commit(ctx)
+}
+
+func enqueueWorkflowOutcome(ctx context.Context, q *sqlc.Queries, runID string, success bool) error {
+	run, err := q.RunWorkflowEntry(ctx, runID)
+	if err != nil {
+		return err
+	}
+	eventType := workflow.RunFailed
+	if success {
+		eventType = workflow.RunSucceeded
+	}
+	return q.EnqueueWorkflowEvent(ctx, sqlc.EnqueueWorkflowEventParams{ID: runID + ":outcome", WorkspaceID: run.WorkspaceID, TaskID: run.TaskID, StageVersion: run.StageVersion, ActorID: run.ActorID.String, EventType: string(eventType), RunID: runID, CausationID: runID, CorrelationID: runID})
 }
 
 func (r *AgentLaunchPostgresRepository) ListTaskLaunches(ctx context.Context, orgID, workspaceID, taskID string) ([]orchestration.Launch, error) {

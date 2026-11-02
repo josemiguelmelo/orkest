@@ -71,6 +71,7 @@ export function validateConfig(
 }
 export function integrationBody(
   values: {
+    workflowId: string;
     provider: string;
     name: string;
     enabled: boolean;
@@ -81,6 +82,7 @@ export function integrationBody(
   config: Record<string, JsonValue>,
 ) {
   return {
+    workflowId: values.workflowId,
     provider: values.provider,
     name: values.name,
     enabled: values.enabled,

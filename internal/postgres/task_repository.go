@@ -2,7 +2,6 @@ package postgres
 
 import (
 	"context"
-	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	modelerrors "github.com/josemiguelmelo/orkest/internal/core/model/errors"
@@ -19,7 +18,7 @@ func NewTaskPostgresRepository(database *PostgresDatabase) *TaskPostgresReposito
 	return &TaskPostgresRepository{queries: sqlc.New(database.pool), pool: database.pool}
 }
 
-var _ task.Repository = (*TaskPostgresRepository)(nil)
+var _ task.TaskRepository = (*TaskPostgresRepository)(nil)
 
 func (r *TaskPostgresRepository) Tasks(ctx context.Context, orgID, workspaceID string) ([]task.Task, error) {
 	rows, err := r.queries.ListTasks(ctx, sqlc.ListTasksParams{OrganizationID: orgID, WorkspaceID: workspaceID})
@@ -28,7 +27,7 @@ func (r *TaskPostgresRepository) Tasks(ctx context.Context, orgID, workspaceID s
 	}
 	out := make([]task.Task, 0, len(rows))
 	for _, row := range rows {
-		t := taskFrom(row.ID, row.WorkspaceID, row.Title, row.Description, row.SourceProvider, row.SourceID, row.SourceUrl, row.Status, row.AssigneeAgentID, row.Labels, row.CreatedAt.Time, row.UpdatedAt.Time)
+		t := taskFromRow(sqlc.GetTaskRow(row))
 		if err := r.fillRepositories(ctx, &t); err != nil {
 			return nil, err
 		}
@@ -42,81 +41,11 @@ func (r *TaskPostgresRepository) Task(ctx context.Context, orgID, workspaceID, i
 	if err != nil {
 		return task.Task{}, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
 	}
-	t := taskFrom(row.ID, row.WorkspaceID, row.Title, row.Description, row.SourceProvider, row.SourceID, row.SourceUrl, row.Status, row.AssigneeAgentID, row.Labels, row.CreatedAt.Time, row.UpdatedAt.Time)
+	t := taskFromRow(sqlc.GetTaskRow(row))
 	if err = r.fillRepositories(ctx, &t); err != nil {
 		return task.Task{}, err
 	}
 	return t, nil
-}
-
-func (r *TaskPostgresRepository) CreateTask(ctx context.Context, id, workspaceID string, in task.TaskInput) (task.Task, error) {
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return task.Task{}, err
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	q := r.queries.WithTx(tx)
-	row, err := q.InsertTask(ctx, sqlc.InsertTaskParams{ID: id, ID_2: workspaceID, Title: in.Title, Description: in.Description, Status: in.Status, Column6: in.AssigneeAgentID, Labels: in.Labels})
-	if err != nil {
-		return task.Task{}, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
-	}
-	for _, repositoryID := range in.RepositoryIDs {
-		if err = q.InsertTaskRepository(ctx, sqlc.InsertTaskRepositoryParams{WorkspaceID: workspaceID, TaskID: id, RepositoryID: repositoryID}); err != nil {
-			return task.Task{}, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
-		}
-	}
-	if err = tx.Commit(ctx); err != nil {
-		return task.Task{}, err
-	}
-	t := taskFrom(row.ID, row.WorkspaceID, row.Title, row.Description, row.SourceProvider, row.SourceID, row.SourceUrl, row.Status, row.AssigneeAgentID, row.Labels, row.CreatedAt.Time, row.UpdatedAt.Time)
-	t.Repositories, err = r.taskRepositories(ctx, workspaceID, id)
-	return t, err
-}
-
-func (r *TaskPostgresRepository) UpdateTask(ctx context.Context, orgID, workspaceID, id string, in task.TaskInput) (task.Task, error) {
-	return r.updateTask(ctx, orgID, workspaceID, id, in, "")
-}
-
-func (r *TaskPostgresRepository) UpdateTaskIfStatus(ctx context.Context, orgID, workspaceID, id, expectedStatus string, in task.TaskInput) (task.Task, error) {
-	return r.updateTask(ctx, orgID, workspaceID, id, in, expectedStatus)
-}
-
-func (r *TaskPostgresRepository) updateTask(ctx context.Context, orgID, workspaceID, id string, in task.TaskInput, expectedStatus string) (task.Task, error) {
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return task.Task{}, err
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	q := r.queries.WithTx(tx)
-	var updated task.Task
-	if expectedStatus == "" {
-		var row sqlc.UpdateTaskRow
-		row, err = q.UpdateTask(ctx, sqlc.UpdateTaskParams{OrganizationID: orgID, WorkspaceID: workspaceID, ID: id, Title: in.Title, Description: in.Description, Status: in.Status, Column7: in.AssigneeAgentID, Labels: in.Labels})
-		updated = taskFrom(row.ID, row.WorkspaceID, row.Title, row.Description, row.SourceProvider, row.SourceID, row.SourceUrl, row.Status, row.AssigneeAgentID, row.Labels, row.CreatedAt.Time, row.UpdatedAt.Time)
-	} else {
-		var row sqlc.UpdateTaskIfStatusRow
-		row, err = q.UpdateTaskIfStatus(ctx, sqlc.UpdateTaskIfStatusParams{OrganizationID: orgID, WorkspaceID: workspaceID, ID: id, Status: expectedStatus, Title: in.Title, Description: in.Description, Status_2: in.Status, Column8: in.AssigneeAgentID, Labels: in.Labels})
-		updated = taskFrom(row.ID, row.WorkspaceID, row.Title, row.Description, row.SourceProvider, row.SourceID, row.SourceUrl, row.Status, row.AssigneeAgentID, row.Labels, row.CreatedAt.Time, row.UpdatedAt.Time)
-	}
-	if err != nil {
-		if expectedStatus != "" {
-			return task.Task{}, mapError(err, modelerrors.ErrConflict, modelerrors.ErrConflict)
-		}
-		return task.Task{}, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
-	}
-	if err = q.DeleteTaskRepositories(ctx, sqlc.DeleteTaskRepositoriesParams{WorkspaceID: workspaceID, TaskID: id}); err != nil {
-		return task.Task{}, err
-	}
-	for _, repositoryID := range in.RepositoryIDs {
-		if err = q.InsertTaskRepository(ctx, sqlc.InsertTaskRepositoryParams{WorkspaceID: workspaceID, TaskID: id, RepositoryID: repositoryID}); err != nil {
-			return task.Task{}, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
-		}
-	}
-	if err = tx.Commit(ctx); err != nil {
-		return task.Task{}, err
-	}
-	updated.Repositories, err = r.taskRepositories(ctx, workspaceID, id)
-	return updated, err
 }
 
 func (r *TaskPostgresRepository) Comments(ctx context.Context, orgID, workspaceID, taskID string) ([]task.Comment, error) {
@@ -162,9 +91,11 @@ func (r *TaskPostgresRepository) taskRepositories(ctx context.Context, workspace
 	return out, nil
 }
 
-func taskFrom(id, workspaceID, title, description, sourceProvider, sourceID, sourceURL, status, assignee string, labels []string, created, updated time.Time) task.Task {
-	if labels == nil {
-		labels = []string{}
+// All task queries return the same projection; conversions at call sites are
+// checked by the compiler when SQL generation changes that projection.
+func taskFromRow(row sqlc.GetTaskRow) task.Task {
+	if row.Labels == nil {
+		row.Labels = []string{}
 	}
-	return task.Task{ID: id, WorkspaceID: workspaceID, Title: title, Description: description, SourceProvider: sourceProvider, SourceID: sourceID, SourceURL: sourceURL, Status: status, AssigneeAgentID: assignee, Labels: labels, Repositories: []task.RepositoryRef{}, CreatedAt: created, UpdatedAt: updated}
+	return task.Task{ID: row.ID, WorkspaceID: row.WorkspaceID, WorkflowID: row.WorkflowID, Title: row.Title, Description: row.Description, SourceProvider: row.SourceProvider, SourceID: row.SourceID, SourceURL: row.SourceUrl, Status: row.Status, AssigneeAgentID: row.AssigneeAgentID, Labels: row.Labels, CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time, StageVersion: row.StageVersion, StageWorkState: task.WorkState(row.StageWorkState), AutomationPending: row.AutomationPending, Closed: row.Closed, StageName: row.StageName, StageDescription: row.StageDescription, Repositories: []task.RepositoryRef{}}
 }

@@ -3,11 +3,16 @@ package httpapi
 import (
 	"net/http"
 
+	workflowautomation "github.com/josemiguelmelo/orkest/internal/workflowautomation"
+
 	"github.com/go-chi/chi/v5"
 	"github.com/josemiguelmelo/orkest/internal/task"
 )
 
-type taskAPI struct{ tasks *task.Service }
+type taskAPI struct {
+	tasks      *task.TaskService
+	automation *workflowautomation.WorkflowAutomationService
+}
 
 func (a taskAPI) routes(r chi.Router) {
 	const prefix = "/organizations/{orgID}/workspaces/{workspaceID}"
@@ -17,6 +22,7 @@ func (a taskAPI) routes(r chi.Router) {
 		r.Route("/{taskID}", func(r chi.Router) {
 			r.Get("/", a.getTask)
 			r.Put("/", a.updateTask)
+			r.Post("/transitions", a.transition)
 			r.Get("/comments", a.listComments)
 			r.Post("/comments", a.addComment)
 		})
@@ -65,4 +71,13 @@ func (a taskAPI) addComment(w http.ResponseWriter, r *http.Request) {
 	}
 	v, e := a.tasks.AddComment(r.Context(), currentUserID(r), chi.URLParam(r, "orgID"), chi.URLParam(r, "workspaceID"), chi.URLParam(r, "taskID"), in.Body)
 	respond(w, v, e, http.StatusCreated)
+}
+
+func (a taskAPI) transition(w http.ResponseWriter, r *http.Request) {
+	var in workflowautomation.TransitionRequest
+	if !decodeBody(w, r, &in) {
+		return
+	}
+	value, err := a.automation.Transition(r.Context(), currentUserID(r), chi.URLParam(r, "orgID"), chi.URLParam(r, "workspaceID"), chi.URLParam(r, "taskID"), in)
+	respond(w, value, err, http.StatusOK)
 }

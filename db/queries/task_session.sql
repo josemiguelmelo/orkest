@@ -37,12 +37,6 @@ UPDATE agent_prompt_outbox SET delivered = true WHERE run_id = $1 AND command_id
 SELECT run_id FROM agent_launches WHERE workspace_id = $1 AND task_id = $2
 AND status IN ('starting', 'process_started', 'ready', 'completed_pending_close', 'failed_pending_close') LIMIT 1;
 
--- name: CompleteTaskForRun :exec
-UPDATE tasks SET status = 'in_review', updated_at = now()
-FROM agent_launches AS launch
-WHERE launch.run_id = $1 AND tasks.id = launch.task_id
-AND tasks.workspace_id = launch.workspace_id AND tasks.status = 'in_progress';
-
 -- name: FindTaskCommand :one
 SELECT prompt FROM agent_prompt_outbox AS command
 JOIN agent_launches AS launch USING (run_id)

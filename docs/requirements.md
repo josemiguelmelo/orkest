@@ -15,18 +15,18 @@ Orkest is a platform for orchestrating, monitoring, and interacting with AI agen
 - Provide built-in tools for communicating with the core platform; user-defined tools are outside MVP scope.
 - Agent definitions select one of two permission policies across supported runtimes: `ask` preserves interactive approval behavior and forwards runtime approval requests to the task UI; `autonomous` configures the provider to proceed without interactive approval inside its isolated task environment. Native sandbox behavior can vary by provider. Existing agents default to `ask`.
 - Support manual task creation and tasks imported from GitHub Projects v2 issue and draft issue items.
-- Require users to assign tasks to specific team members and manually move tasks to in progress.
+- Users can assign and start tasks explicitly; workspace workflow configuration may assign agents, auto-start work on stage entry, and advance after successful completion.
 - Support reusable agent definitions and workspace teams with individual members providing execution slots.
 - Execute agents using Docker behind an executor abstraction suitable for future implementations such as Kubernetes.
 - Provide a Local executor for trusted single-user development that starts host processes without task isolation; Docker remains the default executor.
 - Build agentctl as the bridge between the platform and agent ACP sessions in execution environments.
 - Support task-specific chat, agent approval requests, cancellation, and recovery after platform or executor interruption. Recovery proposals and provider limitations are described in section 7.
 - Support HTTP MCP servers; stdio MCP servers are outside the MVP.
-- Start with a simple workflow: todo, in progress, in review, done.
+- Support workspace-configurable ordered stages, seeded with todo, in progress, in review, done.
 - Allow a task to involve multiple repositories registered in its workspace.
 - Treat external systems as authoritative for imported task content; users edit that content at the source.
 
-Automatic assignment and automatic movement into in progress are outside the MVP. OpenCode, Claude Code, Codex, GitHub Copilot CLI, and Kiro CLI are supported through pinned runtime adapters. Codex uses the ACP adapter and an OpenAI model selection; API-key credentials are provided through workspace secrets, and Local development can use the host Codex login described above. GitHub Copilot CLI uses ACP and a GitHub Copilot model selection; credentials are provided through workspace secrets. Kiro CLI uses ACP V3 and the `kiro` model provider; `KIRO_API_KEY` is supplied through workspace secrets.
+Workflow stage assignment and event-driven start/movement rules are configured explicitly by workspace administrators; automatic selection of unrelated tasks remains outside the MVP. OpenCode, Claude Code, Codex, GitHub Copilot CLI, and Kiro CLI are supported through pinned runtime adapters. Codex uses the ACP adapter and an OpenAI model selection; API-key credentials are provided through workspace secrets, and Local development can use the host Codex login described above. GitHub Copilot CLI uses ACP and a GitHub Copilot model selection; credentials are provided through workspace secrets. Kiro CLI uses ACP V3 and the `kiro` model provider; `KIRO_API_KEY` is supplied through workspace secrets.
 
 For Local development, Orkest uses the host Codex auth file at
 `~/.codex/auth.json` when present; `ORKEST_CODEX_AUTH_FILE` overrides the path.
@@ -73,13 +73,13 @@ Deleting an assigned agent definition clears that task assignment while preservi
 
 Tasks may be created in Orkest or imported from an integration. Imported tasks retain their source identity and a link to the source. Source-managed fields cannot be edited in Orkest.
 
-Users assign tasks to workspace agents. Only a user can initiate work by moving a task into in progress. Linking execution slots/team members to these agents is part of the team and orchestration work. Agent completion must not automatically initiate another task.
+Users and configured workflow stages assign tasks to workspace agents. Users initiate work explicitly or through administrator-configured stage entry automation. Linking execution slots/team members to these agents is part of the team and orchestration work. Agent completion must not automatically initiate another task.
 
 Orkest manages its own assignment, execution, and agent chat without updating source status. Imported title, description, labels, and source URL remain source-managed. When a source issue is closed, the imported task moves to done; when an item is removed from an integration's selected source or no longer matches its filters, its imported task is removed from Orkest. Source comment synchronization remains open.
 
 ### 3.4 Integration
 
-An integration connects a workspace to an external task system, imports tasks, and keeps source-managed task data synchronized. GitHub Cloud Projects v2 and Jira Server are the initial implementations. Each source is configured and enabled per workspace, selects source tasks using label filters, and is polled on a configurable interval. GitHub Cloud sources select a Projects v2 board URL; Jira sources select project keys on their configured server.
+An integration connects a workspace to an external task system, imports tasks, and keeps source-managed task data synchronized. GitHub Cloud Projects v2 and Jira Server are the initial implementations. Each source is configured and enabled per workspace, selects one workflow and source tasks using label filters, and is polled on a configurable interval. Imported tasks are associated with that workflow. GitHub Cloud sources select a Projects v2 board URL; Jira sources select project keys on their configured server.
 
 Integration implementations must conform to a common contract so another task system can be added through a new implementation class without changing the core task or orchestration logic. Each provider owns a typed configuration, strict validation, and a machine-readable config schema. The authenticated provider catalog exposes these schemas to setup clients. Provider configuration, credentials, and source-specific mapping may differ.
 
@@ -153,9 +153,15 @@ The executor contract must cover environment creation, startup, connectivity, st
 
 ### 3.10 Workflow
 
-The initial workflow consists of todo → in progress → in review → done. Assignment and movement into in progress require explicit user actions. Workflow stages are fixed for the initial task API. Done tasks cannot be reopened in this initial slice.
+Workspaces have one or more configurable task boards. Every task selects a workflow; source integrations select one for imported tasks. Stages have stable IDs, names, descriptions, display order and an optional responsible agent. Explicit initial and closed stage references determine task entry and closure independently of display order. Occupied stages and referenced workflows cannot be deleted.
 
-Successful agent completion moves the task into review and releases its slot. Starting another work step after review requires an explicit user action in the platform UI and moves the task back into progress. Only users can mark tasks done. Reopening done tasks is not supported in the initial task API. A failed or interrupted execution leaves its task in progress with a visible failed/interrupted execution indicator until a user retries or changes its status. Infrastructure recovery may continue the existing interrupted work step according to section 7; ordinary task failure does not trigger an automatic new attempt. A workflow status is distinct from execution health.
+Confirmed: automation is event-driven using durable PostgreSQL events and explicit rules. Stage-entry rules may start assigned work. Successful-run and manual-completion rules independently move tasks to explicit destinations. At most one enabled rule matches an event and source stage. Closed stages cannot have outgoing automation, and closed tasks cannot reopen. Failures, cancellation and interaction waits never advance or retry automatically. Agent completion may continue the same task through configured rules; it never selects another task.
+
+Task movement applies destination assignment and atomically records a stage-entry event; execution follows asynchronously when configured. Missing execution prerequisites surface as failed work indicators without undoing committed movement. Explicit starts remain separate user commands. Workflow position, pending automation and execution health are separate concepts.
+
+Workspace admins and inherited organization owners/admins configure workflows. Members can transition tasks; viewers are read-only. Each event is evaluated against the latest saved configuration under the workflow lock. Saving configuration does not itself emit events, start execution or alter active runtime settings. Event acknowledgement, task movement, history and resulting commands commit atomically. Stable identities, stage-entry versions and run identities prevent replay and stale-event effects. See [workspace workflows](workflows.md) for API, migration and recovery semantics.
+
+Task artifacts and external PR-triggered rules are future extensions. Artifacts will belong to tasks with optional producing-run/stage-entry identity. PR review outcomes and their conditions must be defined with the integration; no PR webhook ingestion is currently implemented.
 
 ### 3.11 Task Run — proposed supporting concept
 
@@ -350,7 +356,7 @@ Event retention, recovery time targets, host-loss guarantees, and overall availa
 - Invitations and external identity-to-membership provisioning beyond first-login user creation.
 - Permission policies are selected per agent definition, not workspace-wide. The initial choices are `ask` (the default) and `autonomous`; runtime adapters translate the selected value into native provider configuration. The setting is snapshotted per task session.
 - Pinned releases for supported runtimes, default model selection, and validated recovery behavior.
-- Whether workflows are fixed for MVP or configurable per workspace.
+- Multiple workflows per workspace are implemented; external event conditions remain deferred.
 - Internal platform tool exposure mechanism and exact allowed operations; custom tool registration is deferred.
 - GitHub import scope, comment synchronization, webhook/polling behavior, and issue-close semantics.
 - Docker deployment location, environment persistence, resource limits, and credential provisioning.

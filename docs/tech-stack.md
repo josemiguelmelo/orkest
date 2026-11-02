@@ -185,3 +185,23 @@ Deployments that independently applied a GitLab-only version 23 must reconcile
 that migration history and task-repository schema before using this numbering;
 do not blindly relabel an existing Goose version. Local startup and fresh-schema
 migration verification now succeed.
+
+## Workspace workflows
+
+`internal/workflow` owns board, stage and rule configuration through
+`WorkflowConfigurationService`. `internal/task` owns task CRUD, imported content
+and lifecycle through `TaskService`. Creation initializes the configured first
+stage and emits a durable entry event. Updates keep content and requested stage
+changes in one transaction, using a task-owned `TaskWorkflowPlanner` interface.
+
+`internal/workflowautomation` implements stage transitions and rule evaluation in
+`WorkflowAutomationService`; `WorkflowExecutionService` reconciles and delivers
+start commands through orchestration. `WorkflowAutomationWorker` only schedules
+these services. Neither task nor workflow imports the automation package.
+
+PostgreSQL adapters load locked snapshots and persist service decisions, history,
+inbox acknowledgements and command intent atomically. Definition reference checks
+also run as service policy against locked facts. Source import stage decisions
+are explicit SQL inputs; query code is generated with sqlc. Agent launch and
+recovery remain in orchestration. No broker or generic workflow engine is added.
+See [workflow architecture and propagation](workflows.md).

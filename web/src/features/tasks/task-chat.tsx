@@ -120,7 +120,7 @@ export function TaskChat({ task, direct = false }: { task: Task; direct?: boolea
         );
       } else {
         // A run can end before the task-status refresh arrives. Explicitly start
-        // the next step from either review or in_progress using the saved session.
+        // another work step in the current workflow stage using the saved session.
         await data(
           sdk.updateTask({
             ...command,
@@ -128,7 +128,8 @@ export function TaskChat({ task, direct = false }: { task: Task; direct?: boolea
             body: {
               title: task.title,
               description: task.description,
-              status: 'in_progress',
+              status: task.status,
+              stageVersion: task.stageVersion ?? 1,
               startWork: true,
               assigneeAgentId: task.assigneeAgentId ?? '',
               labels: task.labels,
@@ -168,7 +169,7 @@ export function TaskChat({ task, direct = false }: { task: Task; direct?: boolea
     ? 'You are viewing an earlier session.'
     : !permissions.editWorkspace
       ? 'You have view-only access to this conversation.'
-      : task.status === 'done'
+      : (task.closed ?? task.status === 'done')
         ? 'This task is done. Its conversation is read-only.'
         : !task.assigneeAgentId
           ? 'Assign an agent to continue this conversation.'
@@ -411,7 +412,7 @@ export function TaskChat({ task, direct = false }: { task: Task; direct?: boolea
             onChange={(event) => setText(event.target.value)}
             placeholder="Ask a question or describe what to change…"
             disabled={
-              !permissions.editWorkspace || archived || task.status === 'done' || action.pending
+              !permissions.editWorkspace || archived || (task.closed ?? task.status === 'done') || action.pending
             }
             aria-describedby={`chat-hint-${task.id}`}
             onKeyDown={(event) => {
@@ -427,7 +428,7 @@ export function TaskChat({ task, direct = false }: { task: Task; direct?: boolea
                 <Terminal size={12} />
                 {direct ? 'Direct chat' : 'Task context'}
               </span>
-              {!direct && latest && !archived && permissions.editWorkspace && task.status !== 'done' && (
+              {!direct && latest && !archived && permissions.editWorkspace && !(task.closed ?? task.status === 'done') && (
                 <select
                   aria-label="Session for next message"
                   value={nextMode}

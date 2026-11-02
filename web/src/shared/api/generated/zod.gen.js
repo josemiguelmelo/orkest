@@ -65,23 +65,70 @@ export const zMembership = z.object({
         'viewer'
     ])
 });
+export const zWorkflowStage = z.object({
+    id: z.string().min(1).max(100),
+    name: z.string().min(1).max(200),
+    description: z.string().max(2000),
+    responsibleAgentId: z.string()
+});
+export const zWorkflowAutomationRule = z.object({
+    id: z.string().min(1).max(100),
+    enabled: z.boolean(),
+    event: z.enum([
+        'stage_entered',
+        'run_succeeded',
+        'stage_completed'
+    ]),
+    sourceStageId: z.string(),
+    action: z.enum(['move_task', 'start_work']),
+    targetStageId: z.string().optional()
+});
+export const zWorkflowInput = z.object({
+    name: z.string().min(1).max(200)
+});
+export const zWorkspaceWorkflow = z.object({
+    id: z.string(),
+    name: z.string().min(1).max(200),
+    version: z.coerce.bigint().gte(BigInt(1)).max(BigInt('9223372036854775807'), { error: 'Invalid value: Expected int64 to be <= 9223372036854775807' }),
+    initialStageId: z.string(),
+    closedStageId: z.string(),
+    rules: z.array(zWorkflowAutomationRule).max(200),
+    configuredBy: z.string().optional(),
+    stages: z.array(zWorkflowStage).min(1).max(50)
+});
+export const zTaskTransition = z.object({
+    stageId: z.string().optional(),
+    stageVersion: z.coerce.bigint().gte(BigInt(1)).max(BigInt('9223372036854775807'), { error: 'Invalid value: Expected int64 to be <= 9223372036854775807' }),
+    action: z.enum([
+        'move',
+        'start',
+        'complete'
+    ]),
+    commandId: z.string().min(1).max(200),
+    sessionMode: z.enum(['continue', 'new']).optional(),
+    promptText: z.string().max(262144).optional()
+});
 export const zTaskInput = z.object({
     startWork: z.boolean().optional(),
     sessionMode: z.enum(['continue', 'new']).optional(),
     promptText: z.string().max(262144).optional(),
     commandId: z.string().max(200).optional(),
     title: z.string().min(1).max(500),
+    workflowId: z.string().optional(),
     description: z.string().max(100000).optional(),
-    status: z.enum([
-        'todo',
-        'in_progress',
-        'in_review',
-        'done'
-    ]).optional(),
+    stageVersion: z.coerce.bigint().min(BigInt('-9223372036854775808'), { error: 'Invalid value: Expected int64 to be >= -9223372036854775808' }).max(BigInt('9223372036854775807'), { error: 'Invalid value: Expected int64 to be <= 9223372036854775807' }).optional(),
+    status: z.string().optional(),
     assigneeAgentId: z.string().optional(),
     labels: z.array(z.string()).optional(),
     repositoryIds: z.array(z.string()).optional()
 });
+export const zStageWorkState = z.enum([
+    'idle',
+    'queued',
+    'running',
+    'completed',
+    'failed'
+]);
 export const zTaskRepository = z.object({
     id: z.string(),
     providerName: z.string(),
@@ -91,17 +138,17 @@ export const zTaskRepository = z.object({
 export const zTask = z.object({
     id: z.string(),
     workspaceId: z.string(),
+    workflowId: z.string(),
     title: z.string(),
     description: z.string(),
     sourceProvider: z.string(),
     sourceId: z.string().optional(),
     sourceUrl: z.string().optional(),
-    status: z.enum([
-        'todo',
-        'in_progress',
-        'in_review',
-        'done'
-    ]),
+    stageVersion: z.coerce.bigint().min(BigInt('-9223372036854775808'), { error: 'Invalid value: Expected int64 to be >= -9223372036854775808' }).max(BigInt('9223372036854775807'), { error: 'Invalid value: Expected int64 to be <= 9223372036854775807' }).optional(),
+    automationPending: z.boolean().optional(),
+    stageWorkState: zStageWorkState.optional(),
+    closed: z.boolean().optional(),
+    status: z.string(),
     assigneeAgentId: z.string().optional(),
     labels: z.array(z.string()),
     repositories: z.array(zTaskRepository),
@@ -318,6 +365,7 @@ export const zCodeRepositoryCreate = z.object({
  */
 export const zTaskIntegrationConfig = z.record(z.string(), z.unknown());
 export const zTaskIntegrationInput = z.object({
+    workflowId: z.string(),
     provider: z.string(),
     name: z.string().min(1).max(200),
     enabled: z.boolean().optional(),
@@ -328,6 +376,7 @@ export const zTaskIntegrationInput = z.object({
 export const zTaskIntegration = z.object({
     id: z.string(),
     workspaceId: z.string(),
+    workflowId: z.string(),
     provider: z.string(),
     name: z.string(),
     enabled: z.boolean(),
@@ -384,6 +433,7 @@ export const zCodingIntegrationInputWritable = z.object({
     credential: z.string().optional()
 });
 export const zTaskIntegrationInputWritable = z.object({
+    workflowId: z.string(),
     provider: z.string(),
     name: z.string().min(1).max(200),
     enabled: z.boolean().optional(),
@@ -929,6 +979,61 @@ export const zUpdateAgentPath = z.object({
  * Agent updated
  */
 export const zUpdateAgentResponse = zAgent;
+export const zListWorkspaceWorkflowsPath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string()
+});
+/**
+ * Workspace workflows
+ */
+export const zListWorkspaceWorkflowsResponse = z.array(zWorkspaceWorkflow);
+export const zCreateWorkspaceWorkflowBody = zWorkflowInput;
+export const zCreateWorkspaceWorkflowPath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string()
+});
+/**
+ * Created workflow
+ */
+export const zCreateWorkspaceWorkflowResponse = zWorkspaceWorkflow;
+export const zDeleteWorkspaceWorkflowPath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string(),
+    workflowID: z.string()
+});
+/**
+ * Workflow deleted
+ */
+export const zDeleteWorkspaceWorkflowResponse = z.void();
+export const zGetWorkspaceWorkflowPath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string(),
+    workflowID: z.string()
+});
+/**
+ * Ordered workspace workflow
+ */
+export const zGetWorkspaceWorkflowResponse = zWorkspaceWorkflow;
+export const zSaveWorkspaceWorkflowBody = zWorkspaceWorkflow;
+export const zSaveWorkspaceWorkflowPath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string(),
+    workflowID: z.string()
+});
+/**
+ * Saved workflow with incremented version
+ */
+export const zSaveWorkspaceWorkflowResponse = zWorkspaceWorkflow;
+export const zTransitionTaskBody = zTaskTransition;
+export const zTransitionTaskPath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string(),
+    taskID: z.string()
+});
+/**
+ * Task after the transition; any execution start is durably queued
+ */
+export const zTransitionTaskResponse = zTask;
 export const zListTasksPath = z.object({
     orgID: z.string(),
     workspaceID: z.string()

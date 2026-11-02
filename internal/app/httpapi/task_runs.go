@@ -14,7 +14,7 @@ import (
 )
 
 type taskRunAPI struct {
-	tasks    *task.Service
+	tasks    *task.TaskService
 	launches *orchestration.LaunchService
 }
 
