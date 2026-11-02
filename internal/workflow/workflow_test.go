@@ -7,69 +7,82 @@ import (
 	modelerrors "github.com/josemiguelmelo/orkest/internal/core/model/errors"
 )
 
-func TestTransitionRules(t *testing.T) {
-	d := Definition{ID: "test", Name: "Test", Version: 1, Stages: []Stage{
-		{ID: "ready", Name: "Ready"},
-		{ID: "build", Name: "Build", ResponsibleAgentID: "builder", AutoStart: true, AutoAdvance: true},
-		{ID: "verify", Name: "Verify", ResponsibleAgentID: "reviewer", AutoStart: true},
-		{ID: "closed", Name: "Closed"},
-	}}
-	tests := []struct {
-		name, current, target, assignee string
-		trigger                         Trigger
-		want                            Plan
-		conflict                        bool
-	}{
-		{name: "entry assigns and starts", current: "ready", target: "build", trigger: Enter, want: Plan{StageID: "build", AssigneeAgentID: "builder", Start: true}},
-		{name: "success enters next stage", current: "build", assignee: "builder", trigger: Succeeded, want: Plan{StageID: "verify", AssigneeAgentID: "reviewer", Start: true}},
-		{name: "success stays when disabled", current: "verify", assignee: "reviewer", trigger: Succeeded, want: Plan{StageID: "verify", AssigneeAgentID: "reviewer", Completed: true}},
-		{name: "manual completion stays by default", current: "ready", trigger: Complete, want: Plan{StageID: "ready", Completed: true}},
-		{name: "unconfigured assignment is retained", current: "verify", target: "ready", assignee: "reviewer", trigger: Enter, want: Plan{StageID: "ready", AssigneeAgentID: "reviewer"}},
-		{name: "start needs assignee", current: "ready", trigger: Start, conflict: true},
-		{name: "closed task cannot reopen", current: "closed", target: "ready", trigger: Enter, conflict: true},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := PlanTransition(d, tt.current, tt.target, tt.assignee, tt.trigger)
-			if tt.conflict {
-				if !errors.Is(err, modelerrors.ErrConflict) {
-					t.Fatal(err)
-				}
-				return
-			}
-			if err != nil || got != tt.want {
-				t.Fatalf("got %+v, %v; want %+v", got, err, tt.want)
-			}
-		})
-	}
-}
-
-func TestDefinitionValidation(t *testing.T) {
-	d := Definition{ID: "test", Name: "Test", Version: 1, Stages: []Stage{{ID: "only", Name: "Only"}}}
+func TestExplicitDestinationsSurviveReorder(t *testing.T) {
+	d := DefaultDefinition("Test")
+	d.ID = "flow"
+	d.Stages[0], d.Stages[2] = d.Stages[2], d.Stages[0]
 	if err := d.Validate(); err != nil {
 		t.Fatal(err)
 	}
-	d.Stages[0].AutoStart = true
-	if !errors.Is(d.Validate(), modelerrors.ErrInvalid) {
-		t.Fatal("terminal automation accepted")
+	p, err := PlanTransition(d, "in_progress", "", "agent", Succeeded)
+	if err != nil || p.StageID != "in_review" || p.Start {
+		t.Fatalf("unexpected success plan: %+v %v", p, err)
 	}
-	d.Stages[0].AutoStart = false
-	d.Stages = append(d.Stages, d.Stages[0])
-	if !errors.Is(d.Validate(), modelerrors.ErrInvalid) {
-		t.Fatal("duplicate stage IDs accepted")
+	if d.StartStageID() != "todo" || d.FinalStageID() != "done" {
+		t.Fatal("reorder changed endpoints")
+	}
+	if _, err = PlanTransition(d, "done", "todo", "agent", Enter); !errors.Is(err, modelerrors.ErrConflict) {
+		t.Fatal("closed task reopened", err)
 	}
 }
 
-func TestWorkflowEndpointsFollowStageOrder(t *testing.T) {
-	d := Definition{Stages: []Stage{{ID: "intake"}, {ID: "active"}, {ID: "complete"}}}
-	if d.StartStageID() != "intake" || d.FinalStageID() != "complete" {
-		t.Fatalf("unexpected workflow endpoints: start=%q final=%q", d.StartStageID(), d.FinalStageID())
+func TestStageEntryAndExecutionAreSeparate(t *testing.T) {
+	d := DefaultDefinition("Test")
+	d.ID = "flow"
+	d.Stages[1].ResponsibleAgentID = "builder"
+	p, err := PlanTransition(d, "todo", "in_progress", "", Enter)
+	if err != nil || p.AssigneeAgentID != "builder" || p.Start {
+		t.Fatal(p, err)
 	}
-	if _, err := PlanTransition(d, "complete", "intake", "agent", Enter); !errors.Is(err, modelerrors.ErrConflict) {
-		t.Fatalf("final stage reopened: %v", err)
+	var evaluator AutomationEvaluator = RuleEvaluator{}
+	p, err = evaluator.Evaluate(d, p, Event{Type: StageEntered})
+	if err != nil || !p.Start {
+		t.Fatal(p, err)
 	}
-	d.Stages = []Stage{{ID: "intake"}, {ID: "complete", AutoAdvance: true}}
-	if !errors.Is(d.Validate(), modelerrors.ErrInvalid) {
-		t.Fatal("final stage automation accepted")
+	if _, err = evaluator.Evaluate(d, Plan{StageID: "in_progress"}, Event{Type: StageEntered}); !errors.Is(err, modelerrors.ErrConflict) {
+		t.Fatal("missing assignment accepted", err)
+	}
+	p, err = evaluator.Evaluate(d, Plan{StageID: "in_progress"}, Event{Type: RunFailed})
+	if err != nil || p.Start || p.Completed || p.StageID != "in_progress" {
+		t.Fatal("failure advanced", p, err)
+	}
+}
+
+func TestRuleValidation(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		change func(*Definition)
+	}{
+		{"duplicate enabled match", func(d *Definition) { r := d.Rules[0]; r.ID = "other"; d.Rules = append(d.Rules, r) }},
+		{"entry cannot move", func(d *Definition) { d.Rules[0].Action = MoveTask; d.Rules[0].TargetStageID = "todo" }},
+		{"missing destination", func(d *Definition) { d.Rules[1].TargetStageID = "absent" }},
+		{"self movement", func(d *Definition) { d.Rules[1].TargetStageID = "in_progress" }},
+		{"closed automation", func(d *Definition) { d.Rules[0].SourceStageID = "done" }},
+		{"missing initial", func(d *Definition) { d.InitialStageID = "absent" }},
+		{"duplicate stage", func(d *Definition) { d.Stages = append(d.Stages, d.Stages[0]) }},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			d := DefaultDefinition("Test")
+			d.ID = "flow"
+			test.change(&d)
+			if !errors.Is(d.Validate(), modelerrors.ErrInvalid) {
+				t.Fatal("invalid configuration accepted")
+			}
+		})
+	}
+	d := DefaultDefinition("Test")
+	d.ID = "flow"
+	d.Rules = nil
+	if err := d.Validate(); err != nil {
+		t.Fatal("manual board rejected", err)
+	}
+}
+
+func TestManualCompletionHasIndependentPolicy(t *testing.T) {
+	d := DefaultDefinition("Test")
+	d.Rules = d.Rules[:2]
+	p, err := PlanTransition(d, "in_progress", "", "agent", Complete)
+	if err != nil || p.StageID != "in_progress" || !p.Completed {
+		t.Fatal(p, err)
 	}
 }

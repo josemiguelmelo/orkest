@@ -19,6 +19,7 @@ type Service struct {
 	workspaces  WorkspaceAccess
 	workflows   WorkflowReader
 	transitions TransitionRepository
+	evaluator   workflow.AutomationEvaluator
 }
 
 type TaskDispatcher interface {
@@ -31,8 +32,8 @@ type DispatchError struct{ Cause error }
 func (e *DispatchError) Error() string { return e.Cause.Error() }
 func (e *DispatchError) Unwrap() error { return e.Cause }
 
-func NewService(repository Repository, workspaces WorkspaceAccess, workflows WorkflowReader, transitions TransitionRepository) *Service {
-	return &Service{repository: repository, workspaces: workspaces, workflows: workflows, transitions: transitions}
+func NewService(repository Repository, workspaces WorkspaceAccess, workflows WorkflowReader, transitions TransitionRepository, evaluator workflow.AutomationEvaluator) *Service {
+	return &Service{repository: repository, workspaces: workspaces, workflows: workflows, transitions: transitions, evaluator: evaluator}
 }
 
 func (s *Service) List(ctx context.Context, userID, orgID, workspaceID string) ([]Task, error) {

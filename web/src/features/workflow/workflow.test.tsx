@@ -18,22 +18,21 @@ const definition: WorkspaceWorkflow = {
   id: 'workspace',
   name: 'Default',
   version: 3,
+  initialStageId: 'ready',
+  closedStageId: 'closed',
+  rules: [],
   stages: [
     {
       id: 'ready',
       name: 'Ready',
       description: 'Ready to work',
       responsibleAgentId: '',
-      autoStart: false,
-      autoAdvance: false,
     },
     {
       id: 'closed',
       name: 'Closed',
       description: 'Finished',
       responsibleAgentId: '',
-      autoStart: false,
-      autoAdvance: false,
     },
   ],
 };
@@ -61,8 +60,6 @@ function setup(role: 'admin' | 'viewer') {
 }
 it('saves stable stage IDs, ordering and defaults for a newly created stage', async () => {
   setup('admin');
-  expect(screen.queryByLabelText('New tasks start in')).not.toBeInTheDocument();
-  expect(screen.queryByLabelText('Closed source tasks go to')).not.toBeInTheDocument();
   expect(await screen.findByText('Starts here')).toBeInTheDocument();
   expect(screen.getByText('Final stage')).toBeInTheDocument();
   const user = userEvent.setup();
@@ -77,8 +74,9 @@ it('saves stable stage IDs, ordering and defaults for a newly created stage', as
   expect(call.body.version).toBe(3);
   expect(call.body.stages.map((s) => s.name)).toEqual(['Backlog', 'New stage', 'Closed']);
   expect(call.body.stages[0]?.id).toBe('ready');
-  expect(call.body.stages[1]?.autoStart).toBe(false);
-  expect(call.body.stages[1]?.autoAdvance).toBe(false);
+  expect(call.body.rules).toEqual([]);
+  expect(call.body.initialStageId).toBe('ready');
+  expect(call.body.closedStageId).toBe('closed');
 });
 it('renders workflow settings read-only for viewers', async () => {
   setup('viewer');
@@ -86,4 +84,27 @@ it('renders workflow settings read-only for viewers', async () => {
   expect(screen.getAllByLabelText('Name')[0]).toBeDisabled();
   expect(screen.queryByRole('button', { name: 'Save workflow' })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Add stage' })).not.toBeInTheDocument();
+});
+
+it('keeps explicit automation destinations and endpoints when columns move', async () => {
+  setup('admin');
+  await screen.findByText('Starts here');
+  const user = userEvent.setup();
+  await user.selectOptions(screen.getAllByLabelText('After successful run')[0]!, 'closed');
+  await user.click(screen.getAllByRole('button', { name: 'Move earlier' })[1]!);
+  await user.click(screen.getByRole('button', { name: 'Save workflow' }));
+  await waitFor(() => expect(api.saveWorkspaceWorkflow).toHaveBeenCalled());
+  const call = api.saveWorkspaceWorkflow.mock.calls[0]?.[0] as { body: WorkspaceWorkflow };
+  expect(call.body.stages.map((s) => s.id)).toEqual(['closed', 'ready']);
+  expect(call.body.initialStageId).toBe('ready');
+  expect(call.body.closedStageId).toBe('closed');
+  expect(call.body.rules).toHaveLength(1);
+  expect(call.body.rules[0]?.id).toMatch(/^[0-9a-f-]{36}$/);
+  expect(call.body.rules[0]).toMatchObject({
+    enabled: true,
+    event: 'run_succeeded',
+    sourceStageId: 'ready',
+    action: 'move_task',
+    targetStageId: 'closed',
+  });
 });

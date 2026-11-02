@@ -69,9 +69,19 @@ export const zWorkflowStage = z.object({
     id: z.string().min(1).max(100),
     name: z.string().min(1).max(200),
     description: z.string().max(2000),
-    responsibleAgentId: z.string(),
-    autoStart: z.boolean().default(false),
-    autoAdvance: z.boolean().default(false)
+    responsibleAgentId: z.string()
+});
+export const zWorkflowAutomationRule = z.object({
+    id: z.string().min(1).max(100),
+    enabled: z.boolean(),
+    event: z.enum([
+        'stage_entered',
+        'run_succeeded',
+        'stage_completed'
+    ]),
+    sourceStageId: z.string(),
+    action: z.enum(['move_task', 'start_work']),
+    targetStageId: z.string().optional()
 });
 export const zWorkflowInput = z.object({
     name: z.string().min(1).max(200)
@@ -80,6 +90,9 @@ export const zWorkspaceWorkflow = z.object({
     id: z.string(),
     name: z.string().min(1).max(200),
     version: z.coerce.bigint().gte(BigInt(1)).max(BigInt('9223372036854775807'), { error: 'Invalid value: Expected int64 to be <= 9223372036854775807' }),
+    initialStageId: z.string(),
+    closedStageId: z.string(),
+    rules: z.array(zWorkflowAutomationRule).max(200),
     configuredBy: z.string().optional(),
     stages: z.array(zWorkflowStage).min(1).max(50)
 });
@@ -132,6 +145,7 @@ export const zTask = z.object({
     sourceId: z.string().optional(),
     sourceUrl: z.string().optional(),
     stageVersion: z.coerce.bigint().min(BigInt('-9223372036854775808'), { error: 'Invalid value: Expected int64 to be >= -9223372036854775808' }).max(BigInt('9223372036854775807'), { error: 'Invalid value: Expected int64 to be <= 9223372036854775807' }).optional(),
+    automationPending: z.boolean().optional(),
     stageWorkState: zStageWorkState.optional(),
     closed: z.boolean().optional(),
     status: z.string(),

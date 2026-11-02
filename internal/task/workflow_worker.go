@@ -12,7 +12,21 @@ import (
 type WorkflowCommand struct {
 	ID, OrganizationID, WorkspaceID, TaskID, ActorID string
 	StageVersion                                     int64
-	Options                                          TransitionInput
+	Options                                          StartWorkCommand
+}
+
+// StartWorkCommand carries execution options only; task transitions and domain
+// events have separate payloads.
+type StartWorkCommand struct {
+	Action       string `json:"action"`
+	CommandID    string `json:"commandId"`
+	StageVersion int64  `json:"stageVersion"`
+	SessionMode  string `json:"sessionMode"`
+	PromptText   string `json:"promptText"`
+}
+
+type EventProcessor interface {
+	ProcessWorkflowEvent(context.Context) (bool, error)
 }
 
 type CommandRepository interface {
@@ -24,12 +38,13 @@ type CommandRepository interface {
 type WorkflowWorker struct {
 	commands   CommandRepository
 	tasks      *Service
+	events     EventProcessor
 	dispatcher TaskDispatcher
 	logger     *slog.Logger
 }
 
 func NewWorkflowWorker(commands CommandRepository, tasks *Service, dispatcher TaskDispatcher, logger *slog.Logger) *WorkflowWorker {
-	return &WorkflowWorker{commands: commands, tasks: tasks, dispatcher: dispatcher, logger: logger}
+	return &WorkflowWorker{commands: commands, tasks: tasks, events: tasks, dispatcher: dispatcher, logger: logger}
 }
 
 func (w *WorkflowWorker) Run(ctx context.Context) {
@@ -37,7 +52,7 @@ func (w *WorkflowWorker) Run(ctx context.Context) {
 	defer ticker.Stop()
 	for {
 		for ctx.Err() == nil {
-			found, err := w.commands.DeliverWorkflowCommand(ctx, w.deliver)
+			found, err := w.ProcessOne(ctx)
 			if err != nil {
 				if ctx.Err() == nil {
 					w.logger.Error("workflow command processing failed")
@@ -54,6 +69,17 @@ func (w *WorkflowWorker) Run(ctx context.Context) {
 		case <-ticker.C:
 		}
 	}
+}
+
+// ProcessOne processes one event and delivers one command. It is also useful for
+// deterministic recovery tests and bounded worker shutdown.
+func (w *WorkflowWorker) ProcessOne(ctx context.Context) (bool, error) {
+	processed, err := w.events.ProcessWorkflowEvent(ctx)
+	if err != nil {
+		return false, err
+	}
+	delivered, err := w.commands.DeliverWorkflowCommand(ctx, w.deliver)
+	return processed || delivered, err
 }
 
 func (w *WorkflowWorker) deliver(ctx context.Context, c WorkflowCommand) (bool, error) {

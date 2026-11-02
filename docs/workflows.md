@@ -1,139 +1,159 @@
 # Workspace workflows
 
-Workspaces support ordered, versioned workflows. Every task is bound to one
-workflow. Manual task creation selects
-the workflow, and each source integration selects the workflow for imported
-tasks. Stage IDs are stable keys within a workflow; task `status` contains the
-stage key for API compatibility. Names, descriptions and order are configurable.
-Stages are ordered left to right. Tasks start in the first stage, and source-
-closed tasks move to the final stage; these positions are derived from the stage
-order rather than configured separately. There may be 1–50 stages per workflow.
+Workflows are task boards with ordered stages and explicit automation rules.
+Every task and source integration selects a workspace workflow. Stage IDs are
+stable keys; task `status` contains that key for API compatibility. Display order
+does not determine movement, initial state, or closure. A definition has 1–50
+stages, an `initialStageId`, a `closedStageId`, and up to 200 rules.
 
 ## Configuration and behavior
 
-Workspace admins and inherited organization owners/admins manage configuration.
-Members can transition tasks; viewers cannot mutate configuration, move tasks,
-start work, complete stages, or answer runtime approvals.
+Workspace admins and inherited organization owners/admins configure workflows.
+Members may transition tasks; viewers cannot mutate tasks, start executions,
+complete stages, configure rules, or answer runtime approvals.
 
-Entering a stage assigns its responsible agent when configured; otherwise the
-current assignment is retained. Auto-start enqueues a durable command. An assigned
-agent is required to start. A missing assignment produces a conflict for explicit
-entry, or a visible failed work indicator on an imported task. Stage names and
-descriptions are included in the task prompt to describe the current work scope.
+Stages contain a name, description and optional responsible agent. Entering a
+stage applies that assignment, retaining the current assignment when unspecified.
+The name and description describe the agent's current work scope in its prompt.
+New tasks enter the explicit initial stage; source closure moves directly to the
+explicit closed stage. Closed tasks cannot reopen. Reordering columns has no
+behavioral effects. Changing the explicit closed stage changes which tasks are
+considered closed. Referenced stages, workflows and agents cannot be deleted.
+A workspace must retain at least one workflow.
 
-Successful agent execution completes its stage after process ownership is
-resolved. Auto-advance moves to the next ordered stage; the destination's entry
-policy then applies, including assignment and optional start. Auto-advance is off
-for new stages. Without auto-advance, the task remains in place with completed
-stage work. Users move it explicitly. Users can also complete manual stages;
-they follow the same auto-advance setting. Failure, cancellation, input and
-approval waits never advance a task. Failed starts require an explicit user retry.
-Starting again in the same stage creates another work step. It does not implicitly
-move the task to a stage named `in_progress`.
+Automation rules contain a stable ID, enabled flag, event, source stage, action
+and optional target stage. The initial supported combinations are:
 
-The final stage cannot auto-start or auto-advance. Tasks that entered the final
-stage cannot reopen.
-Stage movement and reassignment are rejected while a start is queued or execution
-is active. Ordinary content edits remain possible.
+| Event | Action | Destination |
+| --- | --- | --- |
+| `stage_entered` | `start_work` | Current task/stage |
+| `run_succeeded` | `move_task` | Explicit different stage |
+| `stage_completed` | `move_task` | Explicit different stage |
 
-Every transition uses the latest saved workflow configuration, including successful
-run completion and manual stage completion. Changing auto-advance or stage order
-while an agent runs changes its next transition. Destination assignment and
-start settings also use the current configuration. Saving configuration does not
-itself launch work or rewrite an active agent's instructions/runtime settings.
-Task closed state follows the current final stage. Moving a stage away from the
-final position therefore makes tasks in that stage open under the new definition.
-Deleting a stage occupied by one or more tasks is rejected by the task stage
-foreign key. Deleting a workflow referenced by tasks or source integrations is
-rejected; a workspace must retain at least one workflow. An agent referenced by
-a workflow stage must be removed from that configuration before its agent
-definition is deleted.
+At most one enabled rule may match an event and source stage. Closed stages
+cannot have outgoing automation. Stage-entry rules cannot move tasks, preventing
+movement loops. There is no expression language or arbitrary action execution.
+Manual completion and successful execution have independent rules. Failed runs,
+cancellation and interaction waits never advance or retry automatically.
 
-Manual task creation and new open imports enter the first stage. Source
-polling applies entry effects only for a new task or source-driven stage change;
-repeated polling never repeats a start. Import automation runs on behalf of the
-admin who last saved the workflow; their current mutation access is checked before
-execution. A source closure moves directly to the final stage and
-invalidates the prior stage entry. Existing external work is still reconciled
-independently; a source change does not prove process termination.
+The seeded board contains Todo, In progress, In review and Done. Entry into In
+progress starts assigned work. Successful execution or manual completion there
+moves to In review. Custom stages have no automation by default. Explicit starts
+remain available independently of stage movement and create another work step.
+Automation always starts a new runtime session; explicit starts may select
+`continue` or `new` and supply a prompt.
 
-## Architecture
+## Event propagation and recovery
 
-`internal/workflow` owns configuration validation and the pure transition planner.
-The task service owns task access and user commands. Consumer-owned repository
-contracts and constructor injection connect these to PostgreSQL and orchestration.
-Workflow metadata and ordered stage properties are relational rows, with one
-source of truth. Stage variants are data. Additional completion strategies can be introduced when
-there is a concrete second completion mechanism.
+```mermaid
+flowchart TD
+    User[User command] --> Tasks[Task service / transition transaction]
+    Tasks --> State[Task state and history]
+    Tasks --> Events[PostgreSQL workflow_events]
+    Runtime[Persisted terminal run outcome] --> Events
+    Events --> Worker[Workflow worker]
+    Worker --> Evaluate[Pure automation evaluator]
+    Evaluate --> Apply[Validate and apply plan in transaction]
+    Apply --> State
+    Apply --> Events
+    Apply --> Commands[PostgreSQL workflow_commands]
+    Commands --> Delivery[Existing start-command delivery]
+    Delivery --> Runtime
+```
 
-PostgreSQL transactions serialize workflow configuration and task transitions,
-check versions, change assignment/stage, record history with the configuration version used and persist commands
-atomically. Settings saves use the workflow version; transition commands carry only action,
-target stage and execution options, never task content or repository links. They require
-the task's stage version and a command ID. Reusing a command ID with a different
-transition payload is rejected. Task reads include stage identity, work state and
-version from the same database row snapshot.
+Task creation, source-driven stage changes, user movement and automation movement
+persist stage-entry events in the same transaction as the task change. Terminal
+run persistence atomically records a normalized success/failure event. Manual
+completion records its own event. Events are internal; no event publishing API or
+broker is introduced.
 
-A bounded worker holds an exclusive outbox row lock through dispatch. Workers use
-`SKIP LOCKED`; platform shutdown cancels and joins the worker. Delivery reconciles
-the stable command identity against the existing prompt outbox before any start.
-Reservation persists a run before external launch and rejects duplicate command
-identities. Accepted but uncertain starts belong to existing launch recovery and
-are never blindly replaced. Delivery is at least once, with idempotent admission;
-external effects are not assumed to be exactly once.
+The worker polls once per second when idle and drains available work. Events use
+`FOR UPDATE SKIP LOCKED`. Claim, latest-configuration read, task locking, rule
+evaluation, resulting task movement/start enqueueing and event acknowledgement
+occur in one transaction. No external execution happens in this transaction.
+Moving to a destination records another stage-entry event; its entry automation
+runs asynchronously. Task responses expose `automationPending`, and the task UI
+shows pending automation separately from execution state.
 
-Stage versions and the currently bound run ID fence old completion events,
-including retries within the same stage. Terminal run status, stage changes and
-any next-stage command commit together after process cleanup. The platform worker
-does not own the agentctl lifecycle and never auto-approves runtime permissions.
+User movement returns after its stage change commits. Missing assignment or other
+unavailable entry execution prerequisites produce a visible failed work indicator
+when automation is processed; they do not undo an already committed movement.
+Task movement/reassignment conflict with queued or active execution. An explicit
+start accepted before an entry event is handled supersedes that automatic start.
+A completed stage with no movement rule stays in place.
 
-The worker currently processes commands sequentially per platform process and
-holds a database connection while dispatching. This bounds concurrent startup
-work; a lease-based claim can replace that transaction boundary if dispatch
-throughput requires it. Configuration changes and transitions serialize per workflow to keep configuration
-reads consistent. Read-only configuration requests use a repeatable-read transaction
-to assemble workflow metadata and ordered stages from the same database snapshot.
+Delivery is at least once. Stable event IDs deduplicate stage entries and run
+outcomes; event acknowledgement commits atomically with effects. Stage-entry
+versions fence obsolete events, and run IDs fence old completion events from
+retries in the same stage. Obsolete events are acknowledged without effects.
+Every handled event records the configuration version and matched rule, if any.
+Event rows also retain occurrence time, causation and correlation identifiers.
+Configuration saves never emit events or retroactively start work.
+
+Start commands retain the existing exclusive delivery lock and reconciliation
+against the stable prompt command identity. Reservation persists a run before
+external launch. Accepted but uncertain starts belong to launch recovery and are
+never blindly replaced. Execution delivery rechecks the actor's current mutation
+access. Imports act on behalf of the administrator who last saved configuration.
+Ordinary execution failures require user retry. Platform shutdown cancels/joins
+its worker without stopping independent agentctl processes or approving requests.
+The worker holds a database connection through command dispatch; lease-based
+claims remain a possible throughput improvement, not part of this change.
+
+## Architecture and extension boundaries
+
+`internal/workflow` owns entities, validation, pure transition planning and the
+`AutomationEvaluator`, `EventMatcher`, and `AutomationAction` interfaces. Concrete
+stage-event matchers and move/start actions implement the initial behavior.
+The task service owns user commands, stale-event/active-run policy, actor selection
+and automation evaluation. Its injected evaluator produces a persistence-independent
+decision. `WithWorkflowEvent` loads a locked snapshot and invokes the service's
+pure decision callback inside the transaction, then persists that decision and
+acknowledges the event atomically. Repository adapters never invoke the evaluator
+or decide whether a business conflict should fail or skip automation.
+PostgreSQL adapters own transactions, relational configuration and durable inbox/
+outbox persistence. Runtime orchestration only publishes terminal run facts.
+Public transition requests, internal events and execution command payloads are
+separate types. No dependency registry or external workflow engine is used.
+
+Future artifacts belong to tasks, with optional producing run and stage-entry
+references; movement will not remove outputs. Artifact storage and APIs are not
+implemented. A future integration adapter can verify/deduplicate a PR notification,
+resolve its linked artifact to a workspace task, and persist a normalized event.
+Provider-specific typed conditions and matchers should be added with that adapter.
+PR event ingestion, artifact requirements and configurable scripts remain future
+work. In particular, returning to In progress and starting revisions are separate
+actions; the destination entry rule determines whether execution follows.
 
 ## API and UI
 
-- `GET/POST .../workspaces/{workspaceID}/workflows`: list or create workflows.
-- `GET/PUT/DELETE .../workspaces/{workspaceID}/workflows/{workflowID}`: read,
-  replace ordered stages, or delete a workflow. PUT requires the last-read
-  configuration version; DELETE conflicts while tasks or integrations use it.
-- `POST .../tasks/{taskID}/transitions`: `move`, `start`, or `complete`, with
-  `stageVersion`, `commandId`, and optional session choice/prompt.
-- Existing task PUT remains compatible and uses the same transaction planner.
-- The Workflow navigation page edits stage metadata, responsible agents, ordering
-  and automation. The board, selectors and filters load this definition.
-- Task responses expose `stageVersion`, `stageWorkState`, and `closed` separately
-  from runtime execution health. No runtime transport addresses are exposed.
+- Workflow CRUD remains under workspace-scoped `/workflows` endpoints.
+- Definitions expose stages, explicit initial/closed references and `rules`.
+- `POST .../tasks/{taskID}/transitions` accepts `move`, `start`, or `complete`,
+  with `stageVersion` and `commandId`; optional execution options apply to starts.
+- Legacy task PUT uses the same task locking and planner and preserves content.
+- Configuration saves require the last-read workflow version. Movement and event
+  evaluation use the latest configuration under the same workflow row lock.
+- The editor provides initial/closed stage selectors, entry start toggles, and
+  separate explicit destinations after run success and manual completion.
 
-Automation defaults to a fresh runtime session so a stage's newly assigned agent
-configuration takes effect. Explicit user starts may choose `continue` or `new`.
-Continuing intentionally retains the saved runtime session's effective settings.
+## Migrations and verification
 
-## Migrations and operations
+0035 establishes the branch's relational workflows from main-branch v34.
+0036 converts its booleans into rules with explicit destinations, pins existing
+initial/closed stages, and migrates pending run outcomes into the durable event
+inbox. Queued starts retain their identities. Existing tasks, working files,
+sessions and agent processes are preserved. Deploy platform writers and workers
+together; the old workflow API/configuration shape is replaced.
 
-0035 creates the final relational model directly from the main-branch v34 schema.
-It seeds existing and future workspaces with Todo, In progress, In review, Done;
-existing tasks retain their stage keys. The seeded In progress stage enables
-start and advance to preserve entering-stage execution/review behavior. Custom
-stages default both automation switches off. Existing tasks and source integrations
-bind to their workspace's seeded default workflow. Runs bind to their stage entry;
-responsible agents are constrained to their workspace. Reference checks for stage,
-agent and repository links are deferred until commit so workspace deletion can
-cascade in any order. No migration deletes task working files or stops processes.
+0036 rollback deletes event audit history and approximates explicit rules using
+legacy booleans. Nonadjacent destinations and separate manual-completion policies
+cannot be preserved. Back up configuration and drain events/stop workers before
+rollback. The superseded branch migrations 0035–0039 still require the local reset
+described in [local rollback commands](local-workflow-migration-reset.md) before
+adopting the rewritten 0035; do not relabel Goose records without resetting schema.
 
-Rollback deletes workflow configuration, stage history and workflow commands,
-removes workflow associations, and maps custom stage keys to `todo`. Tasks,
-source integrations, runtime sessions and working files remain. Back up before
-rollback. Stop platform command delivery and reconcile active runs first.
-
-The superseded branch migrations 0035–0039 must be reset locally before running
-this rewritten 0035. See [local rollback commands](local-workflow-migration-reset.md).
-Do not change only Goose's version records: the schema must return to v34 too.
-
-Verification: `make check`; `make test-postgres` with documented PostgreSQL
-settings; race detection for workflow, task, orchestration and PostgreSQL tests.
-Runtime model execution and multi-stage live provider behavior require configured
-runtimes/credentials and are separate from deterministic delivery verification.
+Verify with `make check`, `make test-postgres` with local database settings, and
+race detection for workflow, task, orchestration and PostgreSQL tests. Runtime
+provider execution and live multi-stage continuation require configured runtimes
+and credentials; deterministic event delivery does not qualify those behaviors.

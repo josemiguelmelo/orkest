@@ -97,8 +97,21 @@ export declare const zWorkflowStage: z.ZodObject<{
     name: z.ZodString;
     description: z.ZodString;
     responsibleAgentId: z.ZodString;
-    autoStart: z.ZodDefault<z.ZodBoolean>;
-    autoAdvance: z.ZodDefault<z.ZodBoolean>;
+}, z.core.$strip>;
+export declare const zWorkflowAutomationRule: z.ZodObject<{
+    id: z.ZodString;
+    enabled: z.ZodBoolean;
+    event: z.ZodEnum<{
+        stage_entered: "stage_entered";
+        run_succeeded: "run_succeeded";
+        stage_completed: "stage_completed";
+    }>;
+    sourceStageId: z.ZodString;
+    action: z.ZodEnum<{
+        move_task: "move_task";
+        start_work: "start_work";
+    }>;
+    targetStageId: z.ZodOptional<z.ZodString>;
 }, z.core.$strip>;
 export declare const zWorkflowInput: z.ZodObject<{
     name: z.ZodString;
@@ -107,14 +120,29 @@ export declare const zWorkspaceWorkflow: z.ZodObject<{
     id: z.ZodString;
     name: z.ZodString;
     version: z.ZodCoercedBigInt<unknown>;
+    initialStageId: z.ZodString;
+    closedStageId: z.ZodString;
+    rules: z.ZodArray<z.ZodObject<{
+        id: z.ZodString;
+        enabled: z.ZodBoolean;
+        event: z.ZodEnum<{
+            stage_entered: "stage_entered";
+            run_succeeded: "run_succeeded";
+            stage_completed: "stage_completed";
+        }>;
+        sourceStageId: z.ZodString;
+        action: z.ZodEnum<{
+            move_task: "move_task";
+            start_work: "start_work";
+        }>;
+        targetStageId: z.ZodOptional<z.ZodString>;
+    }, z.core.$strip>>;
     configuredBy: z.ZodOptional<z.ZodString>;
     stages: z.ZodArray<z.ZodObject<{
         id: z.ZodString;
         name: z.ZodString;
         description: z.ZodString;
         responsibleAgentId: z.ZodString;
-        autoStart: z.ZodDefault<z.ZodBoolean>;
-        autoAdvance: z.ZodDefault<z.ZodBoolean>;
     }, z.core.$strip>>;
 }, z.core.$strip>;
 export declare const zTaskTransition: z.ZodObject<{
@@ -172,6 +200,7 @@ export declare const zTask: z.ZodObject<{
     sourceId: z.ZodOptional<z.ZodString>;
     sourceUrl: z.ZodOptional<z.ZodString>;
     stageVersion: z.ZodOptional<z.ZodCoercedBigInt<unknown>>;
+    automationPending: z.ZodOptional<z.ZodBoolean>;
     stageWorkState: z.ZodOptional<z.ZodEnum<{
         idle: "idle";
         queued: "queued";
@@ -1791,14 +1820,29 @@ export declare const zListWorkspaceWorkflowsResponse: z.ZodArray<z.ZodObject<{
     id: z.ZodString;
     name: z.ZodString;
     version: z.ZodCoercedBigInt<unknown>;
+    initialStageId: z.ZodString;
+    closedStageId: z.ZodString;
+    rules: z.ZodArray<z.ZodObject<{
+        id: z.ZodString;
+        enabled: z.ZodBoolean;
+        event: z.ZodEnum<{
+            stage_entered: "stage_entered";
+            run_succeeded: "run_succeeded";
+            stage_completed: "stage_completed";
+        }>;
+        sourceStageId: z.ZodString;
+        action: z.ZodEnum<{
+            move_task: "move_task";
+            start_work: "start_work";
+        }>;
+        targetStageId: z.ZodOptional<z.ZodString>;
+    }, z.core.$strip>>;
     configuredBy: z.ZodOptional<z.ZodString>;
     stages: z.ZodArray<z.ZodObject<{
         id: z.ZodString;
         name: z.ZodString;
         description: z.ZodString;
         responsibleAgentId: z.ZodString;
-        autoStart: z.ZodDefault<z.ZodBoolean>;
-        autoAdvance: z.ZodDefault<z.ZodBoolean>;
     }, z.core.$strip>>;
 }, z.core.$strip>>;
 export declare const zCreateWorkspaceWorkflowBody: z.ZodObject<{
@@ -1815,14 +1859,29 @@ export declare const zCreateWorkspaceWorkflowResponse: z.ZodObject<{
     id: z.ZodString;
     name: z.ZodString;
     version: z.ZodCoercedBigInt<unknown>;
+    initialStageId: z.ZodString;
+    closedStageId: z.ZodString;
+    rules: z.ZodArray<z.ZodObject<{
+        id: z.ZodString;
+        enabled: z.ZodBoolean;
+        event: z.ZodEnum<{
+            stage_entered: "stage_entered";
+            run_succeeded: "run_succeeded";
+            stage_completed: "stage_completed";
+        }>;
+        sourceStageId: z.ZodString;
+        action: z.ZodEnum<{
+            move_task: "move_task";
+            start_work: "start_work";
+        }>;
+        targetStageId: z.ZodOptional<z.ZodString>;
+    }, z.core.$strip>>;
     configuredBy: z.ZodOptional<z.ZodString>;
     stages: z.ZodArray<z.ZodObject<{
         id: z.ZodString;
         name: z.ZodString;
         description: z.ZodString;
         responsibleAgentId: z.ZodString;
-        autoStart: z.ZodDefault<z.ZodBoolean>;
-        autoAdvance: z.ZodDefault<z.ZodBoolean>;
     }, z.core.$strip>>;
 }, z.core.$strip>;
 export declare const zDeleteWorkspaceWorkflowPath: z.ZodObject<{
@@ -1846,28 +1905,58 @@ export declare const zGetWorkspaceWorkflowResponse: z.ZodObject<{
     id: z.ZodString;
     name: z.ZodString;
     version: z.ZodCoercedBigInt<unknown>;
+    initialStageId: z.ZodString;
+    closedStageId: z.ZodString;
+    rules: z.ZodArray<z.ZodObject<{
+        id: z.ZodString;
+        enabled: z.ZodBoolean;
+        event: z.ZodEnum<{
+            stage_entered: "stage_entered";
+            run_succeeded: "run_succeeded";
+            stage_completed: "stage_completed";
+        }>;
+        sourceStageId: z.ZodString;
+        action: z.ZodEnum<{
+            move_task: "move_task";
+            start_work: "start_work";
+        }>;
+        targetStageId: z.ZodOptional<z.ZodString>;
+    }, z.core.$strip>>;
     configuredBy: z.ZodOptional<z.ZodString>;
     stages: z.ZodArray<z.ZodObject<{
         id: z.ZodString;
         name: z.ZodString;
         description: z.ZodString;
         responsibleAgentId: z.ZodString;
-        autoStart: z.ZodDefault<z.ZodBoolean>;
-        autoAdvance: z.ZodDefault<z.ZodBoolean>;
     }, z.core.$strip>>;
 }, z.core.$strip>;
 export declare const zSaveWorkspaceWorkflowBody: z.ZodObject<{
     id: z.ZodString;
     name: z.ZodString;
     version: z.ZodCoercedBigInt<unknown>;
+    initialStageId: z.ZodString;
+    closedStageId: z.ZodString;
+    rules: z.ZodArray<z.ZodObject<{
+        id: z.ZodString;
+        enabled: z.ZodBoolean;
+        event: z.ZodEnum<{
+            stage_entered: "stage_entered";
+            run_succeeded: "run_succeeded";
+            stage_completed: "stage_completed";
+        }>;
+        sourceStageId: z.ZodString;
+        action: z.ZodEnum<{
+            move_task: "move_task";
+            start_work: "start_work";
+        }>;
+        targetStageId: z.ZodOptional<z.ZodString>;
+    }, z.core.$strip>>;
     configuredBy: z.ZodOptional<z.ZodString>;
     stages: z.ZodArray<z.ZodObject<{
         id: z.ZodString;
         name: z.ZodString;
         description: z.ZodString;
         responsibleAgentId: z.ZodString;
-        autoStart: z.ZodDefault<z.ZodBoolean>;
-        autoAdvance: z.ZodDefault<z.ZodBoolean>;
     }, z.core.$strip>>;
 }, z.core.$strip>;
 export declare const zSaveWorkspaceWorkflowPath: z.ZodObject<{
@@ -1882,14 +1971,29 @@ export declare const zSaveWorkspaceWorkflowResponse: z.ZodObject<{
     id: z.ZodString;
     name: z.ZodString;
     version: z.ZodCoercedBigInt<unknown>;
+    initialStageId: z.ZodString;
+    closedStageId: z.ZodString;
+    rules: z.ZodArray<z.ZodObject<{
+        id: z.ZodString;
+        enabled: z.ZodBoolean;
+        event: z.ZodEnum<{
+            stage_entered: "stage_entered";
+            run_succeeded: "run_succeeded";
+            stage_completed: "stage_completed";
+        }>;
+        sourceStageId: z.ZodString;
+        action: z.ZodEnum<{
+            move_task: "move_task";
+            start_work: "start_work";
+        }>;
+        targetStageId: z.ZodOptional<z.ZodString>;
+    }, z.core.$strip>>;
     configuredBy: z.ZodOptional<z.ZodString>;
     stages: z.ZodArray<z.ZodObject<{
         id: z.ZodString;
         name: z.ZodString;
         description: z.ZodString;
         responsibleAgentId: z.ZodString;
-        autoStart: z.ZodDefault<z.ZodBoolean>;
-        autoAdvance: z.ZodDefault<z.ZodBoolean>;
     }, z.core.$strip>>;
 }, z.core.$strip>;
 export declare const zTransitionTaskBody: z.ZodObject<{
@@ -1925,6 +2029,7 @@ export declare const zTransitionTaskResponse: z.ZodObject<{
     sourceId: z.ZodOptional<z.ZodString>;
     sourceUrl: z.ZodOptional<z.ZodString>;
     stageVersion: z.ZodOptional<z.ZodCoercedBigInt<unknown>>;
+    automationPending: z.ZodOptional<z.ZodBoolean>;
     stageWorkState: z.ZodOptional<z.ZodEnum<{
         idle: "idle";
         queued: "queued";
@@ -1962,6 +2067,7 @@ export declare const zListTasksResponse: z.ZodArray<z.ZodObject<{
     sourceId: z.ZodOptional<z.ZodString>;
     sourceUrl: z.ZodOptional<z.ZodString>;
     stageVersion: z.ZodOptional<z.ZodCoercedBigInt<unknown>>;
+    automationPending: z.ZodOptional<z.ZodBoolean>;
     stageWorkState: z.ZodOptional<z.ZodEnum<{
         idle: "idle";
         queued: "queued";
@@ -2016,6 +2122,7 @@ export declare const zCreateTaskResponse: z.ZodObject<{
     sourceId: z.ZodOptional<z.ZodString>;
     sourceUrl: z.ZodOptional<z.ZodString>;
     stageVersion: z.ZodOptional<z.ZodCoercedBigInt<unknown>>;
+    automationPending: z.ZodOptional<z.ZodBoolean>;
     stageWorkState: z.ZodOptional<z.ZodEnum<{
         idle: "idle";
         queued: "queued";
@@ -2054,6 +2161,7 @@ export declare const zGetTaskResponse: z.ZodObject<{
     sourceId: z.ZodOptional<z.ZodString>;
     sourceUrl: z.ZodOptional<z.ZodString>;
     stageVersion: z.ZodOptional<z.ZodCoercedBigInt<unknown>>;
+    automationPending: z.ZodOptional<z.ZodBoolean>;
     stageWorkState: z.ZodOptional<z.ZodEnum<{
         idle: "idle";
         queued: "queued";
@@ -2109,6 +2217,7 @@ export declare const zUpdateTaskResponse: z.ZodObject<{
     sourceId: z.ZodOptional<z.ZodString>;
     sourceUrl: z.ZodOptional<z.ZodString>;
     stageVersion: z.ZodOptional<z.ZodCoercedBigInt<unknown>>;
+    automationPending: z.ZodOptional<z.ZodBoolean>;
     stageWorkState: z.ZodOptional<z.ZodEnum<{
         idle: "idle";
         queued: "queued";

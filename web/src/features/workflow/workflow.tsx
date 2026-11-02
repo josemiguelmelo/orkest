@@ -86,6 +86,33 @@ function WorkflowEditor({
       stages: d.stages.map((s) => (s.id === id ? { ...s, ...values } : s)),
     }));
   }
+  function setRule(
+    stageId: string,
+    event: 'stage_entered' | 'run_succeeded' | 'stage_completed',
+    target: string,
+  ) {
+    setDraft((d) => ({
+      ...d,
+      rules: [
+        ...d.rules.filter((r) => !(r.sourceStageId === stageId && r.event === event)),
+        ...(target
+          ? [
+              {
+                id:
+                  d.rules.find((r) => r.sourceStageId === stageId && r.event === event)?.id ??
+                  crypto.randomUUID(),
+                enabled: true,
+                event,
+                sourceStageId: stageId,
+                action:
+                  event === 'stage_entered' ? ('start_work' as const) : ('move_task' as const),
+                ...(event === 'stage_entered' ? {} : { targetStageId: target }),
+              },
+            ]
+          : []),
+      ],
+    }));
+  }
   function reorder(index: number, delta: number) {
     setDraft((d) => {
       const stages = [...d.stages];
@@ -94,11 +121,6 @@ function WorkflowEditor({
       if (!stage || target < 0 || target >= stages.length) return d;
       stages.splice(index, 1);
       stages.splice(target, 0, stage);
-      const final = stages[stages.length - 1];
-      if (final) {
-        final.autoStart = false;
-        final.autoAdvance = false;
-      }
       return { ...d, stages };
     });
   }
@@ -153,7 +175,11 @@ function WorkflowEditor({
       {action.error && <ErrorState error={action.error} />}
       <div className="workflow-toolbar">
         <Field label="Select workflow">
-          <select className="workflow-select" value={definition.id} onChange={(event) => onSelect(event.target.value)}>
+          <select
+            className="workflow-select"
+            value={definition.id}
+            onChange={(event) => onSelect(event.target.value)}
+          >
             {workflows.map((workflow) => (
               <option key={workflow.id} value={workflow.id}>
                 {workflow.name}
@@ -202,13 +228,47 @@ function WorkflowEditor({
           <WorkflowIcon size={17} />
           <div>
             <strong>Stage sequence</strong>
-            <span>Tasks start in the first stage and source-closed tasks go to the final stage.</span>
+            <span>Choose task entry and closure independently of column order.</span>
           </div>
         </div>
       </div>
+      <div className="workflow-toolbar">
+        <Field label="New tasks start in">
+          <select
+            disabled={disabled}
+            value={draft.initialStageId}
+            onChange={(e) => setDraft({ ...draft, initialStageId: e.target.value })}
+          >
+            {draft.stages.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+        <Field label="Closed source tasks go to">
+          <select
+            disabled={disabled}
+            value={draft.closedStageId}
+            onChange={(e) =>
+              setDraft({
+                ...draft,
+                closedStageId: e.target.value,
+                rules: draft.rules.filter((r) => r.sourceStageId !== e.target.value),
+              })
+            }
+          >
+            {draft.stages.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </Field>
+      </div>
       <div className="workflow-board-hint">
-        <span>Tasks flow from left to right</span>
-        <span>Successful work advances only where enabled; failed work stays in its stage.</span>
+        <span>Column order controls display</span>
+        <span>Rules move tasks to explicit destinations; failed work stays in its stage.</span>
       </div>
       <div className="workflow-board">
         {draft.stages.map((stage, index) => (
@@ -239,13 +299,13 @@ function WorkflowEditor({
               </div>
             </div>
             <div className="workflow-stage-markers">
-              {index === 0 && (
+              {stage.id === draft.initialStageId && (
                 <span className="workflow-marker marker-start">Starts here</span>
               )}
-              {index === draft.stages.length - 1 && (
+              {stage.id === draft.closedStageId && (
                 <span className="workflow-marker marker-closed">Final stage</span>
               )}
-              {index !== 0 && index !== draft.stages.length - 1 && (
+              {stage.id !== draft.initialStageId && stage.id !== draft.closedStageId && (
                 <span className="workflow-marker-placeholder">&nbsp;</span>
               )}
             </div>
@@ -291,27 +351,46 @@ function WorkflowEditor({
               <label className="workflow-toggle">
                 <input
                   type="checkbox"
-                  disabled={disabled || index === draft.stages.length - 1}
-                  checked={stage.autoStart}
-                  onChange={(e) => patch(stage.id, { autoStart: e.target.checked })}
+                  disabled={disabled || stage.id === draft.closedStageId}
+                  checked={draft.rules.some(
+                    (r) => r.enabled && r.sourceStageId === stage.id && r.event === 'stage_entered',
+                  )}
+                  onChange={(e) =>
+                    setRule(stage.id, 'stage_entered', e.target.checked ? 'start' : '')
+                  }
                 />{' '}
                 <span>
                   <strong>Start on entry</strong>
                   <small>Run the assigned agent automatically</small>
                 </span>
               </label>
-              <label className="workflow-toggle">
-                <input
-                  type="checkbox"
-                  disabled={disabled || index === draft.stages.length - 1}
-                  checked={stage.autoAdvance}
-                  onChange={(e) => patch(stage.id, { autoAdvance: e.target.checked })}
-                />{' '}
-                <span>
-                  <strong>Advance on success</strong>
-                  <small>Move to the next stage after a successful run</small>
-                </span>
-              </label>
+              {(['run_succeeded', 'stage_completed'] as const).map((event) => (
+                <Field
+                  key={event}
+                  label={
+                    event === 'run_succeeded' ? 'After successful run' : 'After manual completion'
+                  }
+                >
+                  <select
+                    disabled={disabled || stage.id === draft.closedStageId}
+                    value={
+                      draft.rules.find(
+                        (r) => r.enabled && r.sourceStageId === stage.id && r.event === event,
+                      )?.targetStageId ?? ''
+                    }
+                    onChange={(e) => setRule(stage.id, event, e.target.value)}
+                  >
+                    <option value="">Stay in this stage</option>
+                    {draft.stages
+                      .filter((s) => s.id !== stage.id)
+                      .map((s) => (
+                        <option key={s.id} value={s.id}>
+                          Move to {s.name}
+                        </option>
+                      ))}
+                  </select>
+                </Field>
+              ))}
             </div>
             {permissions.workspaceAdmin && (
               <div className="workflow-stage-footer">
@@ -320,10 +399,18 @@ function WorkflowEditor({
                   size="sm"
                   disabled={
                     disabled ||
-                    draft.stages.length === 1
+                    draft.stages.length === 1 ||
+                    stage.id === draft.initialStageId ||
+                    stage.id === draft.closedStageId
                   }
                   onClick={() =>
-                    setDraft({ ...draft, stages: draft.stages.filter((s) => s.id !== stage.id) })
+                    setDraft({
+                      ...draft,
+                      stages: draft.stages.filter((s) => s.id !== stage.id),
+                      rules: draft.rules.filter(
+                        (r) => r.sourceStageId !== stage.id && r.targetStageId !== stage.id,
+                      ),
+                    })
                   }
                   aria-label={`Remove ${stage.name}`}
                   title="Remove stage"
@@ -351,8 +438,6 @@ function WorkflowEditor({
                     name: 'New stage',
                     description: '',
                     responsibleAgentId: '',
-                    autoStart: false,
-                    autoAdvance: false,
                   },
                 ],
               })
@@ -379,11 +464,9 @@ function WorkflowEditor({
 }
 
 function normalizeDefinition(definition: WorkspaceWorkflow): WorkspaceWorkflow {
-  const stages = definition.stages.map((stage) => ({ ...stage }));
-  const final = stages[stages.length - 1];
-  if (final) {
-    final.autoStart = false;
-    final.autoAdvance = false;
-  }
-  return { ...definition, stages };
+  return {
+    ...definition,
+    stages: definition.stages.map((stage) => ({ ...stage })),
+    rules: definition.rules.map((rule) => ({ ...rule })),
+  };
 }

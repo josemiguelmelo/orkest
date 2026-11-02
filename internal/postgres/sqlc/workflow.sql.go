@@ -11,6 +11,21 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const acknowledgeWorkflowEvent = `-- name: AcknowledgeWorkflowEvent :exec
+UPDATE workflow_events SET processed_at=now(),configuration_version=$2,matched_rule_id=$3 WHERE id=$1
+`
+
+type AcknowledgeWorkflowEventParams struct {
+	ID                   string      `json:"id"`
+	ConfigurationVersion pgtype.Int8 `json:"configuration_version"`
+	MatchedRuleID        pgtype.Text `json:"matched_rule_id"`
+}
+
+func (q *Queries) AcknowledgeWorkflowEvent(ctx context.Context, arg AcknowledgeWorkflowEventParams) error {
+	_, err := q.db.Exec(ctx, acknowledgeWorkflowEvent, arg.ID, arg.ConfigurationVersion, arg.MatchedRuleID)
+	return err
+}
+
 const bindWorkflowRun = `-- name: BindWorkflowRun :exec
 UPDATE tasks SET workflow_run_id=$3 WHERE workspace_id=$1 AND id=$2
 `
@@ -27,15 +42,17 @@ func (q *Queries) BindWorkflowRun(ctx context.Context, arg BindWorkflowRunParams
 }
 
 const createWorkflow = `-- name: CreateWorkflow :exec
-INSERT INTO workspace_workflows(workspace_id,id,name,version,configured_by) VALUES($1,$2,$3,$4,$5)
+INSERT INTO workspace_workflows(workspace_id,id,name,version,configured_by,initial_stage_id,closed_stage_id) VALUES($1,$2,$3,$4,$5,$6,$7)
 `
 
 type CreateWorkflowParams struct {
-	WorkspaceID  string `json:"workspace_id"`
-	ID           string `json:"id"`
-	Name         string `json:"name"`
-	Version      int64  `json:"version"`
-	ConfiguredBy string `json:"configured_by"`
+	WorkspaceID    string `json:"workspace_id"`
+	ID             string `json:"id"`
+	Name           string `json:"name"`
+	Version        int64  `json:"version"`
+	ConfiguredBy   string `json:"configured_by"`
+	InitialStageID string `json:"initial_stage_id"`
+	ClosedStageID  string `json:"closed_stage_id"`
 }
 
 func (q *Queries) CreateWorkflow(ctx context.Context, arg CreateWorkflowParams) error {
@@ -45,6 +62,8 @@ func (q *Queries) CreateWorkflow(ctx context.Context, arg CreateWorkflowParams) 
 		arg.Name,
 		arg.Version,
 		arg.ConfiguredBy,
+		arg.InitialStageID,
+		arg.ClosedStageID,
 	)
 	return err
 }
@@ -64,6 +83,20 @@ func (q *Queries) DeleteWorkflow(ctx context.Context, arg DeleteWorkflowParams) 
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const deleteWorkflowRules = `-- name: DeleteWorkflowRules :exec
+DELETE FROM workflow_rules WHERE workspace_id=$1 AND workflow_id=$2
+`
+
+type DeleteWorkflowRulesParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	WorkflowID  string `json:"workflow_id"`
+}
+
+func (q *Queries) DeleteWorkflowRules(ctx context.Context, arg DeleteWorkflowRulesParams) error {
+	_, err := q.db.Exec(ctx, deleteWorkflowRules, arg.WorkspaceID, arg.WorkflowID)
+	return err
 }
 
 const enqueueWorkflowCommand = `-- name: EnqueueWorkflowCommand :exec
@@ -91,8 +124,40 @@ func (q *Queries) EnqueueWorkflowCommand(ctx context.Context, arg EnqueueWorkflo
 	return err
 }
 
+const enqueueWorkflowEvent = `-- name: EnqueueWorkflowEvent :exec
+INSERT INTO workflow_events(id,workspace_id,task_id,stage_version,actor_id,event_type,run_id,causation_id,correlation_id)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(id) DO NOTHING
+`
+
+type EnqueueWorkflowEventParams struct {
+	ID            string `json:"id"`
+	WorkspaceID   string `json:"workspace_id"`
+	TaskID        string `json:"task_id"`
+	StageVersion  int64  `json:"stage_version"`
+	ActorID       string `json:"actor_id"`
+	EventType     string `json:"event_type"`
+	RunID         string `json:"run_id"`
+	CausationID   string `json:"causation_id"`
+	CorrelationID string `json:"correlation_id"`
+}
+
+func (q *Queries) EnqueueWorkflowEvent(ctx context.Context, arg EnqueueWorkflowEventParams) error {
+	_, err := q.db.Exec(ctx, enqueueWorkflowEvent,
+		arg.ID,
+		arg.WorkspaceID,
+		arg.TaskID,
+		arg.StageVersion,
+		arg.ActorID,
+		arg.EventType,
+		arg.RunID,
+		arg.CausationID,
+		arg.CorrelationID,
+	)
+	return err
+}
+
 const getWorkflow = `-- name: GetWorkflow :one
-SELECT workspace_id, version, id, name, configured_by FROM workspace_workflows WHERE workspace_id=$1 AND id=$2
+SELECT workspace_id, version, id, name, configured_by, initial_stage_id, closed_stage_id FROM workspace_workflows WHERE workspace_id=$1 AND id=$2
 `
 
 type GetWorkflowParams struct {
@@ -109,6 +174,8 @@ func (q *Queries) GetWorkflow(ctx context.Context, arg GetWorkflowParams) (Works
 		&i.ID,
 		&i.Name,
 		&i.ConfiguredBy,
+		&i.InitialStageID,
+		&i.ClosedStageID,
 	)
 	return i, err
 }
@@ -165,8 +232,76 @@ func (q *Queries) ImportedWorkflowTask(ctx context.Context, arg ImportedWorkflow
 	return i, err
 }
 
+const insertWorkflowRule = `-- name: InsertWorkflowRule :exec
+INSERT INTO workflow_rules(workspace_id,workflow_id,id,enabled,event_type,source_stage_id,action_type,target_stage_id)
+VALUES($1,$2,$3,$4,$5,$6,$7,NULLIF($8::text,''))
+`
+
+type InsertWorkflowRuleParams struct {
+	WorkspaceID   string `json:"workspace_id"`
+	WorkflowID    string `json:"workflow_id"`
+	ID            string `json:"id"`
+	Enabled       bool   `json:"enabled"`
+	EventType     string `json:"event_type"`
+	SourceStageID string `json:"source_stage_id"`
+	ActionType    string `json:"action_type"`
+	TargetStageID string `json:"target_stage_id"`
+}
+
+func (q *Queries) InsertWorkflowRule(ctx context.Context, arg InsertWorkflowRuleParams) error {
+	_, err := q.db.Exec(ctx, insertWorkflowRule,
+		arg.WorkspaceID,
+		arg.WorkflowID,
+		arg.ID,
+		arg.Enabled,
+		arg.EventType,
+		arg.SourceStageID,
+		arg.ActionType,
+		arg.TargetStageID,
+	)
+	return err
+}
+
+const listWorkflowRules = `-- name: ListWorkflowRules :many
+SELECT workspace_id, workflow_id, id, enabled, event_type, source_stage_id, action_type, target_stage_id FROM workflow_rules WHERE workspace_id=$1 AND workflow_id=$2 ORDER BY id
+`
+
+type ListWorkflowRulesParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	WorkflowID  string `json:"workflow_id"`
+}
+
+func (q *Queries) ListWorkflowRules(ctx context.Context, arg ListWorkflowRulesParams) ([]WorkflowRule, error) {
+	rows, err := q.db.Query(ctx, listWorkflowRules, arg.WorkspaceID, arg.WorkflowID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []WorkflowRule
+	for rows.Next() {
+		var i WorkflowRule
+		if err := rows.Scan(
+			&i.WorkspaceID,
+			&i.WorkflowID,
+			&i.ID,
+			&i.Enabled,
+			&i.EventType,
+			&i.SourceStageID,
+			&i.ActionType,
+			&i.TargetStageID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listWorkflowStages = `-- name: ListWorkflowStages :many
-SELECT workspace_id, id, responsible_agent_id, workflow_id, position, name, description, auto_start, auto_advance FROM workflow_stages WHERE workspace_id=$1 AND workflow_id=$2 ORDER BY position
+SELECT workspace_id, id, responsible_agent_id, workflow_id, position, name, description FROM workflow_stages WHERE workspace_id=$1 AND workflow_id=$2 ORDER BY position
 `
 
 type ListWorkflowStagesParams struct {
@@ -191,8 +326,6 @@ func (q *Queries) ListWorkflowStages(ctx context.Context, arg ListWorkflowStages
 			&i.Position,
 			&i.Name,
 			&i.Description,
-			&i.AutoStart,
-			&i.AutoAdvance,
 		); err != nil {
 			return nil, err
 		}
@@ -205,7 +338,7 @@ func (q *Queries) ListWorkflowStages(ctx context.Context, arg ListWorkflowStages
 }
 
 const listWorkflows = `-- name: ListWorkflows :many
-SELECT workspace_id, version, id, name, configured_by FROM workspace_workflows WHERE workspace_id=$1 ORDER BY name,id
+SELECT workspace_id, version, id, name, configured_by, initial_stage_id, closed_stage_id FROM workspace_workflows WHERE workspace_id=$1 ORDER BY name,id
 `
 
 func (q *Queries) ListWorkflows(ctx context.Context, workspaceID string) ([]WorkspaceWorkflow, error) {
@@ -223,6 +356,8 @@ func (q *Queries) ListWorkflows(ctx context.Context, workspaceID string) ([]Work
 			&i.ID,
 			&i.Name,
 			&i.ConfiguredBy,
+			&i.InitialStageID,
+			&i.ClosedStageID,
 		); err != nil {
 			return nil, err
 		}
@@ -235,7 +370,7 @@ func (q *Queries) ListWorkflows(ctx context.Context, workspaceID string) ([]Work
 }
 
 const lockWorkflow = `-- name: LockWorkflow :one
-SELECT workspace_id, version, id, name, configured_by FROM workspace_workflows WHERE workspace_id=$1 AND id=$2 FOR UPDATE
+SELECT workspace_id, version, id, name, configured_by, initial_stage_id, closed_stage_id FROM workspace_workflows WHERE workspace_id=$1 AND id=$2 FOR UPDATE
 `
 
 type LockWorkflowParams struct {
@@ -252,6 +387,8 @@ func (q *Queries) LockWorkflow(ctx context.Context, arg LockWorkflowParams) (Wor
 		&i.ID,
 		&i.Name,
 		&i.ConfiguredBy,
+		&i.InitialStageID,
+		&i.ClosedStageID,
 	)
 	return i, err
 }
@@ -371,11 +508,36 @@ func (q *Queries) PendingWorkflowCommand(ctx context.Context) (PendingWorkflowCo
 	return i, err
 }
 
+const pendingWorkflowEvent = `-- name: PendingWorkflowEvent :one
+SELECT id, workspace_id, task_id, stage_version, actor_id, event_type, run_id, causation_id, correlation_id, occurred_at, processed_at, configuration_version, matched_rule_id FROM workflow_events WHERE processed_at IS NULL ORDER BY occurred_at,id LIMIT 1 FOR UPDATE SKIP LOCKED
+`
+
+func (q *Queries) PendingWorkflowEvent(ctx context.Context) (WorkflowEvent, error) {
+	row := q.db.QueryRow(ctx, pendingWorkflowEvent)
+	var i WorkflowEvent
+	err := row.Scan(
+		&i.ID,
+		&i.WorkspaceID,
+		&i.TaskID,
+		&i.StageVersion,
+		&i.ActorID,
+		&i.EventType,
+		&i.RunID,
+		&i.CausationID,
+		&i.CorrelationID,
+		&i.OccurredAt,
+		&i.ProcessedAt,
+		&i.ConfigurationVersion,
+		&i.MatchedRuleID,
+	)
+	return i, err
+}
+
 const putWorkflowStage = `-- name: PutWorkflowStage :exec
-INSERT INTO workflow_stages(workspace_id,workflow_id,id,responsible_agent_id,position,name,description,auto_start,auto_advance)
-VALUES($1,$2,$3,NULLIF($4::text,''),$5,$6,$7,$8,$9)
+INSERT INTO workflow_stages(workspace_id,workflow_id,id,responsible_agent_id,position,name,description)
+VALUES($1,$2,$3,NULLIF($4::text,''),$5,$6,$7)
 ON CONFLICT(workspace_id,workflow_id,id) DO UPDATE SET responsible_agent_id=EXCLUDED.responsible_agent_id,
-position=EXCLUDED.position,name=EXCLUDED.name,description=EXCLUDED.description,auto_start=EXCLUDED.auto_start,auto_advance=EXCLUDED.auto_advance
+position=EXCLUDED.position,name=EXCLUDED.name,description=EXCLUDED.description
 `
 
 type PutWorkflowStageParams struct {
@@ -386,8 +548,6 @@ type PutWorkflowStageParams struct {
 	Position    int32  `json:"position"`
 	Name        string `json:"name"`
 	Description string `json:"description"`
-	AutoStart   bool   `json:"auto_start"`
-	AutoAdvance bool   `json:"auto_advance"`
 }
 
 func (q *Queries) PutWorkflowStage(ctx context.Context, arg PutWorkflowStageParams) error {
@@ -399,8 +559,6 @@ func (q *Queries) PutWorkflowStage(ctx context.Context, arg PutWorkflowStagePara
 		arg.Position,
 		arg.Name,
 		arg.Description,
-		arg.AutoStart,
-		arg.AutoAdvance,
 	)
 	return err
 }
@@ -474,15 +632,17 @@ func (q *Queries) RunWorkflowEntry(ctx context.Context, runID string) (RunWorkfl
 }
 
 const saveWorkflow = `-- name: SaveWorkflow :execrows
-UPDATE workspace_workflows SET name=$4,configured_by=$5,version=version+1 WHERE workspace_id=$1 AND id=$2 AND version=$3
+UPDATE workspace_workflows SET name=$4,configured_by=$5,initial_stage_id=$6,closed_stage_id=$7,version=version+1 WHERE workspace_id=$1 AND id=$2 AND version=$3
 `
 
 type SaveWorkflowParams struct {
-	WorkspaceID  string `json:"workspace_id"`
-	ID           string `json:"id"`
-	Version      int64  `json:"version"`
-	Name         string `json:"name"`
-	ConfiguredBy string `json:"configured_by"`
+	WorkspaceID    string `json:"workspace_id"`
+	ID             string `json:"id"`
+	Version        int64  `json:"version"`
+	Name           string `json:"name"`
+	ConfiguredBy   string `json:"configured_by"`
+	InitialStageID string `json:"initial_stage_id"`
+	ClosedStageID  string `json:"closed_stage_id"`
 }
 
 func (q *Queries) SaveWorkflow(ctx context.Context, arg SaveWorkflowParams) (int64, error) {
@@ -492,6 +652,8 @@ func (q *Queries) SaveWorkflow(ctx context.Context, arg SaveWorkflowParams) (int
 		arg.Version,
 		arg.Name,
 		arg.ConfiguredBy,
+		arg.InitialStageID,
+		arg.ClosedStageID,
 	)
 	if err != nil {
 		return 0, err

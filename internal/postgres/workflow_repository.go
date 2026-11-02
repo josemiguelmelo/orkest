@@ -24,9 +24,16 @@ func workflowDefinition(ctx context.Context, q *sqlc.Queries, row sqlc.Workspace
 	if err != nil {
 		return workflow.Definition{}, err
 	}
-	d := workflow.Definition{ID: row.ID, Name: row.Name, Version: row.Version, ConfiguredBy: row.ConfiguredBy, Stages: make([]workflow.Stage, 0, len(stages))}
+	d := workflow.Definition{ID: row.ID, Name: row.Name, Version: row.Version, ConfiguredBy: row.ConfiguredBy, InitialStageID: row.InitialStageID, ClosedStageID: row.ClosedStageID, Rules: []workflow.AutomationRule{}, Stages: make([]workflow.Stage, 0, len(stages))}
 	for _, s := range stages {
-		d.Stages = append(d.Stages, workflow.Stage{ID: s.ID, Name: s.Name, Description: s.Description, ResponsibleAgentID: s.ResponsibleAgentID.String, AutoStart: s.AutoStart, AutoAdvance: s.AutoAdvance})
+		d.Stages = append(d.Stages, workflow.Stage{ID: s.ID, Name: s.Name, Description: s.Description, ResponsibleAgentID: s.ResponsibleAgentID.String})
+	}
+	rules, err := q.ListWorkflowRules(ctx, sqlc.ListWorkflowRulesParams{WorkspaceID: row.WorkspaceID, WorkflowID: row.ID})
+	if err != nil {
+		return workflow.Definition{}, err
+	}
+	for _, r := range rules {
+		d.Rules = append(d.Rules, workflow.AutomationRule{ID: r.ID, Enabled: r.Enabled, Event: workflow.EventType(r.EventType), SourceStageID: r.SourceStageID, Action: workflow.ActionType(r.ActionType), TargetStageID: r.TargetStageID.String})
 	}
 	return d, nil
 }
@@ -78,7 +85,7 @@ func (r *WorkflowPostgresRepository) Create(ctx context.Context, workspaceID str
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := r.queries.WithTx(tx)
-	if err = q.CreateWorkflow(ctx, sqlc.CreateWorkflowParams{WorkspaceID: workspaceID, ID: d.ID, Name: d.Name, Version: d.Version, ConfiguredBy: d.ConfiguredBy}); err != nil {
+	if err = q.CreateWorkflow(ctx, sqlc.CreateWorkflowParams{WorkspaceID: workspaceID, ID: d.ID, Name: d.Name, Version: d.Version, ConfiguredBy: d.ConfiguredBy, InitialStageID: d.InitialStageID, ClosedStageID: d.ClosedStageID}); err != nil {
 		return workflow.Definition{}, mapError(err, modelerrors.ErrConflict, modelerrors.ErrConflict)
 	}
 	if err = r.saveStages(ctx, q, workspaceID, d); err != nil {
@@ -107,7 +114,7 @@ func (r *WorkflowPostgresRepository) Save(ctx context.Context, workspaceID strin
 	if err = r.saveStages(ctx, q, workspaceID, d); err != nil {
 		return workflow.Definition{}, err
 	}
-	count, err := q.SaveWorkflow(ctx, sqlc.SaveWorkflowParams{WorkspaceID: workspaceID, ID: d.ID, Version: d.Version, Name: d.Name, ConfiguredBy: d.ConfiguredBy})
+	count, err := q.SaveWorkflow(ctx, sqlc.SaveWorkflowParams{WorkspaceID: workspaceID, ID: d.ID, Version: d.Version, Name: d.Name, ConfiguredBy: d.ConfiguredBy, InitialStageID: d.InitialStageID, ClosedStageID: d.ClosedStageID})
 	if err != nil {
 		return workflow.Definition{}, err
 	}
@@ -122,6 +129,12 @@ func (r *WorkflowPostgresRepository) Save(ctx context.Context, workspaceID strin
 }
 
 func (r *WorkflowPostgresRepository) saveStages(ctx context.Context, q *sqlc.Queries, workspaceID string, d workflow.Definition) error {
+	if err := d.Validate(); err != nil {
+		return err
+	}
+	if err := q.DeleteWorkflowRules(ctx, sqlc.DeleteWorkflowRulesParams{WorkspaceID: workspaceID, WorkflowID: d.ID}); err != nil {
+		return err
+	}
 	ids := make([]string, 0, len(d.Stages))
 	for i, s := range d.Stages {
 		if s.ResponsibleAgentID != "" {
@@ -134,12 +147,17 @@ func (r *WorkflowPostgresRepository) saveStages(ctx context.Context, q *sqlc.Que
 			}
 		}
 		ids = append(ids, s.ID)
-		if err := q.PutWorkflowStage(ctx, sqlc.PutWorkflowStageParams{WorkspaceID: workspaceID, WorkflowID: d.ID, ID: s.ID, AgentID: s.ResponsibleAgentID, Position: int32(i), Name: s.Name, Description: s.Description, AutoStart: s.AutoStart, AutoAdvance: s.AutoAdvance}); err != nil {
+		if err := q.PutWorkflowStage(ctx, sqlc.PutWorkflowStageParams{WorkspaceID: workspaceID, WorkflowID: d.ID, ID: s.ID, AgentID: s.ResponsibleAgentID, Position: int32(i), Name: s.Name, Description: s.Description}); err != nil {
 			return err
 		}
 	}
 	if err := q.RemoveWorkflowStages(ctx, sqlc.RemoveWorkflowStagesParams{WorkspaceID: workspaceID, WorkflowID: d.ID, Ids: ids}); err != nil {
 		return mapError(err, modelerrors.ErrConflict, modelerrors.ErrConflict)
+	}
+	for _, r := range d.Rules {
+		if err := q.InsertWorkflowRule(ctx, sqlc.InsertWorkflowRuleParams{WorkspaceID: workspaceID, WorkflowID: d.ID, ID: r.ID, Enabled: r.Enabled, EventType: string(r.Event), SourceStageID: r.SourceStageID, ActionType: string(r.Action), TargetStageID: r.TargetStageID}); err != nil {
+			return err
+		}
 	}
 	return nil
 }

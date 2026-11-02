@@ -157,10 +157,8 @@ func (r *PostgresImportedTaskRepository) UpsertImportedTask(ctx context.Context,
 			if e = q.MoveWorkflowTask(ctx, sqlc.MoveWorkflowTaskParams{WorkspaceID: workspaceID, ID: after.ID, StageVersion: state.StageVersion, Status: after.Status, Column5: plan.AssigneeAgentID}); e != nil {
 				return e
 			}
-			if plan.Start {
-				if e = enqueueStageStart(ctx, q, workspaceID, after.ID, d.ConfiguredBy, state.StageVersion, task.TransitionInput{Action: "start", SessionMode: "new"}); e != nil {
-					return e
-				}
+			if e = enqueueStageEntry(ctx, q, workspaceID, after.ID, d.ConfiguredBy, state.StageVersion, ""); e != nil {
+				return e
 			}
 		}
 	}

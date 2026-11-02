@@ -275,6 +275,33 @@ type WorkflowCommand struct {
 	CreatedAt    pgtype.Timestamptz `json:"created_at"`
 }
 
+type WorkflowEvent struct {
+	ID                   string             `json:"id"`
+	WorkspaceID          string             `json:"workspace_id"`
+	TaskID               string             `json:"task_id"`
+	StageVersion         int64              `json:"stage_version"`
+	ActorID              string             `json:"actor_id"`
+	EventType            string             `json:"event_type"`
+	RunID                string             `json:"run_id"`
+	CausationID          string             `json:"causation_id"`
+	CorrelationID        string             `json:"correlation_id"`
+	OccurredAt           pgtype.Timestamptz `json:"occurred_at"`
+	ProcessedAt          pgtype.Timestamptz `json:"processed_at"`
+	ConfigurationVersion pgtype.Int8        `json:"configuration_version"`
+	MatchedRuleID        pgtype.Text        `json:"matched_rule_id"`
+}
+
+type WorkflowRule struct {
+	WorkspaceID   string      `json:"workspace_id"`
+	WorkflowID    string      `json:"workflow_id"`
+	ID            string      `json:"id"`
+	Enabled       bool        `json:"enabled"`
+	EventType     string      `json:"event_type"`
+	SourceStageID string      `json:"source_stage_id"`
+	ActionType    string      `json:"action_type"`
+	TargetStageID pgtype.Text `json:"target_stage_id"`
+}
+
 type WorkflowStage struct {
 	WorkspaceID        string      `json:"workspace_id"`
 	ID                 string      `json:"id"`
@@ -283,8 +310,6 @@ type WorkflowStage struct {
 	Position           int32       `json:"position"`
 	Name               string      `json:"name"`
 	Description        string      `json:"description"`
-	AutoStart          bool        `json:"auto_start"`
-	AutoAdvance        bool        `json:"auto_advance"`
 }
 
 type Workspace struct {
@@ -311,9 +336,11 @@ type WorkspaceMembership struct {
 }
 
 type WorkspaceWorkflow struct {
-	WorkspaceID  string `json:"workspace_id"`
-	Version      int64  `json:"version"`
-	ID           string `json:"id"`
-	Name         string `json:"name"`
-	ConfiguredBy string `json:"configured_by"`
+	WorkspaceID    string `json:"workspace_id"`
+	Version        int64  `json:"version"`
+	ID             string `json:"id"`
+	Name           string `json:"name"`
+	ConfiguredBy   string `json:"configured_by"`
+	InitialStageID string `json:"initial_stage_id"`
+	ClosedStageID  string `json:"closed_stage_id"`
 }

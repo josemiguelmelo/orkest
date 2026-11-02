@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/josemiguelmelo/orkest/internal/core/ids"
@@ -24,7 +25,7 @@ func enqueueStageStart(ctx context.Context, q *sqlc.Queries, workspaceID, taskID
 		}
 		in.CommandID = id
 	}
-	options, err := json.Marshal(in)
+	options, err := json.Marshal(task.StartWorkCommand{Action: "start", CommandID: in.CommandID, StageVersion: in.StageVersion, SessionMode: in.SessionMode, PromptText: in.PromptText})
 	if err != nil {
 		return err
 	}
@@ -130,7 +131,7 @@ func (r *TaskPostgresRepository) transitionTask(ctx context.Context, userID, org
 		}
 	}
 	plan := workflow.Plan{StageID: target, AssigneeAgentID: assignee}
-	if changing || in.Action != "move" {
+	if changing || in.Action == "start" {
 		plan, err = workflow.PlanTransition(d, state.Status, target, assignee, trigger)
 		if err != nil {
 			return task.Task{}, err
@@ -162,16 +163,17 @@ func (r *TaskPostgresRepository) transitionTask(ctx context.Context, userID, org
 	if plan.StageID != state.Status {
 		version++
 	}
-	if plan.Start {
-		if err = enqueueStageStart(ctx, q, workspaceID, id, userID, version, in); err != nil {
+	if in.Action == "complete" {
+		if err = q.EnqueueWorkflowEvent(ctx, sqlc.EnqueueWorkflowEventParams{ID: fmt.Sprintf("%s:%d:completed:%s", id, version, in.CommandID), WorkspaceID: workspaceID, TaskID: id, ActorID: userID, StageVersion: version, EventType: string(workflow.StageCompleted), RunID: state.WorkflowRunID, CausationID: in.CommandID, CorrelationID: in.CommandID}); err != nil {
 			return task.Task{}, err
 		}
-	} else if plan.Completed {
-		if err = q.SetStageWorkState(ctx, sqlc.SetStageWorkStateParams{WorkspaceID: workspaceID, ID: id, StageVersion: version, StageWorkState: string(task.WorkStateCompleted)}); err != nil {
-			return task.Task{}, err
-		}
+		plan.Completed = true
 	}
-	if !plan.Start && in.CommandID != "" {
+	if err = persistWorkflowEffects(ctx, q, workspaceID, id, userID, version, changing, plan, in, in.CommandID, in.CommandID); err != nil {
+		return task.Task{}, err
+	}
+
+	if in.CommandID != "" && (!plan.Start || in.Action == "move") {
 		options, e := json.Marshal(in)
 		if e != nil {
 			return task.Task{}, e
@@ -186,49 +188,19 @@ func (r *TaskPostgresRepository) transitionTask(ctx context.Context, userID, org
 	return r.Task(ctx, orgID, workspaceID, id)
 }
 
-// completeWorkflowRun executes in the same transaction as terminal run status.
-func completeWorkflowRun(ctx context.Context, q *sqlc.Queries, runID string, success bool) error {
-	run, err := q.RunWorkflowEntry(ctx, runID)
-	if err != nil {
-		return err
-	}
-	data, err := q.LockWorkflow(ctx, sqlc.LockWorkflowParams{WorkspaceID: run.WorkspaceID, ID: run.WorkflowID})
-	if err != nil {
-		return err
-	}
-	d, err := workflowDefinition(ctx, q, data)
-	if err != nil {
-		return err
-	}
-	state, err := q.LockWorkflowTask(ctx, sqlc.LockWorkflowTaskParams{WorkspaceID: run.WorkspaceID, ID: run.TaskID})
-	if errors.Is(err, pgx.ErrNoRows) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	if state.StageVersion != run.StageVersion || state.WorkflowRunID != runID || state.StageWorkState == string(task.WorkStateCompleted) {
-		return nil
-	}
-	workState := task.WorkStateFailed
-	if success {
-		workState = task.WorkStateCompleted
-		plan, e := workflow.PlanTransition(d, state.Status, "", state.Assignee, workflow.Succeeded)
-		if errors.Is(e, modelerrors.ErrConflict) {
-			return q.SetStageWorkState(ctx, sqlc.SetStageWorkStateParams{WorkspaceID: run.WorkspaceID, ID: run.TaskID, StageVersion: state.StageVersion, StageWorkState: string(task.WorkStateCompleted)})
-		}
-		if e != nil {
-			return e
-		}
-		if plan.StageID != state.Status {
-			if e = q.MoveWorkflowTask(ctx, sqlc.MoveWorkflowTaskParams{WorkspaceID: run.WorkspaceID, ID: run.TaskID, StageVersion: state.StageVersion, Status: plan.StageID, Column5: plan.AssigneeAgentID}); e != nil {
-				return e
-			}
-			if plan.Start {
-				return enqueueStageStart(ctx, q, run.WorkspaceID, run.TaskID, run.ActorID.String, state.StageVersion+1, task.TransitionInput{Action: "start", SessionMode: "new"})
-			}
-			return nil
+// persistWorkflowEffects is shared by user transitions and event processing.
+// Callers already hold the task/configuration locks and have persisted movement.
+func persistWorkflowEffects(ctx context.Context, q *sqlc.Queries, workspaceID, taskID, actorID string, version int64, moved bool, plan workflow.Plan, in task.TransitionInput, cause, correlation string) error {
+	if moved {
+		if err := enqueueStageEntry(ctx, q, workspaceID, taskID, actorID, version, cause, correlation); err != nil {
+			return err
 		}
 	}
-	return q.SetStageWorkState(ctx, sqlc.SetStageWorkStateParams{WorkspaceID: run.WorkspaceID, ID: run.TaskID, StageVersion: state.StageVersion, StageWorkState: string(workState)})
+	if plan.Start {
+		return enqueueStageStart(ctx, q, workspaceID, taskID, actorID, version, in)
+	}
+	if plan.Completed {
+		return q.SetStageWorkState(ctx, sqlc.SetStageWorkStateParams{WorkspaceID: workspaceID, ID: taskID, StageVersion: version, StageWorkState: string(task.WorkStateCompleted)})
+	}
+	return nil
 }

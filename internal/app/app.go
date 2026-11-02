@@ -159,7 +159,7 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 	}
 	taskRepository := postgres.NewTaskPostgresRepository(database)
 	workflows := workflow.NewService(postgres.NewWorkflowPostgresRepository(database), workspaces)
-	tasks := task.NewService(taskRepository, workspaces, workflows, taskRepository)
+	tasks := task.NewService(taskRepository, workspaces, workflows, taskRepository, workflow.RuleEvaluator{})
 	integrations := taskintegration.NewTaskIntegrationService(postgres.NewPostgresTaskIntegrationRepository(database), secretBox, workspaces, organizations, postgres.NewPostgresImportedTaskRepository(database), githubcloud.NewGitHubCloudProvider(), jiraserver.NewJiraServerProvider())
 	runnerCtx, stopRunner := context.WithCancel(ctx)
 	var runnerWG sync.WaitGroup

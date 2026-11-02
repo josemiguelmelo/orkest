@@ -82,7 +82,7 @@ func (definitionStub) Definitions(context.Context, string) ([]workflow.Definitio
 }
 
 func (definitionStub) Definition(_ context.Context, _, workflowID string) (workflow.Definition, error) {
-	return workflow.Definition{ID: workflowID, Name: "Workflow", Version: 1, Stages: []workflow.Stage{{ID: "todo"}, {ID: "done"}}}, nil
+	return workflow.Definition{InitialStageID: "todo", ClosedStageID: "done", ID: workflowID, Name: "Workflow", Version: 1, Stages: []workflow.Stage{{ID: "todo"}, {ID: "done"}}}, nil
 }
 
 func (definitionStub) Create(context.Context, string, workflow.Definition) (workflow.Definition, error) {
@@ -99,5 +99,5 @@ func (definitionStub) Delete(context.Context, string, string) error {
 
 func testService(repo *taskRepositoryStub, role string) *Service {
 	access := workspaceAccessStub{role: role}
-	return NewService(repo, access, workflow.NewService(definitionStub{}, access), nil)
+	return NewService(repo, access, workflow.NewService(definitionStub{}, access), nil, workflow.RuleEvaluator{})
 }

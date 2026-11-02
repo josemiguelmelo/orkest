@@ -3,6 +3,8 @@ package postgres
 import (
 	"context"
 	"errors"
+	"io"
+	"log/slog"
 	"sync"
 	"testing"
 
@@ -16,6 +18,7 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/task"
 	"github.com/josemiguelmelo/orkest/internal/taskintegration"
 	"github.com/josemiguelmelo/orkest/internal/workflow"
+	"github.com/josemiguelmelo/orkest/internal/workspace"
 )
 
 func testWorkspaceWorkflow(t *testing.T, db *PostgresDatabase, orgID, actorID, foreignAgent string) {
@@ -53,6 +56,9 @@ func testWorkspaceWorkflow(t *testing.T, db *PostgresDatabase, orgID, actorID, f
 		secondDefinition.Stages[2],
 	}
 	secondDefinition.Stages[0].ResponsibleAgentID = assigned.ID
+	secondDefinition.InitialStageID = "in_progress"
+	secondDefinition.ClosedStageID = "in_review"
+	secondDefinition.Rules = secondDefinition.Rules[:1]
 	secondDefinition.ConfiguredBy = actorID
 	if _, err = repo.Create(ctx, workspaceID, secondDefinition); err != nil {
 		t.Fatal("create second workflow with shared stage IDs", err)
@@ -66,7 +72,12 @@ func testWorkspaceWorkflow(t *testing.T, db *PostgresDatabase, orgID, actorID, f
 		t.Fatal("foreign workspace agent accepted", err)
 	}
 	d.Stages[1].ResponsibleAgentID = assigned.ID
-	d.Stages = append(d.Stages[:2], append([]workflow.Stage{{ID: "quality", Name: "Quality", AutoAdvance: false}}, d.Stages[2:]...)...)
+	d.Stages = append(d.Stages[:2], append([]workflow.Stage{{ID: "quality", Name: "Quality"}}, d.Stages[2:]...)...)
+	for i := range d.Rules {
+		if d.Rules[i].Action == workflow.MoveTask {
+			d.Rules[i].TargetStageID = "quality"
+		}
+	}
 	d, err = repo.Save(ctx, workspaceID, d)
 	if err != nil {
 		t.Fatal(err)
@@ -75,6 +86,7 @@ func testWorkspaceWorkflow(t *testing.T, db *PostgresDatabase, orgID, actorID, f
 		t.Fatal("stale workflow write accepted", err)
 	}
 	tasks := NewTaskPostgresRepository(db)
+	worker := newWorkflowTestWorker(tasks)
 	taskID := newID()
 	value, err := tasks.CreateTask(ctx, taskID, workspaceID, task.TaskInput{WorkflowID: workspaceID, Title: "Workflow", Status: "todo"})
 	if err != nil {
@@ -102,19 +114,27 @@ func testWorkspaceWorkflow(t *testing.T, db *PostgresDatabase, orgID, actorID, f
 			t.Fatal("idempotent move failed", e)
 		}
 	}
+	processWorkflowCommands(t, ctx, worker)
 	value, err = tasks.Task(ctx, orgID, workspaceID, taskID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if value.StageVersion != 2 || value.StageWorkState != "queued" || value.AssigneeAgentID != assigned.ID {
+	if value.StageVersion != 2 || value.StageWorkState != "running" || value.AssigneeAgentID != assigned.ID {
 		t.Fatalf("entry effects missing: %+v", value)
 	}
 	q := sqlc.New(db.pool)
 	var count int
-	if err = db.pool.QueryRow(ctx, "SELECT count(*) FROM workflow_commands WHERE workspace_id=$1 AND task_id=$2", workspaceID, taskID).Scan(&count); err != nil || count != 1 {
+	if err = db.pool.QueryRow(ctx, "SELECT count(*) FROM workflow_commands WHERE workspace_id=$1 AND task_id=$2 AND options->>'action'='start'", workspaceID, taskID).Scan(&count); err != nil || count != 1 {
 		t.Fatal("duplicate start command", count, err)
 	}
 	d.Stages = append(d.Stages[:1], d.Stages[2:]...)
+	kept := []workflow.AutomationRule{}
+	for _, rule := range d.Rules {
+		if rule.SourceStageID != "in_progress" && rule.TargetStageID != "in_progress" {
+			kept = append(kept, rule)
+		}
+	}
+	d.Rules = kept
 	if _, err = repo.Save(ctx, workspaceID, d); !errors.Is(err, modelerrors.ErrConflict) {
 		t.Fatal("occupied stage removed", err)
 	}
@@ -130,6 +150,7 @@ func testWorkspaceWorkflow(t *testing.T, db *PostgresDatabase, orgID, actorID, f
 	if err = launches.SetLaunchStatus(ctx, runID, orchestration.LaunchCompleted); err != nil {
 		t.Fatal(err)
 	}
+	processWorkflowCommands(t, ctx, worker)
 	value, err = tasks.Task(ctx, orgID, workspaceID, taskID)
 	if err != nil || value.Status != "quality" || value.StageVersion != 3 {
 		t.Fatal("successful run did not advance", value, err)
@@ -137,6 +158,7 @@ func testWorkspaceWorkflow(t *testing.T, db *PostgresDatabase, orgID, actorID, f
 	if err = launches.SetLaunchStatus(ctx, runID, orchestration.LaunchCompleted); err != nil {
 		t.Fatal(err)
 	}
+	processWorkflowCommands(t, ctx, worker)
 	again, err := tasks.Task(ctx, orgID, workspaceID, taskID)
 	if err != nil || again.StageVersion != 3 {
 		t.Fatal("completion replay advanced task", again, err)
@@ -155,6 +177,7 @@ func testWorkspaceWorkflow(t *testing.T, db *PostgresDatabase, orgID, actorID, f
 			if err = launches.SetLaunchStatus(ctx, run, orchestration.LaunchFailed); err != nil {
 				t.Fatal(err)
 			}
+			processWorkflowCommands(t, ctx, worker)
 		}
 	}
 	if err = launches.SetLaunchStatus(ctx, oldRun, orchestration.LaunchCompleted); err != nil {
@@ -167,6 +190,7 @@ func testWorkspaceWorkflow(t *testing.T, db *PostgresDatabase, orgID, actorID, f
 	if err = launches.SetLaunchStatus(ctx, newRun, orchestration.LaunchFailed); err != nil {
 		t.Fatal(err)
 	}
+	processWorkflowCommands(t, ctx, worker)
 	// Competing moves with distinct command identities must not both win.
 	a := task.TransitionInput{Action: "move", StageID: "in_review", StageVersion: 3}
 	b := a
@@ -212,11 +236,12 @@ func testWorkspaceWorkflow(t *testing.T, db *PostgresDatabase, orgID, actorID, f
 	if e != nil {
 		t.Fatal(e)
 	}
+	processWorkflowCommands(t, ctx, worker)
 	importedTask, e := tasks.Task(ctx, orgID, workspaceID, imported.ID)
-	if e != nil || importedTask.WorkflowID != secondWorkflowID || importedTask.AssigneeAgentID != assigned.ID || importedTask.StageWorkState != "queued" {
+	if e != nil || importedTask.WorkflowID != secondWorkflowID || importedTask.AssigneeAgentID != assigned.ID || importedTask.StageWorkState != "running" {
 		t.Fatal("import entry effects missing", importedTask, e)
 	}
-	if e = db.pool.QueryRow(ctx, "SELECT count(*) FROM workflow_commands WHERE workspace_id=$1 AND task_id=$2", workspaceID, imported.ID).Scan(&count); e != nil || count != 1 {
+	if e = db.pool.QueryRow(ctx, "SELECT count(*) FROM workflow_commands WHERE workspace_id=$1 AND task_id=$2 AND options->>'action'='start'", workspaceID, imported.ID).Scan(&count); e != nil || count != 1 {
 		t.Fatal("polling duplicated stage start", count, e)
 	}
 	item.Closed = true
@@ -234,7 +259,7 @@ func testWorkspaceWorkflow(t *testing.T, db *PostgresDatabase, orgID, actorID, f
 	}
 	for i := range definition.Stages {
 		if definition.Stages[i].ID == "quality" {
-			definition.Stages[i].AutoStart = true
+			definition.Rules = append(definition.Rules, workflow.AutomationRule{ID: "quality-start", Enabled: true, Event: workflow.StageEntered, SourceStageID: "quality", Action: workflow.StartWork})
 			definition.Stages[i].ResponsibleAgentID = assigned.ID
 		}
 	}
@@ -246,6 +271,7 @@ func testWorkspaceWorkflow(t *testing.T, db *PostgresDatabase, orgID, actorID, f
 	if e != nil {
 		t.Fatal(e)
 	}
+	processWorkflowCommands(t, ctx, worker)
 	chainRun := newID()
 	if e = launches.CreateLaunch(ctx, orchestration.Launch{RunID: chainRun, OrganizationID: orgID, WorkspaceID: workspaceID, TaskID: chain.ID, Status: orchestration.LaunchReady}); e != nil {
 		t.Fatal(e)
@@ -257,14 +283,16 @@ func testWorkspaceWorkflow(t *testing.T, db *PostgresDatabase, orgID, actorID, f
 		if e = launches.SetLaunchStatus(ctx, chainRun, orchestration.LaunchCompleted); e != nil {
 			t.Fatal(e)
 		}
+		processWorkflowCommands(t, ctx, worker)
 	}
 	chain, e = tasks.Task(ctx, orgID, workspaceID, chain.ID)
-	if e != nil || chain.Status != "quality" || chain.StageWorkState != "queued" || chain.StageVersion != 2 {
+	if e != nil || chain.Status != "quality" || chain.StageWorkState != "running" || chain.StageVersion != 2 {
 		t.Fatal("destination start not queued", chain, e)
 	}
-	if e = db.pool.QueryRow(ctx, "SELECT count(*) FROM workflow_commands WHERE workspace_id=$1 AND task_id=$2", workspaceID, chain.ID).Scan(&count); e != nil || count != 2 {
+	if e = db.pool.QueryRow(ctx, "SELECT count(*) FROM workflow_commands WHERE workspace_id=$1 AND task_id=$2 AND options->>'action'='start'", workspaceID, chain.ID).Scan(&count); e != nil || count != 2 {
 		t.Fatal("chain duplicated or lost a start", count, e)
 	}
+	t.Run("event admission", func(t *testing.T) { testWorkflowEventAdmission(t, db, orgID, workspaceID, actorID, assigned.ID) })
 	t.Run("latest configuration", func(t *testing.T) { testLatestWorkflowConfiguration(t, db, orgID, actorID, workspaceID, assigned.ID) })
 	t.Run("transitions preserve edits", func(t *testing.T) { testTransitionPreservesContent(t, db, orgID, actorID, workspaceID) })
 }
@@ -284,16 +312,18 @@ func testLatestWorkflowConfiguration(t *testing.T, db *PostgresDatabase, orgID, 
 			repo := NewWorkflowPostgresRepository(db)
 			d := workflow.DefaultDefinition(scenario)
 			d.ID = newID()
-			d.Stages[1].AutoStart = scenario != "manual completion"
+			d.Rules[0].Enabled = scenario != "manual completion"
 			d, err := repo.Create(ctx, workspaceID, d)
 			if err != nil {
 				t.Fatal(err)
 			}
 			tasks := NewTaskPostgresRepository(db)
+			worker := newWorkflowTestWorker(tasks)
 			value, err := tasks.CreateTask(ctx, newID(), workspaceID, task.TaskInput{WorkflowID: d.ID, Title: "Original", Status: "in_progress", AssigneeAgentID: agentID, ActorID: actorID})
 			if err != nil {
 				t.Fatal(err)
 			}
+			processWorkflowCommands(t, ctx, worker)
 			launches := NewAgentLaunchPostgresRepository(db)
 			q := sqlc.New(db.pool)
 			runID := newID()
@@ -308,18 +338,27 @@ func testLatestWorkflowConfiguration(t *testing.T, db *PostgresDatabase, orgID, 
 			expectedStage, expectedState := "in_review", task.WorkStateIdle
 			switch scenario {
 			case "disable advancement", "manual completion":
-				d.Stages[1].AutoAdvance = false
+				for i := range d.Rules {
+					if d.Rules[i].Action == workflow.MoveTask {
+						d.Rules[i].Enabled = false
+					}
+				}
 				expectedStage, expectedState = "in_progress", task.WorkStateCompleted
 			case "reorder stages":
 				d.Stages[0], d.Stages[2] = d.Stages[2], d.Stages[0]
-				expectedStage = "todo"
+				expectedStage = "in_review"
 			case "remove future stage":
 				d.Stages = append(d.Stages[:2], d.Stages[3:]...)
 				expectedStage = "done"
+				for i := range d.Rules {
+					if d.Rules[i].Action == workflow.MoveTask {
+						d.Rules[i].TargetStageID = "done"
+					}
+				}
 			case "change destination policy":
-				d.Stages[2].AutoStart = true
+				d.Rules = append(d.Rules, workflow.AutomationRule{ID: "review-start", Enabled: true, Event: workflow.StageEntered, SourceStageID: "in_review", Action: workflow.StartWork})
 				d.Stages[2].ResponsibleAgentID = agentID
-				expectedState = task.WorkStateQueued
+				expectedState = task.WorkStateRunning
 			}
 			d.Stages[1].Name = "Updated build"
 			if _, err = repo.Save(ctx, workspaceID, d); err != nil {
@@ -329,10 +368,14 @@ func testLatestWorkflowConfiguration(t *testing.T, db *PostgresDatabase, orgID, 
 				_, err = tasks.TransitionTask(ctx, actorID, orgID, workspaceID, value.ID, task.TransitionInput{Action: "complete", StageVersion: value.StageVersion, CommandID: newID()})
 			} else {
 				err = launches.SetLaunchStatus(ctx, runID, orchestration.LaunchCompleted)
+				if err == nil {
+					processWorkflowCommands(t, ctx, worker)
+				}
 			}
 			if err != nil {
 				t.Fatal(err)
 			}
+			processWorkflowCommands(t, ctx, worker)
 			got, err := tasks.Task(ctx, orgID, workspaceID, value.ID)
 			if err != nil || got.Status != expectedStage || got.StageWorkState != expectedState {
 				t.Fatalf("latest configuration not applied: %+v, %v", got, err)
@@ -384,4 +427,41 @@ func testTransitionPreservesContent(t *testing.T, db *PostgresDatabase, orgID, a
 	if err != nil || got.Title != "Concurrent edit" || got.Description != "Keep this description" || len(got.Labels) != 1 || got.Labels[0] != "keep" || got.Status != "in_review" {
 		t.Fatalf("transition overwrote content: %+v, %v", got, err)
 	}
+}
+
+type workflowTestAccess struct{}
+
+func (workflowTestAccess) GetWorkspace(context.Context, string, string, string) (workspace.Workspace, error) {
+	return workspace.Workspace{Role: "admin"}, nil
+}
+
+type workflowTestDispatcher struct{}
+
+func (workflowTestDispatcher) StartTask(context.Context, string, string, task.Task) error { return nil }
+
+func (workflowTestDispatcher) TaskCommandAccepted(context.Context, string, string, string, string, string) (bool, error) {
+	return true, nil
+}
+
+func newWorkflowTestWorker(repo *TaskPostgresRepository) *task.WorkflowWorker {
+	service := newWorkflowTestService(repo)
+	return task.NewWorkflowWorker(repo, service, workflowTestDispatcher{}, slog.New(slog.NewTextHandler(io.Discard, nil)))
+}
+
+func processWorkflowCommands(t *testing.T, ctx context.Context, worker *task.WorkflowWorker) {
+	t.Helper()
+	for i := 0; i < 100; i++ {
+		found, err := worker.ProcessOne(ctx)
+		if err != nil {
+			t.Fatal("deliver workflow command", err)
+		}
+		if !found {
+			return
+		}
+	}
+	t.Fatal("workflow command delivery did not drain")
+}
+
+func newWorkflowTestService(repo *TaskPostgresRepository) *task.Service {
+	return task.NewService(repo, workflowTestAccess{}, nil, repo, workflow.RuleEvaluator{})
 }

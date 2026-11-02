@@ -188,9 +188,13 @@ migration verification now succeed.
 
 ## Workspace workflows
 
-The `internal/workflow` package validates relational workflow definitions and
-plans deterministic stage transitions. PostgreSQL stores workflow and ordered
-stage configuration in relational columns. Tasks and source integrations
-reference a workspace workflow; transitions use the latest configuration under
-the workflow row lock. Stage-entry history stores configuration versions, while
-a durable outbox records transition commands and supports idempotent delivery.
+The `internal/workflow` package owns board/stage/rule entities and pure automation
+matcher/action interfaces. Explicit initial/closed stages and movement destinations
+are independent of column order. PostgreSQL stores relational configuration,
+a durable event inbox and the existing execution command outbox. The platform
+worker asks the task service to evaluate events against a locked snapshot of the
+latest workflow configuration. A repository transaction callback persists the
+service decision and acknowledgement atomically; external execution remains in the reconciled command delivery path.
+Stage-entry history and processed events retain configuration versions. No broker
+or generic workflow engine is introduced. Artifacts and normalized PR events are
+future extensions. See [workflow architecture and propagation](workflows.md).

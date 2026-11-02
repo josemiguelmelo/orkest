@@ -574,8 +574,6 @@ export function TaskEditor({
   const { scope } = useApp();
   const refresh = useRefresh();
   const action = useAction();
-  const sessionChoice = useSessionChoice();
-  const runs = useQuery({ ...taskRunsQuery(scope, task?.id ?? ''), enabled: !!task });
   const agents = useQuery(agentsQuery(scope));
   const repositories = useQuery(repositoriesQuery(scope));
   const form = useForm({
@@ -598,7 +596,7 @@ export function TaskEditor({
     if (!form.getValues('workflowId') && workflow.workflows[0])
       form.setValue('workflowId', workflow.workflows[0].id);
     if (workflow.data && !form.getValues('status'))
-      form.setValue('status', workflow.data.stages[0]?.id ?? '');
+      form.setValue('status', workflow.data.initialStageId ?? '');
   }, [form, task, workflow.data, workflow.workflows]);
   const imported = !!task && task.sourceProvider !== 'manual';
   return (
@@ -614,31 +612,20 @@ export function TaskEditor({
         if (!open && !action.pending) onClose();
       }}
     >
-      {sessionChoice.dialog}
       <Form
         form={form}
         error={action.error}
         onSubmit={async (values) => {
-          const starting =
-            task &&
-            task.status !== values.status &&
-            workflow.stages.find((s) => s.id === values.status)?.autoStart;
-          const sessionMode =
-            starting && runs.data?.some((run) => run.taskSessionId)
-              ? await sessionChoice.choose()
-              : undefined;
-          if (sessionMode === null) return;
           if (
             await action.run(async () => {
               const body = {
                 ...taskInput(
                   {
                     ...values,
-                    status: task ? values.status : (workflow.data?.stages[0]?.id ?? values.status),
+                    status: task ? values.status : (workflow.data?.initialStageId ?? values.status),
                   },
                   task,
                 ),
-                ...(sessionMode ? { sessionMode } : {}),
               };
               if (task)
                 await data(
@@ -665,7 +652,7 @@ export function TaskEditor({
               onChange={(event) => {
                 void workflowField.onChange(event);
                 const selected = workflow.workflows.find((item) => item.id === event.target.value);
-                form.setValue('status', selected?.stages[0]?.id ?? '');
+                form.setValue('status', selected?.initialStageId ?? '');
               }}
             >
               {workflow.workflows.map((item) => (
@@ -750,7 +737,14 @@ export function TaskPage(): JSX.Element {
         className="text-link"
         to="/organizations/$orgId/workspaces/$workspaceId/tasks"
         params={{ orgId: scope.orgID, workspaceId: scope.workspaceID }}
-        search={{ view: 'board', workflow: item.workflowId, q: '', status: 'all', agent: '', sort: 'updated' }}
+        search={{
+          view: 'board',
+          workflow: item.workflowId,
+          q: '',
+          status: 'all',
+          agent: '',
+          sort: 'updated',
+        }}
       >
         <ArrowLeft size={13} style={{ display: 'inline' }} /> Back to workflow
       </Link>
@@ -829,6 +823,7 @@ export function TaskPage(): JSX.Element {
         </PageHeader>
       </div>
       {startAction.error && <ErrorState error={startAction.error} />}
+      {item.automationPending && <Badge>Automation pending</Badge>}
       {item.stageWorkState && (
         <p>
           <Badge>{stageWorkStateLabels[item.stageWorkState]}</Badge>

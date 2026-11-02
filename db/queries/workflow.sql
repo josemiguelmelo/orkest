@@ -5,7 +5,7 @@ SELECT * FROM workspace_workflows WHERE workspace_id=$1 AND id=$2;
 SELECT * FROM workspace_workflows WHERE workspace_id=$1 ORDER BY name,id;
 
 -- name: CreateWorkflow :exec
-INSERT INTO workspace_workflows(workspace_id,id,name,version,configured_by) VALUES($1,$2,$3,$4,$5);
+INSERT INTO workspace_workflows(workspace_id,id,name,version,configured_by,initial_stage_id,closed_stage_id) VALUES($1,$2,$3,$4,$5,$6,$7);
 
 -- name: DeleteWorkflow :execrows
 DELETE FROM workspace_workflows WHERE workspace_id=$1 AND id=$2;
@@ -17,16 +17,16 @@ SELECT id FROM workspace_workflows WHERE workspace_id=$1 ORDER BY id FOR UPDATE;
 SELECT * FROM workspace_workflows WHERE workspace_id=$1 AND id=$2 FOR UPDATE;
 
 -- name: SaveWorkflow :execrows
-UPDATE workspace_workflows SET name=$4,configured_by=$5,version=version+1 WHERE workspace_id=$1 AND id=$2 AND version=$3;
+UPDATE workspace_workflows SET name=$4,configured_by=$5,initial_stage_id=$6,closed_stage_id=$7,version=version+1 WHERE workspace_id=$1 AND id=$2 AND version=$3;
 
 -- name: ListWorkflowStages :many
 SELECT * FROM workflow_stages WHERE workspace_id=$1 AND workflow_id=$2 ORDER BY position;
 
 -- name: PutWorkflowStage :exec
-INSERT INTO workflow_stages(workspace_id,workflow_id,id,responsible_agent_id,position,name,description,auto_start,auto_advance)
-VALUES(sqlc.arg(workspace_id),sqlc.arg(workflow_id),sqlc.arg(id),NULLIF(sqlc.arg(agent_id)::text,''),sqlc.arg(position),sqlc.arg(name),sqlc.arg(description),sqlc.arg(auto_start),sqlc.arg(auto_advance))
+INSERT INTO workflow_stages(workspace_id,workflow_id,id,responsible_agent_id,position,name,description)
+VALUES(sqlc.arg(workspace_id),sqlc.arg(workflow_id),sqlc.arg(id),NULLIF(sqlc.arg(agent_id)::text,''),sqlc.arg(position),sqlc.arg(name),sqlc.arg(description))
 ON CONFLICT(workspace_id,workflow_id,id) DO UPDATE SET responsible_agent_id=EXCLUDED.responsible_agent_id,
-position=EXCLUDED.position,name=EXCLUDED.name,description=EXCLUDED.description,auto_start=EXCLUDED.auto_start,auto_advance=EXCLUDED.auto_advance;
+position=EXCLUDED.position,name=EXCLUDED.name,description=EXCLUDED.description;
 
 -- name: RemoveWorkflowStages :exec
 DELETE FROM workflow_stages WHERE workspace_id=$1 AND workflow_id=$2 AND NOT (id=ANY(sqlc.arg(ids)::text[]));
@@ -83,3 +83,23 @@ INSERT INTO workflow_commands(id,workspace_id,task_id,stage_version,actor_id,opt
 -- name: ImportedWorkflowTask :one
 SELECT id,status,workflow_id FROM tasks WHERE workspace_id=$1 AND source_provider=$2 AND source_id=$3
 AND (source_integration_id=$4 OR source_integration_id IS NULL) LIMIT 1 FOR UPDATE;
+
+-- name: ListWorkflowRules :many
+SELECT * FROM workflow_rules WHERE workspace_id=$1 AND workflow_id=$2 ORDER BY id;
+
+-- name: DeleteWorkflowRules :exec
+DELETE FROM workflow_rules WHERE workspace_id=$1 AND workflow_id=$2;
+
+-- name: InsertWorkflowRule :exec
+INSERT INTO workflow_rules(workspace_id,workflow_id,id,enabled,event_type,source_stage_id,action_type,target_stage_id)
+VALUES($1,$2,$3,$4,$5,$6,$7,NULLIF(sqlc.arg(target_stage_id)::text,''));
+
+-- name: EnqueueWorkflowEvent :exec
+INSERT INTO workflow_events(id,workspace_id,task_id,stage_version,actor_id,event_type,run_id,causation_id,correlation_id)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(id) DO NOTHING;
+
+-- name: PendingWorkflowEvent :one
+SELECT * FROM workflow_events WHERE processed_at IS NULL ORDER BY occurred_at,id LIMIT 1 FOR UPDATE SKIP LOCKED;
+
+-- name: AcknowledgeWorkflowEvent :exec
+UPDATE workflow_events SET processed_at=now(),configuration_version=$2,matched_rule_id=$3 WHERE id=$1;

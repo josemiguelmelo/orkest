@@ -285,7 +285,7 @@ WITH legacy AS (
 INSERT INTO tasks (id, workspace_id, workflow_id, title, description, source_provider, source_integration_id, source_id, source_url, labels, status)
 SELECT $1, $2, $3, $4, $5, $6,
     $7, $8, $9, $10,
-    (SELECT id FROM workflow_stages WHERE workspace_id=$2 AND workflow_id=$3 ORDER BY CASE WHEN $11::boolean THEN -position ELSE position END LIMIT 1)
+    (SELECT CASE WHEN $11::boolean THEN closed_stage_id ELSE initial_stage_id END FROM workspace_workflows WHERE workspace_id=$2 AND id=$3)
 WHERE NOT EXISTS (SELECT 1 FROM legacy)
 ON CONFLICT (workspace_id, source_provider, source_integration_id, source_id)
 DO UPDATE SET title=EXCLUDED.title, description=EXCLUDED.description, source_url=EXCLUDED.source_url, labels=EXCLUDED.labels,

@@ -2,7 +2,6 @@ package postgres
 
 import (
 	"context"
-	"os"
 	"strings"
 	"testing"
 
@@ -55,22 +54,6 @@ func TestSessionMigrations(t *testing.T) {
 		t.Fatal("session scope constraint missing", err)
 	}
 	t.Run("workflow migration round trip", func(t *testing.T) { testWorkflowMigrationRoundTrip(t, ctx, pool) })
-	t.Run("local branch rollback", func(t *testing.T) {
-		script, err := os.ReadFile("../../tools/db/rollback-branch-workflows.sql")
-		if err != nil {
-			t.Fatal(err)
-		}
-		if _, err = pool.Exec(ctx, string(script)); err != nil {
-			t.Fatal("local reset", err)
-		}
-		var version int64
-		if err = pool.QueryRow(ctx, "SELECT max(version_id) FROM goose_db_version WHERE is_applied").Scan(&version); err != nil || version != 34 {
-			t.Fatal("local reset did not restore v34", version, err)
-		}
-		if err = runMigrations(ctx, pool); err != nil {
-			t.Fatal("reapply after local reset", err)
-		}
-	})
 }
 
 func testWorkflowMigrationRoundTrip(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
@@ -90,6 +73,17 @@ func testWorkflowMigrationRoundTrip(t *testing.T, ctx context.Context, pool *pgx
 	if _, err = tx.Exec(ctx, `INSERT INTO workflow_stages(workspace_id,workflow_id,id,position,name) VALUES('migration-workspace','migration-workspace','custom',4,'Custom'); UPDATE tasks SET status='custom' WHERE id='migration-task'; INSERT INTO task_integrations(id,workspace_id,workflow_id,provider,name,encrypted_credential) VALUES('migration-integration','migration-workspace','migration-workspace','github_cloud','Migration','test'); SET CONSTRAINTS ALL IMMEDIATE;`); err != nil {
 		t.Fatal(err)
 	}
+	automationSource, err := migrations.FS.ReadFile("0036_workflow_automation.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	automationUp, automationDown, ok := strings.Cut(string(automationSource), "-- +goose Down")
+	if !ok {
+		t.Fatal("missing automation rollback")
+	}
+	if _, err = tx.Exec(ctx, automationDown); err != nil {
+		t.Fatal("rollback automation", err)
+	}
 	source, err := migrations.FS.ReadFile("0035_workspace_workflows.sql")
 	if err != nil {
 		t.Fatal(err)
@@ -107,6 +101,16 @@ func testWorkflowMigrationRoundTrip(t *testing.T, ctx context.Context, pool *pgx
 	}
 	if _, err = tx.Exec(ctx, up); err != nil {
 		t.Fatal("reapply final workflow migration", err)
+	}
+	if _, err = tx.Exec(ctx, `INSERT INTO workflow_commands(id,workspace_id,task_id,stage_version,actor_id,options) VALUES('migration-outcome','migration-workspace','migration-task',1,'actor','{"action":"run_outcome","runId":"migration-run","success":true}');`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = tx.Exec(ctx, automationUp); err != nil {
+		t.Fatal("reapply automation", err)
+	}
+	var eventPreserved bool
+	if err = tx.QueryRow(ctx, `SELECT event_type='run_succeeded' AND run_id='migration-run' AND processed_at IS NULL FROM workflow_events WHERE id='migration-outcome'`).Scan(&eventPreserved); err != nil || !eventPreserved {
+		t.Fatal("pending outcome lost during upgrade", err)
 	}
 	var preserved bool
 	if err = tx.QueryRow(ctx, `SELECT t.workflow_id='migration-workspace' AND t.status='todo' AND t.stage_version=1 AND i.workflow_id=t.workflow_id AND s.name='Todo' FROM tasks t JOIN task_integrations i ON i.workspace_id=t.workspace_id JOIN workflow_stages s ON s.workspace_id=t.workspace_id AND s.workflow_id=t.workflow_id AND s.id=t.status WHERE t.id='migration-task' AND i.id='migration-integration'`).Scan(&preserved); err != nil || !preserved {

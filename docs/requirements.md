@@ -26,7 +26,7 @@ Orkest is a platform for orchestrating, monitoring, and interacting with AI agen
 - Allow a task to involve multiple repositories registered in its workspace.
 - Treat external systems as authoritative for imported task content; users edit that content at the source.
 
-Workflow stage assignment, auto-start and auto-advance are configured explicitly by workspace administrators; automatic selection of unrelated tasks remains outside the MVP. OpenCode, Claude Code, Codex, GitHub Copilot CLI, and Kiro CLI are supported through pinned runtime adapters. Codex uses the ACP adapter and an OpenAI model selection; API-key credentials are provided through workspace secrets, and Local development can use the host Codex login described above. GitHub Copilot CLI uses ACP and a GitHub Copilot model selection; credentials are provided through workspace secrets. Kiro CLI uses ACP V3 and the `kiro` model provider; `KIRO_API_KEY` is supplied through workspace secrets.
+Workflow stage assignment and event-driven start/movement rules are configured explicitly by workspace administrators; automatic selection of unrelated tasks remains outside the MVP. OpenCode, Claude Code, Codex, GitHub Copilot CLI, and Kiro CLI are supported through pinned runtime adapters. Codex uses the ACP adapter and an OpenAI model selection; API-key credentials are provided through workspace secrets, and Local development can use the host Codex login described above. GitHub Copilot CLI uses ACP and a GitHub Copilot model selection; credentials are provided through workspace secrets. Kiro CLI uses ACP V3 and the `kiro` model provider; `KIRO_API_KEY` is supplied through workspace secrets.
 
 For Local development, Orkest uses the host Codex auth file at
 `~/.codex/auth.json` when present; `ORKEST_CODEX_AUTH_FILE` overrides the path.
@@ -153,11 +153,15 @@ The executor contract must cover environment creation, startup, connectivity, st
 
 ### 3.10 Workflow
 
-Workspaces have one or more ordered, configurable workflows. Every task is associated with one workflow; manual task creation selects it, and source integrations select the workflow for imported tasks. Stages contain a name, short description, optional responsible agent, auto-start, and auto-advance (off for new stages). Stable stage IDs identify task positions independently of stage names within a workflow. Tasks start in the first stage, and source-closed tasks move to the final stage. A stage cannot be removed while tasks occupy it. A workflow cannot be deleted while tasks or integrations reference it.
+Workspaces have one or more configurable task boards. Every task selects a workflow; source integrations select one for imported tasks. Stages have stable IDs, names, descriptions, display order and an optional responsible agent. Explicit initial and closed stage references determine task entry and closure independently of display order. Occupied stages and referenced workflows cannot be deleted.
 
-Entering a stage applies its configured assignment and optionally queues execution. Successful work advances only when enabled. Manual stage completion follows the same rule. Failures, cancellation, and interaction waits never advance automatically. Tasks in the closed stage cannot reopen. Workflow position and execution health remain separate. Agent completion may continue the same task through configured stages; it never selects another task.
+Confirmed: automation is event-driven using durable PostgreSQL events and explicit rules. Stage-entry rules may start assigned work. Successful-run and manual-completion rules independently move tasks to explicit destinations. At most one enabled rule matches an event and source stage. Closed stages cannot have outgoing automation, and closed tasks cannot reopen. Failures, cancellation and interaction waits never advance or retry automatically. Agent completion may continue the same task through configured rules; it never selects another task.
 
-Workspace admins and inherited organization owners/admins configure workflows. Members can transition tasks; viewers are read-only. Confirmed: each transition uses the latest saved workflow configuration. Changes to advancement and ordering during execution affect completion; destination entry uses current assignment/start settings. Saving configuration does not itself start execution or change an active runtime configuration. Closed state follows the current final stage. Commands and entry history are durable, versioned and reconciled before replacement. See [workspace workflows](workflows.md) for transition, migration and recovery semantics.
+Task movement applies destination assignment and atomically records a stage-entry event; execution follows asynchronously when configured. Missing execution prerequisites surface as failed work indicators without undoing committed movement. Explicit starts remain separate user commands. Workflow position, pending automation and execution health are separate concepts.
+
+Workspace admins and inherited organization owners/admins configure workflows. Members can transition tasks; viewers are read-only. Each event is evaluated against the latest saved configuration under the workflow lock. Saving configuration does not itself emit events, start execution or alter active runtime settings. Event acknowledgement, task movement, history and resulting commands commit atomically. Stable identities, stage-entry versions and run identities prevent replay and stale-event effects. See [workspace workflows](workflows.md) for API, migration and recovery semantics.
+
+Task artifacts and external PR-triggered rules are future extensions. Artifacts will belong to tasks with optional producing-run/stage-entry identity. PR review outcomes and their conditions must be defined with the integration; no PR webhook ingestion is currently implemented.
 
 ### 3.11 Task Run — proposed supporting concept
 
@@ -352,7 +356,7 @@ Event retention, recovery time targets, host-loss guarantees, and overall availa
 - Invitations and external identity-to-membership provisioning beyond first-login user creation.
 - Permission policies are selected per agent definition, not workspace-wide. The initial choices are `ask` (the default) and `autonomous`; runtime adapters translate the selected value into native provider configuration. The setting is snapshotted per task session.
 - Pinned releases for supported runtimes, default model selection, and validated recovery behavior.
-- Multiple workflows per workspace are implemented; conditional branching remains deferred.
+- Multiple workflows per workspace are implemented; external event conditions remain deferred.
 - Internal platform tool exposure mechanism and exact allowed operations; custom tool registration is deferred.
 - GitHub import scope, comment synchronization, webhook/polling behavior, and issue-close semantics.
 - Docker deployment location, environment persistence, resource limits, and credential provisioning.

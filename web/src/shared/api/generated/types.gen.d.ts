@@ -59,8 +59,14 @@ export type WorkflowStage = {
     name: string;
     description: string;
     responsibleAgentId: string;
-    autoStart: boolean;
-    autoAdvance: boolean;
+};
+export type WorkflowAutomationRule = {
+    id: string;
+    enabled: boolean;
+    event: 'stage_entered' | 'run_succeeded' | 'stage_completed';
+    sourceStageId: string;
+    action: 'move_task' | 'start_work';
+    targetStageId?: string;
 };
 export type WorkflowInput = {
     name: string;
@@ -69,6 +75,15 @@ export type WorkspaceWorkflow = {
     id: string;
     name: string;
     version: number;
+    /**
+     * Stage for new tasks; independent of display order.
+     */
+    initialStageId: string;
+    /**
+     * Closed stage; independent of display order.
+     */
+    closedStageId: string;
+    rules: Array<WorkflowAutomationRule>;
     /**
      * User who last configured automation; assigned by the server.
      */
@@ -125,6 +140,10 @@ export type Task = {
      */
     sourceUrl?: string;
     stageVersion?: number;
+    /**
+     * A durable automation event is waiting to be processed.
+     */
+    automationPending?: boolean;
     stageWorkState?: StageWorkState;
     closed?: boolean;
     /**

@@ -35,7 +35,7 @@ WITH legacy AS (
 INSERT INTO tasks (id, workspace_id, workflow_id, title, description, source_provider, source_integration_id, source_id, source_url, labels, status)
 SELECT sqlc.arg(id), sqlc.arg(workspace_id), sqlc.arg(workflow_id), sqlc.arg(title), sqlc.arg(description), sqlc.arg(source_provider),
     sqlc.arg(source_integration_id), sqlc.arg(source_id), sqlc.narg(source_url), sqlc.arg(labels),
-    (SELECT id FROM workflow_stages WHERE workspace_id=sqlc.arg(workspace_id) AND workflow_id=sqlc.arg(workflow_id) ORDER BY CASE WHEN sqlc.arg(closed)::boolean THEN -position ELSE position END LIMIT 1)
+    (SELECT CASE WHEN sqlc.arg(closed)::boolean THEN closed_stage_id ELSE initial_stage_id END FROM workspace_workflows WHERE workspace_id=sqlc.arg(workspace_id) AND id=sqlc.arg(workflow_id))
 WHERE NOT EXISTS (SELECT 1 FROM legacy)
 ON CONFLICT (workspace_id, source_provider, source_integration_id, source_id)
 DO UPDATE SET title=EXCLUDED.title, description=EXCLUDED.description, source_url=EXCLUDED.source_url, labels=EXCLUDED.labels,

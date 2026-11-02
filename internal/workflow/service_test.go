@@ -48,7 +48,7 @@ func TestConfigurationRequiresWorkspaceAdministration(t *testing.T) {
 		t.Run(role, func(t *testing.T) {
 			repo := &repositoryStub{}
 			s := NewService(repo, accessStub{role: role})
-			d := Definition{Version: 1, ConfiguredBy: "forged", Stages: []Stage{{ID: "only", Name: "Only"}}}
+			d := Definition{InitialStageID: "only", ClosedStageID: "only", Version: 1, ConfiguredBy: "forged", Stages: []Stage{{ID: "only", Name: "Only"}}}
 			_, err := s.Save(context.Background(), "actor", "org", "workspace", "flow", d)
 			allowed := role == "admin" || role == "owner"
 			if allowed {

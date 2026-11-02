@@ -12,32 +12,22 @@ type Stage struct {
 	Name               string `json:"name"`
 	Description        string `json:"description"`
 	ResponsibleAgentID string `json:"responsibleAgentId"`
-	AutoStart          bool   `json:"autoStart"`
-	AutoAdvance        bool   `json:"autoAdvance"`
 }
 
 // Definition is ordered; IDs remain stable when names and positions change.
 type Definition struct {
-	ConfiguredBy string  `json:"configuredBy,omitempty"`
-	ID           string  `json:"id"`
-	Name         string  `json:"name"`
-	Version      int64   `json:"version"`
-	Stages       []Stage `json:"stages"`
+	ConfiguredBy   string           `json:"configuredBy,omitempty"`
+	ID             string           `json:"id"`
+	Name           string           `json:"name"`
+	Version        int64            `json:"version"`
+	InitialStageID string           `json:"initialStageId"`
+	ClosedStageID  string           `json:"closedStageId"`
+	Rules          []AutomationRule `json:"rules"`
+	Stages         []Stage          `json:"stages"`
 }
 
-func (d Definition) StartStageID() string {
-	if len(d.Stages) == 0 {
-		return ""
-	}
-	return d.Stages[0].ID
-}
-
-func (d Definition) FinalStageID() string {
-	if len(d.Stages) == 0 {
-		return ""
-	}
-	return d.Stages[len(d.Stages)-1].ID
-}
+func (d Definition) StartStageID() string { return d.InitialStageID }
+func (d Definition) FinalStageID() string { return d.ClosedStageID }
 
 func (d Definition) Stage(id string) (Stage, bool) {
 	for _, s := range d.Stages {
@@ -63,20 +53,28 @@ func (d *Definition) Validate() error {
 		}
 		seen[s.ID] = true
 	}
-	final := d.Stages[len(d.Stages)-1]
-	if final.AutoStart || final.AutoAdvance {
+	if !seen[d.InitialStageID] || !seen[d.ClosedStageID] {
 		return modelerrors.ErrInvalid
 	}
-	return nil
+	if d.Rules == nil {
+		d.Rules = []AutomationRule{}
+	}
+	return validateRules(*d)
 }
 
 func DefaultDefinition(name string) Definition {
 	return Definition{
-		Name:    name,
-		Version: 1,
+		Name:           name,
+		Version:        1,
+		InitialStageID: "todo", ClosedStageID: "done",
+		Rules: []AutomationRule{
+			{ID: "start-progress", Enabled: true, Event: StageEntered, SourceStageID: "in_progress", Action: StartWork},
+			{ID: "review-success", Enabled: true, Event: RunSucceeded, SourceStageID: "in_progress", Action: MoveTask, TargetStageID: "in_review"},
+			{ID: "review-complete", Enabled: true, Event: StageCompleted, SourceStageID: "in_progress", Action: MoveTask, TargetStageID: "in_review"},
+		},
 		Stages: []Stage{
 			{ID: "todo", Name: "Todo", Description: "Ready to pick up"},
-			{ID: "in_progress", Name: "In progress", Description: "Work in progress", AutoStart: true, AutoAdvance: true},
+			{ID: "in_progress", Name: "In progress", Description: "Work in progress"},
 			{ID: "in_review", Name: "In review", Description: "Ready for review"},
 			{ID: "done", Name: "Done", Description: "Completed work"},
 		},
@@ -93,6 +91,7 @@ const (
 )
 
 type Plan struct {
+	RuleID          string
 	StageID         string
 	AssigneeAgentID string
 	Start           bool
@@ -101,28 +100,19 @@ type Plan struct {
 
 // PlanTransition has no effects; callers persist its result atomically.
 func PlanTransition(d Definition, currentID, targetID, assignee string, trigger Trigger) (Plan, error) {
-	current, ok := d.Stage(currentID)
-	if !ok {
+	if _, ok := d.Stage(currentID); !ok {
 		return Plan{}, modelerrors.ErrInvalid
 	}
 	plan := Plan{StageID: currentID, AssigneeAgentID: assignee}
 	switch trigger {
 	case Succeeded, Complete:
-		plan.Completed = true
-		if !current.AutoAdvance {
-			return plan, nil
+		event := RunSucceeded
+		if trigger == Complete {
+			event = StageCompleted
 		}
-		for i, s := range d.Stages {
-			if s.ID == currentID {
-				if i+1 == len(d.Stages) {
-					return plan, nil
-				}
-				targetID = d.Stages[i+1].ID
-				break
-			}
-		}
+		return (RuleEvaluator{}).Evaluate(d, plan, Event{Type: event})
 	case Start:
-		if currentID == d.FinalStageID() || assignee == "" {
+		if currentID == d.ClosedStageID || assignee == "" {
 			return Plan{}, modelerrors.ErrConflict
 		}
 		plan.Start = true
@@ -131,20 +121,16 @@ func PlanTransition(d Definition, currentID, targetID, assignee string, trigger 
 	default:
 		return Plan{}, modelerrors.ErrInvalid
 	}
+	if currentID == d.ClosedStageID && targetID != currentID {
+		return Plan{}, modelerrors.ErrConflict
+	}
 	next, ok := d.Stage(targetID)
 	if !ok {
 		return Plan{}, modelerrors.ErrInvalid
 	}
-	if currentID == d.FinalStageID() && targetID != currentID {
-		return Plan{}, modelerrors.ErrConflict
-	}
-	plan.StageID, plan.Completed = targetID, false
+	plan.StageID = targetID
 	if next.ResponsibleAgentID != "" {
 		plan.AssigneeAgentID = next.ResponsibleAgentID
-	}
-	plan.Start = next.AutoStart
-	if plan.Start && plan.AssigneeAgentID == "" {
-		return Plan{}, modelerrors.ErrConflict
 	}
 	return plan, nil
 }

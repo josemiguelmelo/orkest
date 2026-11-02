@@ -84,15 +84,14 @@ func (r *TaskPostgresRepository) CreateTask(ctx context.Context, id, workspaceID
 			return task.Task{}, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
 		}
 	}
-	if plan.Start && in.ActorID != "" {
-		if err = enqueueStageStart(ctx, q, workspaceID, id, in.ActorID, 1, task.TransitionInput{Action: "start", CommandID: in.CommandID, SessionMode: in.SessionMode, PromptText: in.PromptText}); err != nil {
-			return task.Task{}, err
-		}
+	if err = enqueueStageEntry(ctx, q, workspaceID, id, in.ActorID, 1, in.CommandID); err != nil {
+		return task.Task{}, err
 	}
 	if err = tx.Commit(ctx); err != nil {
 		return task.Task{}, err
 	}
 	t := taskFromRow(sqlc.GetTaskRow(row))
+	t.AutomationPending = true
 	err = r.fillRepositories(ctx, &t)
 	return t, err
 }
@@ -192,5 +191,5 @@ func taskFromRow(row sqlc.GetTaskRow) task.Task {
 	if row.Labels == nil {
 		row.Labels = []string{}
 	}
-	return task.Task{ID: row.ID, WorkspaceID: row.WorkspaceID, WorkflowID: row.WorkflowID, Title: row.Title, Description: row.Description, SourceProvider: row.SourceProvider, SourceID: row.SourceID, SourceURL: row.SourceUrl, Status: row.Status, AssigneeAgentID: row.AssigneeAgentID, Labels: row.Labels, CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time, StageVersion: row.StageVersion, StageWorkState: task.WorkState(row.StageWorkState), Closed: row.Closed, StageName: row.StageName, StageDescription: row.StageDescription, Repositories: []task.RepositoryRef{}}
+	return task.Task{ID: row.ID, WorkspaceID: row.WorkspaceID, WorkflowID: row.WorkflowID, Title: row.Title, Description: row.Description, SourceProvider: row.SourceProvider, SourceID: row.SourceID, SourceURL: row.SourceUrl, Status: row.Status, AssigneeAgentID: row.AssigneeAgentID, Labels: row.Labels, CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time, StageVersion: row.StageVersion, StageWorkState: task.WorkState(row.StageWorkState), AutomationPending: row.AutomationPending, Closed: row.Closed, StageName: row.StageName, StageDescription: row.StageDescription, Repositories: []task.RepositoryRef{}}
 }
