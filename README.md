@@ -44,6 +44,7 @@ React/Vite workbench
 Go Orkest API ─── PostgreSQL (state, migrations, sessions)
         │
         ├── Docker executor ─── agentctl container
+        ├── Local executor ─── host agentctl process (trusted development only)
         │                              │ ACP over stdio
         │                              ▼
         │                       OpenCode / Claude Code / Codex
@@ -82,6 +83,37 @@ make auth-up
 make build
 make dev
 ```
+
+### Run agents with the Local executor
+
+Local runs `agentctl` directly on the Orkest host. It is intended for trusted,
+single-user development and does not isolate tasks from the host or from each
+other. Docker is still needed for the local PostgreSQL and Keycloak services;
+the Docker executor itself is not needed for Local agent runs.
+
+Build/install the host `agentctl` binary and frontend, then configure `.env` to
+select it. `make build` creates `bin/agentctl` as well as the Orkest binary and
+web assets:
+
+```sh
+make build
+```
+
+Set these values in `.env`, replacing the binary path with the absolute path to
+this repository's `bin/agentctl`:
+
+```dotenv
+ORKEST_EXECUTOR=local
+ORKEST_AGENTCTL_BINARY=/absolute/path/to/orkest/bin/agentctl
+```
+
+Install the pinned runtime you select for an agent definition on the host and
+make it available on `PATH` (for example, OpenCode 2.1.4). Local passes the
+host `PATH` to the runtime automatically so runtime launchers can find their
+dependencies. Local does not use the runtime Docker images or Docker execution profiles. Then start the
+infrastructure and Orkest as usual with `make db-up`, `make auth-up`, and
+`make dev`. See the [Local executor guide](docs/executors/local.md) and
+[runtime provider guides](docs/runtime-providers.md) for runtime requirements.
 
 The API listens on `http://127.0.0.1:8080` by default. In a separate terminal, open the management workbench at that address and sign in at `/auth/login` with the imported local Keycloak account:
 
@@ -138,13 +170,16 @@ make docker-agentctl-push-local  # also pushes images to the local registry
 | `KEYCLOAK_PORT` | Local Keycloak host port; defaults to `8082` in Compose. |
 | `ORKEST_WEB_DIR` | Built frontend directory served by Go; defaults to `web/dist`. |
 | `ORKEST_DATA_DIR` | Durable host directory for workspace files, task checkouts, and agent state. |
+| `ORKEST_EXECUTOR` | Agent executor: `docker` (default) or `local`. Local does not isolate task processes. |
+| `ORKEST_AGENTCTL_BINARY` | Absolute path to the installed `agentctl` executable; required when using Local. `make build` creates `bin/agentctl`. |
+| `ORKEST_AGENT_PROVIDER_ENV` | Comma-separated host environment variable names explicitly passed to agent runtimes. |
 | `ORKEST_INTEGRATION_ENCRYPTION_KEY` | Required for encrypted integration or workspace-secret storage; use a unique 32-byte hex key. |
 | `AGENTCTL_*_IMAGE` | Agent runtime images for OpenCode, Claude Code, and Codex. Defaults are pinned in `.env.example`. |
 | `ORKEST_EXECUTION_IMAGE_REPOSITORY` | Registry repository used by execution profiles. Leave unset when execution-profile builds are not needed. |
 | `ORKEST_IMAGE_BUILDER` | Execution-profile builder: `buildkit` (default) or `docker`. |
 | `ORKEST_BUILDCTL_BINARY`, `ORKEST_BUILDKIT_*` | BuildKit binary, address, daemonless mode, and optional TLS settings. |
 | `AGENTCTL_LISTEN`, `AGENTCTL_WORK_DIR`, `AGENTCTL_STATE_DIR` | Standalone `agentctl` address and required task/state directories. |
-| `ORKEST_CODEX_AUTH_FILE` | Optional host Codex auth file for local Docker runs; treat it as sensitive. |
+| `ORKEST_CODEX_AUTH_FILE` | Optional Codex auth file override. Local defaults to `~/.codex/auth.json` when present; Docker requires this path to be visible to the daemon. |
 
 When using Colima or another named Docker context, set `DOCKER_HOST` in `.env` to the endpoint returned by `docker context inspect --format '{{.Endpoints.docker.Host}}'`. Orkest's Docker client reads this variable independently of the Docker CLI's active context. For Compose, `ORKEST_DATA_DIR` must be a path visible to the Docker daemon because nested agent containers use host bind mounts.
 
@@ -219,6 +254,7 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, verification, pull
 - [Durable task sessions](docs/task-sessions.md)
 - [Execution profiles](docs/execution-profiles.md)
 - [Docker executor](docs/executors/docker.md)
+- [Local executor](docs/executors/local.md)
 - [Provider guides](docs/providers/)
 
 ## Project status and license

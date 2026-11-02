@@ -23,7 +23,7 @@ import (
 	coreruntime "github.com/josemiguelmelo/orkest/internal/core/runtime"
 	"github.com/josemiguelmelo/orkest/internal/core/secretbox"
 	"github.com/josemiguelmelo/orkest/internal/executionprofile"
-	dockerexecutor "github.com/josemiguelmelo/orkest/internal/executors/docker"
+	"github.com/josemiguelmelo/orkest/internal/executors"
 	"github.com/josemiguelmelo/orkest/internal/identity"
 	"github.com/josemiguelmelo/orkest/internal/imagebuild"
 	"github.com/josemiguelmelo/orkest/internal/imagebuild/buildkit"
@@ -93,11 +93,14 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 	codeRepositories.SetSecretBox(secretBox)
 	launchRepo := postgres.NewAgentLaunchPostgresRepository(database, secretBox)
 	client := orchestration.NewHTTPAgentctlClient(httplog.PropagatingHTTPClient(&http.Client{Timeout: 10 * time.Second}))
-	executor, executorErr := dockerexecutor.New(ctx, dockerexecutor.Config{
-		DataRoot:      filepath.Join(dataRoot, "agent-executions"),
-		NetworkName:   os.Getenv("ORKEST_AGENTCTL_NETWORK"),
-		CodexAuthFile: os.Getenv("ORKEST_CODEX_AUTH_FILE"),
-		Images: map[coreruntime.Runtime]string{
+	providers := []coderepository.CodingProvider{githubprovider.NewGitHubProvider(), gitlabprovider.NewGitLabCloudProvider(), gitlabprovider.NewGitLabServerProvider()}
+	executorSelection, executorErr := executors.New(ctx, executors.Config{
+		Kind:           os.Getenv("ORKEST_EXECUTOR"),
+		DataRoot:       filepath.Join(dataRoot, "agent-executions"),
+		DockerNetwork:  os.Getenv("ORKEST_AGENTCTL_NETWORK"),
+		CodexAuthFile:  os.Getenv("ORKEST_CODEX_AUTH_FILE"),
+		AgentctlBinary: os.Getenv("ORKEST_AGENTCTL_BINARY"),
+		DockerImages: map[coreruntime.Runtime]string{
 			coreruntime.OpenCode:      os.Getenv("AGENTCTL_OPENCODE_IMAGE"),
 			coreruntime.ClaudeCode:    os.Getenv("AGENTCTL_CLAUDE_CODE_IMAGE"),
 			coreruntime.Codex:         os.Getenv("AGENTCTL_CODEX_IMAGE"),
@@ -105,12 +108,14 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 			coreruntime.Kiro:          os.Getenv("AGENTCTL_KIRO_IMAGE"),
 		},
 		ProviderEnv:              splitEnvironmentNames(os.Getenv("ORKEST_AGENT_PROVIDER_ENV")),
-		CodingProviders:          []coderepository.CodingProvider{githubprovider.NewGitHubProvider(), gitlabprovider.NewGitLabCloudProvider(), gitlabprovider.NewGitLabServerProvider()},
+		CodingProviders:          providers,
 		CodingCredentialResolver: codeRepositories,
 	})
 	if executorErr != nil {
-		return fmt.Errorf("initialize Docker agent executor: %w", executorErr)
+		return fmt.Errorf("initialize agent executor: %w", executorErr)
 	}
+	executor := executorSelection.Executor
+	executorKind := executorSelection.Kind
 	defer func() { _ = executor.Close() }()
 	completion, completionErr := orchestration.NewLaunchCompletionService(launchRepo, executor)
 	if completionErr != nil {
@@ -138,7 +143,11 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	dispatcher.SetProfiles(executionProfileService)
+	if executorKind == executors.Local {
+		dispatcher.SetProfiles(localExecutionProfileResolver{})
+	} else {
+		dispatcher.SetProfiles(executionProfileService)
+	}
 	dispatcher.SetRepositoryResolver(codeRepositories)
 	dispatcher.SetCodingCredentialResolver(codeRepositories)
 	dispatcher.SetSkillResolver(skillCatalog)
@@ -198,6 +207,12 @@ func Run(ctx context.Context, logger *slog.Logger) error {
 	stopRunner()
 	runnerWG.Wait()
 	return serverErr
+}
+
+type localExecutionProfileResolver struct{}
+
+func (localExecutionProfileResolver) Resolve(context.Context, string, string, coreruntime.Runtime) (string, error) {
+	return "", nil
 }
 
 func splitEnvironmentNames(value string) []string {

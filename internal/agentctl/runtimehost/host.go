@@ -35,6 +35,7 @@ type Host struct {
 	profile         agentruntime.RuntimeProfile
 	factory         agentruntime.ProtocolClientFactory
 	environment     Environment
+	preparation     RuntimePreparationStrategy
 	cliAuthAdapters []gitprovider.CLIAuthAdapter
 }
 
@@ -42,8 +43,16 @@ var runtimeVersionPattern = regexp.MustCompile(`^(?:[A-Za-z][A-Za-z0-9._+-]* )?v
 
 // New binds runtime contracts to an explicitly granted execution environment.
 func New(profile agentruntime.RuntimeProfile, factory agentruntime.ProtocolClientFactory, environment Environment, cliAuthAdapters ...gitprovider.CLIAuthAdapter) *Host {
+	return NewWithPreparation(profile, factory, environment, NoopRuntimePreparationStrategy{}, cliAuthAdapters...)
+}
+
+// NewWithPreparation binds a provider-specific host preparation strategy.
+func NewWithPreparation(profile agentruntime.RuntimeProfile, factory agentruntime.ProtocolClientFactory, environment Environment, preparation RuntimePreparationStrategy, cliAuthAdapters ...gitprovider.CLIAuthAdapter) *Host {
 	environment.GrantedEnv = slices.Clone(environment.GrantedEnv)
-	return &Host{profile: profile, factory: factory, environment: environment, cliAuthAdapters: slices.Clone(cliAuthAdapters)}
+	if preparation == nil {
+		preparation = NoopRuntimePreparationStrategy{}
+	}
+	return &Host{profile: profile, factory: factory, environment: environment, preparation: preparation, cliAuthAdapters: slices.Clone(cliAuthAdapters)}
 }
 
 func (h *Host) Runtime() coreruntime.Runtime { return h.profile.Descriptor().Runtime }
@@ -94,11 +103,11 @@ func (h *Host) start(ctx context.Context, config runconfig.RuntimeConfig, restor
 	}
 	settings := agentruntime.ResolvedRuntimeSettings{Agent: config.Agent, Model: config.Model, MCPServers: config.MCPServers, Skills: config.Skills}
 	paths := h.provisioningPaths(config, store)
-	executable, environment, err := h.prepareRuntime(ctx, config, settings, store, descriptor, restoring)
+	prepared, err := h.prepareRuntime(ctx, config, settings, store, descriptor, restoring)
 	if err != nil {
 		return nil, err
 	}
-	session, err := h.startProcess(ctx, executable, environment, descriptor, owner)
+	session, err := h.startProcess(ctx, prepared.Executable, prepared.Environment, descriptor, owner)
 	if err != nil {
 		return nil, err
 	}
@@ -120,14 +129,7 @@ func (h *Host) start(ctx context.Context, config runconfig.RuntimeConfig, restor
 			session.callbacks.AddSecretValues(value)
 		}
 	}
-	if descriptor.Runtime == coreruntime.Codex {
-		authFile := filepath.Join(paths.RuntimeRoot, filepath.FromSlash(codexAuthFileRelative))
-		contents, readErr := os.ReadFile(authFile)
-		if readErr != nil && !errors.Is(readErr, os.ErrNotExist) {
-			return nil, &agentruntime.LaunchError{Message: "read saved Codex auth state failed", Cause: readErr}
-		}
-		session.callbacks.AddSecretValues(codexAuthSecretValues(contents)...)
-	}
+	session.callbacks.AddSecretValues(prepared.SecretValues...)
 	for _, credential := range config.GitCredentials {
 		if credential.Token != "" {
 			session.callbacks.AddSecretValues(credential.Token, base64.StdEncoding.EncodeToString([]byte("x-access-token:"+credential.Token)))
@@ -170,30 +172,29 @@ func (h *Host) validateStartup(ctx context.Context, config runconfig.RuntimeConf
 	return nil
 }
 
-func (h *Host) prepareRuntime(ctx context.Context, config runconfig.RuntimeConfig, settings agentruntime.ResolvedRuntimeSettings, store sessionStorage, descriptor agentruntime.RuntimeDescriptor, restoring bool) (string, []string, error) {
+type preparedRuntime struct {
+	Executable   string
+	Environment  []string
+	SecretValues []string
+}
+
+func (h *Host) prepareRuntime(ctx context.Context, config runconfig.RuntimeConfig, settings agentruntime.ResolvedRuntimeSettings, store sessionStorage, descriptor agentruntime.RuntimeDescriptor, restoring bool) (preparedRuntime, error) {
 	paths := h.provisioningPaths(config, store)
 	plan, err := h.profile.BuildProvisioningPlan(settings, paths)
 	if err != nil {
-		return "", nil, err
+		return preparedRuntime{}, err
 	}
-	grantedHostEnv := slices.Clone(h.environment.GrantedEnv)
-	if descriptor.Runtime == coreruntime.Codex {
-		var authFileContents []byte
-		grantedHostEnv, authFileContents, err = prepareLocalCodexAuthFile(grantedHostEnv, paths.RuntimeRoot, restoring)
-		if err != nil {
-			return "", nil, err
-		}
-		if authFileContents != nil {
-			if plan.Files == nil {
-				plan.Files = make(map[string][]byte)
-			}
-			plan.Files["home/.codex/auth.json"] = authFileContents
-		}
-	}
-	granted := append(grantedHostEnv, environmentEntries(config.Environment)...)
-	environment, err := applyProvisioningPlan(paths.RuntimeRoot, granted, descriptor.ReservedEnvNames, descriptor.ReservedEnvPrefixes, plan)
+	prepared, err := h.preparation.Prepare(ctx, RuntimePreparationInput{
+		Settings: settings, Paths: paths, Plan: plan,
+		GrantedEnvironment: slices.Clone(h.environment.GrantedEnv), Restoring: restoring,
+	})
 	if err != nil {
-		return "", nil, err
+		return preparedRuntime{}, err
+	}
+	granted := append(prepared.GrantedEnvironment, environmentEntries(config.Environment)...)
+	environment, err := applyProvisioningPlan(paths.RuntimeRoot, granted, descriptor.ReservedEnvNames, descriptor.ReservedEnvPrefixes, prepared.Plan)
+	if err != nil {
+		return preparedRuntime{}, err
 	}
 	environment, err = gitprovider.PrepareRuntime(ctx, gitprovider.RuntimePreparation{
 		RuntimeRoot: paths.RuntimeRoot,
@@ -202,16 +203,16 @@ func (h *Host) prepareRuntime(ctx context.Context, config runconfig.RuntimeConfi
 		Credentials: config.GitCredentials,
 	}, h.cliAuthAdapters)
 	if err != nil {
-		return "", nil, err
+		return preparedRuntime{}, err
 	}
 	executable, err := exec.LookPath(descriptor.Executable)
 	if err != nil {
-		return "", nil, &agentruntime.LaunchError{Message: "runtime executable unavailable", Cause: err}
+		return preparedRuntime{}, &agentruntime.LaunchError{Message: "runtime executable unavailable", Cause: err}
 	}
 	if err := verifyRuntimeVersion(ctx, executable, descriptor.VersionArguments, descriptor.Version, descriptor.VersionOutputPrefix, descriptor.VersionOutputSuffix, environment); err != nil {
-		return "", nil, err
+		return preparedRuntime{}, err
 	}
-	return executable, environment, nil
+	return preparedRuntime{Executable: executable, Environment: environment, SecretValues: prepared.SecretValues}, nil
 }
 
 func (h *Host) provisioningPaths(config runconfig.RuntimeConfig, store sessionStorage) agentruntime.ProvisioningPaths {
