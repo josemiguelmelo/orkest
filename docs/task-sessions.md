@@ -25,6 +25,14 @@ original agent, model, instructions, skills, and MCP endpoint configuration.
 MCP credentials are resolved again by server ID. New sessions preserve previous
 chat, working trees, untracked files, and task branches.
 
+Runtime, provider, and model identity are part of session compatibility. Changes
+to an agent definition apply to new sessions; a continued session must load and
+accept its next message using the configuration with which it was created.
+Runtime upgrades or session-format changes must preserve a compatible restore
+path for existing sessions, with coverage through a successful follow-up
+message. If that cannot be established, recovery must report the incompatibility
+without replacing the session or removing its saved state.
+
 The task update API accepts `sessionMode: continue|new`, optional `promptText`,
 and a stable `commandId`. `startWork: true` explicitly requests another step
 when the task is already in progress after a failed run. Repeated start commands
@@ -35,6 +43,14 @@ The platform stores session snapshots without MCP credential headers. Session
 selection and run reservation share a PostgreSQL transaction and task row lock;
 a partial unique index rejects overlapping active runs for the task. This does
 not implement team-member slot allocation, which remains separate work.
+
+Agentctl session manifests record a whole-configuration fingerprint and, in
+version 2 and later, fingerprints for each configuration section. Environment
+variables are excluded from session compatibility and are resolved again for
+each run. Version 2 manifests may restore when environment is the only
+difference. A failed compatibility check logs differing section names without
+their values. Version 1 manifests have only a whole-configuration fingerprint,
+so field-level detail is unavailable for those sessions.
 
 ## Queue and completion
 

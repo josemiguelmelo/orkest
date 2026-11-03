@@ -8,6 +8,7 @@ import (
 // RunConfig is the resolved configuration bound to one task execution run.
 // It is separate from reusable agent definitions and process startup options.
 type RunConfig struct {
+	ArtifactRevisionIDs []string `json:"-"`
 	RuntimeConfig
 	// Platform-only image selection is persisted with the session, excluded by ForRuntime.
 	ExecutionProfileID   string `json:"executionProfileId,omitempty"`

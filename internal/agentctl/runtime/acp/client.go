@@ -75,6 +75,10 @@ func mcpServers(servers []runconfig.MCPServer) []sdk.McpServer {
 	return result
 }
 
+func (c *client) SetSessionModel(ctx context.Context, id, model string) error {
+	return c.selectModel(ctx, id, model)
+}
+
 func (c *client) SetSessionMode(ctx context.Context, id, mode string) error {
 	_, err := c.connection.SetSessionMode(ctx, sdk.SetSessionModeRequest{SessionId: sdk.SessionId(id), ModeId: sdk.SessionModeId(mode)})
 	if err != nil {
@@ -290,4 +294,22 @@ func (c *client) protocolErrorKind(kind agentruntime.RuntimeFailureKind, message
 		}
 	}
 	return &agentruntime.RuntimeError{Kind: kind, Message: message, Cause: cause}
+}
+
+// selectModel prevents ACP sessions from silently retaining a provider default
+// when selecting an agent mode does not apply that agent's configured model.
+func (c *client) selectModel(ctx context.Context, id, model string) error {
+	if model == "" {
+		return nil
+	}
+	response, err := c.connection.SetSessionConfigOption(ctx, sdk.SetSessionConfigOptionRequest{ValueId: &sdk.SetSessionConfigOptionValueId{SessionId: sdk.SessionId(id), ConfigId: "model", Value: sdk.SessionConfigValueId(model)}})
+	if err != nil {
+		return c.protocolError("select configured ACP model failed", err)
+	}
+	for _, option := range response.ConfigOptions {
+		if option.Select != nil && option.Select.Id == "model" && string(option.Select.CurrentValue) == model {
+			return nil
+		}
+	}
+	return &agentruntime.RuntimeError{Kind: agentruntime.RuntimeFailure, Message: "runtime did not confirm the configured model"}
 }

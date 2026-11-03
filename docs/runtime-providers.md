@@ -115,7 +115,7 @@ closes streams independently of accepted execution. Transport types remain in
 `httpapi/protocol`; they map domain values without exposing resolved secrets.
 
 Package moves preserve REST/WebSocket payloads, event names, command markers,
-v1 checkpoints and session manifests, configuration fingerprints, ownership locks,
+v1 checkpoints and versioned session manifests, configuration fingerprints, ownership locks,
 working paths, and legacy behavior. Go import paths changed to their owning
 subpackages; repository consumers were updated directly without compatibility
 aliases. The checkpoint fixture moved to `run/testdata`; its bytes are unchanged.
@@ -187,3 +187,20 @@ Locally, `make qualify-runtime` checks all runtimes;
 `make qualify-runtime QUALIFY_RUNTIME=claude-code` checks Claude alone with
 `ORKEST_TEST_MODEL_ID` set to its model and `ORKEST_CLAUDE_CODE_BINARY` pointing
 to the pinned adapter.
+
+## Explicit OpenCode model selection
+
+OpenCode agent frontmatter alone does not guarantee the ACP session model.
+Orkest sets the selected provider/model as the native runtime default and sends
+`session/set_config_option` with `configId: model` after creating or loading an ACP
+session. It requires the response to confirm the exact selected value before
+allowing prompts. Unavailable models or unconfirmed selection fail startup;
+Orkest must not silently execute a different provider's default model.
+
+This prevents misleading provider errors when an unrelated default model rejects
+a request (observed with an OpenRouter GPT selection executing an OpenCode free
+model). Existing already-running agentctl processes retain their old binary;
+rebuild the OpenCode execution image and start a new task session to adopt the
+fix. Restored sessions apply their original snapshotted model rather than current
+agent-definition edits. The handshake test selects a catalogued OpenCode free
+model and sends no model prompt; it does not qualify inference or credentials.

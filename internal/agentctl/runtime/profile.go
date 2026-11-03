@@ -46,6 +46,8 @@ type ProvisioningPlan struct {
 // ProtocolSessionOptions carries native session values through ACP without
 // coupling runtime profiles to the ACP SDK types.
 type ProtocolSessionOptions struct {
+	// Model requests an explicit ACP model selection, checked after session creation or loading.
+	Model      string
 	Metadata   map[string]any
 	MCPServers []runconfig.MCPServer
 }

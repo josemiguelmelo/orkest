@@ -32,6 +32,7 @@ func (p Profile) Descriptor() agentruntime.RuntimeDescriptor {
 }
 
 type runtimeConfiguration struct {
+	Model       string            `json:"model"`
 	Autoupdate  bool              `json:"autoupdate"`
 	Share       string            `json:"share"`
 	Permissions []permissionRule  `json:"permissions,omitempty"`
@@ -84,7 +85,7 @@ func (p Profile) BuildProvisioningPlan(settings agentruntime.ResolvedRuntimeSett
 	if err != nil {
 		return agentruntime.ProvisioningPlan{}, err
 	}
-	runtimeConfig := runtimeConfiguration{Share: "disabled", MCP: mcp}
+	runtimeConfig := runtimeConfiguration{Model: settings.Model.Provider + "/" + settings.Model.ID, Share: "disabled", MCP: mcp}
 	if settings.Agent.PermissionPolicy == runconfig.PermissionPolicyAutonomous {
 		runtimeConfig.Permissions = []permissionRule{{Action: "*", Resource: "*", Effect: "allow"}}
 	}
@@ -117,8 +118,8 @@ func (Profile) NativeSessionMode(settings agentruntime.ResolvedRuntimeSettings) 
 	return normalizeNativeName(settings.Agent.Name)
 }
 
-func (Profile) ProtocolSessionOptions(agentruntime.ResolvedRuntimeSettings, agentruntime.ProvisioningPaths) agentruntime.ProtocolSessionOptions {
-	return agentruntime.ProtocolSessionOptions{}
+func (Profile) ProtocolSessionOptions(settings agentruntime.ResolvedRuntimeSettings, _ agentruntime.ProvisioningPaths) agentruntime.ProtocolSessionOptions {
+	return agentruntime.ProtocolSessionOptions{Model: settings.Model.Provider + "/" + settings.Model.ID}
 }
 
 func buildMCPConfiguration(servers []runconfig.MCPServer) (*runtimeMCPConfig, error) {

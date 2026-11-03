@@ -64,3 +64,32 @@ func TestAutonomousPolicyAllowsOpenCodeActions(t *testing.T) {
 	}
 	t.Fatal("OpenCode runtime configuration was missing")
 }
+
+func TestConfiguredModelIsExplicitForACPAndRuntimeDefaults(t *testing.T) {
+	settings := agentruntime.ResolvedRuntimeSettings{Model: runconfig.ModelSelection{Provider: "openrouter", ID: "openai/gpt-5.4-mini"}}
+	paths := agentruntime.ProvisioningPaths{RuntimeRoot: t.TempDir(), WorkDir: t.TempDir(), ConfigSubdir: "config-run"}
+	plan, err := (Profile{}).BuildProvisioningPlan(settings, paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "openrouter/openai/gpt-5.4-mini"
+	for _, entry := range plan.Environment {
+		if strings.HasPrefix(entry, "OPENCODE_CONFIG_CONTENT=") {
+			var config struct {
+				Model string `json:"model"`
+			}
+			if err := json.Unmarshal([]byte(strings.TrimPrefix(entry, "OPENCODE_CONFIG_CONTENT=")), &config); err != nil {
+				t.Fatal(err)
+			}
+			if config.Model != want {
+				t.Fatalf("default model=%q, want %q", config.Model, want)
+			}
+			options := (Profile{}).ProtocolSessionOptions(settings, paths)
+			if options.Model != want {
+				t.Fatalf("ACP model=%q, want %q", options.Model, want)
+			}
+			return
+		}
+	}
+	t.Fatal("runtime configuration missing")
+}

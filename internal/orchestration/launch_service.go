@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/url"
 	"strings"
 	"time"
@@ -48,6 +49,23 @@ func (s *LaunchService) Start(ctx context.Context, config runconfig.RunConfig) (
 	}
 	fail := func(stage string, cause error) (Launch, error) {
 		launch.Status, launch.FailureStage, launch.FailureReason, launch.UpdatedAt = LaunchFailed, stage, sanitizedFailure(stage, cause), time.Now().UTC()
+		logAttrs := []any{
+			"organization_id", launch.OrganizationID,
+			"workspace_id", launch.WorkspaceID,
+			"task_id", launch.TaskID,
+			"run_id", launch.RunID,
+			"task_session_id", launch.TaskSessionID,
+			"failure_stage", stage,
+			"error_type", fmt.Sprintf("%T", cause),
+		}
+		var response *agentctlHTTPError
+		if errors.As(cause, &response) && response.Code == "launch_failed" && response.Message != "" {
+			// Agentctl launch errors expose provider-sanitized diagnostics. Preserve
+			// the reason in Orkest logs so durable-storage failures can be diagnosed
+			// even when the executor container has already exited.
+			logAttrs = append(logAttrs, "agentctl_error_code", response.Code, "agentctl_error", response.Message)
+		}
+		slog.Default().Error("agent launch step failed", logAttrs...)
 		if config.TaskSessionID != "" {
 			launch.Status = LaunchFailedPendingClose
 		}

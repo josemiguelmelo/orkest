@@ -20,6 +20,7 @@ import (
 
 	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
 	"github.com/josemiguelmelo/orkest/internal/coderepository"
+	"github.com/josemiguelmelo/orkest/internal/core/agentctllogs"
 	"github.com/josemiguelmelo/orkest/internal/orchestration"
 )
 
@@ -144,27 +145,44 @@ func (e *Executor) StartAgentctl(ctx context.Context, config runconfig.RunConfig
 	}
 	cmd := exec.Command(e.config.AgentctlBinary, args...)
 	cmd.Dir = workDir
-	cmd.Stdin, cmd.Stdout, cmd.Stderr = nil, io.Discard, io.Discard
+	cmd.Stdin, cmd.Stdout = nil, io.Discard
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return orchestration.Process{}, fmt.Errorf("capture local agentctl logs: %w", err)
+	}
 	cmd.Env = cmdEnv
 	if err = cmd.Start(); err != nil {
 		return orchestration.Process{}, fmt.Errorf("start local agentctl process: %w", err)
 	}
+	logsDone := make(chan struct{})
+	go func() {
+		agentctllogs.Forward(stderr, "run_id", config.RunID)
+		close(logsDone)
+	}()
 	identity, err := processIdentity(ctx, cmd.Process.Pid)
 	if err != nil {
 		_ = cmd.Process.Kill()
+		<-logsDone
 		_ = cmd.Wait()
 		return orchestration.Process{}, fmt.Errorf("identify started local agentctl process: %w", err)
 	}
 	id := strconv.Itoa(cmd.Process.Pid) + ":" + identity
 	if err = e.writeRunIdentity(config.RunID, id); err != nil {
 		_ = cmd.Process.Kill()
+		<-logsDone
 		_ = cmd.Wait()
 		return orchestration.Process{ID: id}, fmt.Errorf("persist local agentctl process identity: %w", err)
 	}
 	e.mu.Lock()
 	e.processes[id] = cmd.Process
 	e.mu.Unlock()
-	go func() { _ = cmd.Wait(); e.mu.Lock(); delete(e.processes, id); e.mu.Unlock() }()
+	go func() {
+		<-logsDone
+		_ = cmd.Wait()
+		e.mu.Lock()
+		delete(e.processes, id)
+		e.mu.Unlock()
+	}()
 	return orchestration.Process{ID: id, Endpoint: fmt.Sprintf("http://127.0.0.1:%d", port)}, nil
 }
 

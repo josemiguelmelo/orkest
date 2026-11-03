@@ -26,7 +26,7 @@ import (
 )
 
 func main() {
-	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil))
+	logger := slog.New(slog.NewJSONHandler(os.Stderr, nil)).With("service", "agentctl")
 	slog.SetDefault(logger)
 	if err := environment.LoadEnvironment(".env"); err != nil {
 		logger.Error("agentctl stopped", "error", err)

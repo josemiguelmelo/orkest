@@ -98,7 +98,7 @@ func (h *Host) start(ctx context.Context, config runconfig.RuntimeConfig, restor
 		if !restoring {
 			operation = "reserve_session_creation"
 		}
-		slog.Default().Error("runtime durable session storage operation failed",
+		logAttrs := []any{
 			"organization_id", config.OrganizationID,
 			"workspace_id", config.WorkspaceID,
 			"task_id", config.TaskID,
@@ -108,7 +108,19 @@ func (h *Host) start(ctx context.Context, config runconfig.RuntimeConfig, restor
 			"restoring", restoring,
 			"storage_root", store.Root(config),
 			"error", err,
-		)
+		}
+		var compatibilityError *sessionManifestCompatibilityError
+		if errors.As(err, &compatibilityError) {
+			logAttrs = append(logAttrs, "compatibility_mismatches", compatibilityError.Mismatches)
+			if slices.Contains(compatibilityError.Mismatches, "configuration_mismatch") {
+				if compatibilityError.Legacy {
+					logAttrs = append(logAttrs, "configuration_mismatch_detail", "legacy_manifest_has_no_field_fingerprints")
+				} else {
+					logAttrs = append(logAttrs, "configuration_mismatch_fields", compatibilityError.Fields)
+				}
+			}
+		}
+		slog.Default().Error("runtime durable session storage operation failed", logAttrs...)
 		message := "could not reserve durable session storage; check storage availability and permissions"
 		switch {
 		case errors.Is(err, errSessionAlreadyExists):
@@ -311,6 +323,13 @@ func (h *Host) initializeSession(ctx context.Context, session *Session, settings
 			return &agentruntime.LaunchError{Message: "runtime cannot apply the configured session mode"}
 		}
 		if err := session.connection.SetSessionMode(ctx, nativeID, mode); err != nil {
+			return err
+		}
+	}
+	if selector, ok := session.connection.(interface {
+		SetSessionModel(context.Context, string, string) error
+	}); ok && options.Model != "" {
+		if err := selector.SetSessionModel(ctx, nativeID, options.Model); err != nil {
 			return err
 		}
 	}

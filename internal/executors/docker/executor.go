@@ -2,8 +2,6 @@
 package docker
 
 import (
-	"bufio"
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
@@ -22,6 +20,7 @@ import (
 	"github.com/containerd/errdefs"
 	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
 	"github.com/josemiguelmelo/orkest/internal/coderepository"
+	"github.com/josemiguelmelo/orkest/internal/core/agentctllogs"
 	coreruntime "github.com/josemiguelmelo/orkest/internal/core/runtime"
 	"github.com/josemiguelmelo/orkest/internal/orchestration"
 	"github.com/moby/moby/api/pkg/stdcopy"
@@ -265,6 +264,7 @@ func (e *Executor) StartAgentctl(ctx context.Context, config runconfig.RunConfig
 		return process, e.removeAfterFailure(ctx, created.ID, err)
 	}
 	process.Endpoint = endpoint
+	go e.forwardAgentctlLogs(created.ID)
 	return process, nil
 }
 
@@ -350,7 +350,6 @@ func (e *Executor) TerminateAgentctl(ctx context.Context, processID string) erro
 	if inspection.Container.State == nil {
 		return errors.New("docker did not report agentctl container state during shutdown")
 	}
-	e.logStorageDiagnostics(ctx, processID)
 	if inspection.Container.State.Running {
 		timeout := 10
 		if _, err = e.client.ContainerStop(ctx, processID, mobyclient.ContainerStopOptions{Timeout: &timeout}); err != nil {
@@ -366,32 +365,21 @@ func (e *Executor) TerminateAgentctl(ctx context.Context, processID string) erro
 	return nil
 }
 
-// logStorageDiagnostics copies only the targeted startup diagnostics before a
-// failed container is removed. Container logs can contain prompts or provider
-// output, so the rest of the stream is deliberately discarded.
-func (e *Executor) logStorageDiagnostics(ctx context.Context, processID string) {
-	logs, err := e.client.ContainerLogs(ctx, processID, mobyclient.ContainerLogsOptions{ShowStderr: true, Tail: "200"})
+// forwardAgentctlLogs follows the container stderr stream, where agentctl emits
+// structured logs. The shared filter drops provider output and sensitive fields.
+func (e *Executor) forwardAgentctlLogs(processID string) {
+	logs, err := e.client.ContainerLogs(context.Background(), processID, mobyclient.ContainerLogsOptions{ShowStderr: true, Follow: true})
 	if err != nil {
-		slog.Default().Warn("read agentctl container diagnostics failed", "container_id", processID, "error", err)
+		slog.Default().Warn("follow agentctl container logs failed", "container_id", processID, "error", err)
 		return
 	}
 	defer func() { _ = logs.Close() }()
-	var output bytes.Buffer
-	if _, err = stdcopy.StdCopy(&output, io.Discard, logs); err != nil {
-		slog.Default().Warn("decode agentctl container diagnostics failed", "container_id", processID, "error", err)
-		return
-	}
-	scanner := bufio.NewScanner(&output)
-	scanner.Buffer(make([]byte, 1024), 64*1024)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if strings.Contains(line, `"msg":"runtime durable session storage operation failed"`) || strings.Contains(line, `"msg":"runtime task storage ownership failed"`) {
-			slog.Default().Error("agentctl durable storage diagnostic", "container_id", processID, "agentctl_log", line)
-		}
-	}
-	if err = scanner.Err(); err != nil {
-		slog.Default().Warn("scan agentctl container diagnostics failed", "container_id", processID, "error", err)
-	}
+	reader, writer := io.Pipe()
+	go func() {
+		_, copyErr := stdcopy.StdCopy(io.Discard, writer, logs)
+		_ = writer.CloseWithError(copyErr)
+	}()
+	agentctllogs.Forward(reader, "container_id", processID)
 }
 
 // TerminateAgentctlByRunID resolves the deterministic container name used before

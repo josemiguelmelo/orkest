@@ -77,6 +77,16 @@ func Run(version string) {
 				}
 				fixtureSend(map[string]any{"jsonrpc": "2.0", "method": "session/update", "params": map[string]any{"sessionId": "fixture-session", "update": map[string]any{"sessionUpdate": "agent_message_chunk", "content": map[string]any{"type": "text", "text": "restored history"}}}})
 				result = map[string]any{}
+			case "session/set_config_option":
+				var params struct {
+					SessionID string `json:"sessionId"`
+					ConfigID  string `json:"configId"`
+					Value     string `json:"value"`
+				}
+				if json.Unmarshal(request.Params, &params) != nil || params.SessionID != "fixture-session" || params.ConfigID != "model" {
+					os.Exit(15)
+				}
+				result = map[string]any{"configOptions": []any{map[string]any{"id": "model", "name": "Model", "type": "select", "currentValue": params.Value, "options": []any{map[string]any{"value": params.Value, "name": params.Value}}}}}
 			case "session/set_mode":
 				var params struct {
 					ModeID string `json:"modeId"`

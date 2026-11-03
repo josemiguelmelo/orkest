@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"syscall"
 
@@ -14,17 +16,35 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/core/durablefile"
 )
 
-// sessionStorage owns the existing v1 layout independently of native protocols.
+// sessionStorage owns the stable task-scoped layout independently of native protocols.
 type sessionStorage struct{ StateDir, WorkDir, RuntimeVersion string }
 
 var errSessionAlreadyExists = errors.New("session already exists; explicit restoration required")
 
 type sessionManifest struct {
-	Version        int    `json:"version"`
-	RuntimeVersion string `json:"runtimeVersion"`
-	WorkDir        string `json:"workDir"`
-	Configuration  string `json:"configuration"`
-	SessionID      string `json:"sessionId"`
+	Version                  int               `json:"version"`
+	RuntimeVersion           string            `json:"runtimeVersion"`
+	WorkDir                  string            `json:"workDir"`
+	Configuration            string            `json:"configuration"`
+	ConfigurationFingerprint map[string]string `json:"configurationFingerprint,omitempty"`
+	SessionID                string            `json:"sessionId"`
+}
+
+type sessionManifestCompatibilityError struct {
+	Mismatches []string
+	Fields     []string
+	Legacy     bool
+}
+
+func (e *sessionManifestCompatibilityError) Error() string {
+	message := "session manifest compatibility check failed: " + strings.Join(e.Mismatches, ",")
+	if slices.Contains(e.Mismatches, "configuration_mismatch") {
+		if e.Legacy {
+			return message + "; field details unavailable for legacy session manifest"
+		}
+		return message + "; differing configuration fields: " + strings.Join(e.Fields, ",")
+	}
+	return message
 }
 
 func taskStorageRoot(stateDir string, config runconfig.RuntimeConfig) string {
@@ -44,6 +64,54 @@ func configurationFingerprint(config runconfig.RuntimeConfig) string {
 	config = fingerprintableConfiguration(config)
 	data, _ := json.Marshal(config)
 	return fmt.Sprintf("%x", sha256.Sum256(data))
+}
+
+func sessionConfigurationFingerprint(config runconfig.RuntimeConfig) string {
+	config = config.Clone()
+	config = fingerprintableConfiguration(config)
+	config.Environment = nil
+	data, _ := json.Marshal(config)
+	return fmt.Sprintf("%x", sha256.Sum256(data))
+}
+
+func configurationFieldFingerprints(config runconfig.RuntimeConfig) map[string]string {
+	config = config.Clone()
+	config = fingerprintableConfiguration(config)
+	config.Environment = nil
+	fields := map[string]any{
+		"organization_id": config.OrganizationID,
+		"workspace_id":    config.WorkspaceID,
+		"task_id":         config.TaskID,
+		"task_session_id": config.TaskSessionID,
+		"runtime":         config.Runtime,
+		"agent":           config.Agent,
+		"model":           config.Model,
+		"mcp_servers":     config.MCPServers,
+		"skills":          config.Skills,
+	}
+	fingerprints := make(map[string]string, len(fields))
+	for name, value := range fields {
+		data, _ := json.Marshal(value)
+		fingerprints[name] = fmt.Sprintf("%x", sha256.Sum256(data))
+	}
+	return fingerprints
+}
+
+func configurationMismatchFields(saved map[string]string, config runconfig.RuntimeConfig) []string {
+	current := configurationFieldFingerprints(config)
+	fields := make([]string, 0)
+	for name, fingerprint := range current {
+		if saved[name] != fingerprint {
+			fields = append(fields, name)
+		}
+	}
+	for name := range saved {
+		if _, exists := current[name]; !exists {
+			fields = append(fields, name)
+		}
+	}
+	slices.Sort(fields)
+	return fields
 }
 
 func fingerprintableConfiguration(config runconfig.RuntimeConfig) runconfig.RuntimeConfig {
@@ -121,12 +189,32 @@ func (s sessionStorage) load(config runconfig.RuntimeConfig) (string, error) {
 	if err := json.Unmarshal(data, &manifest); err != nil {
 		return "", err
 	}
-	compatibleConfiguration := manifest.Configuration == configurationFingerprint(config)
-	for _, fingerprint := range legacyConfigurationFingerprints(config) {
-		compatibleConfiguration = compatibleConfiguration || manifest.Configuration == fingerprint
+	compatibleConfiguration := false
+	if manifest.Version >= 3 {
+		compatibleConfiguration = manifest.Configuration == sessionConfigurationFingerprint(config)
+	} else {
+		compatibleConfiguration = manifest.Configuration == configurationFingerprint(config)
+		for _, fingerprint := range legacyConfigurationFingerprints(config) {
+			compatibleConfiguration = compatibleConfiguration || manifest.Configuration == fingerprint
+		}
 	}
 	var mismatches []string
-	if manifest.Version != 1 {
+	var configurationFields []string
+	legacyConfiguration := manifest.Version < 2
+	if !compatibleConfiguration && manifest.Version == 2 {
+		configurationFields = configurationMismatchFields(manifest.ConfigurationFingerprint, config)
+		if slices.Equal(configurationFields, []string{"environment"}) {
+			compatibleConfiguration = true
+			slog.Default().Info("restoring session with refreshed workspace environment",
+				"organization_id", config.OrganizationID,
+				"workspace_id", config.WorkspaceID,
+				"task_id", config.TaskID,
+				"run_id", config.RunID,
+				"task_session_id", config.TaskSessionID,
+			)
+		}
+	}
+	if manifest.Version != 1 && manifest.Version != 2 && manifest.Version != 3 {
 		mismatches = append(mismatches, "manifest_version_mismatch")
 	}
 	if manifest.RuntimeVersion != s.RuntimeVersion {
@@ -137,18 +225,28 @@ func (s sessionStorage) load(config runconfig.RuntimeConfig) (string, error) {
 	}
 	if !compatibleConfiguration {
 		mismatches = append(mismatches, "configuration_mismatch")
+		if !legacyConfiguration && len(configurationFields) == 0 {
+			configurationFields = configurationMismatchFields(manifest.ConfigurationFingerprint, config)
+		}
 	}
 	if manifest.SessionID == "" {
 		mismatches = append(mismatches, "native_session_id_missing")
 	}
 	if len(mismatches) != 0 {
-		return "", fmt.Errorf("session manifest compatibility check failed: %s", strings.Join(mismatches, ","))
+		return "", &sessionManifestCompatibilityError{Mismatches: mismatches, Fields: configurationFields, Legacy: legacyConfiguration}
 	}
 	return manifest.SessionID, nil
 }
 
 func (s sessionStorage) save(config runconfig.RuntimeConfig, id string) error {
-	data, err := json.Marshal(sessionManifest{Version: 1, RuntimeVersion: s.RuntimeVersion, WorkDir: s.WorkDir, Configuration: configurationFingerprint(config), SessionID: id})
+	data, err := json.Marshal(sessionManifest{
+		Version:                  3,
+		RuntimeVersion:           s.RuntimeVersion,
+		WorkDir:                  s.WorkDir,
+		Configuration:            sessionConfigurationFingerprint(config),
+		ConfigurationFingerprint: configurationFieldFingerprints(config),
+		SessionID:                id,
+	})
 	if err != nil {
 		return err
 	}
