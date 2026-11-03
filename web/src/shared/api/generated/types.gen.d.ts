@@ -54,7 +54,50 @@ export type Membership = {
     user: User;
     role: 'owner' | 'admin' | 'member' | 'viewer';
 };
+export type ArtifactContent = unknown & {
+    mediaType: string;
+    text?: string;
+    url?: string;
+    metadata?: {
+        [key: string]: unknown;
+    };
+};
+export type PublishArtifactInput = {
+    artifactId?: string;
+    expectedRevision: number;
+    idempotencyKey: string;
+    kind: string;
+    title: string;
+    outputName?: string;
+    content: ArtifactContent;
+};
+export type ArtifactRevision = {
+    id: string;
+    artifactId: string;
+    number: number;
+    kind: string;
+    title: string;
+    outputName?: string;
+    content: ArtifactContent;
+    createdBy: string;
+    producingRunId?: string;
+    stageId: string;
+    stageVersion: number;
+    createdAt: string;
+};
+export type ArtifactOutput = {
+    name: string;
+    kind: string;
+};
+export type ArtifactInput = {
+    name: string;
+    sourceStageId: string;
+    outputName: string;
+    required: boolean;
+};
 export type WorkflowStage = {
+    artifactInputs?: Array<ArtifactInput>;
+    artifactOutputs?: Array<ArtifactOutput>;
     id: string;
     name: string;
     description: string;
@@ -3493,6 +3536,79 @@ export type RespondDirectAgentConversationPermissionResponses = {
      */
     202: unknown;
 };
+export type ListTaskArtifactsData = {
+    body?: never;
+    path: {
+        orgID: string;
+        workspaceID: string;
+        taskID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/tasks/{taskID}/artifacts';
+};
+export type ListTaskArtifactsErrors = {
+    /**
+     * Missing or invalid credentials
+     */
+    401: Error;
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+    /**
+     * Resource is absent or inaccessible
+     */
+    404: Error;
+    /**
+     * Internal server error
+     */
+    500: Error;
+};
+export type ListTaskArtifactsError = ListTaskArtifactsErrors[keyof ListTaskArtifactsErrors];
+export type ListTaskArtifactsResponses = {
+    /**
+     * Artifact revisions
+     */
+    200: Array<ArtifactRevision>;
+};
+export type ListTaskArtifactsResponse = ListTaskArtifactsResponses[keyof ListTaskArtifactsResponses];
+export type ListArtifactRevisionsData = {
+    body?: never;
+    path: {
+        orgID: string;
+        workspaceID: string;
+        taskID: string;
+        artifactID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/tasks/{taskID}/artifacts/{artifactID}/revisions';
+};
+export type ListArtifactRevisionsErrors = {
+    /**
+     * Missing or invalid credentials
+     */
+    401: Error;
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+    /**
+     * Resource is absent or inaccessible
+     */
+    404: Error;
+    /**
+     * Internal server error
+     */
+    500: Error;
+};
+export type ListArtifactRevisionsError = ListArtifactRevisionsErrors[keyof ListArtifactRevisionsErrors];
+export type ListArtifactRevisionsResponses = {
+    /**
+     * Artifact revisions
+     */
+    200: Array<ArtifactRevision>;
+};
+export type ListArtifactRevisionsResponse = ListArtifactRevisionsResponses[keyof ListArtifactRevisionsResponses];
 export type ListTaskCommentsData = {
     body?: never;
     path: {

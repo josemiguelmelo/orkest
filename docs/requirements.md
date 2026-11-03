@@ -99,7 +99,7 @@ MVP tools are built-in capabilities that let an agent communicate with the core 
 
 User-defined tool registration, custom scripts/commands as platform tools, and a configurable Tool catalog are outside the MVP. External MCP servers remain separately configurable; native runtime capabilities such as shell execution and file editing remain available subject to permissions.
 
-The platform exposes built-in read-only tools through its internal Streamable HTTP MCP endpoint. It provides `list_workspace_repositories` and `get_task`, scoped to the workspace and user that started the run. Calls are authenticated with short-lived run credentials. Agents must not use internal tools to bypass manual assignment/start controls or user-only completion and reopening rules.
+The platform exposes built-in tools through its internal Streamable HTTP MCP endpoint. It provides `list_workspace_repositories` and `get_task`, scoped to the workspace and user that started the run. Artifact tools `list_artifacts`, `get_artifact` and `publish_artifact` are scoped to the current task; publishing additionally requires an authenticated producing run. Calls are authenticated with short-lived run credentials. Agents must not use internal tools to bypass manual assignment/start controls or user-only completion and reopening rules.
 
 ### 3.6 MCP Server
 
@@ -161,7 +161,7 @@ Task movement applies destination assignment and atomically records a stage-entr
 
 Workspace admins and inherited organization owners/admins configure workflows. Members can transition tasks; viewers are read-only. Each event is evaluated against the latest saved configuration under the workflow lock. Saving configuration does not itself emit events, start execution or alter active runtime settings. Event acknowledgement, task movement, history and resulting commands commit atomically. Stable identities, stage-entry versions and run identities prevent replay and stale-event effects. See [workspace workflows](workflows.md) for API, migration and recovery semantics.
 
-Task artifacts and external PR-triggered rules are future extensions. Artifacts will belong to tasks with optional producing-run/stage-entry identity. PR review outcomes and their conditions must be defined with the integration; no PR webhook ingestion is currently implemented.
+Task artifacts belong to tasks and retain immutable revisions, with optional producing-run identity and producing stage-entry identity. Stored text/JSON and external references are supported through task APIs and built-in agent tools. Workflow stages may declare named outputs and consume pinned artifact revisions as run inputs. Required consumer inputs prevent startup when missing; producer output declarations do not gate completion. See [task artifacts](task-artifacts.md) for implemented behavior and limits. External PR-triggered rules remain a future extension: review outcomes and their conditions must be defined with the integration; no PR webhook ingestion is currently implemented.
 
 ### 3.11 Task Run — proposed supporting concept
 

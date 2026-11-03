@@ -23,10 +23,10 @@ UPDATE workspace_workflows SET name=$4,configured_by=$5,initial_stage_id=$6,clos
 SELECT * FROM workflow_stages WHERE workspace_id=$1 AND workflow_id=$2 ORDER BY position;
 
 -- name: PutWorkflowStage :exec
-INSERT INTO workflow_stages(workspace_id,workflow_id,id,responsible_agent_id,position,name,description)
-VALUES(sqlc.arg(workspace_id),sqlc.arg(workflow_id),sqlc.arg(id),NULLIF(sqlc.arg(agent_id)::text,''),sqlc.arg(position),sqlc.arg(name),sqlc.arg(description))
+INSERT INTO workflow_stages(workspace_id,workflow_id,id,responsible_agent_id,position,name,description,artifact_inputs,artifact_outputs)
+VALUES(sqlc.arg(workspace_id),sqlc.arg(workflow_id),sqlc.arg(id),NULLIF(sqlc.arg(agent_id)::text,''),sqlc.arg(position),sqlc.arg(name),sqlc.arg(description),sqlc.arg(artifact_inputs),sqlc.arg(artifact_outputs))
 ON CONFLICT(workspace_id,workflow_id,id) DO UPDATE SET responsible_agent_id=EXCLUDED.responsible_agent_id,
-position=EXCLUDED.position,name=EXCLUDED.name,description=EXCLUDED.description;
+position=EXCLUDED.position,name=EXCLUDED.name,description=EXCLUDED.description,artifact_inputs=EXCLUDED.artifact_inputs,artifact_outputs=EXCLUDED.artifact_outputs;
 
 -- name: RemoveWorkflowStages :exec
 DELETE FROM workflow_stages WHERE workspace_id=$1 AND workflow_id=$2 AND NOT (id=ANY(sqlc.arg(ids)::text[]));

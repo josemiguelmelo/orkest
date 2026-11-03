@@ -65,7 +65,48 @@ export const zMembership = z.object({
         'viewer'
     ])
 });
+export const zArtifactContent = z.intersection(z.unknown(), z.object({
+    mediaType: z.string(),
+    text: z.string().max(100000).optional(),
+    url: z.url().max(4000).optional(),
+    metadata: z.record(z.string(), z.unknown()).optional()
+}));
+export const zPublishArtifactInput = z.object({
+    artifactId: z.string().optional(),
+    expectedRevision: z.coerce.bigint().gte(BigInt(0)).max(BigInt('9223372036854775807'), { error: 'Invalid value: Expected int64 to be <= 9223372036854775807' }),
+    idempotencyKey: z.string().min(1).max(200),
+    kind: z.string().regex(/^[a-z][a-z0-9_.-]{0,99}$/),
+    title: z.string().min(1).max(500),
+    outputName: z.string().optional(),
+    content: zArtifactContent
+});
+export const zArtifactRevision = z.object({
+    id: z.string(),
+    artifactId: z.string(),
+    number: z.coerce.bigint().min(BigInt('-9223372036854775808'), { error: 'Invalid value: Expected int64 to be >= -9223372036854775808' }).max(BigInt('9223372036854775807'), { error: 'Invalid value: Expected int64 to be <= 9223372036854775807' }),
+    kind: z.string(),
+    title: z.string(),
+    outputName: z.string().optional(),
+    content: zArtifactContent,
+    createdBy: z.string(),
+    producingRunId: z.string().optional(),
+    stageId: z.string(),
+    stageVersion: z.coerce.bigint().min(BigInt('-9223372036854775808'), { error: 'Invalid value: Expected int64 to be >= -9223372036854775808' }).max(BigInt('9223372036854775807'), { error: 'Invalid value: Expected int64 to be <= 9223372036854775807' }),
+    createdAt: z.iso.datetime()
+});
+export const zArtifactOutput = z.object({
+    name: z.string(),
+    kind: z.string()
+});
+export const zArtifactInput = z.object({
+    name: z.string(),
+    sourceStageId: z.string(),
+    outputName: z.string(),
+    required: z.boolean()
+});
 export const zWorkflowStage = z.object({
+    artifactInputs: z.array(zArtifactInput).max(50).optional(),
+    artifactOutputs: z.array(zArtifactOutput).max(50).optional(),
     id: z.string().min(1).max(100),
     name: z.string().min(1).max(200),
     description: z.string().max(2000),
@@ -1220,6 +1261,25 @@ export const zRespondDirectAgentConversationPermissionPath = z.object({
     conversationID: z.string(),
     runID: z.string()
 });
+export const zListTaskArtifactsPath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string(),
+    taskID: z.string()
+});
+/**
+ * Artifact revisions
+ */
+export const zListTaskArtifactsResponse = z.array(zArtifactRevision);
+export const zListArtifactRevisionsPath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string(),
+    taskID: z.string(),
+    artifactID: z.string()
+});
+/**
+ * Artifact revisions
+ */
+export const zListArtifactRevisionsResponse = z.array(zArtifactRevision);
 export const zListTaskCommentsPath = z.object({
     orgID: z.string(),
     workspaceID: z.string(),

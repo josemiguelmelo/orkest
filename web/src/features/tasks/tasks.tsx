@@ -1,4 +1,5 @@
 import { useWorkflow } from '../workflow/workflow';
+import { TaskArtifacts } from './artifacts';
 import { TaskChat } from './task-chat';
 import { Markdown } from '../../shared/ui/markdown';
 import type { JSX } from 'react';
@@ -545,6 +546,7 @@ function TaskDrawer({ taskId, onClose }: { taskId: string; onClose: () => void }
             </div>
             <div className="task-drawer-section">
               <h3>Task chat</h3>
+              <TaskArtifacts taskID={task.data.id} />
               <TaskChat key={task.data.id} task={task.data} />
             </div>
             <Link
@@ -855,6 +857,7 @@ export function TaskPage(): JSX.Element {
               </div>
             </details>
           </div>
+          <TaskArtifacts taskID={item.id} />
           <TaskChat key={item.id} task={item} />
         </div>
         <aside>

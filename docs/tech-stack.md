@@ -205,3 +205,14 @@ also run as service policy against locked facts. Source import stage decisions
 are explicit SQL inputs; query code is generated with sqlc. Agent launch and
 recovery remain in orchestration. No broker or generic workflow engine is added.
 See [workflow architecture and propagation](workflows.md).
+
+## Task artifacts
+
+`internal/artifact` owns generic task outputs, publication validation and task
+access checks. PostgreSQL/sqlc persists stable artifacts, immutable revisions,
+idempotent publication keys and run input links. Stage input/output declarations
+are stored with workflow stages. Dispatch resolves named input revisions before
+reservation, appends their content to the durable prompt, and pins their IDs in
+the reservation transaction. REST and run-scoped MCP publishing share the service;
+the task and workflow UIs expose artifacts and handoff configuration. See
+[task artifacts](task-artifacts.md) for migration effects and limits.

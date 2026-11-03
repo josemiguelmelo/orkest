@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -26,7 +27,14 @@ func workflowDefinition(ctx context.Context, q *sqlc.Queries, row sqlc.Workspace
 	}
 	d := workflow.Definition{ID: row.ID, Name: row.Name, Version: row.Version, ConfiguredBy: row.ConfiguredBy, InitialStageID: row.InitialStageID, ClosedStageID: row.ClosedStageID, Rules: []workflow.AutomationRule{}, Stages: make([]workflow.Stage, 0, len(stages))}
 	for _, s := range stages {
-		d.Stages = append(d.Stages, workflow.Stage{ID: s.ID, Name: s.Name, Description: s.Description, ResponsibleAgentID: s.ResponsibleAgentID.String})
+		stage := workflow.Stage{ID: s.ID, Name: s.Name, Description: s.Description, ResponsibleAgentID: s.ResponsibleAgentID.String}
+		if err := json.Unmarshal(s.ArtifactInputs, &stage.ArtifactInputs); err != nil {
+			return workflow.Definition{}, err
+		}
+		if err := json.Unmarshal(s.ArtifactOutputs, &stage.ArtifactOutputs); err != nil {
+			return workflow.Definition{}, err
+		}
+		d.Stages = append(d.Stages, stage)
 	}
 	rules, err := q.ListWorkflowRules(ctx, sqlc.ListWorkflowRulesParams{WorkspaceID: row.WorkspaceID, WorkflowID: row.ID})
 	if err != nil {
@@ -154,7 +162,15 @@ func (r *WorkflowDefinitionPostgresRepository) saveStages(ctx context.Context, q
 	ids := make([]string, 0, len(d.Stages))
 	for i, s := range d.Stages {
 		ids = append(ids, s.ID)
-		if err := q.PutWorkflowStage(ctx, sqlc.PutWorkflowStageParams{WorkspaceID: workspaceID, WorkflowID: d.ID, ID: s.ID, AgentID: s.ResponsibleAgentID, Position: int32(i), Name: s.Name, Description: s.Description}); err != nil {
+		inputs, err := json.Marshal(s.ArtifactInputs)
+		if err != nil {
+			return err
+		}
+		outputs, err := json.Marshal(s.ArtifactOutputs)
+		if err != nil {
+			return err
+		}
+		if err := q.PutWorkflowStage(ctx, sqlc.PutWorkflowStageParams{WorkspaceID: workspaceID, WorkflowID: d.ID, ID: s.ID, AgentID: s.ResponsibleAgentID, Position: int32(i), Name: s.Name, Description: s.Description, ArtifactInputs: inputs, ArtifactOutputs: outputs}); err != nil {
 			return err
 		}
 	}

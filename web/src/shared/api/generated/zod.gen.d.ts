@@ -92,7 +92,66 @@ export declare const zMembership: z.ZodObject<{
         viewer: "viewer";
     }>;
 }, z.core.$strip>;
+export declare const zArtifactContent: z.ZodIntersection<z.ZodUnknown, z.ZodObject<{
+    mediaType: z.ZodString;
+    text: z.ZodOptional<z.ZodString>;
+    url: z.ZodOptional<z.ZodURL>;
+    metadata: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnknown>>;
+}, z.core.$strip>>;
+export declare const zPublishArtifactInput: z.ZodObject<{
+    artifactId: z.ZodOptional<z.ZodString>;
+    expectedRevision: z.ZodCoercedBigInt<unknown>;
+    idempotencyKey: z.ZodString;
+    kind: z.ZodString;
+    title: z.ZodString;
+    outputName: z.ZodOptional<z.ZodString>;
+    content: z.ZodIntersection<z.ZodUnknown, z.ZodObject<{
+        mediaType: z.ZodString;
+        text: z.ZodOptional<z.ZodString>;
+        url: z.ZodOptional<z.ZodURL>;
+        metadata: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnknown>>;
+    }, z.core.$strip>>;
+}, z.core.$strip>;
+export declare const zArtifactRevision: z.ZodObject<{
+    id: z.ZodString;
+    artifactId: z.ZodString;
+    number: z.ZodCoercedBigInt<unknown>;
+    kind: z.ZodString;
+    title: z.ZodString;
+    outputName: z.ZodOptional<z.ZodString>;
+    content: z.ZodIntersection<z.ZodUnknown, z.ZodObject<{
+        mediaType: z.ZodString;
+        text: z.ZodOptional<z.ZodString>;
+        url: z.ZodOptional<z.ZodURL>;
+        metadata: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnknown>>;
+    }, z.core.$strip>>;
+    createdBy: z.ZodString;
+    producingRunId: z.ZodOptional<z.ZodString>;
+    stageId: z.ZodString;
+    stageVersion: z.ZodCoercedBigInt<unknown>;
+    createdAt: z.ZodISODateTime;
+}, z.core.$strip>;
+export declare const zArtifactOutput: z.ZodObject<{
+    name: z.ZodString;
+    kind: z.ZodString;
+}, z.core.$strip>;
+export declare const zArtifactInput: z.ZodObject<{
+    name: z.ZodString;
+    sourceStageId: z.ZodString;
+    outputName: z.ZodString;
+    required: z.ZodBoolean;
+}, z.core.$strip>;
 export declare const zWorkflowStage: z.ZodObject<{
+    artifactInputs: z.ZodOptional<z.ZodArray<z.ZodObject<{
+        name: z.ZodString;
+        sourceStageId: z.ZodString;
+        outputName: z.ZodString;
+        required: z.ZodBoolean;
+    }, z.core.$strip>>>;
+    artifactOutputs: z.ZodOptional<z.ZodArray<z.ZodObject<{
+        name: z.ZodString;
+        kind: z.ZodString;
+    }, z.core.$strip>>>;
     id: z.ZodString;
     name: z.ZodString;
     description: z.ZodString;
@@ -139,6 +198,16 @@ export declare const zWorkspaceWorkflow: z.ZodObject<{
     }, z.core.$strip>>;
     configuredBy: z.ZodOptional<z.ZodString>;
     stages: z.ZodArray<z.ZodObject<{
+        artifactInputs: z.ZodOptional<z.ZodArray<z.ZodObject<{
+            name: z.ZodString;
+            sourceStageId: z.ZodString;
+            outputName: z.ZodString;
+            required: z.ZodBoolean;
+        }, z.core.$strip>>>;
+        artifactOutputs: z.ZodOptional<z.ZodArray<z.ZodObject<{
+            name: z.ZodString;
+            kind: z.ZodString;
+        }, z.core.$strip>>>;
         id: z.ZodString;
         name: z.ZodString;
         description: z.ZodString;
@@ -1839,6 +1908,16 @@ export declare const zListWorkspaceWorkflowsResponse: z.ZodArray<z.ZodObject<{
     }, z.core.$strip>>;
     configuredBy: z.ZodOptional<z.ZodString>;
     stages: z.ZodArray<z.ZodObject<{
+        artifactInputs: z.ZodOptional<z.ZodArray<z.ZodObject<{
+            name: z.ZodString;
+            sourceStageId: z.ZodString;
+            outputName: z.ZodString;
+            required: z.ZodBoolean;
+        }, z.core.$strip>>>;
+        artifactOutputs: z.ZodOptional<z.ZodArray<z.ZodObject<{
+            name: z.ZodString;
+            kind: z.ZodString;
+        }, z.core.$strip>>>;
         id: z.ZodString;
         name: z.ZodString;
         description: z.ZodString;
@@ -1878,6 +1957,16 @@ export declare const zCreateWorkspaceWorkflowResponse: z.ZodObject<{
     }, z.core.$strip>>;
     configuredBy: z.ZodOptional<z.ZodString>;
     stages: z.ZodArray<z.ZodObject<{
+        artifactInputs: z.ZodOptional<z.ZodArray<z.ZodObject<{
+            name: z.ZodString;
+            sourceStageId: z.ZodString;
+            outputName: z.ZodString;
+            required: z.ZodBoolean;
+        }, z.core.$strip>>>;
+        artifactOutputs: z.ZodOptional<z.ZodArray<z.ZodObject<{
+            name: z.ZodString;
+            kind: z.ZodString;
+        }, z.core.$strip>>>;
         id: z.ZodString;
         name: z.ZodString;
         description: z.ZodString;
@@ -1924,6 +2013,16 @@ export declare const zGetWorkspaceWorkflowResponse: z.ZodObject<{
     }, z.core.$strip>>;
     configuredBy: z.ZodOptional<z.ZodString>;
     stages: z.ZodArray<z.ZodObject<{
+        artifactInputs: z.ZodOptional<z.ZodArray<z.ZodObject<{
+            name: z.ZodString;
+            sourceStageId: z.ZodString;
+            outputName: z.ZodString;
+            required: z.ZodBoolean;
+        }, z.core.$strip>>>;
+        artifactOutputs: z.ZodOptional<z.ZodArray<z.ZodObject<{
+            name: z.ZodString;
+            kind: z.ZodString;
+        }, z.core.$strip>>>;
         id: z.ZodString;
         name: z.ZodString;
         description: z.ZodString;
@@ -1953,6 +2052,16 @@ export declare const zSaveWorkspaceWorkflowBody: z.ZodObject<{
     }, z.core.$strip>>;
     configuredBy: z.ZodOptional<z.ZodString>;
     stages: z.ZodArray<z.ZodObject<{
+        artifactInputs: z.ZodOptional<z.ZodArray<z.ZodObject<{
+            name: z.ZodString;
+            sourceStageId: z.ZodString;
+            outputName: z.ZodString;
+            required: z.ZodBoolean;
+        }, z.core.$strip>>>;
+        artifactOutputs: z.ZodOptional<z.ZodArray<z.ZodObject<{
+            name: z.ZodString;
+            kind: z.ZodString;
+        }, z.core.$strip>>>;
         id: z.ZodString;
         name: z.ZodString;
         description: z.ZodString;
@@ -1990,6 +2099,16 @@ export declare const zSaveWorkspaceWorkflowResponse: z.ZodObject<{
     }, z.core.$strip>>;
     configuredBy: z.ZodOptional<z.ZodString>;
     stages: z.ZodArray<z.ZodObject<{
+        artifactInputs: z.ZodOptional<z.ZodArray<z.ZodObject<{
+            name: z.ZodString;
+            sourceStageId: z.ZodString;
+            outputName: z.ZodString;
+            required: z.ZodBoolean;
+        }, z.core.$strip>>>;
+        artifactOutputs: z.ZodOptional<z.ZodArray<z.ZodObject<{
+            name: z.ZodString;
+            kind: z.ZodString;
+        }, z.core.$strip>>>;
         id: z.ZodString;
         name: z.ZodString;
         description: z.ZodString;
@@ -2432,6 +2551,61 @@ export declare const zRespondDirectAgentConversationPermissionPath: z.ZodObject<
     conversationID: z.ZodString;
     runID: z.ZodString;
 }, z.core.$strip>;
+export declare const zListTaskArtifactsPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+    taskID: z.ZodString;
+}, z.core.$strip>;
+/**
+ * Artifact revisions
+ */
+export declare const zListTaskArtifactsResponse: z.ZodArray<z.ZodObject<{
+    id: z.ZodString;
+    artifactId: z.ZodString;
+    number: z.ZodCoercedBigInt<unknown>;
+    kind: z.ZodString;
+    title: z.ZodString;
+    outputName: z.ZodOptional<z.ZodString>;
+    content: z.ZodIntersection<z.ZodUnknown, z.ZodObject<{
+        mediaType: z.ZodString;
+        text: z.ZodOptional<z.ZodString>;
+        url: z.ZodOptional<z.ZodURL>;
+        metadata: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnknown>>;
+    }, z.core.$strip>>;
+    createdBy: z.ZodString;
+    producingRunId: z.ZodOptional<z.ZodString>;
+    stageId: z.ZodString;
+    stageVersion: z.ZodCoercedBigInt<unknown>;
+    createdAt: z.ZodISODateTime;
+}, z.core.$strip>>;
+export declare const zListArtifactRevisionsPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+    taskID: z.ZodString;
+    artifactID: z.ZodString;
+}, z.core.$strip>;
+/**
+ * Artifact revisions
+ */
+export declare const zListArtifactRevisionsResponse: z.ZodArray<z.ZodObject<{
+    id: z.ZodString;
+    artifactId: z.ZodString;
+    number: z.ZodCoercedBigInt<unknown>;
+    kind: z.ZodString;
+    title: z.ZodString;
+    outputName: z.ZodOptional<z.ZodString>;
+    content: z.ZodIntersection<z.ZodUnknown, z.ZodObject<{
+        mediaType: z.ZodString;
+        text: z.ZodOptional<z.ZodString>;
+        url: z.ZodOptional<z.ZodURL>;
+        metadata: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnknown>>;
+    }, z.core.$strip>>;
+    createdBy: z.ZodString;
+    producingRunId: z.ZodOptional<z.ZodString>;
+    stageId: z.ZodString;
+    stageVersion: z.ZodCoercedBigInt<unknown>;
+    createdAt: z.ZodISODateTime;
+}, z.core.$strip>>;
 export declare const zListTaskCommentsPath: z.ZodObject<{
     orgID: z.ZodString;
     workspaceID: z.ZodString;

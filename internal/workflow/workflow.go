@@ -4,14 +4,30 @@ package workflow
 import (
 	"strings"
 
+	"github.com/josemiguelmelo/orkest/internal/artifact"
+
 	modelerrors "github.com/josemiguelmelo/orkest/internal/core/model/errors"
 )
 
+type ArtifactOutput struct {
+	Name string `json:"name"`
+	Kind string `json:"kind"`
+}
+
+type ArtifactInput struct {
+	Name          string `json:"name"`
+	SourceStageID string `json:"sourceStageId"`
+	OutputName    string `json:"outputName"`
+	Required      bool   `json:"required"`
+}
+
 type Stage struct {
-	ID                 string `json:"id"`
-	Name               string `json:"name"`
-	Description        string `json:"description"`
-	ResponsibleAgentID string `json:"responsibleAgentId"`
+	ArtifactInputs     []ArtifactInput  `json:"artifactInputs,omitempty"`
+	ArtifactOutputs    []ArtifactOutput `json:"artifactOutputs,omitempty"`
+	ID                 string           `json:"id"`
+	Name               string           `json:"name"`
+	Description        string           `json:"description"`
+	ResponsibleAgentID string           `json:"responsibleAgentId"`
 }
 
 // Definition is ordered; IDs remain stable when names and positions change.
@@ -59,6 +75,9 @@ func (d *Definition) Validate() error {
 	if d.Rules == nil {
 		d.Rules = []AutomationRule{}
 	}
+	if err := validateArtifacts(*d); err != nil {
+		return err
+	}
 	return validateRules(*d)
 }
 
@@ -79,4 +98,40 @@ func DefaultDefinition(name string) Definition {
 			{ID: "done", Name: "Done", Description: "Completed work"},
 		},
 	}
+}
+
+func validateArtifacts(d Definition) error {
+	for _, stage := range d.Stages {
+		if len(stage.ArtifactInputs) > 50 || len(stage.ArtifactOutputs) > 50 {
+			return modelerrors.ErrInvalid
+		}
+		seen := map[string]bool{}
+		for _, output := range stage.ArtifactOutputs {
+			if !artifact.ValidName(output.Name) || !artifact.ValidName(output.Kind) || seen[output.Name] {
+				return modelerrors.ErrInvalid
+			}
+			seen[output.Name] = true
+		}
+		seen = map[string]bool{}
+		for _, input := range stage.ArtifactInputs {
+			if !artifact.ValidName(input.Name) || seen[input.Name] {
+				return modelerrors.ErrInvalid
+			}
+			seen[input.Name] = true
+			source, ok := d.Stage(input.SourceStageID)
+			if !ok || source.ID == stage.ID {
+				return modelerrors.ErrInvalid
+			}
+			found := false
+			for _, output := range source.ArtifactOutputs {
+				if output.Name == input.OutputName {
+					found = true
+				}
+			}
+			if !found {
+				return modelerrors.ErrInvalid
+			}
+		}
+	}
+	return nil
 }

@@ -301,7 +301,7 @@ func (q *Queries) ListWorkflowRules(ctx context.Context, arg ListWorkflowRulesPa
 }
 
 const listWorkflowStages = `-- name: ListWorkflowStages :many
-SELECT workspace_id, id, responsible_agent_id, workflow_id, position, name, description FROM workflow_stages WHERE workspace_id=$1 AND workflow_id=$2 ORDER BY position
+SELECT workspace_id, id, responsible_agent_id, workflow_id, position, name, description, artifact_inputs, artifact_outputs FROM workflow_stages WHERE workspace_id=$1 AND workflow_id=$2 ORDER BY position
 `
 
 type ListWorkflowStagesParams struct {
@@ -326,6 +326,8 @@ func (q *Queries) ListWorkflowStages(ctx context.Context, arg ListWorkflowStages
 			&i.Position,
 			&i.Name,
 			&i.Description,
+			&i.ArtifactInputs,
+			&i.ArtifactOutputs,
 		); err != nil {
 			return nil, err
 		}
@@ -563,20 +565,22 @@ func (q *Queries) PendingWorkflowEvent(ctx context.Context) (WorkflowEvent, erro
 }
 
 const putWorkflowStage = `-- name: PutWorkflowStage :exec
-INSERT INTO workflow_stages(workspace_id,workflow_id,id,responsible_agent_id,position,name,description)
-VALUES($1,$2,$3,NULLIF($4::text,''),$5,$6,$7)
+INSERT INTO workflow_stages(workspace_id,workflow_id,id,responsible_agent_id,position,name,description,artifact_inputs,artifact_outputs)
+VALUES($1,$2,$3,NULLIF($4::text,''),$5,$6,$7,$8,$9)
 ON CONFLICT(workspace_id,workflow_id,id) DO UPDATE SET responsible_agent_id=EXCLUDED.responsible_agent_id,
-position=EXCLUDED.position,name=EXCLUDED.name,description=EXCLUDED.description
+position=EXCLUDED.position,name=EXCLUDED.name,description=EXCLUDED.description,artifact_inputs=EXCLUDED.artifact_inputs,artifact_outputs=EXCLUDED.artifact_outputs
 `
 
 type PutWorkflowStageParams struct {
-	WorkspaceID string `json:"workspace_id"`
-	WorkflowID  string `json:"workflow_id"`
-	ID          string `json:"id"`
-	AgentID     string `json:"agent_id"`
-	Position    int32  `json:"position"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
+	WorkspaceID     string `json:"workspace_id"`
+	WorkflowID      string `json:"workflow_id"`
+	ID              string `json:"id"`
+	AgentID         string `json:"agent_id"`
+	Position        int32  `json:"position"`
+	Name            string `json:"name"`
+	Description     string `json:"description"`
+	ArtifactInputs  []byte `json:"artifact_inputs"`
+	ArtifactOutputs []byte `json:"artifact_outputs"`
 }
 
 func (q *Queries) PutWorkflowStage(ctx context.Context, arg PutWorkflowStageParams) error {
@@ -588,6 +592,8 @@ func (q *Queries) PutWorkflowStage(ctx context.Context, arg PutWorkflowStagePara
 		arg.Position,
 		arg.Name,
 		arg.Description,
+		arg.ArtifactInputs,
+		arg.ArtifactOutputs,
 	)
 	return err
 }

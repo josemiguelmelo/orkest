@@ -123,6 +123,15 @@ func (r *AgentLaunchPostgresRepository) ReserveSessionRun(ctx context.Context, c
 	if err := q.BindWorkflowRun(ctx, sqlc.BindWorkflowRunParams{WorkspaceID: config.WorkspaceID, ID: config.TaskID, WorkflowRunID: pgtype.Text{String: config.RunID, Valid: true}}); err != nil {
 		return err
 	}
+	for _, revisionID := range config.ArtifactRevisionIDs {
+		count, err := q.PinRunArtifactInput(ctx, sqlc.PinRunArtifactInputParams{RunID: config.RunID, ID: revisionID})
+		if err != nil {
+			return err
+		}
+		if count != 1 {
+			return modelerrors.ErrConflict
+		}
+	}
 	if config.InitialCommandID != "" {
 		if err := q.InsertPromptOutbox(ctx, sqlc.InsertPromptOutboxParams{RunID: config.RunID, CommandID: config.InitialCommandID, Prompt: config.InitialPrompt}); err != nil {
 			return err

@@ -172,6 +172,11 @@ type OrganizationMembership struct {
 	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 }
 
+type RunArtifactInput struct {
+	RunID      string `json:"run_id"`
+	RevisionID string `json:"revision_id"`
+}
+
 type Skill struct {
 	ID             string             `json:"id"`
 	Scope          string             `json:"scope"`
@@ -211,6 +216,32 @@ type TaskAgentSession struct {
 	RuntimeSessionID string             `json:"runtime_session_id"`
 	IsCurrent        bool               `json:"is_current"`
 	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+}
+
+type TaskArtifact struct {
+	ID          string `json:"id"`
+	WorkspaceID string `json:"workspace_id"`
+	TaskID      string `json:"task_id"`
+	Kind        string `json:"kind"`
+	OutputName  string `json:"output_name"`
+	Revision    int64  `json:"revision"`
+}
+
+type TaskArtifactRevision struct {
+	ID             string             `json:"id"`
+	WorkspaceID    string             `json:"workspace_id"`
+	TaskID         string             `json:"task_id"`
+	ArtifactID     string             `json:"artifact_id"`
+	Number         int64              `json:"number"`
+	Title          string             `json:"title"`
+	Content        []byte             `json:"content"`
+	CreatedBy      string             `json:"created_by"`
+	ProducingRunID pgtype.Text        `json:"producing_run_id"`
+	StageID        string             `json:"stage_id"`
+	StageVersion   int64              `json:"stage_version"`
+	IdempotencyKey string             `json:"idempotency_key"`
+	Request        []byte             `json:"request"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
 }
 
 type TaskComment struct {
@@ -310,6 +341,8 @@ type WorkflowStage struct {
 	Position           int32       `json:"position"`
 	Name               string      `json:"name"`
 	Description        string      `json:"description"`
+	ArtifactInputs     []byte      `json:"artifact_inputs"`
+	ArtifactOutputs    []byte      `json:"artifact_outputs"`
 }
 
 type Workspace struct {

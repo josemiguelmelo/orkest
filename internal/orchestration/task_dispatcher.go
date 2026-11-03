@@ -10,12 +10,14 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/agent"
 	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
+	"github.com/josemiguelmelo/orkest/internal/artifact"
 	"github.com/josemiguelmelo/orkest/internal/coderepository"
 	"github.com/josemiguelmelo/orkest/internal/core/ids"
 	coreruntime "github.com/josemiguelmelo/orkest/internal/core/runtime"
 	"github.com/josemiguelmelo/orkest/internal/mcpserver"
 	"github.com/josemiguelmelo/orkest/internal/skill"
 	"github.com/josemiguelmelo/orkest/internal/task"
+	"github.com/josemiguelmelo/orkest/internal/workflow"
 	"github.com/josemiguelmelo/orkest/internal/workspaceenv"
 )
 
@@ -46,8 +48,10 @@ type taskPromptSnapshot struct {
 
 // TaskDispatcher resolves an assigned agent definition and starts its task run.
 type TaskDispatcher struct {
-	agents   taskAgentGetter
-	profiles interface {
+	artifacts *artifact.Service
+	workflows *workflow.WorkflowConfigurationService
+	agents    taskAgentGetter
+	profiles  interface {
 		Resolve(context.Context, string, string, agent.Runtime) (string, error)
 	}
 	launches   *LaunchService
@@ -163,6 +167,13 @@ func (d *TaskDispatcher) StartTask(ctx context.Context, userID, organizationID s
 	}
 	if value.PromptText != "" {
 		prompt = value.PromptText
+	}
+	if err = d.refreshOrkestMCPServer(userID, organizationID, value, &config); err != nil {
+		return err
+	}
+	prompt, err = d.artifactPrompt(ctx, userID, organizationID, value, &config, prompt)
+	if err != nil {
+		return err
 	}
 	if err := config.Validate(); err != nil {
 		return err
@@ -333,6 +344,11 @@ func (d *TaskDispatcher) refreshOrkestMCPServer(userID, organizationID string, v
 		return nil
 	}
 	server, err := d.agentTools.RuntimeServer(userID, organizationID, value.WorkspaceID, value.ID)
+	if scoped, ok := d.agentTools.(interface {
+		RuntimeServerForRun(string, string, string, string, string) (mcpserver.RuntimeServer, error)
+	}); ok {
+		server, err = scoped.RuntimeServerForRun(userID, organizationID, value.WorkspaceID, value.ID, config.RunID)
+	}
 	if err != nil {
 		return fmt.Errorf("configure Orkest agent tools: %w", err)
 	}

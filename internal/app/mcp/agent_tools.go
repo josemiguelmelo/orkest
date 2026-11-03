@@ -17,6 +17,7 @@ import (
 	"time"
 
 	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	"github.com/josemiguelmelo/orkest/internal/artifact"
 	"github.com/josemiguelmelo/orkest/internal/coderepository"
 	"github.com/josemiguelmelo/orkest/internal/mcpserver"
 	"github.com/josemiguelmelo/orkest/internal/task"
@@ -26,6 +27,7 @@ import (
 const agentToolsPath = "/mcp/agent-tools"
 
 type AgentTools struct {
+	artifacts    *artifact.Service
 	key          []byte
 	endpoint     string
 	repositories interface {
@@ -37,6 +39,7 @@ type AgentTools struct {
 }
 
 type agentClaims struct {
+	RunID       string `json:"r,omitempty"`
 	UserID      string `json:"u"`
 	OrgID       string `json:"o"`
 	WorkspaceID string `json:"w"`
@@ -100,7 +103,13 @@ func AgentToolsTokenKey(dataRoot, configured string) (string, error) {
 }
 
 func (s *AgentTools) RuntimeServer(userID, orgID, workspaceID, taskID string) (mcpserver.RuntimeServer, error) {
-	claims := agentClaims{UserID: userID, OrgID: orgID, WorkspaceID: workspaceID, TaskID: taskID, Expires: time.Now().Add(24 * time.Hour).Unix()}
+	return s.RuntimeServerForRun(userID, orgID, workspaceID, taskID, "")
+}
+
+func (s *AgentTools) SetArtifacts(service *artifact.Service) { s.artifacts = service }
+
+func (s *AgentTools) RuntimeServerForRun(userID, orgID, workspaceID, taskID, runID string) (mcpserver.RuntimeServer, error) {
+	claims := agentClaims{RunID: runID, UserID: userID, OrgID: orgID, WorkspaceID: workspaceID, TaskID: taskID, Expires: time.Now().Add(24 * time.Hour).Unix()}
 	payload, err := json.Marshal(claims)
 	if err != nil {
 		return mcpserver.RuntimeServer{}, err
@@ -126,7 +135,7 @@ func (s *AgentTools) Handler() http.Handler {
 			return nil, listWorkspaceRepositoriesOutput{Repositories: value}, nil
 		})
 		type getTaskInput struct {
-			TaskID string `json:"task_id" jsonschema:"Task ID to retrieve; defaults to the current task."`
+			TaskID string `json:"task_id" jsonschema:"Task Orkest's internal ID to retrieve; defaults to the current task."`
 		}
 		mcp.AddTool(server, &mcp.Tool{Name: "get_task", Description: "Get task details. The current task is returned by default; other tasks must belong to the same workspace."}, func(ctx context.Context, _ *mcp.CallToolRequest, input getTaskInput) (*mcp.CallToolResult, any, error) {
 			id := strings.TrimSpace(input.TaskID)
@@ -139,6 +148,35 @@ func (s *AgentTools) Handler() http.Handler {
 			}
 			return nil, value, nil
 		})
+		if s.artifacts != nil {
+			scope := artifact.Scope{UserID: claims.UserID, OrganizationID: claims.OrgID, WorkspaceID: claims.WorkspaceID, TaskID: claims.TaskID, RunID: claims.RunID}
+			mcp.AddTool(server, &mcp.Tool{Name: "list_artifacts", Description: "List current artifact revisions for this task."}, func(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, any, error) {
+				value, err := s.artifacts.List(ctx, scope)
+				if err != nil {
+					return nil, nil, errors.New("unable to list artifacts")
+				}
+				return nil, value, nil
+			})
+			mcp.AddTool(server, &mcp.Tool{Name: "get_artifact", Description: "Read immutable revision history for an artifact belonging to this task."}, func(ctx context.Context, _ *mcp.CallToolRequest, input struct {
+				ArtifactID string `json:"artifactId"`
+			},
+			) (*mcp.CallToolResult, any, error) {
+				value, err := s.artifacts.Revisions(ctx, scope, input.ArtifactID)
+				if err != nil {
+					return nil, nil, errors.New("unable to get artifact")
+				}
+				return nil, value, nil
+			})
+			if claims.RunID != "" {
+				mcp.AddTool(server, &mcp.Tool{Name: "publish_artifact", Description: "Publish a task output: stored text/JSON or an external HTTP(S) reference. Reuse idempotencyKey only for an identical retry. To revise, supply artifactId and expectedRevision. Kind and outputName remain fixed."}, func(ctx context.Context, _ *mcp.CallToolRequest, input artifact.PublishInput) (*mcp.CallToolResult, artifact.Revision, error) {
+					value, err := s.artifacts.Publish(ctx, scope, input)
+					if err != nil {
+						return nil, artifact.Revision{}, errors.New("unable to publish artifact: check input, revision and run state")
+					}
+					return nil, value, nil
+				})
+			}
+		}
 		return server
 	}, &mcp.StreamableHTTPOptions{Stateless: true})
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -133,12 +133,16 @@ conflicts stay in services. Persisted command JSON and public API payloads retai
 their existing shapes. This package refactor changes queries and generated code
 without changing the database schema.
 
-Future artifacts belong to tasks, with optional producing run and stage-entry
-references; movement will not remove outputs. Artifact storage and APIs are not
-implemented. A future integration adapter can verify/deduplicate a PR notification,
-resolve its linked artifact to a workspace task, and persist a normalized event.
-Provider-specific typed conditions and matchers should be added with that adapter.
-PR event ingestion, artifact requirements and configurable scripts remain future
+Task artifacts belong to tasks and survive stage movement. Stages can declare
+named outputs and input bindings to outputs of another stage. Dispatch snapshots
+matching revisions and stores input identities atomically with run reservation;
+missing required inputs prevent consumer startup. Output declarations do not gate
+producer completion. See [task artifacts](task-artifacts.md).
+
+A future integration adapter can verify/deduplicate a PR notification, resolve its
+linked artifact to a workspace task, and persist a normalized event.
+Provider-specific conditions and matchers should be added with that adapter.
+PR event ingestion, producer output gates and configurable scripts remain future
 work. In particular, returning to In progress and starting revisions are separate
 actions; the destination entry rule determines whether execution follows.
 

@@ -1370,6 +1370,37 @@ paths:
       security: [{bearerAuth: []}, {cookieAuth: []}]
       requestBody: {required: true, content: {application/json: {schema: {type: object, required: [requestId, sessionId, optionId], properties: {requestId: {type: string}, sessionId: {type: string}, optionId: {type: string}}}}}}
       responses: {"202": {description: Permission response accepted}, "403": {$ref: "#/components/responses/Forbidden"}, "404": {$ref: "#/components/responses/NotFound"}}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/tasks/{taskID}/artifacts:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+      - {name: taskID, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [Tasks]
+      operationId: listTaskArtifacts
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      responses:
+        "200": {description: Artifact revisions, content: {application/json: {schema: {type: array, items: {$ref: "#/components/schemas/ArtifactRevision"}}}}}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "500": {$ref: "#/components/responses/InternalServerError"}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/tasks/{taskID}/artifacts/{artifactID}/revisions:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+      - {name: taskID, in: path, required: true, schema: {type: string}}
+      - {name: artifactID, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [Tasks]
+      operationId: listArtifactRevisions
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      responses:
+        "200": {description: Artifact revisions, content: {application/json: {schema: {type: array, items: {$ref: "#/components/schemas/ArtifactRevision"}}}}}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "500": {$ref: "#/components/responses/InternalServerError"}
   /api/organizations/{orgID}/workspaces/{workspaceID}/tasks/{taskID}/comments:
     parameters:
       - {name: orgID, in: path, required: true, schema: {type: string}}
@@ -1683,10 +1714,70 @@ components:
       properties:
         user: {$ref: "#/components/schemas/User"}
         role: {type: string, enum: [owner, admin, member, viewer]}
+    ArtifactContent:
+      type: object
+      additionalProperties: false
+      required: [mediaType]
+      properties:
+        mediaType: {type: string}
+        text: {type: string, maxLength: 100000}
+        url: {type: string, format: uri, maxLength: 4000}
+        metadata: {type: object, additionalProperties: true}
+      oneOf:
+        - required: [text]
+          not: {required: [url]}
+        - required: [url]
+          not: {required: [text]}
+    PublishArtifactInput:
+      type: object
+      additionalProperties: false
+      required: [expectedRevision, idempotencyKey, kind, title, content]
+      properties:
+        artifactId: {type: string}
+        expectedRevision: {type: integer, format: int64, minimum: 0}
+        idempotencyKey: {type: string, minLength: 1, maxLength: 200}
+        kind: {type: string, pattern: '^[a-z][a-z0-9_.-]{0,99}$'}
+        title: {type: string, minLength: 1, maxLength: 500}
+        outputName: {type: string}
+        content: {$ref: "#/components/schemas/ArtifactContent"}
+    ArtifactRevision:
+      type: object
+      required: [id, artifactId, number, kind, title, content, createdBy, stageId, stageVersion, createdAt]
+      properties:
+        id: {type: string}
+        artifactId: {type: string}
+        number: {type: integer, format: int64}
+        kind: {type: string}
+        title: {type: string}
+        outputName: {type: string}
+        content: {$ref: "#/components/schemas/ArtifactContent"}
+        createdBy: {type: string}
+        producingRunId: {type: string}
+        stageId: {type: string}
+        stageVersion: {type: integer, format: int64}
+        createdAt: {type: string, format: date-time}
+    ArtifactOutput:
+      type: object
+      additionalProperties: false
+      required: [name, kind]
+      properties:
+        name: {type: string}
+        kind: {type: string}
+    ArtifactInput:
+      type: object
+      additionalProperties: false
+      required: [name, sourceStageId, outputName, required]
+      properties:
+        name: {type: string}
+        sourceStageId: {type: string}
+        outputName: {type: string}
+        required: {type: boolean}
     WorkflowStage:
       type: object
       required: [id, name, description, responsibleAgentId]
       properties:
+        artifactInputs: {type: array, maxItems: 50, items: {$ref: "#/components/schemas/ArtifactInput"}}
+        artifactOutputs: {type: array, maxItems: 50, items: {$ref: "#/components/schemas/ArtifactOutput"}}
         id: {type: string, minLength: 1, maxLength: 100}
         name: {type: string, minLength: 1, maxLength: 200}
         description: {type: string, maxLength: 2000}

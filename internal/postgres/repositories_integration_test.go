@@ -175,6 +175,7 @@ func TestPostgresRepositories(t *testing.T) {
 		t.Fatalf("expected task-referenced repository deletion conflict, got %v", err)
 	}
 	t.Run("workspace workflow transitions", func(t *testing.T) { testWorkspaceWorkflow(t, database, org.ID, owner.ID, worker.ID) })
+	t.Run("task artifacts", func(t *testing.T) { testTaskArtifacts(t, database, org.ID, workspaceID, taskID, owner.ID) })
 	t.Run("task sessions and prompt delivery", func(t *testing.T) { testTaskSessions(t, database, org.ID, workspaceID, taskID) })
 	commentID, err := ids.NewUUID()
 	if err != nil {
