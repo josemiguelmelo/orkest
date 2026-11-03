@@ -8,7 +8,8 @@ Read these documents before making a change:
 
 - [AGENTS.md](AGENTS.md) for repository conventions and verification requirements.
 - [Project requirements](docs/requirements.md) for confirmed scope, proposed behavior, and open decisions.
-- [Technology stack](docs/tech-stack.md) for architecture and implementation boundaries.
+- [Architecture](docs/architecture.md) for ownership, interfaces, and extension points.
+- [Technology stack](docs/tech-stack.md) for dependencies and verification limits.
 
 Do not commit credentials, generated secrets, local `.env` files, task content containing secrets, or ordinary logs containing sensitive data.
 

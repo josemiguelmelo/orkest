@@ -18,4 +18,4 @@ Runtime implementations depend on contracts, never the run controller. The
 controller and private conversation engine stay together to keep lifecycle and
 locking rules private. There is no forwarding package at the root.
 
-See [architecture and verification](../../docs/runtime-providers.md).
+See [architecture and verification](../../docs/development/agentctl.md).

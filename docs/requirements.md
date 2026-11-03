@@ -1,377 +1,374 @@
 # Orkest requirements
 
-Status: Draft for discussion. Confirmed requirements are distinguished from proposals and open decisions below.
+Draft product specification; confirmed rules, proposals, and open decisions are labeled.
+Section/requirement IDs are stable. See [status](status.md) for implementation and
+verification, [glossary](glossary.md) for terms, and [architecture](architecture.md) for ownership.
 
 ## 1. Purpose
 
-Orkest is a platform for orchestrating, monitoring, and interacting with AI agents, primarily for software development lifecycle (SDLC) tasks. The platform launches agents in isolated task environments and supports human-directed execution and interaction through Agent Client Protocol (ACP).
+Orkest orchestrates software-development agents, launches task environments, and
+provides monitoring, chat, approvals, and recovery through agentctl and ACP.
 
 ## 2. Confirmed MVP scope
 
-- Support multiple organizations, users, and workspaces from day one.
-- Delegate authentication to Keycloak to support username/password and SSO through identity-provider configuration.
-- Use organization roles Owner/Admin/Member and workspace roles Admin/Member/Viewer.
-- Support OpenCode, Claude Code, Codex, GitHub Copilot CLI, and Kiro CLI runtimes through extensible runtime adapters.
-- Provide built-in tools for communicating with the core platform; user-defined tools are outside MVP scope.
-- Agent definitions select one of two permission policies across supported runtimes: `ask` preserves interactive approval behavior and forwards runtime approval requests to the task UI; `autonomous` configures the provider to proceed without interactive approval inside its isolated task environment. Native sandbox behavior can vary by provider. Existing agents default to `ask`.
-- Support manual task creation and tasks imported from GitHub Projects v2 issue and draft issue items.
-- Users can assign and start tasks explicitly; workspace workflow configuration may assign agents, auto-start work on stage entry, and advance after successful completion.
-- Support reusable agent definitions and workspace teams with individual members providing execution slots.
-- Execute agents using Docker behind an executor abstraction suitable for future implementations such as Kubernetes.
-- Provide a Local executor for trusted single-user development that starts host processes without task isolation; Docker remains the default executor.
-- Build agentctl as the bridge between the platform and agent ACP sessions in execution environments.
-- Support task-specific chat, agent approval requests, cancellation, and recovery after platform or executor interruption. Recovery proposals and provider limitations are described in section 7.
-- Support HTTP MCP servers; stdio MCP servers are outside the MVP.
-- Support workspace-configurable ordered stages, seeded with todo, in progress, in review, done.
-- Allow a task to involve multiple repositories registered in its workspace.
-- Treat external systems as authoritative for imported task content; users edit that content at the source.
+- Multiple organizations, users, and workspaces from day one.
+- Keycloak authentication: username/password and configured SSO.
+- Roles: organization Owner/Admin/Member; workspace Admin/Member/Viewer.
+- Extensible adapters for OpenCode, Claude Code, Codex, GitHub Copilot CLI, and Kiro CLI.
+- Built-in platform tools; user-defined tools excluded.
+- Agent permission policies: `ask` forwards interactive approvals to task UI (default
+  for existing agents); `autonomous` uses provider-native noninteractive permissions
+  inside the isolated task environment. Native sandbox behavior varies.
+- Manual tasks and GitHub Projects v2 issue/draft-issue imports; source-managed
+  content remains editable only at the source.
+- Explicit assignment/starts, plus configured workflow assignment, stage-entry
+  starts, and advancement after success.
+- Reusable agent definitions; workspace team members supply execution slots.
+- Docker execution by default, behind an extensible executor contract. Local is
+  a trusted, single-user host-process option without task isolation; Kubernetes is future work.
+- agentctl bridges the platform and runtime ACP sessions.
+- Task chat, approvals, cancellation, and interruption recovery; see §7.
+- HTTP MCP servers; stdio MCP excluded.
+- Configurable ordered stages, seeded with todo, in progress, in review, done.
+- Multiple registered workspace repositories per task.
 
-Workflow stage assignment and event-driven start/movement rules are configured explicitly by workspace administrators; automatic selection of unrelated tasks remains outside the MVP. OpenCode, Claude Code, Codex, GitHub Copilot CLI, and Kiro CLI are supported through pinned runtime adapters. Codex uses the ACP adapter and an OpenAI model selection; API-key credentials are provided through workspace secrets, and Local development can use the host Codex login described above. GitHub Copilot CLI uses ACP and a GitHub Copilot model selection; credentials are provided through workspace secrets. Kiro CLI uses ACP V3 and the `kiro` model provider; `KIRO_API_KEY` is supplied through workspace secrets.
-
-For Local development, Orkest uses the host Codex auth file at
-`~/.codex/auth.json` when present; `ORKEST_CODEX_AUTH_FILE` overrides the path.
-Docker development may also set this variable to mount the file into Codex task
-containers. This local convenience does not add platform-managed ChatGPT login
-or shared account connections.
+See [policy reconciliation](status.md#product-decisions-requiring-reconciliation).
+This specification does not override repository instructions.
 
 ## 3. Domain model
 
+Rules for the terms in the [glossary](glossary.md).
+
 ### 3.1 Organization, User, Workspace
 
-An organization groups users and multiple workspaces. Each workspace represents an isolated project within the organization. Repositories, tasks, agent definitions, team members, tools, MCP servers, integrations, executor configurations, and workflow configuration belong to a workspace and are isolated from other workspaces, including those in the same organization. Configuration and credentials must not be implicitly shared across projects.
+- Keycloak authenticates; Orkest authorizes.
+- First login creates a profile keyed by verified subject with username/email;
+  later logins do not overwrite it.
+- Organization membership is required for workspace membership; invitations are deferred.
 
-Workspace Admins and inherited organization Owners/Admins can manage workspace environment variables and secrets. Variables are readable through workspace configuration APIs; secret values are encrypted at rest and write-only. Workspace values are supplied to the runtime process and child tools for each run. Updates apply to future runs; an existing run's environment snapshot is encrypted and retained for recovery.
+| Role | Authority |
+| --- | --- |
+| Organization Owner | Organization and all memberships; last Owner cannot be removed/demoted |
+| Organization Admin | Settings, workspaces, memberships; cannot grant/change/remove Owners |
+| Organization Member | Read organization details |
+| Workspace Admin | Workspace settings and memberships |
+| Workspace Member | Read/edit project resources |
+| Workspace Viewer | Read only; no mutations, starts, or approval answers |
 
-Organization roles are Owner, Admin, and Member. Workspace roles are Admin, Member, and Viewer. Authentication is delegated to Keycloak. Orkest owns user profiles, organization/workspace membership, and application authorization; Keycloak authenticates users. On first successful login, Orkest creates a user keyed by the verified Keycloak subject and records username and email. The profile is not overwritten by later logins. Users must be organization members before receiving workspace membership.
-
-Organization Owners manage the organization and all memberships. Organization Admins manage organization settings and workspaces and manage memberships, but cannot grant, change, or remove an Owner. Organization Members can read organization details. Owner and Admin access is inherited across every workspace in the organization. Workspace Admins manage workspace settings and memberships; Members may read and edit project resources; Viewers are read-only. The last organization Owner cannot be demoted or removed. Invitations are not part of this first membership API. A workspace Viewer must not mutate tasks or configurations, start executions, or answer approval requests. The platform must enforce organization and workspace access boundaries on all data and execution operations.
+- Organization Owners/Admins inherit workspace access.
+- Isolate resources, subscriptions, credentials, and executions by workspace,
+  including within one organization. No implicit configuration sharing.
+- Workspace Admins/inherited administrators manage environment values: ordinary
+  values are readable; secrets are encrypted and write-only. Runs retain encrypted
+  recovery snapshots. See [environment resolution](guides/agent-configuration.md).
 
 ### 3.2 Repository
 
-Users register repositories in a workspace before tasks may use them. A task may involve one or more registered repositories. A task must not access repositories from another workspace through task configuration.
-
-GitHub Cloud with a PAT is the initial coding provider. GitLab Cloud and
-self-managed GitLab Server with PATs are also supported as coding providers.
-GitLab Server connections configure their HTTPS base URL. Workspace-scoped
-integration management, write-only encrypted credential storage and rotation,
-connection validation, paginated repository discovery, selection-based
-registration, and task checkout credential resolution apply to these providers.
-Integrated repository PATs are supplied to agentctl for Git push authentication
-during a run. They are encrypted in the platform's task-session snapshot and
-omitted from agentctl's plaintext recovery checkpoint. Further coding providers
-remain future support.
-
-Repository configuration must identify the remote repository and the credentials or integration used to access it. The agent determines which workspace repositories need changes from the task context and creates a task branch only when changes are needed; review iterations reuse that branch. Imported task prompts use the external source reference as the main task ID and retain the Orkest ID for traceability. Agents autonomously create and update pull requests and perform the repository operations needed to complete the task, within configured permissions and approval policies. Base branch selection and discovery mechanics remain open.
-
-Agent-created commits use the fixed Git identity `Orkest Agent <agent@orkest.local>`. PATs authenticate HTTPS Git operations through agentctl-provided process configuration and must not be written to repository Git configuration, logs, task content, or ordinary API responses.
+- Tasks select zero or more registered same-workspace repositories; runs check out only those selected.
+- GitHub Cloud, GitLab Cloud, and HTTPS GitLab Server support PAT integration,
+  validation, discovery, registration, rotation, and checkout.
+- Agents create task branches only in selected repositories needing changes.
+  Review iterations retain branches and working trees.
+- Imported prompts use the external reference plus the Orkest ID for traceability.
+- Agents create/update PRs within permissions. New checkouts use discovered default
+  branches; base-branch overrides and further PR policy remain open.
+- Commit as `Orkest Agent <agent@orkest.local>`. Exclude checkout/push credentials
+  from repository configuration and plaintext checkpoints. See [credential handling](guides/integrations.md#coding-integrations).
 
 ### 3.3 Task
 
-A task contains a title, description, workflow status, freeform labels, comments, associated repositories, and timestamps. It belongs to a workspace and may be assigned to a workspace agent definition. Tasks associate directly with zero or more registered repositories in the same workspace; runs check out only those associated repositories. Workspace-scoped APIs and task UI manage these links.
-
-Deleting an assigned agent definition clears that task assignment while preserving the task. Task comment authors remain users.
-
-Tasks may be created in Orkest or imported from an integration. Imported tasks retain their source identity and a link to the source. Source-managed fields cannot be edited in Orkest.
-
-Users and configured workflow stages assign tasks to workspace agents. Users initiate work explicitly or through administrator-configured stage entry automation. Linking execution slots/team members to these agents is part of the team and orchestration work. Agent completion must not automatically initiate another task.
-
-Orkest manages its own assignment, execution, and agent chat without updating source status. Imported title, description, labels, and source URL remain source-managed. When a source issue is closed, the imported task moves to done; when an item is removed from an integration's selected source or no longer matches its filters, its imported task is removed from Orkest. Source comment synchronization remains open.
+- Fields: title, description, stage, labels, user comments, repository links, timestamps.
+- Optional agent-definition assignment. Deleting the definition clears assignment,
+  preserving the task. Assignment never starts work; completion never selects another task.
+- Manual content is locally managed. Imported title, description, labels, and URL
+  are read-only and source-managed.
+- Source closure moves tasks to the configured closed stage. Leaving the selected
+  source/filters removes the imported task.
+- Local workflow never updates source status; source comment sync remains open.
 
 ### 3.4 Integration
 
-An integration connects a workspace to an external task system, imports tasks, and keeps source-managed task data synchronized. GitHub Cloud Projects v2 and Jira Server are the initial implementations. Each source is configured and enabled per workspace, selects one workflow and source tasks using label filters, and is polled on a configurable interval. Imported tasks are associated with that workflow. GitHub Cloud sources select a Projects v2 board URL; Jira sources select project keys on their configured server.
-
-Integration implementations must conform to a common contract so another task system can be added through a new implementation class without changing the core task or orchestration logic. Each provider owns a typed configuration, strict validation, and a machine-readable config schema. The authenticated provider catalog exposes these schemas to setup clients. Provider configuration, credentials, and source-specific mapping may differ.
-
-Proposed contract responsibilities:
-
-- Validate configuration and connectivity.
-- Discover or import supported source tasks.
-- Map source content into the internal representation while keeping local workflow status separate from source status.
-- Process source updates idempotently.
-- Reconcile missed updates and surface synchronization failures.
-
-MVP does not change source status. Imported title, description, labels, and source URL are read-only in Orkest and updated idempotently by polling. Closed source issues move their imported task to done. Items removed from the selected source or no longer matching its filters are deleted from Orkest. GitHub Cloud imports issue and draft issue items from the selected board; pull request items are excluded. Label filters require all configured labels on an item. Credentials are encrypted at rest and omitted from API responses and ordinary logs. Outbound comments and other source writes remain unspecified. Local task workflow status, source status, and run execution state are separate concepts.
+- GitHub Projects v2 and Jira Server poll into a selected workspace workflow.
+- Providers own typed configuration, validation, and authenticated catalog schemas
+  behind a common contract.
+- Proposed contract: connectivity validation, discovery, field mapping, idempotent
+  updates, missed-update reconciliation, and failure reporting.
+- GitHub imports issues/draft issues, excluding PRs. [Label semantics](guides/integrations.md#task-integrations)
+  differ by provider; no unified policy is established.
 
 ### 3.5 Tool
 
-MVP tools are built-in capabilities that let an agent communicate with the core platform. Initial capabilities include getting task details and listing repositories registered in the agent's workspace. Calls must be authenticated and scoped to the agent's workspace and allowed operations.
-
-User-defined tool registration, custom scripts/commands as platform tools, and a configurable Tool catalog are outside the MVP. External MCP servers remain separately configurable; native runtime capabilities such as shell execution and file editing remain available subject to permissions.
-
-The platform exposes built-in tools through its internal Streamable HTTP MCP endpoint. It provides `list_workspace_repositories` and `get_task`, scoped to the workspace and user that started the run. Artifact tools `list_artifacts`, `get_artifact` and `publish_artifact` are scoped to the current task; publishing additionally requires an authenticated producing run. Calls are authenticated with short-lived run credentials. Agents must not use internal tools to bypass manual assignment/start controls or user-only completion and reopening rules.
+- Built-in Streamable HTTP MCP tools expose authorized task/repository data and artifacts.
+- `get_task` / `list_workspace_repositories`: starting user/workspace scope.
+- `list_artifacts` / `get_artifact`: task scope. `publish_artifact` also requires a producing run.
+- Credentials are short-lived. Tools cannot bypass assignment, start, completion, or access policies.
+- Custom tool registration, scripts, and catalogs are deferred. Runtime shell/file
+  access remains permission-bound; external MCP servers are separate.
 
 ### 3.6 MCP Server
 
-An MCP server configuration represents a workspace-scoped HTTP connection to capabilities provided by an external server, such as GitHub or Jira. MVP supports remote Streamable HTTP servers through the configured runtime adapters, including OpenCode, Claude Code, Codex, GitHub Copilot CLI, and Kiro CLI; stdio servers and OAuth setup are outside MVP scope. Agent definitions select zero or more MCP servers registered in the same workspace.
-
-Configuration includes a display name, absolute HTTP(S) endpoint URL, and optional custom request headers. Header values are encrypted at rest using the integration encryption key, write-only in APIs, and omitted from ordinary logs. Updates that omit headers preserve stored values; an explicitly supplied empty header map clears them. At launch, only the selected servers and decrypted headers are passed to agentctl and configured in the selected runtime. Server deletion removes its agent selections. MCP server changes affect future runs; already-running processes keep their startup configuration.
+- Workspace fields: name, HTTP(S) URL, optional encrypted/write-only headers.
+- Agents select same-workspace servers. Deleting a server removes selections.
+- Header updates: omitted preserves; empty map clears.
+- Active processes retain startup settings; later runs resolve headers again by ID.
+- Stdio MCP and OAuth setup are deferred.
 
 ### 3.7 Agent Definition
 
-An agent definition is reusable configuration containing:
-
-- Name and short description.
-- System prompt / agent declaration.
-- Agent runtime: a supported runtime through an extensible runtime adapter.
-- Model provider and model identifier supported by that runtime.
-- Model selection.
-- Selected MCP servers. Built-in platform tools are provided by the platform; a custom tool selection UI is outside MVP.
-
-An agent definition belongs to a workspace and does not itself supply execution capacity. Its versioning policy remains open.
-
-Runtime providers expose a machine-readable schema for supported environment
-configuration. Agent definitions and reusable runtime profiles may set those
-values directly. Configuration values are encrypted at rest, write-only in
-configuration APIs, and supplied to new runs alongside workspace environment
-values; agent/profile values take precedence for matching variable names.
-
-Workspace runtime profiles are reusable presets containing a name, runtime,
-model provider, model identifier, and provider-specific environment
-configuration. Agent definitions can select a runtime profile or configure
-runtime and model settings directly. Updating a runtime profile updates every
-linked agent definition together, including its provider configuration;
-deleting it preserves the
-linked agents' last resolved settings and returns them to direct configuration.
-Execution image/toolchain profiles remain a separate resource.
+- Fields: name, description, instructions, runtime, model provider/ID, permission
+  policy, skills, MCP selections, optional runtime/execution profiles.
+- Definitions supply configuration, not capacity. Versioning remains open.
+- `ask` is the default; see §2 for permission policies and [configuration](guides/agent-configuration.md) for setup.
+- Runtime profiles preset runtime/model/provider configuration. Updates change linked
+  definitions atomically; deletion retains resolved values.
+- Provider values are encrypted, write-only, and override matching workspace names
+  for new sessions. Continued sessions retain compatible configuration.
 
 ### 3.8 Agent Team and Team Member
 
-A workspace has an agent team. Users add members to the team and select an agent definition for each member. Multiple members may reuse the same definition.
+Confirmed capacity requirement; implementation unfinished:
 
-Each member provides one execution slot and may work on at most one task at a time. The slot becomes available when the member is no longer working, including when a task awaits review after execution completes.
-
-A member may have multiple tasks assigned but execute only one task at a time. Assignment alone does not occupy a slot or start work.
-
-Slot allocation must be atomic so concurrent user actions cannot launch two tasks on one member. A slot remains occupied until the current work step/session finishes, including while waiting for user input or approval. An open but idle conversation after a completed step does not occupy a slot. Restarting work on an assigned task must acquire the member’s slot again.
+- Each workspace team member selects an agent definition and supplies one execution slot.
+  Multiple members may share a definition.
+- Many tasks may be assigned; only one may execute per member. Reserve atomically.
+- Input/approval waits occupy the slot. Release only after the step ends and ownership resolves.
+- Completed idle conversations occupy no slot; revisions reacquire capacity.
+- Assignment neither reserves capacity nor starts work.
 
 ### 3.9 Executor
 
-An executor provisions and manages a task execution environment. Docker is the default implementation; a Local executor is available for trusted single-user development and launches host processes without task isolation. Orchestration uses an abstraction suitable for further executors such as Kubernetes.
-
-The executor contract must cover environment creation, startup, connectivity, status inspection, stopping, and cleanup. Docker task environments must be isolated from other tasks. Local is an explicit development exception and provides no task isolation. Resource limits, network policy, persistence, and cleanup timing remain open.
+- Docker: default isolated environment.
+- Local: explicit trusted, single-user development option without task isolation.
+- Contract: create, start, connect, inspect, stop, clean up.
+- Kubernetes is future work; resource limits, network policy, and cleanup timing remain open.
 
 ### 3.10 Workflow
 
-Workspaces have one or more configurable task boards. Every task selects a workflow; source integrations select one for imported tasks. Stages have stable IDs, names, descriptions, display order and an optional responsible agent. Explicit initial and closed stage references determine task entry and closure independently of display order. Occupied stages and referenced workflows cannot be deleted.
+- Tasks/integrations select a workspace board. Stages have stable IDs, names,
+  descriptions, order, and optional responsible agents.
+- Explicit initial/closed references determine entry/closure; display order does not.
+  Occupied stages and referenced workflows cannot be deleted.
+- Reopening remains unresolved; see [current behavior](guides/workflows.md) and
+  [policy reconciliation](status.md#product-decisions-requiring-reconciliation).
+- Confirmed automation: durable events trigger stage-entry starts and independent
+  success/manual-completion movement rules. At most one enabled rule per event/source
+  stage; no outgoing rules from closed stages.
+- Rules continue only the same task. Failures, cancellation, and waits never advance/retry.
+- Movement applies assignment atomically. Failed asynchronous starts expose failure
+  without undoing movement; explicit starts remain separate.
+- Configuration saves neither trigger work nor change active sessions. Evaluate
+  events idempotently against current configuration; reject stale effects.
+- Artifacts retain immutable revisions and optional run/stage-entry identity.
+  Support text/JSON and external references. Required pinned inputs gate consumer
+  startup; outputs do not gate producer completion.
+- PR-triggered rules/provider conditions remain future work.
 
-Confirmed: automation is event-driven using durable PostgreSQL events and explicit rules. Stage-entry rules may start assigned work. Successful-run and manual-completion rules independently move tasks to explicit destinations. At most one enabled rule matches an event and source stage. Closed stages cannot have outgoing automation, and closed tasks cannot reopen. Failures, cancellation and interaction waits never advance or retry automatically. Agent completion may continue the same task through configured rules; it never selects another task.
+See [workflow behavior](guides/workflows.md) and [transactions](development/workflows.md).
 
-Task movement applies destination assignment and atomically records a stage-entry event; execution follows asynchronously when configured. Missing execution prerequisites surface as failed work indicators without undoing committed movement. Explicit starts remain separate user commands. Workflow position, pending automation and execution health are separate concepts.
+### 3.11 Task Run
 
-Workspace admins and inherited organization owners/admins configure workflows. Members can transition tasks; viewers are read-only. Each event is evaluated against the latest saved configuration under the workflow lock. Saving configuration does not itself emit events, start execution or alter active runtime settings. Event acknowledgement, task movement, history and resulting commands commit atomically. Stable identities, stage-entry versions and run identities prevent replay and stale-event effects. See [workspace workflows](workflows.md) for API, migration and recovery semantics.
-
-Task artifacts belong to tasks and retain immutable revisions, with optional producing-run identity and producing stage-entry identity. Stored text/JSON and external references are supported through task APIs and built-in agent tools. Workflow stages may declare named outputs and consume pinned artifact revisions as run inputs. Required consumer inputs prevent startup when missing; producer output declarations do not gate completion. See [task artifacts](task-artifacts.md) for implemented behavior and limits. External PR-triggered rules remain a future extension: review outcomes and their conditions must be defined with the integration; no PR webhook ingestion is currently implemented.
-
-### 3.11 Task Run — proposed supporting concept
-
-A task run records one execution attempt for a task. It links the task, assigned team member, effective agent definition, executor environment, and ACP session.
-
-It preserves timestamps, execution state, events, logs, approval requests, and results so retries do not erase history. Proposed states include starting, running, waiting for input, succeeded, failed, cancelled, and interrupted; exact states remain open.
-
-The platform should snapshot effective configuration for each run so later edits to an agent definition do not change the historical record.
+- One work step: effective configuration, environment, session, timestamps, events,
+  approvals, outcome.
+- Recovery retains the run; user-started revisions create another.
+- Team-member linkage is unfinished. Final state taxonomy remains open;
+  implemented values are in OpenAPI.
 
 ### 3.12 Agent Skill
 
-An agent skill is a reusable `SKILL.md` instruction document in the Agent Skills format. Skills have global scope (shared across organizations and workspaces), organization scope, or workspace scope. Users can read skills within their visibility scope; platform admins manage global skills, organization owners/admins manage organization skills, and workspace admins plus inherited organization owners/admins manage workspace skills. These roles can create, update, and delete skills. Global platform-admin status is application-managed on the user record and is provisioned by deployment operators.
-
-Agent definitions select skills by their globally unique lowercase skill ID. The API and run configuration use `skillMD` for the primary Markdown file. At task start, the platform resolves only skills visible in that workspace and snapshots `skillMD` into the run configuration. OpenCode receives the selected `SKILL.md` files under its project skill directory, where its native skill tool can discover and load them. V1 does not support companion files; the catalog can later extend from `skillMD` to the full directory structure without changing the meaning of this field.
+- Globally unique lowercase ID; matching frontmatter `name`, nonempty `description`, Markdown body.
+- Visibility/administration: global (platform admins), organization (Owners/Admins),
+  workspace (Admins/inherited administrators).
+- Definitions select visible skills; runs snapshot Markdown instructions.
+- Companion files are deferred. Future support must preserve the primary Markdown
+  field's meaning. See [native installation](reference/runtimes/README.md).
 
 ## 4. Execution and communication
 
-Proposed communication structure:
-
-```text
-User → Orkest → Executor-managed environment
-                 └─ agentctl ↔ Agent (ACP)
-```
-
-The platform launches the agent. For Docker and future remote execution environments, agentctl bridges platform communication to the agent's ACP session. The platform-to-agentctl transport, authentication, reconnect behavior, and ownership of process startup remain open; ACP does not by itself settle that transport design.
+The platform launches independent agentctl workers. Workers own runtime processes
+and ACP stdio; platform communication uses REST commands and a receive-only
+activity WebSocket. See [architecture](architecture.md#system-boundary) for the
+system diagram and [status](status.md) for transport limitations.
 
 Required user-facing capabilities:
 
 - View task execution state and agent activity.
 - Chat with the agent in the context of a task.
 - Inspect and answer approval requests.
-- Cancel execution and resume interrupted work, with precise semantics still to be defined.
+- Cancel execution and explicitly resume eligible queued work; see §4.2.
 - Inspect failures and results without losing prior conversation or execution history.
-- Start a workspace-scoped conversation with an agent definition directly, without creating a task. Direct conversations use the same session and interaction behavior as task chat, but do not receive an initial task-context prompt or change task workflow state.
+- Start workspace-scoped conversations directly with agent definitions: task-chat
+  session/interaction behavior, without a task, initial task-context prompt, or workflow change.
 
 ### 4.1 Runtime selection
 
-OpenCode, Claude Code, Codex, GitHub Copilot CLI, and Kiro CLI are supported runtimes. The platform must distinguish the agent runtime from the model provider and model identifier. Model selection remains configurable on agent definitions, allowing available free models without depending on a permanently free hardcoded model. Claude Code definitions use provider `anthropic` and a configured Claude model identifier. Codex definitions use provider `openai` and a configured Codex model identifier. GitHub Copilot CLI definitions use provider `github-copilot` and a configured Copilot model identifier. Kiro CLI definitions use provider `kiro` and a configured Kiro model identifier. Codex runs use API-key authentication from workspace secrets; Local development can instead reuse the host Codex login. Browser-based login remains outside the platform-managed headless flow. GitHub Copilot and Kiro CLI credentials are supplied through workspace secrets.
+**RUNTIME-01:** Runtime, model provider, and model identifier are distinct settings.
+Use an explicit model; never silently substitute a paid or different model.
+Pin each runtime and validate instructions, skills, HTTP MCP, approvals,
+cancellation, durable storage, and restore followed by another user message.
 
-### 4.1.1 OpenCode runtime requirements
+**RUNTIME-02:** Bind effective runtime/model configuration and permission policy
+to the session. Changed definitions apply to new sessions. Incompatible restore
+must preserve the saved state and report the reason, without a fresh replacement.
 
-The official [OpenCode ACP reference](https://dev.opencode.ai/v2/docs/cli/acp/) documents `opencode acp` as a child process using ACP over stdio, plus session load/resume and HTTP MCP support. agentctl owns this local subprocess connection and exposes the separate platform-facing transport. The HTTP-only restriction applies to MCP connections, not the local ACP transport.
-
-Support the shared agent permission policies through OpenCode's native configuration. `ask` retains the existing approval behavior; `autonomous` allows runtime actions without interactive approval while the task remains inside its isolated environment. If a runtime asks under `ask`, the user approves or rejects through the task UI and the slot remains occupied while waiting. Record the effective runtime version and permission policy with each run.
-
-Pin and validate the selected OpenCode release before implementation acceptance: verify model selection, system prompt configuration, HTTP MCP headers, approval round trips, durable session storage, and continuation after process restart. Document and persist the required OpenCode data directories and restore the same working paths. Documentation support for session restoration is not a substitute for testing interrupted-work recovery.
-
-OpenCode documents free model offerings, some available for a limited time; available models and credentials must be configuration rather than immutable requirements. See [OpenCode models](https://dev.opencode.ai/v2/docs/console/models/). Do not silently select a paid model if a configured free model becomes unavailable.
-
-### 4.1.2 Claude Code runtime requirements
-
-Claude Code runs through the pinned `@agentclientprotocol/claude-agent-acp`
-adapter over ACP v1 stdio. Supply Anthropic API credentials through the existing
-workspace secret environment path. The selected model, system instructions,
-skills, HTTP MCP endpoints and headers, and approval requests must be bound to
-the run and restored with its session. Use the runtime's permission requests and
-forward them to users under `ask`; under `autonomous`, configure the pinned adapter's non-interactive permission mode. Pin and validate
-the adapter and its bundled Claude Agent SDK. Until real qualification proves
-session continuation and complete replay evidence, uncertain interrupted work
-must remain paused for reconciliation.
-
-### 4.1.3 Codex runtime requirements
-
-Codex runs through the pinned `@agentclientprotocol/codex-acp` adapter over ACP
-v1 stdio. Supply `OPENAI_API_KEY` or `CODEX_API_KEY` through the workspace
-secret environment path and disable browser-based ChatGPT login in headless
-execution. The configured model, system instructions, skills, and HTTP MCP
-servers must be bound to the run. Use workspace-write mode with runtime
-permission requests forwarded to users under `ask`; under `autonomous`, select
-Codex's `agent-full-access` mode inside the isolated task container. Persist the
-Codex home and adapter state with the task session. Until
-credentialed qualification proves approval round trips and continuation after
-restart, uncertain interrupted work must remain paused for reconciliation.
+Provider-specific credentials and native permission modes are documented in
+[runtime setup](reference/runtimes/README.md). Live qualification remains required.
 
 ### 4.2 Task sessions — confirmed interaction decisions
 
-Tasks retain one current agent conversation across review iterations and may keep
-older sessions as history. When explicitly starting another work step, users
-choose to continue that session or create a new one. Continued sessions retain
-their original configuration; new sessions use the current assigned agent.
-Sending a message from review is an explicit start action with that same choice.
-Follow-up prompts during work queue durably and execute in order. Failure or
-cancellation pauses the queue until a user resumes or discards it. Infrastructure
-recovery automatically restores and continues where reconciliation establishes
-that doing so is safe; uncertain effects require intervention. See the
-[implemented design and verification limits](task-sessions.md).
+- One current conversation per task; older sessions may remain as history.
+- Explicit starts, including messages from review, choose continue or new session.
+- Continued sessions keep original configuration; new sessions use the current assigned agent.
+- Follow-ups queue durably in order. Failure/cancellation pauses the queue until user resume/discard.
+- Infrastructure recovery restores/continues only after safe reconciliation;
+  uncertain effects require intervention.
+
+See [session behavior and verification limits](guides/sessions.md).
 
 ## 5. Proposed manual execution flow
 
-1. A user creates a task or an integration imports it.
-2. A user assigns a specific team member. The agent receives workspace repository context and determines which repositories the task requires.
-3. A user explicitly moves the task into in progress.
-4. The platform validates access, repository configuration, and member availability, then reserves the member's slot atomically.
-5. The executor creates or restores the isolated task environment and checks out selected repositories on their default or preserved branches. The agent creates a task branch in each repository only when the requested work needs changes.
-6. agentctl establishes the agent ACP session and the platform provides task context.
-7. The user monitors execution, chats, and responds to approval requests.
-8. The platform records the outcome and releases the slot when execution ends.
-9. The agent autonomously creates or updates pull requests and performs other task-required SDLC actions within its configured permissions. Successful agent completion moves the task into review. A user may explicitly start another work step from the platform UI; this reacquires the member slot and reuses task branches and preserved context.
+This earlier member-based proposal differs from current assignment, repository
+selection, and workflow automation. It remains a proposal; see [reconciliation](status.md#product-decisions-requiring-reconciliation).
 
-Imported tasks use local assignment and execution controls without changing source status. A failed launch must release its reservation only once execution is confirmed absent, and expose a useful error. Automatic retries for task failures are not yet specified; infrastructure recovery is described below.
+1. A user creates/imports a task and assigns a team member. The agent determines
+   required repositories from workspace context; see the unresolved selection policy.
+2. The user moves the task into in progress. The platform validates access,
+   repositories, and availability, then reserves the member's slot atomically.
+3. The executor creates/restores the environment and selected checkouts, preserving
+   existing branches. The agent creates task branches only where changes are needed.
+4. agentctl establishes ACP; the platform supplies task context. The user monitors,
+   chats, and answers approvals while the agent performs permitted SDLC actions,
+   including creating/updating PRs.
+5. The platform records the outcome and releases capacity after execution and
+   ownership are resolved. Success moves to review. User-started revisions
+   reacquire capacity and reuse branches and context.
+
+Imported content remains source-managed; local workflow never changes source
+status. A failed launch exposes an error and releases its reservation only after
+execution is confirmed absent. Ordinary failures never auto-retry.
 
 ## 6. Isolation, credentials, and access
 
-- Authorization must apply to task APIs, events, chat, artifacts, integrations, and execution controls.
-- One organization's users must not gain access to another organization's resources through identifiers, subscriptions, or executor connections.
-- Execution environments must receive only the configuration and credentials needed for the task.
-- Credentials must be stored and transmitted securely and redacted from ordinary logs.
-- Workspace secrets and task-session environment snapshots must be encrypted at rest; secret values must not be returned by workspace APIs or written to ordinary logs.
-- Approval requests must remain associated with the correct task, run, and session; stale responses must not approve a different action.
-- Proposed: record an audit trail for assignments, transitions, execution controls, and approval decisions.
+- Authorize task APIs, events, chat, artifacts, integrations, and execution controls.
+- Prevent cross-organization access through IDs, subscriptions, or executor connections.
+- Grant environments only task-required configuration and credentials.
+- Store/transmit credentials securely; redact ordinary logs.
+- Encrypt workspace secrets and session environment snapshots at rest. Never return
+  secret values through workspace APIs or ordinary logs.
+- Bind approvals to task/run/session; stale responses cannot authorize another action.
+- Proposed: audit assignments, transitions, execution controls, and approval decisions.
 
 ## 7. Monitoring and reliability
 
-The platform must expose active task runs, member availability, run failures, and integration synchronization failures. Proposed operational requirements include persistent execution events, connection status, restart reconciliation, and detection of lost environments.
+- Required: active runs, member availability, execution failures, integration sync failures.
+- Proposed: persistent events, connection status, restart reconciliation, lost-environment detection.
+- Confirmed recovery rules follow.
 
 ### 7.1 Confirmed recovery requirements
 
-- If the core platform stops, agents continue working independently. When the platform restarts it reconnects to the existing executions.
-- If an executor or agent process stops, recovery must preserve task progress and continue from the last recoverable state.
-- A disconnected or recovering task must not cause duplicate execution or allow its member to execute a second task while the first might still be running.
+- Platform stops: agents continue independently; restart reconnects existing executions.
+- Executor/agent stops: preserve progress and continue from the last recoverable state.
+- Disconnection/recovery must neither duplicate execution nor free a member while
+  its previous task might still run.
 
 ### 7.2 Confirmed recovery design
 
-**Core platform restart:** agentctl owns the local agent process and ACP connection independently of the core platform lifecycle. It durably records ordered events and pending approval requests, continues active work while disconnected, and pauses at any approval requiring a user response. On reconnect, the platform reconciles execution identity and state and requests events after its last acknowledged cursor. Disconnection alone neither cancels a run nor releases its slot. Work requiring unavailable platform tools waits or reports the dependency failure; it must not fabricate success.
+**RECOVERY-01 — Independent lifecycle:** agentctl owns runtime stdio and keeps
+working during platform downtime. Journal ordered events and pending approvals;
+reconnect by saved identity and cursor. Disconnects never release capacity.
+Unavailable platform tools wait or report failure; never fabricate success.
 
-**Executor or agent restart:** task data resides on durable storage outside the disposable container layer. Persist repository working trees (including uncommitted and untracked work), task branches, agent session storage, runtime configuration identity, working paths, event history, and pending interaction metadata. agentctl restores the same paths and compatible runtime, loads or resumes the persisted session when supported, reconciles the last operation, and continues the interrupted work step. Recovery continues existing work and does not authorize a new step after review.
+**RECOVERY-02 — Durable state:** retain working trees, untracked/uncommitted work,
+branches, runtime homes, session configuration, paths, events, and pending interactions
+outside disposable layers. Restore compatible versions at the same paths.
 
-**Recovery guarantee:** preserve durable files and recorded session context, then continue from the last durable checkpoint. An arbitrary process instruction, in-flight model request, or unfinished shell command cannot be guaranteed to resume exactly. Session reload restores conversation context; it does not alone prove interrupted work is still running or automatically continues. Each runtime adapter must implement and validate continuation behavior. Recovery must report lost or uncertain progress rather than claim exact restoration.
+**RECOVERY-03 — Honest continuation:** restore from the last durable checkpoint.
+An in-flight model request, shell command, or process instruction cannot be resumed
+exactly by assumption. Loading conversation history is insufficient. Validate each
+adapter's continuation; report lost or uncertain progress. Failed/incompatible
+restore preserves the session. A new conversation is an explicit user action.
 
-**Runtime eligibility:** require durable session restoration for initially supported runtimes. If unsupported or restoration fails, keep the task interrupted with a visible reason. Starting a new session with reconstructed context is a separate, explicit user action, not a silent substitute for session recovery. ACP session restoration methods and capabilities vary by protocol version and agent implementation; pin and test the supported combination. See the official [ACP v1 session setup](https://github.com/agentclientprotocol/agent-client-protocol/blob/main/docs/protocol/v1/session-setup.mdx) and [ACP v2 session setup](https://github.com/agentclientprotocol/agent-client-protocol/blob/main/docs/protocol/v2/session-setup.mdx).
+**RECOVERY-04 — Single owner:** retain run/command identities, durable acceptance
+and results, and exclusive ownership. Confirm termination or revoke the old
+owner before replacement. Heartbeat expiry is insufficient. Reconcile uncertain
+external side effects before retry; cross-system exactly-once is not assumed.
 
-**Duplicate prevention:** use stable run and command identities, durable command acceptance/results, and one active execution owner per run. Reconnection or an expired heartbeat is not authorization to create a replacement. Before replacement, confirm the previous execution has stopped or revoke its ability to act. Reconcile uncertain external side effects, such as creating a pull request, before retrying them; generic exactly-once execution across external systems is not assumed.
+**RECOVERY-05 — Bound approvals:** persist request and response delivery identity.
+Reconcile after restore; never replay a response into a different request or
+approve automatically. Approval-required work waits for a user.
 
-**Approvals:** persist request identity and response delivery state. After session restoration, reconcile requests with the agent; do not replay a response into a new or different request. Never automatically approve a request to unblock recovery.
-
-**Storage scope:** Docker volumes can cover container recreation on the same host if retained. Host or disk loss requires separately durable storage or backups and an explicit recovery-point objective. The MVP guarantee covers platform/process/container restarts with durable task storage intact. Recovery from complete executor-host or disk loss is deferred; backup objectives remain open.
-
-**Run history:** infrastructure recovery retains the logical run and records recovery attempts and new process/session identities. A user-initiated revision after review creates a new work step/run linked to the same task workspace and branches. Intentional cancellation is distinct from infrastructure failure and must not automatically resume.
+**RECOVERY-06 — Scope:** cover platform/process/container restart with durable
+storage intact. Host/disk-loss recovery and backup objectives are deferred.
+Recovery retains the logical run and records attempts/process identities. A
+user revision creates a new run. Intentional cancellation never auto-resumes.
 
 ### 7.3 Recovery acceptance scenarios
 
-- Restart the core platform during active work: the agent continues; reconnect restores ordered activity without duplicate prompts or runs.
-- Restart the platform while approval is pending: the request remains pending and the user can answer it once through the reconnected UI.
-- Restart an executor with uncommitted and untracked files: restore those files, task branches, and the supported agent session without restarting the task from scratch.
-- Lose a connection while a command is being accepted: reconcile the command identity before resending or launching a replacement.
-- Interrupt an external side effect: detect an uncertain outcome and reconcile or request user intervention rather than blindly repeating it.
-- Fail session restoration or lose durable storage: surface the interruption and recovery limitation without claiming successful resume.
+| Scenario | Required result |
+| --- | --- |
+| Platform restarts during work | Agent continues; ordered activity reconnects without duplicate prompts/runs |
+| Platform restarts during approval | Request stays pending; user can answer once through the reconnected UI |
+| Executor restarts with uncommitted/untracked files | Restore files, branches, and supported session without restarting from scratch |
+| Connection lost during command acceptance | Reconcile command identity before resend/replacement |
+| External effect interrupted | Reconcile uncertain outcome or request user intervention before retry |
+| Restore fails or durable storage is lost | Expose interruption/recovery limits; never claim successful resume |
 
-Event retention, recovery time targets, host-loss guarantees, and overall availability targets remain open.
+Retention, recovery-time, host-loss, and availability targets remain open.
 
 ## 8. Proposed MVP acceptance criteria
 
-- Users authenticate through Keycloak and access organizations/workspaces subject to application membership and role permissions.
-- A failed/interrupted execution is visible while its task remains in progress; a normal task failure does not automatically start another attempt.
-- OpenCode, Claude Code, Codex, GitHub Copilot CLI, and Kiro CLI execute through agentctl with configured model selection, HTTP MCP connections, and task-specific approvals.
-- Built-in platform tools expose only authorized workspace task and repository information; no custom tool catalog is required.
-- The skill catalog is separate from the deferred custom tool catalog. Skill IDs are globally unique to prevent collisions across scopes. Skill frontmatter requires a matching `name`, a non-empty `description`, and a Markdown instruction body.
-- A user can register repositories, create an agent definition, and add two team members using that definition.
-- Both members can execute separate tasks concurrently; one member cannot execute two tasks concurrently.
-- Assignment alone does not start execution. An explicit user transition into in progress initiates execution when prerequisites are satisfied.
-- A task can use multiple repositories registered in its workspace and executes in an isolated Docker environment.
-- A user can observe activity, send a task-specific message, and answer an approval request through the platform and agentctl.
-- A member can have multiple assigned tasks; an unfinished step, including approval waits, occupies its slot.
-- Successful agent completion moves the task into review and releases the slot; starting revisions requires a user action in the UI.
-- The agent identifies relevant workspace repositories and uses a task-specific branch in each changed repository.
-- Local workflow changes do not update source status.
-- Agents create and update pull requests autonomously; users do not need to perform these actions on the agent’s behalf.
-- Users mark manually managed tasks done; closing an imported source issue also moves its Orkest task to done. The initial manual task API does not support reopening done tasks.
-- All project configuration is workspace-scoped; configuration and credentials from another workspace cannot be selected or used implicitly.
-- GitHub Projects v2 import and source updates preserve source identity and avoid duplicate tasks when updates are delivered repeatedly.
-- Source-managed task fields are read-only in Orkest.
-- Failed launches and interrupted sessions remain visible and do not silently erase run history or create duplicate execution.
-- Executor and integration implementations are accessed through common contracts rather than provider-specific orchestration branches.
+- **MVP-01:** Users authenticate through Keycloak and access organizations/workspaces subject to application membership and role permissions.
+- **MVP-02:** A failed/interrupted execution is visible while its task remains in progress; a normal task failure does not automatically start another attempt.
+- **MVP-03:** OpenCode, Claude Code, Codex, GitHub Copilot CLI, and Kiro CLI execute through agentctl with configured model selection, HTTP MCP connections, and task-specific approvals.
+- **MVP-04:** Built-in platform tools expose only authorized workspace task and repository information; no custom tool catalog is required.
+- **MVP-05:** The skill catalog is separate from the deferred custom tool catalog. Skill IDs are globally unique to prevent collisions across scopes. Skill frontmatter requires a matching `name`, a non-empty `description`, and a Markdown instruction body.
+- **MVP-06:** A user can register repositories, create an agent definition, and add two team members using that definition.
+- **MVP-07:** Both members can execute separate tasks concurrently; one member cannot execute two tasks concurrently.
+- **MVP-08:** Assignment alone does not start execution. An explicit user transition into in progress initiates execution when prerequisites are satisfied.
+- **MVP-09:** A task can use multiple repositories registered in its workspace and executes in an isolated Docker environment.
+- **MVP-10:** A user can observe activity, send a task-specific message, and answer an approval request through the platform and agentctl.
+- **MVP-11:** A member can have multiple assigned tasks; an unfinished step, including approval waits, occupies its slot.
+- **MVP-12:** Successful agent completion moves the task into review and releases the slot; starting revisions requires a user action in the UI.
+- **MVP-13:** The agent identifies relevant workspace repositories and uses a task-specific branch in each changed repository.
+- **MVP-14:** Local workflow changes do not update source status.
+- **MVP-15:** Agents create and update pull requests autonomously; users do not need to perform these actions on the agent’s behalf.
+- **MVP-16:** Users mark manually managed tasks done; closing an imported source issue also moves its Orkest task to done. The initial manual task API does not support reopening done tasks.
+- **MVP-17:** All project configuration is workspace-scoped; configuration and credentials from another workspace cannot be selected or used implicitly.
+- **MVP-18:** GitHub Projects v2 import and source updates preserve source identity and avoid duplicate tasks when updates are delivered repeatedly.
+- **MVP-19:** Source-managed task fields are read-only in Orkest.
+- **MVP-20:** Failed launches and interrupted sessions remain visible and do not silently erase run history or create duplicate execution.
+- **MVP-21:** Executor and integration implementations are accessed through common contracts rather than provider-specific orchestration branches.
 
-## 9. Suggested requirements completion order
+## 9. Remaining validation priorities
 
-1. Pin OpenCode and validate durable session restoration and interrupted-work continuation.
-2. Define repository discovery, base branches, and pull request policy.
-3. Define membership roles, configuration ownership, and credential access.
-4. Specify tools, provider capabilities, and the agentctl boundary.
-5. Finalize acceptance criteria and explicitly defer remaining features.
+1. Qualify pinned runtimes with real approvals and restore followed by a message.
+2. Implement team-member capacity allocation and verify concurrent reservations.
+3. Define transport authentication and deployment resource/network policy.
 
 ## 10. Open decisions
 
-### Highest priority
-
-1. **Repositories:** Define repository discovery/preparation and default base branches.
-2. **Workflow details:** Define the destination status when a user reopens a task. Failed/interrupted executions retain in-progress task status with a visible execution indicator.
-
-### Subsequent decisions
-
-- Invitations and external identity-to-membership provisioning beyond first-login user creation.
-- Permission policies are selected per agent definition, not workspace-wide. The initial choices are `ask` (the default) and `autonomous`; runtime adapters translate the selected value into native provider configuration. The setting is snapshotted per task session.
-- Pinned releases for supported runtimes, default model selection, and validated recovery behavior.
-- Multiple workflows per workspace are implemented; external event conditions remain deferred.
-- Internal platform tool exposure mechanism and exact allowed operations; custom tool registration is deferred.
-- GitHub import scope, comment synchronization, webhook/polling behavior, and issue-close semantics.
-- Docker deployment location, environment persistence, resource limits, and credential provisioning.
-- Artifact types, log/chat retention, audit requirements, and usage/cost reporting scope.
+- Resolve [policy differences](status.md#product-decisions-requiring-reconciliation)
+  in starts, permissions, reopening, assignment, and repository selection.
+- Define base-branch overrides and further pull-request policy. New checkouts
+  currently use discovered default branches; existing checkouts retain branches.
+- Define agent-definition versioning and final run-state taxonomy.
+- Define invitations and external membership provisioning beyond first login.
+- Define source comment synchronization and outbound writes; polling, source
+  closure, and selected-source removal already have documented behavior.
+- Define resource limits, network policy, cleanup, retention, audit, and cost reporting.
+- Define backup/recovery objectives; host/disk-loss recovery remains deferred.
+- Define external workflow event conditions and artifact representations beyond
+  stored text/JSON and external references.
 
 ## 11. Execution toolchain profiles
 
-Confirmed: a workspace supports multiple profiles, and agents can select different
-or shared toolchains. Profiles pair a supported runtime with a toolchain image.
-Creating/updating a profile queues asynchronous composition and registry publishing.
-A new ready image never interrupts active execution or approval waits; the next
-user-started run can restore the same session using it. Explicit profile revisions
-are not required. Build attempts and run image identities retain provenance.
+Confirmed:
 
-Implemented policy: workspace Admins and inherited organization Owners/Admins
-manage profiles/builds; Members select profiles through agent configuration;
-Viewers are read-only. Runtime changes use a different profile and session.
-See [execution profiles](execution-profiles.md) for operational qualifications.
+- Multiple workspace profiles pair supported runtimes with shared or separate toolchain images.
+- Create/update queues asynchronous composition and registry publishing; explicit
+  profile revisions are unnecessary.
+- Ready images never interrupt active work/approval waits. The next user-started
+  run may restore the session with the new image.
+- Build attempts and run image identities retain provenance.
+
+See [execution profiles](guides/execution-profiles.md) for roles, runtime-change
+constraints, and operational qualifications.
