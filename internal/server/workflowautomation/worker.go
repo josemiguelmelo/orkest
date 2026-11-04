@@ -4,6 +4,7 @@ package workflowautomation
 import (
 	"context"
 	"log/slog"
+	"sync"
 	"time"
 )
 
@@ -26,15 +27,26 @@ func NewWorkflowAutomationWorker(events EventProcessor, execution ExecutionComma
 	return &WorkflowAutomationWorker{events: events, execution: execution, logger: logger}
 }
 
+// Run separates durable event processing from delivery so a slow worker launch
+// cannot block unrelated workflow events. Each delivery worker claims on demand.
 func (w *WorkflowAutomationWorker) Run(ctx context.Context) {
+	var work sync.WaitGroup
+	work.Go(func() { w.poll(ctx, "event", w.events.ProcessNextEvent) })
+	for range 4 {
+		work.Go(func() { w.poll(ctx, "execution_command", w.execution.ProcessNextCommand) })
+	}
+	work.Wait()
+}
+
+func (w *WorkflowAutomationWorker) poll(ctx context.Context, operation string, process func(context.Context) (bool, error)) {
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	for {
 		for ctx.Err() == nil {
-			found, err := w.ProcessOne(ctx)
+			found, err := process(ctx)
 			if err != nil {
 				if ctx.Err() == nil {
-					w.logger.Error("workflow command processing failed")
+					w.logger.Error("workflow processing failed", "operation", operation, "reason", "processing_failed")
 				}
 				break
 			}

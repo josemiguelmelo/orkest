@@ -100,8 +100,13 @@ func (r *AgentLaunchPostgresRepository) SetLaunchStatus(ctx context.Context, eff
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := r.queries.WithTx(tx)
-	if err := q.SetAgentLaunchStatus(ctx, sqlc.SetAgentLaunchStatusParams{RunID: runID, Status: string(status)}); err != nil {
+	count, err := q.SetAgentLaunchStatus(ctx, sqlc.SetAgentLaunchStatusParams{RunID: runID, Status: string(status)})
+	if err != nil {
 		return err
+	}
+	// A stale terminal callback must not emit an outcome for a rejected transition.
+	if count == 0 {
+		return tx.Commit(ctx)
 	}
 	if effects.Outcome != nil {
 		run, err := q.RunWorkflowEntry(ctx, runID)

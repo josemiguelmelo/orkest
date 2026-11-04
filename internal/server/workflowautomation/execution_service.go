@@ -117,7 +117,7 @@ func (w *WorkflowExecutionService) dispatchCommand(ctx context.Context, c Execut
 		if checkErr != nil {
 			return false, checkErr
 		}
-		w.logger.Warn("workflow start requires attention", "workspace_id", c.WorkspaceID, "task_id", c.TaskID, "command_id", c.ID, "reason", err)
+		w.logger.Warn("workflow start requires attention", "workspace_id", c.WorkspaceID, "task_id", c.TaskID, "command_id", c.ID, "reason", "dispatch_failed")
 		return accepted, nil
 	}
 	return true, nil
