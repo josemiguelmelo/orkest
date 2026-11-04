@@ -87,10 +87,12 @@ func journalRunEnded(stateDir string, config runconfig.RunConfig) (bool, error) 
 		return false, err
 	}
 	defer func() { _ = journal.Close() }()
+	state := conversationState{usesTaskSession: config.TaskSessionID != ""}
 	for _, event := range events {
-		if event.Type == interaction.EventRunCompleted || event.Type == interaction.EventRunFailed {
-			return true, nil
+		if err := state.validate(event); err != nil {
+			return false, err
 		}
+		state.apply(event)
 	}
-	return false, nil
+	return state.runEnded, nil
 }

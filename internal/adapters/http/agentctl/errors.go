@@ -36,6 +36,7 @@ func writeServiceError(w http.ResponseWriter, err error, status int, code, messa
 		status int
 		code   string
 	}{
+		{agentrun.ErrRecoveryBlocked, http.StatusConflict, "recovery_blocked"},
 		{agentrun.ErrConfigurationConflict, http.StatusConflict, "configuration_conflict"},
 		{agentrun.ErrNotConfigured, http.StatusConflict, "not_configured"},
 		{agentrun.ErrLaunchConflict, http.StatusConflict, "launch_conflict"},

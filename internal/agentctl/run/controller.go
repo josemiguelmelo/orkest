@@ -18,6 +18,7 @@ import (
 var (
 	ErrConfigurationConflict = errors.New("process is already configured for a run")
 	ErrLaunchConflict        = errors.New("run launch already attempted or service closed")
+	ErrRecoveryBlocked       = errors.New("saved run requires recovery reconciliation")
 	ErrNotConfigured         = errors.New("configure the agent before launching")
 )
 
@@ -44,7 +45,9 @@ type RunStatus struct {
 // RunController owns the lifecycle and conversation of one execution run.
 // Configuring a run never starts work.
 type RunController struct {
-	recoveryBlocked bool
+	recoveryBlocked   bool
+	checkpointBlocked bool
+	checkpointMu      sync.Mutex
 	// mu protects configuration and session lifecycle. When needed, acquire it
 	// before the conversation lock; conversation operations never acquire this lock.
 	mu              sync.RWMutex
@@ -79,12 +82,22 @@ func NewRunController(ctx context.Context, host agentruntime.RuntimeHost, stateD
 
 // Configure accepts identical resubmissions and atomically rejects changed bindings.
 func (c *RunController) Configure(config runconfig.RunConfig) error {
+	return c.configure(config, false)
+}
+
+func (c *RunController) configure(config runconfig.RunConfig, recovering bool) error {
 	config = config.Clone()
 	if err := config.Validate(); err != nil {
 		return err
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if c.closed {
+		return ErrLaunchConflict
+	}
+	if c.checkpointBlocked && !recovering {
+		return ErrRecoveryBlocked
+	}
 	if c.host != nil && config.Runtime != c.host.Runtime() {
 		return agentruntime.ErrRuntimeHostUnavailable
 	}
@@ -112,7 +125,7 @@ func (c *RunController) Status() RunStatus {
 	status := RunStatus{
 		RecoveryBlocked:    c.recoveryBlocked,
 		Configured:         c.runConfig != nil,
-		ExecutionAvailable: c.host != nil && !c.closed,
+		ExecutionAvailable: c.host != nil && !c.closed && !c.recoveryBlocked,
 		State:              c.launchState,
 	}
 	if c.runConfig != nil {
@@ -157,6 +170,10 @@ func (c *RunController) RestoreSession() error {
 	if c.runConfig != nil && c.runConfig.GitCredentialsRequired && len(c.runConfig.GitCredentials) == 0 {
 		c.mu.Unlock()
 		return ErrNotConfigured
+	}
+	if c.checkpointBlocked {
+		c.mu.Unlock()
+		return ErrRecoveryBlocked
 	}
 	if c.closed || c.launchState == StateStarting {
 		c.mu.Unlock()
@@ -208,6 +225,10 @@ const (
 // never silently retried; startup belongs to the controller context.
 func (c *RunController) Launch() error {
 	c.mu.Lock()
+	if c.checkpointBlocked {
+		c.mu.Unlock()
+		return ErrRecoveryBlocked
+	}
 	if c.runConfig == nil {
 		c.mu.Unlock()
 		return ErrNotConfigured
@@ -306,6 +327,9 @@ func (c *RunController) Close() error {
 		_ = session.Close()
 	}
 	c.startupWorkers.Wait()
+	// Checkpoint reads/replay may precede runtime startup admission. Join them too.
+	c.checkpointMu.Lock()
+	defer c.checkpointMu.Unlock()
 	return c.conversation.close()
 }
 
@@ -332,18 +356,40 @@ func runLogAttrs(config runconfig.RunConfig) []any {
 
 // RecoverFromCheckpoint restores the last bound run on daemon restart. Runtime ownership must
 // be acquired before any prompt is admitted. Finished runs are never resumed.
-func (c *RunController) RecoverFromCheckpoint(expectedRunID string) error {
+func (c *RunController) RecoverFromCheckpoint(expectedRunID string) (result error) {
+	c.checkpointMu.Lock()
+	defer c.checkpointMu.Unlock()
+	c.mu.Lock()
+	if c.closed || c.launchAttempted {
+		c.mu.Unlock()
+		return ErrLaunchConflict
+	}
+	c.checkpointBlocked = true
+	c.mu.Unlock()
+	defer func() {
+		c.mu.Lock()
+		defer c.mu.Unlock()
+		if result != nil && c.checkpointBlocked {
+			c.recoveryBlocked, c.launchState = true, StateInterrupted
+		}
+	}()
 	config, found, err := c.checkpoints.Load(expectedRunID)
 	if err != nil {
 		return err
 	}
 	if !found {
+		c.mu.Lock()
+		c.checkpointBlocked, c.recoveryBlocked = false, false
+		c.mu.Unlock()
 		return nil
 	}
-	if err := c.Configure(config); err != nil {
+	if err := c.configure(config, true); err != nil {
 		return err
 	}
 	if config.GitCredentialsRequired && len(config.GitCredentials) == 0 {
+		c.mu.Lock()
+		c.checkpointBlocked, c.recoveryBlocked = false, false
+		c.mu.Unlock()
 		return nil
 	}
 	if config.TaskSessionID != "" {
@@ -353,12 +399,16 @@ func (c *RunController) RecoverFromCheckpoint(expectedRunID string) error {
 		}
 		if ended {
 			c.mu.Lock()
+			c.checkpointBlocked, c.recoveryBlocked = false, false
 			c.launchAttempted, c.launchState = true, StateExited
 			c.conversation.markRecoveredRunEnded()
 			c.mu.Unlock()
 			return nil
 		}
 	}
+	c.mu.Lock()
+	c.checkpointBlocked, c.recoveryBlocked = false, false
+	c.mu.Unlock()
 	return c.RestoreSession()
 }
 
@@ -375,3 +425,11 @@ func (c *RunController) CommandStatus(commandID string) (interaction.CommandStat
 func (c *RunController) ResumeQueue() error { return c.currentConversation().ResumeQueue() }
 
 func (c *RunController) DiscardQueue() error { return c.currentConversation().DiscardQueue() }
+
+// CheckpointRecoveryPending permits retrying the saved checkpoint only. It never
+// authorizes creating a session when the checkpoint cannot be read or validated.
+func (c *RunController) CheckpointRecoveryPending() bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.checkpointBlocked && !c.closed
+}
