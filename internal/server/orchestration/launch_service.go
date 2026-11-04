@@ -12,7 +12,7 @@ import (
 
 type LaunchService struct {
 	repo          TaskExecutionRepository
-	launcher      AgentLauncher
+	executor      ProcessExecutor
 	client        AgentctlClient
 	communication AgentCommunication
 	completion    *LaunchCompletionService
@@ -20,11 +20,11 @@ type LaunchService struct {
 
 var ErrTaskRunNotFound = errors.New("task run not found")
 
-func NewLaunchService(repo TaskExecutionRepository, launcher AgentLauncher, client AgentctlClient, communication AgentCommunication, completion *LaunchCompletionService) (*LaunchService, error) {
-	if repo == nil || launcher == nil || client == nil || communication == nil {
+func NewLaunchService(repo TaskExecutionRepository, executor ProcessExecutor, client AgentctlClient, communication AgentCommunication, completion *LaunchCompletionService) (*LaunchService, error) {
+	if repo == nil || executor == nil || client == nil || communication == nil {
 		return nil, errors.New("launch dependencies are required")
 	}
-	service := &LaunchService{repo: repo, launcher: launcher, client: client, communication: communication}
+	service := &LaunchService{repo: repo, executor: executor, client: client, communication: communication}
 	service.completion = completion
 	return service, nil
 }
@@ -75,7 +75,7 @@ func (s *LaunchService) Start(ctx context.Context, config RunConfig) (Launch, er
 		}
 		return launch, fmt.Errorf("%s failed: %w", stage, cause)
 	}
-	process, err := s.launcher.LaunchAgentctl(ctx, config)
+	process, err := s.executor.StartAgentctl(ctx, config)
 	launch.ProcessID, launch.Endpoint = strings.TrimSpace(process.ID), strings.TrimSpace(process.Endpoint)
 	if err != nil {
 		return fail("process_start", err)
@@ -93,7 +93,7 @@ func (s *LaunchService) Start(ctx context.Context, config RunConfig) (Launch, er
 	if err = s.client.Configure(ctx, launch.Endpoint, config); err != nil {
 		return fail("configure", err)
 	}
-	if err = s.communication.Start(launch); err != nil {
+	if err = s.communication.Start(ctx, launch); err != nil {
 		return fail("connect", err)
 	}
 	if config.RestoreSession {

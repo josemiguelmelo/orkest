@@ -29,10 +29,11 @@ func (c *sessionProcessController) TerminateAgentctlByRunID(context.Context, str
 func TestSessionCompletionWaitsForQueueDrain(t *testing.T) {
 	repo := &launchRepoFake{}
 	controller := &sessionProcessController{}
-	service, err := NewLaunchCompletionService(repo, controller)
+	service, err := NewLaunchCompletionService(context.Background(), repo, controller)
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer service.Close()
 	launch := Launch{RunID: "run", TaskSessionID: "conversation", ProcessID: "container"}
 	for _, kind := range []EventType{EventPromptCompleted, EventPromptFailed, EventQueuePaused} {
 		event := Event{RunID: "run", Payload: AgentActivityEvent{Type: kind, TaskSessionID: "conversation"}}

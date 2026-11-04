@@ -51,7 +51,7 @@ func TestNextRunAdoptsUpdatedProfileAndRetainsSession(t *testing.T) {
 	repo := &profileSessionRepo{launchRepoFake: &launchRepoFake{}}
 	getter := &profileAgentGetter{}
 	resolver := &profileImageResolver{image: "registry/image@sha256:a"}
-	dispatcher, err := NewTaskDispatcher(getter, &LaunchService{repo: repo}, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+	dispatcher, err := NewTaskDispatcher(TaskDispatcherDependencies{Agents: getter, Launches: &LaunchService{repo: repo}, Sessions: repo})
 	if err != nil {
 		t.Fatal(err)
 	}

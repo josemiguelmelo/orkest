@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 
 	coreruntime "github.com/josemiguelmelo/orkest/internal/contracts/runtimecatalog"
@@ -46,6 +48,7 @@ type taskPromptSnapshot struct {
 
 // TaskDispatcher resolves an assigned agent definition and starts its task run.
 type TaskDispatcher struct {
+	sessions            TaskSessionStore
 	artifacts           TaskArtifactReader
 	workflows           TaskWorkflowReader
 	agents              taskAgentGetter
@@ -81,18 +84,42 @@ type (
 		List(context.Context, string, string, string) ([]coderepository.CodeRepository, error)
 	}
 	TaskToolResolver interface {
-		RuntimeServer(string, string, string, string) (mcpserver.RuntimeServer, error)
+		RuntimeServerForRun(string, string, string, string, string) (mcpserver.RuntimeServer, error)
 	}
 	TaskCredentialResolver interface {
 		CodingCredential(context.Context, string, string) (coderepository.Credentials, error)
 	}
 )
 
-func NewTaskDispatcher(agents taskAgentGetter, launches *LaunchService, mcpServers TaskMCPResolver, profiles ExecutionImageResolver, skills TaskSkillResolver, environment TaskEnvironmentResolver, repositories TaskRepositoryReader, credentials TaskCredentialResolver, tools TaskToolResolver, artifacts TaskArtifactReader, workflows TaskWorkflowReader) (*TaskDispatcher, error) {
-	if agents == nil || launches == nil || (artifacts != nil && workflows == nil) {
-		return nil, errors.New("task dispatch dependencies are required")
+// TaskSessionStore supplies only selection, reservation, and command identity.
+type TaskSessionStore interface {
+	SessionRepository
+	TaskCommand(context.Context, string, string, string, string, string) (bool, error)
+}
+
+type TaskDispatcherDependencies struct {
+	Agents       taskAgentGetter
+	Launches     *LaunchService
+	Sessions     TaskSessionStore
+	MCPServers   TaskMCPResolver
+	Profiles     ExecutionImageResolver
+	Skills       TaskSkillResolver
+	Environment  TaskEnvironmentResolver
+	Repositories TaskRepositoryReader
+	Credentials  TaskCredentialResolver
+	Tools        TaskToolResolver
+	Artifacts    TaskArtifactReader
+	Workflows    TaskWorkflowReader
+}
+
+func NewTaskDispatcher(deps TaskDispatcherDependencies) (*TaskDispatcher, error) {
+	if deps.Agents == nil || deps.Launches == nil || deps.Sessions == nil {
+		return nil, errors.New("agents, launches, and sessions are required")
 	}
-	return &TaskDispatcher{agents: agents, launches: launches, mcpServers: mcpServers, profiles: profiles, skillResolver: skills, environmentResolver: environment, repositories: repositories, codingCredentials: credentials, agentTools: tools, artifacts: artifacts, workflows: workflows}, nil
+	if deps.Artifacts != nil && deps.Workflows == nil {
+		return nil, errors.New("artifact resolution requires workflows")
+	}
+	return &TaskDispatcher{agents: deps.Agents, launches: deps.Launches, sessions: deps.Sessions, mcpServers: deps.MCPServers, profiles: deps.Profiles, skillResolver: deps.Skills, environmentResolver: deps.Environment, repositories: deps.Repositories, codingCredentials: deps.Credentials, agentTools: deps.Tools, artifacts: deps.Artifacts, workflows: deps.Workflows}, nil
 }
 
 func (d *TaskDispatcher) StartTask(ctx context.Context, userID, organizationID string, command task.StartCommand) error {
@@ -111,7 +138,7 @@ func (d *TaskDispatcher) StartTask(ctx context.Context, userID, organizationID s
 			return err
 		}
 	}
-	sessions := d.launches.repo
+	sessions := d.sessions
 	var config RunConfig
 	var continuing bool
 	if command.SessionMode != "new" {
@@ -194,41 +221,14 @@ func (d *TaskDispatcher) createTaskSession(ctx context.Context, userID, organiza
 	if err = d.resolveTaskRepositories(ctx, userID, organizationID, value, &config); err != nil {
 		return RunConfig{}, err
 	}
-	if len(definition.SkillIDs) > 0 {
-		if d.skillResolver == nil {
-			return RunConfig{}, errors.New("agent skill resolver is unavailable")
-		}
-		resolved, resolveErr := d.skillResolver.ResolveForAgent(ctx, organizationID, value.WorkspaceID, definition.SkillIDs)
-		if resolveErr != nil {
-			return RunConfig{}, fmt.Errorf("resolve agent skills: %w", resolveErr)
-		}
-		for _, item := range resolved {
-			config.Skills = append(config.Skills, Skill{ID: item.ID, SkillMD: item.SkillMD})
-		}
-		if len(config.Skills) != len(definition.SkillIDs) {
-			return RunConfig{}, errors.New("one or more selected agent skills are unavailable")
-		}
-	}
-	if len(definition.MCPServerIDs) > 0 {
-		if d.mcpServers == nil {
-			return RunConfig{}, errors.New("agent MCP server resolver is unavailable")
-		}
-		servers, resolveErr := d.mcpServers.Resolve(ctx, value.WorkspaceID, definition.MCPServerIDs)
-		if resolveErr != nil {
-			return RunConfig{}, fmt.Errorf("resolve agent MCP servers: %w", resolveErr)
-		}
-		for _, server := range servers {
-			config.MCPServers = append(config.MCPServers, MCPServer{ID: server.ID, Name: server.Name, URL: server.URL, Headers: server.Headers})
-		}
-	}
-	if err = d.refreshOrkestMCPServer(userID, organizationID, value, &config); err != nil {
+	if err := d.resolveAgentCapabilities(ctx, organizationID, value.WorkspaceID, definition, &config); err != nil {
 		return RunConfig{}, err
 	}
 	return config, nil
 }
 
 func (d *TaskDispatcher) continueTaskSession(ctx context.Context, userID, organizationID string, value task.Task, runID string) (RunConfig, bool, error) {
-	config, found, err := d.launches.repo.CurrentSession(ctx, organizationID, value.WorkspaceID, value.ID)
+	config, found, err := d.sessions.CurrentSession(ctx, organizationID, value.WorkspaceID, value.ID)
 	if err != nil || !found {
 		return config, found, err
 	}
@@ -272,20 +272,11 @@ func (d *TaskDispatcher) continueTaskSession(ctx context.Context, userID, organi
 			if resolveErr != nil {
 				return RunConfig{}, false, fmt.Errorf("resolve session MCP server credentials: %w", resolveErr)
 			}
-			if len(servers) != len(serverIDs) {
-				return RunConfig{}, false, errors.New("session MCP server is unavailable")
-			}
-			for i := range config.MCPServers {
-				for _, server := range servers {
-					if config.MCPServers[i].ID == server.ID {
-						config.MCPServers[i].Headers = server.Headers
-					}
-				}
+			config.MCPServers, err = refreshSessionMCPHeaders(config.MCPServers, servers)
+			if err != nil {
+				return RunConfig{}, false, err
 			}
 		}
-	}
-	if err = d.refreshOrkestMCPServer(userID, organizationID, value, &config); err != nil {
-		return RunConfig{}, false, err
 	}
 	return config, true, nil
 }
@@ -309,12 +300,7 @@ func (d *TaskDispatcher) refreshOrkestMCPServer(userID, organizationID string, v
 	if d.agentTools == nil {
 		return nil
 	}
-	server, err := d.agentTools.RuntimeServer(userID, organizationID, value.WorkspaceID, value.ID)
-	if scoped, ok := d.agentTools.(interface {
-		RuntimeServerForRun(string, string, string, string, string) (mcpserver.RuntimeServer, error)
-	}); ok {
-		server, err = scoped.RuntimeServerForRun(userID, organizationID, value.WorkspaceID, value.ID, config.RunID)
-	}
+	server, err := d.agentTools.RuntimeServerForRun(userID, organizationID, value.WorkspaceID, value.ID, config.RunID)
 	if err != nil {
 		return fmt.Errorf("configure Orkest agent tools: %w", err)
 	}
@@ -425,5 +411,59 @@ func (d *TaskDispatcher) freshConfiguration(ctx context.Context, userID, organiz
 }
 
 func (d *TaskDispatcher) TaskCommandAccepted(ctx context.Context, orgID, workspaceID, taskID, commandID, prompt string) (bool, error) {
-	return d.launches.repo.TaskCommand(ctx, orgID, workspaceID, taskID, commandID, prompt)
+	return d.sessions.TaskCommand(ctx, orgID, workspaceID, taskID, commandID, prompt)
+}
+
+// Refresh credentials without replacing the compatible saved server settings.
+func refreshSessionMCPHeaders(saved []MCPServer, resolved []mcpserver.RuntimeServer) ([]MCPServer, error) {
+	byID := make(map[string]mcpserver.RuntimeServer, len(resolved))
+	for _, server := range resolved {
+		if _, exists := byID[server.ID]; exists {
+			return nil, errors.New("duplicate resolved MCP server")
+		}
+		byID[server.ID] = server
+	}
+	updated := slices.Clone(saved)
+	for i := range updated {
+		if updated[i].ID == OrkestMCPServerID {
+			continue
+		}
+		server, found := byID[updated[i].ID]
+		if !found {
+			return nil, errors.New("session MCP server is unavailable")
+		}
+		updated[i].Headers = maps.Clone(server.Headers)
+	}
+	return updated, nil
+}
+
+func (d *TaskDispatcher) resolveAgentCapabilities(ctx context.Context, organizationID, workspaceID string, definition agent.Agent, config *RunConfig) error {
+	if len(definition.SkillIDs) > 0 {
+		if d.skillResolver == nil {
+			return errors.New("agent skill resolver is unavailable")
+		}
+		resolved, resolveErr := d.skillResolver.ResolveForAgent(ctx, organizationID, workspaceID, definition.SkillIDs)
+		if resolveErr != nil {
+			return fmt.Errorf("resolve agent skills: %w", resolveErr)
+		}
+		for _, item := range resolved {
+			config.Skills = append(config.Skills, Skill{ID: item.ID, SkillMD: item.SkillMD})
+		}
+		if len(config.Skills) != len(definition.SkillIDs) {
+			return errors.New("one or more selected agent skills are unavailable")
+		}
+	}
+	if len(definition.MCPServerIDs) > 0 {
+		if d.mcpServers == nil {
+			return errors.New("agent MCP server resolver is unavailable")
+		}
+		servers, resolveErr := d.mcpServers.Resolve(ctx, workspaceID, definition.MCPServerIDs)
+		if resolveErr != nil {
+			return fmt.Errorf("resolve agent MCP servers: %w", resolveErr)
+		}
+		for _, server := range servers {
+			config.MCPServers = append(config.MCPServers, MCPServer{ID: server.ID, Name: server.Name, URL: server.URL, Headers: server.Headers})
+		}
+	}
+	return nil
 }

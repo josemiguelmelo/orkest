@@ -1,0 +1,64 @@
+package main
+
+import "os"
+
+// serverConfiguration snapshots composition settings once before startup I/O.
+type serverConfiguration struct {
+	DataDir                      string
+	HTTPAddr                     string
+	IntegrationEncryptionKey     string
+	AgentctlOpencodeImage        string
+	AgentctlClaudeCodeImage      string
+	AgentctlCodexImage           string
+	AgentctlGitHubCopilotImage   string
+	AgentctlKiroImage            string
+	ExecutionImageRepository     string
+	Executor                     string
+	AgentctlNetwork              string
+	CodexAuthFile                string
+	AgentctlBinary               string
+	AgentProviderEnv             string
+	AgentMCPURL                  string
+	AgentMCPTokenKey             string
+	DockerRegistryHost           string
+	BuildKitRegistryHost         string
+	ImageBuilder                 string
+	BuildctlBinary               string
+	BuildKitAddr                 string
+	BuildKitTLSCA                string
+	BuildKitTLSCert              string
+	BuildKitTLSKey               string
+	BuildKitDaemonless           string
+	ExecutionProfileBuildWorkers string
+}
+
+func loadServerConfiguration() serverConfiguration {
+	return serverConfiguration{
+		DataDir:                      os.Getenv("ORKEST_DATA_DIR"),
+		HTTPAddr:                     os.Getenv("HTTP_ADDR"),
+		IntegrationEncryptionKey:     os.Getenv("ORKEST_INTEGRATION_ENCRYPTION_KEY"),
+		AgentctlOpencodeImage:        os.Getenv("AGENTCTL_OPENCODE_IMAGE"),
+		AgentctlClaudeCodeImage:      os.Getenv("AGENTCTL_CLAUDE_CODE_IMAGE"),
+		AgentctlCodexImage:           os.Getenv("AGENTCTL_CODEX_IMAGE"),
+		AgentctlGitHubCopilotImage:   os.Getenv("AGENTCTL_GITHUB_COPILOT_IMAGE"),
+		AgentctlKiroImage:            os.Getenv("AGENTCTL_KIRO_IMAGE"),
+		ExecutionImageRepository:     os.Getenv("ORKEST_EXECUTION_IMAGE_REPOSITORY"),
+		Executor:                     os.Getenv("ORKEST_EXECUTOR"),
+		AgentctlNetwork:              os.Getenv("ORKEST_AGENTCTL_NETWORK"),
+		CodexAuthFile:                os.Getenv("ORKEST_CODEX_AUTH_FILE"),
+		AgentctlBinary:               os.Getenv("ORKEST_AGENTCTL_BINARY"),
+		AgentProviderEnv:             os.Getenv("ORKEST_AGENT_PROVIDER_ENV"),
+		AgentMCPURL:                  os.Getenv("ORKEST_AGENT_MCP_URL"),
+		AgentMCPTokenKey:             os.Getenv("ORKEST_AGENT_MCP_TOKEN_KEY"),
+		DockerRegistryHost:           os.Getenv("ORKEST_DOCKER_REGISTRY_HOST"),
+		BuildKitRegistryHost:         os.Getenv("ORKEST_BUILDKIT_REGISTRY_HOST"),
+		ImageBuilder:                 os.Getenv("ORKEST_IMAGE_BUILDER"),
+		BuildctlBinary:               os.Getenv("ORKEST_BUILDCTL_BINARY"),
+		BuildKitAddr:                 os.Getenv("ORKEST_BUILDKIT_ADDR"),
+		BuildKitTLSCA:                os.Getenv("ORKEST_BUILDKIT_TLS_CA"),
+		BuildKitTLSCert:              os.Getenv("ORKEST_BUILDKIT_TLS_CERT"),
+		BuildKitTLSKey:               os.Getenv("ORKEST_BUILDKIT_TLS_KEY"),
+		BuildKitDaemonless:           os.Getenv("ORKEST_BUILDKIT_DAEMONLESS"),
+		ExecutionProfileBuildWorkers: os.Getenv("ORKEST_EXECUTION_PROFILE_BUILD_WORKERS"),
+	}
+}

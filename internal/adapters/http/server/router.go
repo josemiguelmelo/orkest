@@ -29,8 +29,48 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/server/workspaceenv"
 )
 
+// RouterDependencies names the services required by platform routes.
+type RouterDependencies struct {
+	Users            *identity.UserRegistrationService
+	Organizations    *organization.OrganizationService
+	Workspaces       *workspace.WorkspaceService
+	Agents           *agent.AgentDefinitionUseCase
+	CodeRepositories *coderepository.CodeRepositoryService
+	Tasks            *task.TaskService
+	Integrations     *taskintegration.TaskIntegrationService
+	MCPServers       *mcpserver.MCPServerService
+	SkillCatalog     *skill.CatalogService
+	Launches         *orchestration.LaunchService
+	Profiles         *executionprofile.ExecutionProfileService
+	RuntimeProfiles  *agentruntimeprofile.AgentRuntimeProfileService
+	DirectChats      *orchestration.DirectChatService
+	Workflows        *workflow.WorkflowConfigurationService
+	Automation       *workflowautomation.WorkflowAutomationService
+	Environment      *workspaceenv.WorkspaceEnvironmentService
+	Artifacts        *artifact.ArtifactService
+	AgentTools       *appmcp.AgentTools
+}
+
 // NewRouter validates the served OpenAPI contract before exposing routes.
-func NewRouter(users *identity.UserRegistrationService, organizations *organization.OrganizationService, workspaces *workspace.WorkspaceService, agents *agent.AgentDefinitionUseCase, codeRepositories *coderepository.CodeRepositoryService, tasks *task.TaskService, integrations *taskintegration.TaskIntegrationService, mcpServers *mcpserver.MCPServerService, skillCatalog *skill.CatalogService, launches *orchestration.LaunchService, profiles *executionprofile.ExecutionProfileService, runtimeProfiles *agentruntimeprofile.AgentRuntimeProfileService, directChats *orchestration.DirectChatService, workflows *workflow.WorkflowConfigurationService, automation *workflowautomation.WorkflowAutomationService, environment *workspaceenv.WorkspaceEnvironmentService, artifacts *artifact.ArtifactService, agentTools *appmcp.AgentTools) (*chi.Mux, error) {
+func NewRouter(ctx context.Context, deps RouterDependencies) (*chi.Mux, error) {
+	users := deps.Users
+	organizations := deps.Organizations
+	workspaces := deps.Workspaces
+	agents := deps.Agents
+	codeRepositories := deps.CodeRepositories
+	tasks := deps.Tasks
+	integrations := deps.Integrations
+	mcpServers := deps.MCPServers
+	skillCatalog := deps.SkillCatalog
+	launches := deps.Launches
+	profiles := deps.Profiles
+	runtimeProfiles := deps.RuntimeProfiles
+	directChats := deps.DirectChats
+	workflows := deps.Workflows
+	automation := deps.Automation
+	environment := deps.Environment
+	artifacts := deps.Artifacts
+	agentTools := deps.AgentTools
 	if profiles == nil {
 		return nil, fmt.Errorf("execution profile service is required")
 	}
@@ -49,10 +89,10 @@ func NewRouter(users *identity.UserRegistrationService, organizations *organizat
 	if integrations == nil {
 		return nil, fmt.Errorf("task integration service is required")
 	}
-	if _, err := openapi.LoadAndValidateOpenAPIDoc(OpenAPIContract, context.Background()); err != nil {
+	if _, err := openapi.LoadAndValidateOpenAPIDoc(OpenAPIContract, ctx); err != nil {
 		return nil, fmt.Errorf("load platform OpenAPI contract: %w", err)
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	auth, err := newOIDCAuth(ctx, users, organizations)
 	if err != nil {

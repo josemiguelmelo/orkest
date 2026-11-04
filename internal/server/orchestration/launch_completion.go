@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -13,13 +15,20 @@ var ErrAgentRunClosed = errors.New("agent run completed and process closed")
 type LaunchCompletionService struct {
 	repo       LaunchRepository
 	controller AgentProcessController
+	background *backgroundWork
+	mu         sync.Mutex
+	pending    map[string]Launch
+	reported   map[string]bool
+	slots      chan struct{}
 }
 
-func NewLaunchCompletionService(repo LaunchRepository, controller AgentProcessController) (*LaunchCompletionService, error) {
-	if repo == nil || controller == nil {
+func NewLaunchCompletionService(ctx context.Context, repo LaunchRepository, controller AgentProcessController) (*LaunchCompletionService, error) {
+	if ctx == nil || repo == nil || controller == nil {
 		return nil, errors.New("launch repository and process controller are required")
 	}
-	return &LaunchCompletionService{repo: repo, controller: controller}, nil
+	service := &LaunchCompletionService{repo: repo, controller: controller, background: newBackgroundWork(ctx), pending: make(map[string]Launch), reported: make(map[string]bool), slots: make(chan struct{}, 4)}
+	service.background.Go(service.runCleanup)
+	return service, nil
 }
 
 func (s *LaunchCompletionService) AgentctlRunning(ctx context.Context, launch Launch) (bool, error) {
@@ -72,37 +81,64 @@ func (s *LaunchCompletionService) RecoverPending(ctx context.Context) error {
 		if launch.Status != LaunchCompletedPendingClose && launch.Status != LaunchFailedPendingClose {
 			continue
 		}
-		go s.RetryClose(ctx, launch)
+		s.ScheduleClose(launch)
 	}
 	return nil
 }
 
-func (s *LaunchCompletionService) CloseAbandoned(ctx context.Context, launch Launch, pendingStatus LaunchStatus) {
-	if pendingStatus != LaunchCompletedPendingClose && pendingStatus != LaunchFailedPendingClose {
-		return
-	}
-	launch.Status = pendingStatus
-	for {
-		if err := s.repo.SetLaunchStatus(ctx, PlanLaunchStatus(launch.RunID, pendingStatus)); err == nil {
-			s.RetryClose(ctx, launch)
-			return
-		}
-		if !waitForRetry(ctx) {
-			return
-		}
+// ScheduleClose retains terminal intent for bounded, independently retried cleanup.
+func (s *LaunchCompletionService) ScheduleClose(launch Launch) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, exists := s.pending[launch.RunID]; !exists {
+		s.pending[launch.RunID] = launch
 	}
 }
 
-func (s *LaunchCompletionService) RetryClose(ctx context.Context, launch Launch) {
+func (s *LaunchCompletionService) CloseAbandoned(_ context.Context, launch Launch, status LaunchStatus) {
+	if status != LaunchCompletedPendingClose && status != LaunchFailedPendingClose {
+		return
+	}
+	launch.Status = status
+	s.ScheduleClose(launch)
+}
+
+func (s *LaunchCompletionService) runCleanup(ctx context.Context) {
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
 	for {
-		if err := s.ClosePending(ctx, launch); err == nil {
+		select {
+		case <-ctx.Done():
 			return
+		case <-ticker.C:
 		}
-		if !waitForRetry(ctx) {
-			return
+		s.mu.Lock()
+		launches := make([]Launch, 0, len(s.pending))
+		for _, launch := range s.pending {
+			launches = append(launches, launch)
 		}
+		s.mu.Unlock()
+		reconcileBatch(ctx, launches, func(ctx context.Context, launch Launch) {
+			ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+			defer cancel()
+			if err := s.repo.SetLaunchStatus(ctx, PlanLaunchStatus(launch.RunID, launch.Status)); err != nil {
+				s.reportCleanupFailure(launch, "terminal_intent_unavailable")
+				return
+			}
+			if err := s.ClosePending(ctx, launch); err != nil {
+				s.reportCleanupFailure(launch, "cleanup_unavailable")
+				return
+			}
+			s.mu.Lock()
+			delete(s.pending, launch.RunID)
+			delete(s.reported, launch.RunID)
+			s.mu.Unlock()
+		})
 	}
 }
+
+// Close joins terminal cleanup before its database and executor clients close.
+func (s *LaunchCompletionService) Close() { s.background.Close() }
 
 func (s *LaunchCompletionService) ClosePending(ctx context.Context, launch Launch) error {
 	finalStatus := LaunchCompleted
@@ -111,6 +147,14 @@ func (s *LaunchCompletionService) ClosePending(ctx context.Context, launch Launc
 	} else if launch.Status != LaunchCompletedPendingClose {
 		return fmt.Errorf("launch %q is not pending process cleanup", launch.RunID)
 	}
+	admissionCtx, stopAdmission := context.WithTimeout(ctx, 15*time.Second)
+	defer stopAdmission()
+	select {
+	case s.slots <- struct{}{}:
+	case <-admissionCtx.Done():
+		return admissionCtx.Err()
+	}
+	defer func() { <-s.slots }()
 	closeCtx, cancelClose := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
 	var closeErr error
 	if strings.TrimSpace(launch.ProcessID) != "" {
@@ -130,4 +174,14 @@ func (s *LaunchCompletionService) ClosePending(ctx context.Context, launch Launc
 		return fmt.Errorf("persist completed agent launch: %w", err)
 	}
 	return nil
+}
+
+func (s *LaunchCompletionService) reportCleanupFailure(launch Launch, reason string) {
+	s.mu.Lock()
+	report := !s.reported[launch.RunID]
+	s.reported[launch.RunID] = true
+	s.mu.Unlock()
+	if report {
+		slog.Default().Warn("terminal cleanup deferred", "run_id", launch.RunID, "workspace_id", launch.WorkspaceID, "reason", reason)
+	}
 }

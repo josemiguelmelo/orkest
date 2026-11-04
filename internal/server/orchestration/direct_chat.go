@@ -132,7 +132,7 @@ func (s *DirectChatService) Queue(ctx context.Context, orgID, workspaceID, conve
 }
 
 func (d *TaskDispatcher) StartDirectChat(ctx context.Context, userID, organizationID, workspaceID, agentID, conversationID, commandID, prompt string) error {
-	sessions, ok := d.launches.repo.(directSessionRepository)
+	sessions, ok := d.sessions.(directSessionRepository)
 	if !ok {
 		return errors.New("direct session storage unavailable")
 	}
@@ -159,29 +159,8 @@ func (d *TaskDispatcher) StartDirectChat(ctx context.Context, userID, organizati
 		if err != nil {
 			return err
 		}
-		if len(definition.SkillIDs) > 0 {
-			if d.skillResolver == nil {
-				return errors.New("agent skill resolver is unavailable")
-			}
-			resolved, resolveErr := d.skillResolver.ResolveForAgent(ctx, organizationID, workspaceID, definition.SkillIDs)
-			if resolveErr != nil {
-				return fmt.Errorf("resolve agent skills: %w", resolveErr)
-			}
-			for _, item := range resolved {
-				config.Skills = append(config.Skills, Skill{ID: item.ID, SkillMD: item.SkillMD})
-			}
-		}
-		if len(definition.MCPServerIDs) > 0 {
-			if d.mcpServers == nil {
-				return errors.New("agent MCP server resolver is unavailable")
-			}
-			servers, resolveErr := d.mcpServers.Resolve(ctx, workspaceID, definition.MCPServerIDs)
-			if resolveErr != nil {
-				return fmt.Errorf("resolve agent MCP servers: %w", resolveErr)
-			}
-			for _, server := range servers {
-				config.MCPServers = append(config.MCPServers, MCPServer{ID: server.ID, Name: server.Name, URL: server.URL, Headers: server.Headers})
-			}
+		if err = d.resolveAgentCapabilities(ctx, organizationID, workspaceID, definition, &config); err != nil {
+			return err
 		}
 		if config.ExecutionProfileID != "" {
 			if d.profiles == nil {
@@ -206,15 +185,9 @@ func (d *TaskDispatcher) StartDirectChat(ctx context.Context, userID, organizati
 		if resolveErr != nil {
 			return resolveErr
 		}
-		if len(servers) != len(serverIDs) {
-			return errors.New("session MCP server is unavailable")
-		}
-		for i := range config.MCPServers {
-			for _, server := range servers {
-				if config.MCPServers[i].ID == server.ID {
-					config.MCPServers[i].Headers = server.Headers
-				}
-			}
+		config.MCPServers, err = refreshSessionMCPHeaders(config.MCPServers, servers)
+		if err != nil {
+			return err
 		}
 	}
 	if d.environmentResolver != nil {
@@ -225,7 +198,7 @@ func (d *TaskDispatcher) StartDirectChat(ctx context.Context, userID, organizati
 	}
 	config.RunID, config.RestoreSession = runID, continuing
 	if d.agentTools != nil {
-		server, serverErr := d.agentTools.RuntimeServer(userID, organizationID, workspaceID, conversationID)
+		server, serverErr := d.agentTools.RuntimeServerForRun(userID, organizationID, workspaceID, conversationID, runID)
 		if serverErr != nil {
 			return fmt.Errorf("configure Orkest agent tools: %w", serverErr)
 		}

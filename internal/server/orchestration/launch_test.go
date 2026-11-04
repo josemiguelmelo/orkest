@@ -74,7 +74,7 @@ type launcherFake struct {
 	err     error
 }
 
-func (l launcherFake) LaunchAgentctl(context.Context, RunConfig) (Process, error) {
+func (l launcherFake) StartAgentctl(context.Context, RunConfig) (Process, error) {
 	return l.process, l.err
 }
 
@@ -181,7 +181,7 @@ func TestConnectionServicePersistsEventAndReconnectsFromCursor(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = service.Start(Launch{RunID: "run", ProcessID: "container-1", Endpoint: "http://agentctl:8080", LastSequence: 4}); err != nil {
+	if err = service.Start(ctx, Launch{RunID: "run", ProcessID: "container-1", Endpoint: "http://agentctl:8080", LastSequence: 4}); err != nil {
 		t.Fatal(err)
 	}
 	select {
