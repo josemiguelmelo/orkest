@@ -17,7 +17,7 @@ make docker-agentctl-push-local
 ```
 
 - Build target: base (agentctl, Git, provider CLIs) plus pinned runtime images, one
-  runtime each. BuildKit runs on the platform. Pins: [inventory](../../../internal/core/runtime/versions.json).
+  runtime each. BuildKit runs on the platform. Pins: [inventory](../../../internal/contracts/runtimecatalog/versions.json).
 - Push target starts registry, pushes to `localhost:${REGISTRY_PORT:-5001}/orkest`,
   tags Compose aliases under `registry:5000/orkest`.
 - Registry overrides: `REGISTRY_PORT`, `LOCAL_REGISTRY`, `CONTAINER_REGISTRY`, `AGENTCTL_REGISTRY_NAMESPACE`.
@@ -29,7 +29,8 @@ make docker-agentctl-push-local
 
 ## Durable files and credentials
 
-- Scope: organization/workspace/task. Root: `ORKEST_DATA_DIR/tasks/<scope-hash>`;
+- Scope: organization/workspace/task. The platform supplies
+  `ORKEST_DATA_DIR/agent-executions/tasks/<scope-hash>`;
   hash hides identifiers from paths/container labels.
 - Durable `work`/`agentctl-state` mount at `/workspace`/`/agentctl-state`.
   Directories: 0700; container UID/GID matches platform user for writable files.
@@ -52,7 +53,10 @@ make docker-agentctl-push-local
   container ID in launch failure for reconciliation.
 - `make test-docker`: reachable Engine; named contexts need exported
   [socket](../../operations/configuration.md#docker-networking-and-paths).
-  Fake-client unit tests need no Docker. Full prerequisites: [testing](../../development/testing.md).
+  Set `ORKEST_DOCKER_TEST_MODEL_PROVIDER` and `ORKEST_DOCKER_TEST_MODEL_ID` to an
+  available model before running it. Storage tests confirm selection but make no
+  model requests. Fake-client unit tests need no Docker. Full prerequisites:
+  [testing](../../development/testing.md).
 
 ## Custom toolchains
 

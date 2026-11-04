@@ -9,7 +9,9 @@ Active prototype; see [status](docs/status.md):
 
 - Implemented: management, dispatch, Docker/Local execution, durable sessions.
 - Unfinished: member capacity, worker transport authentication.
-- Needs live qualification per runtime: model execution, approvals, recovery.
+- Live qualification is scenario-specific: OpenCode memory continuation has a dated
+  verification record; other providers, real approvals, MCP, and full platform
+  restart journeys still need qualification. See [evidence and limits](docs/status.md#verification-record).
 
 ## Features
 
@@ -82,6 +84,9 @@ make check
 
 - `make build`: both Go binaries/frontend; `make fmt`: Go formatting.
 - [Testing](docs/development/testing.md): checks, prerequisites, API/SQL regeneration.
+- [Architecture](docs/architecture.md): `cmd/server` builds `bin/orkest`; `cmd/agentctl`
+  builds `bin/agentctl`. Server domains, worker domains, adapters, transport values,
+  and technical utilities have separate package boundaries.
 
 - Before contributing: [AGENTS.md](AGENTS.md), [requirements](docs/requirements.md),
   [stack](docs/tech-stack.md), [CONTRIBUTING.md](CONTRIBUTING.md) (PR/licensing guidance).

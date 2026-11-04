@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/josemiguelmelo/orkest/internal/adapters/runtime/profiles/opencode/opencodetest"
+	"github.com/josemiguelmelo/orkest/internal/adapters/runtime/runtimehost"
 	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
-	"github.com/josemiguelmelo/orkest/internal/agentctl/runtime/opencode/opencodetest"
-	"github.com/josemiguelmelo/orkest/internal/agentctl/runtimehost"
 )
 
 func TestLaunchACPAndFenceDuplicate(t *testing.T) {

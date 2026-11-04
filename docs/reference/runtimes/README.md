@@ -1,6 +1,6 @@
 # Runtime setup
 
-- Choose runtime and model separately. Pins: [versions.json](../../../internal/core/runtime/versions.json).
+- Choose runtime and model separately. Pins: [versions.json](../../../internal/contracts/runtimecatalog/versions.json).
 - Docker installs pinned runtimes; Local requires matching host runtime/dependencies.
 
 | Runtime | Model provider | Credential / setup |
@@ -18,6 +18,10 @@
   Sandbox varies by runtime/executor; Local has no container isolation.
 - Standalone: `-runtime`, existing absolute work directory, absolute durable state
   directory. Host variables require repeatable `-env NAME` grants; [worker setup](../../guides/agentctl.md).
+- Every profile supplies an explicit model identity; launch and restore confirm it
+  through ACP `session/set_config_option` before prompts. Unsupported or unconfirmed
+  selection fails visibly while preserving saved state. Native configuration
+  alone is not confirmation.
 - Native configuration/replay exceptions: individual runtime pages.
 
 ## Verification and recovery
@@ -26,4 +30,6 @@
   MCP/headers, approvals, cancellation, restore plus follow-up.
 - Fixtures/loading alone do not qualify live continuation. Existing sessions keep
   model/configuration; incompatible restore fails visibly, preserving state.
-- [Sessions](../../guides/sessions.md): behavior; [status](../../status.md): evidence limits.
+- [Sessions](../../guides/sessions.md): behavior; [dated verification](../../status.md#verification-record):
+  evidence and limits. OpenCode memory continuation does not qualify other
+  providers or their live approval/MCP behavior.

@@ -30,16 +30,21 @@ The platform and agentctl share one Go module. The UI is a React application.
 | --- | --- |
 | Go toolchain and libraries | [go.mod](../go.mod), [go.sum](../go.sum) |
 | Frontend and Node constraints | [package.json](../web/package.json), [lockfile](../web/package-lock.json) |
-| Runtime versions | [versions.json](../internal/core/runtime/versions.json) |
+| Runtime versions | [versions.json](../internal/contracts/runtimecatalog/versions.json) |
 | Local infrastructure | [Compose](../compose.yaml) |
 | Configuration | [.env.example](../.env.example) |
 | Build and verification commands | [Makefile](../Makefile) |
-| Platform API | [OpenAPI](../internal/app/httpapi/openapi.yaml) |
-| Worker API | [OpenAPI](../internal/agentctl/httpapi/openapi.yaml) |
+| Platform API | [OpenAPI](../internal/adapters/http/server/openapi.yaml) |
+| Worker API | [OpenAPI](../internal/adapters/http/agentctl/openapi.yaml) |
 
 - Pin dependencies; regenerate SQL/API artifacts from inputs.
 - Keep generated rows/SDK types in adapters; static queries in `db/queries`.
-- PostgreSQL adapters own transactions and row→domain mapping.
+- PostgreSQL adapters own locks, transactions, consistency enforcement and row→domain mapping.
+  Domain planners supply business effects. Workflow dispatch uses short claim and
+  acknowledgement transactions with external delivery in the use case.
+- Composition lives in `cmd/server` and `cmd/agentctl`; `bin/orkest` remains the
+  platform binary. [Architecture](architecture.md) defines server/worker, adapter,
+  transport-contract and platform utility boundaries.
 
 See [testing](development/testing.md), [runtime setup](reference/runtimes/README.md),
 and [webapp development](development/webapp.md) for practical details.

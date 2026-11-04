@@ -2,14 +2,14 @@
 
 - REST commands/status; receive-only WebSocket activity.
 - No authentication: platform must authorize access/reserve the run before configure/launch.
-- Schemas/codes: [OpenAPI](../../internal/agentctl/httpapi/openapi.yaml); startup: [agentctl](../guides/agentctl.md).
+- Schemas/codes: [OpenAPI](../../internal/adapters/http/agentctl/openapi.yaml); startup: [agentctl](../guides/agentctl.md).
 
 ## Endpoints
 
 | Method and path | Purpose |
 | --- | --- |
 | `GET /health` | Check process liveness. |
-| `GET /info` | Read provider, process, and conversation status. |
+| `GET /info` | Read run scope, process state, session identity, and queue status. |
 | `POST /agent/configure` | Bind this process to one run; does not start work. |
 | `POST /agent/restore` | Load the configured durable session. |
 | `GET /agent/commands/{commandID}` | Reconcile durable command status. |
@@ -23,6 +23,12 @@
 
 - One run/process; `taskSessionId` enables durable restore/FIFO follow-ups. Sessions span runs.
 - Creation is single-attempt; explicit restore never falls back to a fresh conversation.
+- Launch and restore require confirmation of the configured model before prompts.
+- Configure accepts identical resubmissions. After credential-stripped checkpoint
+  recovery, matching configuration may replenish an absent `gitCredentials` list;
+  other binding changes remain conflicts. A run marked `gitCredentialsRequired`
+  waits for that replenishment before restore. These credentials are never returned
+  by `/info`. [Recovery mechanics](../development/sessions.md#restore-and-ownership).
 - Limits: prompt 256 KiB; JSON body 1 MiB. See [sessions](../guides/sessions.md).
 
 Example configuration:
@@ -62,7 +68,7 @@ Example prompt:
 - **Platform** task updates accept `sessionMode: continue|new`, optional `promptText`,
   stable `commandId`; `startWork: true` requests another step after failure while in
   progress. Reconcile repeat starts against durable history. These are not worker
-  configure fields; see [platform API](../../internal/app/httpapi/openapi.yaml).
+  configure fields; see [platform API](../../internal/adapters/http/server/openapi.yaml).
 
 ## Activity stream
 
@@ -76,8 +82,9 @@ Example prompt:
 - Reconnect: `?afterSequence=LAST_PROCESSED_SEQUENCE`.
 - Memory window: 4096 events. Durable sessions replay older disk records; legacy
   configurations reject expired cursors. Future/invalid cursors → `400 invalid_cursor`.
-- Slow subscribers disconnect/reconnect. Uncapped event/replay response sizes can
-  consume substantial memory. Disconnects never stop accepted work while agentctl lives.
+- Slow subscribers disconnect/reconnect. Large histories can require substantial
+  replay memory; transport message limits still apply. Disconnects never stop
+  accepted work while agentctl lives.
 - Errors: `errorCode` for client logic, sanitized `error`, optional validation `field`;
   possible codes in OpenAPI.
 - Tool activity: `toolKind`, bounded `input`/`output` previews, `locations`, text or

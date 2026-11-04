@@ -3,26 +3,17 @@ package main
 import (
 	"context"
 	"flag"
-	"fmt"
 	"log/slog"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
 
-	"github.com/josemiguelmelo/orkest/internal/agentctl/daemon"
-	"github.com/josemiguelmelo/orkest/internal/agentctl/gitprovider"
-	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
-	sharedacp "github.com/josemiguelmelo/orkest/internal/agentctl/runtime/acp"
-	"github.com/josemiguelmelo/orkest/internal/agentctl/runtime/claudecode"
-	"github.com/josemiguelmelo/orkest/internal/agentctl/runtime/codex"
-	"github.com/josemiguelmelo/orkest/internal/agentctl/runtime/githubcopilot"
-	"github.com/josemiguelmelo/orkest/internal/agentctl/runtime/kiro"
-	"github.com/josemiguelmelo/orkest/internal/agentctl/runtime/opencode"
-	"github.com/josemiguelmelo/orkest/internal/agentctl/runtimehost"
-	codexpreparation "github.com/josemiguelmelo/orkest/internal/agentctl/runtimehost/codex"
-	"github.com/josemiguelmelo/orkest/internal/core/environment"
-	coreruntime "github.com/josemiguelmelo/orkest/internal/core/runtime"
+	"github.com/josemiguelmelo/orkest/internal/adapters/gitprovider"
+	sharedacp "github.com/josemiguelmelo/orkest/internal/adapters/runtime/acp"
+	"github.com/josemiguelmelo/orkest/internal/adapters/runtime/runtimehost"
+	coreruntime "github.com/josemiguelmelo/orkest/internal/contracts/runtimecatalog"
+	"github.com/josemiguelmelo/orkest/internal/platform/environment"
 )
 
 func main() {
@@ -61,26 +52,8 @@ func main() {
 		os.Exit(2)
 	}
 	host := runtimehost.NewWithPreparation(profile, sharedacp.Factory{}, hostEnvironment, preparation, gitprovider.DefaultCLIAuthAdapters()...)
-	if err := daemon.RunAgentctl(ctx, logger, *address, host, *stateDir, *runID); err != nil {
+	if err := RunAgentctl(ctx, logger, *address, host, *stateDir, *runID); err != nil {
 		logger.Error("agentctl stopped", "error", err)
 		os.Exit(1)
-	}
-}
-
-func runtimeConfiguration(runtime coreruntime.Runtime) (agentruntime.RuntimeProfile, runtimehost.RuntimePreparationStrategy, error) {
-	preparation := runtimehost.NoopRuntimePreparationStrategy{}
-	switch runtime {
-	case coreruntime.OpenCode:
-		return opencode.Profile{}, preparation, nil
-	case coreruntime.ClaudeCode:
-		return claudecode.Profile{}, preparation, nil
-	case coreruntime.Codex:
-		return codex.Profile{}, codexpreparation.Preparation{}, nil
-	case coreruntime.GitHubCopilot:
-		return githubcopilot.Profile{}, preparation, nil
-	case coreruntime.Kiro:
-		return kiro.Profile{}, preparation, nil
-	default:
-		return nil, nil, fmt.Errorf("unsupported runtime %q", runtime)
 	}
 }

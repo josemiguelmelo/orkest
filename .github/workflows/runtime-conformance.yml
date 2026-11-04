@@ -43,7 +43,7 @@ jobs:
         env:
           RUNTIME: ${{ matrix.runtime }}
         run: |
-          VERSION=$(python3 -c 'import json, os; print(json.load(open("internal/core/runtime/versions.json"))[os.environ["RUNTIME"]].removeprefix("opencode v"))')
+          VERSION=$(python3 -c 'import json, os; print(json.load(open("internal/contracts/runtimecatalog/versions.json"))[os.environ["RUNTIME"]].removeprefix("opencode v"))')
           if [[ "$RUNTIME" == "kiro" ]]; then test "$VERSION" = "2.37.0"; fi
           case "$RUNTIME" in
             opencode) npm install --global "@opencode/cli@$VERSION" ;;

@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 
 	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
-	"github.com/josemiguelmelo/orkest/internal/core/durablefile"
+	"github.com/josemiguelmelo/orkest/internal/platform/durablefile"
 )
 
 type checkpointStore struct {

@@ -1,0 +1,391 @@
+// Package runtimehost implements agentctl contracts by owning subprocesses,
+// provisioning, native sessions, and restoration evidence.
+package runtimehost
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/base64"
+	"errors"
+	"fmt"
+	"io"
+	"log/slog"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"regexp"
+	"slices"
+	"strings"
+
+	"github.com/josemiguelmelo/orkest/internal/adapters/gitprovider"
+	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
+	coreruntime "github.com/josemiguelmelo/orkest/internal/contracts/runtimecatalog"
+)
+
+// Environment contains paths and explicitly granted environment values.
+type Environment struct {
+	WorkDir    string
+	StateDir   string
+	GrantedEnv []string
+}
+
+// Host owns startup and storage compatibility for one runtime profile and
+// communication factory. The returned session owns the child and task lease.
+type Host struct {
+	profile         agentruntime.RuntimeProfile
+	factory         agentruntime.ProtocolClientFactory
+	environment     Environment
+	preparation     RuntimePreparationStrategy
+	cliAuthAdapters []gitprovider.CLIAuthAdapter
+}
+
+var runtimeVersionPattern = regexp.MustCompile(`^(?:[A-Za-z][A-Za-z0-9._+-]* )?v?[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?$`)
+
+// New binds runtime contracts to an explicitly granted execution environment.
+func New(profile agentruntime.RuntimeProfile, factory agentruntime.ProtocolClientFactory, environment Environment, cliAuthAdapters ...gitprovider.CLIAuthAdapter) *Host {
+	return NewWithPreparation(profile, factory, environment, NoopRuntimePreparationStrategy{}, cliAuthAdapters...)
+}
+
+// NewWithPreparation binds a provider-specific host preparation strategy.
+func NewWithPreparation(profile agentruntime.RuntimeProfile, factory agentruntime.ProtocolClientFactory, environment Environment, preparation RuntimePreparationStrategy, cliAuthAdapters ...gitprovider.CLIAuthAdapter) *Host {
+	environment.GrantedEnv = slices.Clone(environment.GrantedEnv)
+	if preparation == nil {
+		preparation = NoopRuntimePreparationStrategy{}
+	}
+	return &Host{profile: profile, factory: factory, environment: environment, preparation: preparation, cliAuthAdapters: slices.Clone(cliAuthAdapters)}
+}
+
+func (h *Host) Runtime() coreruntime.Runtime { return h.profile.Descriptor().Runtime }
+
+func (h *Host) Version() string { return h.profile.Descriptor().Version }
+
+func (h *Host) Launch(ctx context.Context, config runconfig.RuntimeConfig) (agentruntime.RuntimeSession, error) {
+	return h.start(ctx, config, false)
+}
+
+func (h *Host) Restore(ctx context.Context, config runconfig.RuntimeConfig) (agentruntime.RuntimeSession, error) {
+	return h.start(ctx, config, true)
+}
+
+func (h *Host) start(ctx context.Context, config runconfig.RuntimeConfig, restoring bool) (agentruntime.RuntimeSession, error) {
+	config = config.Clone()
+	descriptor := h.profile.Descriptor()
+	if err := h.validateStartup(ctx, config, descriptor); err != nil {
+		return nil, err
+	}
+	store := sessionStorage{StateDir: h.environment.StateDir, WorkDir: h.environment.WorkDir, RuntimeVersion: descriptor.Version}
+	owner, err := store.acquire(config)
+	if err != nil {
+		slog.Default().Error("runtime task storage ownership failed", "organization_id", config.OrganizationID, "workspace_id", config.WorkspaceID, "task_id", config.TaskID, "run_id", config.RunID, "task_session_id", config.TaskSessionID, "state_dir", h.environment.StateDir, "error", err)
+		return nil, &agentruntime.LaunchError{Message: "task execution ownership unavailable", Cause: err}
+	}
+	transferred := false
+	defer func() {
+		if !transferred {
+			_ = owner.Close()
+		}
+	}()
+
+	var nativeID string
+	if restoring {
+		nativeID, err = store.load(config)
+	} else {
+		err = store.reserveCreation(config)
+	}
+	if err != nil {
+		operation := "load_session"
+		if !restoring {
+			operation = "reserve_session_creation"
+		}
+		logAttrs := []any{
+			"organization_id", config.OrganizationID,
+			"workspace_id", config.WorkspaceID,
+			"task_id", config.TaskID,
+			"run_id", config.RunID,
+			"task_session_id", config.TaskSessionID,
+			"operation", operation,
+			"restoring", restoring,
+			"storage_root", store.Root(config),
+			"error", err,
+		}
+		var compatibilityError *sessionManifestCompatibilityError
+		if errors.As(err, &compatibilityError) {
+			logAttrs = append(logAttrs, "compatibility_mismatches", compatibilityError.Mismatches)
+			if slices.Contains(compatibilityError.Mismatches, "configuration_mismatch") {
+				if compatibilityError.Legacy {
+					logAttrs = append(logAttrs, "configuration_mismatch_detail", "legacy_manifest_has_no_field_fingerprints")
+				} else {
+					logAttrs = append(logAttrs, "configuration_mismatch_fields", compatibilityError.Fields)
+				}
+			}
+		}
+		slog.Default().Error("runtime durable session storage operation failed", logAttrs...)
+		message := "could not reserve durable session storage; check storage availability and permissions"
+		switch {
+		case errors.Is(err, errSessionAlreadyExists):
+			message = "saved session already exists; continue that session or explicitly start a new session"
+		case errors.Is(err, os.ErrExist):
+			message = "session creation was already reserved by a previous attempt; reconcile it or explicitly start a new session"
+		default:
+			message += ": " + err.Error()
+		}
+		return nil, &agentruntime.LaunchError{Message: message, Cause: err}
+	}
+	settings := agentruntime.ResolvedRuntimeSettings{Agent: config.Agent, Model: config.Model, MCPServers: config.MCPServers, Skills: config.Skills}
+	paths := h.provisioningPaths(config, store)
+	prepared, err := h.prepareRuntime(ctx, config, settings, store, descriptor, restoring)
+	if err != nil {
+		return nil, err
+	}
+	session, err := h.startProcess(ctx, prepared.Executable, prepared.Environment, descriptor, owner)
+	if err != nil {
+		return nil, err
+	}
+	// A partial startup must terminate the child before releasing ownership.
+	defer func() {
+		if !transferred {
+			_ = session.Close()
+		}
+	}()
+	for _, entry := range h.environment.GrantedEnv {
+		name, value, ok := strings.Cut(entry, "=")
+		name = strings.ToLower(name)
+		if ok && (strings.Contains(name, "key") || strings.Contains(name, "token") || strings.Contains(name, "secret") || strings.Contains(name, "password")) {
+			session.callbacks.AddSecretValues(value)
+		}
+	}
+	for _, value := range config.Environment {
+		if value != "" {
+			session.callbacks.AddSecretValues(value)
+		}
+	}
+	session.callbacks.AddSecretValues(prepared.SecretValues...)
+	for _, credential := range config.GitCredentials {
+		if credential.Token != "" {
+			session.callbacks.AddSecretValues(credential.Token, base64.StdEncoding.EncodeToString([]byte("x-access-token:"+credential.Token)))
+		}
+	}
+	for _, server := range config.MCPServers {
+		for _, value := range server.Headers {
+			session.callbacks.AddSecretValues(value)
+		}
+	}
+	options := h.profile.ProtocolSessionOptions(settings, paths)
+	if err := h.initializeSession(ctx, session, settings, options, descriptor, nativeID, restoring); err != nil {
+		return nil, err
+	}
+	if err := store.save(config, session.SessionID()); err != nil {
+		return nil, &agentruntime.LaunchError{Message: "persist runtime session failed", Cause: err}
+	}
+	transferred = true
+	go session.supervise()
+	return session, nil
+}
+
+func (h *Host) validateStartup(ctx context.Context, config runconfig.RuntimeConfig, descriptor agentruntime.RuntimeDescriptor) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	if err := config.Validate(); err != nil {
+		return err
+	}
+	if config.Runtime != descriptor.Runtime || descriptor.Version == "" || h.factory == nil {
+		return agentruntime.ErrRuntimeHostUnavailable
+	}
+	if !filepath.IsAbs(h.environment.WorkDir) || !filepath.IsAbs(h.environment.StateDir) {
+		return &agentruntime.LaunchError{Message: "absolute work and state directories are required"}
+	}
+	info, err := os.Stat(h.environment.WorkDir)
+	if err != nil || !info.IsDir() {
+		return &agentruntime.LaunchError{Message: "working directory must exist", Cause: err}
+	}
+	return nil
+}
+
+type preparedRuntime struct {
+	Executable   string
+	Environment  []string
+	SecretValues []string
+}
+
+func (h *Host) prepareRuntime(ctx context.Context, config runconfig.RuntimeConfig, settings agentruntime.ResolvedRuntimeSettings, store sessionStorage, descriptor agentruntime.RuntimeDescriptor, restoring bool) (preparedRuntime, error) {
+	paths := h.provisioningPaths(config, store)
+	plan, err := h.profile.BuildProvisioningPlan(settings, paths)
+	if err != nil {
+		return preparedRuntime{}, err
+	}
+	prepared, err := h.preparation.Prepare(ctx, RuntimePreparationInput{
+		Settings: settings, Paths: paths, Plan: plan,
+		GrantedEnvironment: slices.Clone(h.environment.GrantedEnv), Restoring: restoring,
+	})
+	if err != nil {
+		return preparedRuntime{}, err
+	}
+	granted := append(prepared.GrantedEnvironment, environmentEntries(config.Environment)...)
+	environment, err := applyProvisioningPlan(paths.RuntimeRoot, granted, descriptor.ReservedEnvNames, descriptor.ReservedEnvPrefixes, prepared.Plan)
+	if err != nil {
+		return preparedRuntime{}, err
+	}
+	environment, err = gitprovider.PrepareRuntime(ctx, gitprovider.RuntimePreparation{
+		RuntimeRoot: paths.RuntimeRoot,
+		WorkDir:     h.environment.WorkDir,
+		Environment: environment,
+		Credentials: config.GitCredentials,
+	}, h.cliAuthAdapters)
+	if err != nil {
+		return preparedRuntime{}, err
+	}
+	executable, err := exec.LookPath(descriptor.Executable)
+	if err != nil {
+		return preparedRuntime{}, &agentruntime.LaunchError{Message: "runtime executable unavailable", Cause: err}
+	}
+	if err := verifyRuntimeVersion(ctx, executable, descriptor.VersionArguments, descriptor.Version, descriptor.VersionOutputPrefix, descriptor.VersionOutputSuffix, environment); err != nil {
+		return preparedRuntime{}, err
+	}
+	return preparedRuntime{Executable: executable, Environment: environment, SecretValues: prepared.SecretValues}, nil
+}
+
+func (h *Host) provisioningPaths(config runconfig.RuntimeConfig, store sessionStorage) agentruntime.ProvisioningPaths {
+	identity := config.RunID
+	if config.TaskSessionID != "" {
+		identity = config.TaskSessionID
+	}
+	return agentruntime.ProvisioningPaths{
+		RuntimeRoot: store.Root(config), WorkDir: h.environment.WorkDir,
+		ConfigSubdir: fmt.Sprintf("config-%x", sha256.Sum256([]byte(identity))),
+	}
+}
+
+func environmentEntries(values map[string]string) []string {
+	entries := make([]string, 0, len(values))
+	for name, value := range values {
+		entries = append(entries, name+"="+value)
+	}
+	return entries
+}
+
+func (h *Host) startProcess(ctx context.Context, executable string, environment []string, descriptor agentruntime.RuntimeDescriptor, owner *os.File) (*Session, error) {
+	cmd := exec.Command(executable, descriptor.Arguments...)
+	cmd.Dir, cmd.Env, cmd.Stderr = h.environment.WorkDir, environment, io.Discard
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return nil, &agentruntime.RuntimeError{Kind: agentruntime.RuntimeFailure, Message: "open runtime input failed", Cause: err}
+	}
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		_ = stdin.Close()
+		return nil, &agentruntime.RuntimeError{Kind: agentruntime.RuntimeFailure, Message: "open runtime output failed", Cause: err}
+	}
+	child, err := startChildProcess(cmd, stdin, owner, stdout)
+	if err != nil {
+		_ = stdin.Close()
+		_ = stdout.Close()
+		return nil, err
+	}
+	callbacks := &sessionCallbacks{}
+	connection, err := h.factory.Connect(ctx, stdin, stdout, callbacks)
+	if err != nil {
+		_ = child.Close()
+		return nil, err
+	}
+	return &Session{child: child, connection: connection, callbacks: callbacks, ownership: owner}, nil
+}
+
+func (h *Host) initializeSession(ctx context.Context, session *Session, settings agentruntime.ResolvedRuntimeSettings, options agentruntime.ProtocolSessionOptions, descriptor agentruntime.RuntimeDescriptor, nativeID string, restoring bool) error {
+	if options.Model == "" {
+		return &agentruntime.RuntimeError{Kind: agentruntime.RuntimeFailure, Message: "runtime profile must request confirmation of the configured model"}
+	}
+	capabilities, err := session.connection.Initialize(ctx)
+	if err != nil {
+		return err
+	}
+	if capabilities.ProtocolVersion != 1 {
+		return &agentruntime.RuntimeError{Kind: agentruntime.RuntimeFailure, Message: "unsupported runtime protocol version"}
+	}
+	if !capabilities.LoadSession {
+		return &agentruntime.LaunchError{Message: "runtime is missing a required protocol capability"}
+	}
+	if restoring {
+		session.callbacks.beginReplay(nativeID, descriptor.ReplayCoverageVerified)
+		if err := session.connection.LoadSession(ctx, nativeID, h.environment.WorkDir, options); err != nil {
+			return err
+		}
+		session.callbacks.finishReplay()
+	} else {
+		nativeID, err = session.connection.NewSession(ctx, h.environment.WorkDir, options)
+		if err != nil {
+			return err
+		}
+	}
+	if nativeID == "" {
+		return &agentruntime.RuntimeError{Kind: agentruntime.RuntimeFailure, Message: "runtime returned an empty session identity"}
+	}
+	if mode := h.profile.NativeSessionMode(settings); mode != "" {
+		if !capabilities.SetSessionMode {
+			return &agentruntime.LaunchError{Message: "runtime cannot apply the configured session mode"}
+		}
+		if err := session.connection.SetSessionMode(ctx, nativeID, mode); err != nil {
+			return err
+		}
+	}
+	if err := session.connection.SetSessionModel(ctx, nativeID, options.Model); err != nil {
+		return err
+	}
+	session.sessionID = nativeID
+	return nil
+}
+
+func verifyRuntimeVersion(ctx context.Context, executable string, args []string, want string, outputPrefix, outputSuffix string, environment []string) error {
+	probe := exec.CommandContext(ctx, executable, args...)
+	probe.Env = environment
+	output, err := probe.Output()
+	if err != nil {
+		message := "runtime version command failed; verify the pinned runtime is installed and executable"
+		var exitError *exec.ExitError
+		if errors.As(err, &exitError) {
+			message = fmt.Sprintf("runtime version command exited with status %d; verify the pinned runtime is installed and executable", exitError.ExitCode())
+			if detail := safeRuntimeDiagnostic(string(exitError.Stderr), environment); detail != "" {
+				message = fmt.Sprintf("runtime version command exited with status %d: %s", exitError.ExitCode(), detail)
+			}
+		} else if errors.Is(err, context.DeadlineExceeded) {
+			message = "runtime version command timed out; verify the runtime image is healthy"
+		}
+		return &agentruntime.LaunchError{Message: message, Cause: err}
+	}
+	got := strings.TrimSpace(string(output))
+	if outputPrefix != "" {
+		got = strings.TrimPrefix(got, outputPrefix)
+	}
+	if outputSuffix != "" {
+		got = strings.TrimSuffix(got, outputSuffix)
+	}
+	if got != want {
+		if !safeRuntimeVersion(strings.TrimSpace(string(output))) {
+			got = "unrecognized output"
+		}
+		return &agentruntime.LaunchError{Message: fmt.Sprintf("runtime version mismatch: Orkest requires %s but the installed runtime reports %s", want, got)}
+	}
+	return nil
+}
+
+func safeRuntimeVersion(value string) bool {
+	return len(value) <= 64 && runtimeVersionPattern.MatchString(value)
+}
+
+func safeRuntimeDiagnostic(value string, environment []string) string {
+	for _, entry := range environment {
+		_, secret, ok := strings.Cut(entry, "=")
+		if ok && secret != "" {
+			value = strings.ReplaceAll(value, secret, "[redacted]")
+		}
+	}
+	value = strings.Join(strings.Fields(value), " ")
+	runes := []rune(value)
+	if len(runes) > 400 {
+		value = string(runes[:400]) + "…"
+	}
+	return value
+}
+
+var _ agentruntime.RuntimeHost = (*Host)(nil)

@@ -17,6 +17,8 @@
 | Session | Durable conversation and compatible runtime configuration; several runs can reuse it. |
 | Run | One work step with its own execution identity and outcome. Infrastructure recovery retains that identity. |
 | Command | Idempotent operation, such as a prompt, identified by a stable command ID. |
+| Delivery claim | Temporary permission to reconcile or deliver one workflow command. Its token fences reservation and acknowledgement; expiry proves no execution termination. |
+| Execution ownership | Durable reservation and runtime/process ownership retained until the step ends and ownership is resolved. Separate from a delivery claim and from team-member capacity. |
 | Artifact / revision | Task output and an immutable version of its content or external reference. |
 | Coding integration | Repository discovery and Git credentials for a coding provider. |
 | Task integration | Source task import and synchronization, independent of coding credentials. |

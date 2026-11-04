@@ -1,0 +1,1 @@
+{"organizationId":"org","workspaceId":"workspace","taskId":"task","taskSessionId":"conversation","runId":"run","runtime":"opencode","agent":{"name":"Work","description":"Work","instructions":"Complete the task."},"model":{"provider":"provider","id":"model"}}

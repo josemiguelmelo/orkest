@@ -25,7 +25,13 @@ type NegotiatedCapabilities struct {
 	SetSessionMode  bool
 }
 
+// ProtocolModelSelector must confirm the exact model or return an error.
+type ProtocolModelSelector interface {
+	SetSessionModel(context.Context, string, string) error
+}
+
 type ProtocolClient interface {
+	ProtocolModelSelector
 	Initialize(context.Context) (NegotiatedCapabilities, error)
 	NewSession(context.Context, string, ProtocolSessionOptions) (string, error)
 	// LoadSession returns only after all replay callbacks preceding its response

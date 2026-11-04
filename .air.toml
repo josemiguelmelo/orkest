@@ -3,7 +3,7 @@ tmp_dir = "tmp"
 env_files = [".env"]
 
 [build]
-cmd = "go build -o ./tmp/orkest ./cmd/orkest"
+cmd = "go build -o ./tmp/orkest ./cmd/server"
 entrypoint = ["./tmp/orkest"]
 include_ext = ["go", "sql", "yaml"]
 exclude_dir = [".git", "bin", "docs", "tmp", "web", "tests"]

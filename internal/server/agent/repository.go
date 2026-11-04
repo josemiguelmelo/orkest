@@ -1,0 +1,25 @@
+package agent
+
+import "context"
+
+import "github.com/josemiguelmelo/orkest/internal/server/workspace"
+
+type AgentDefinitionRepository interface {
+	Agents(context.Context, string, string) ([]Agent, error)
+	Agent(context.Context, string, string, string) (Agent, error)
+	CreateAgent(context.Context, string, string, AgentDefinition) (Agent, error)
+	UpdateAgent(context.Context, string, string, string, AgentDefinition) (Agent, error)
+	DeleteAgent(context.Context, string, string, string) error
+}
+
+type WorkspaceAccess interface {
+	GetWorkspace(context.Context, string, string, string) (workspace.Workspace, error)
+}
+
+type MCPServerAccess interface {
+	Exists(context.Context, string, string, []string) (bool, error)
+}
+
+type SkillAccess interface {
+	ValidateAgentSkills(context.Context, string, string, []string) error
+}

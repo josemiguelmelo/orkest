@@ -3,7 +3,7 @@ package config
 import (
 	"testing"
 
-	coreruntime "github.com/josemiguelmelo/orkest/internal/core/runtime"
+	coreruntime "github.com/josemiguelmelo/orkest/internal/contracts/runtimecatalog"
 )
 
 func TestClaudeCodeRequiresAnthropicModelProvider(t *testing.T) {

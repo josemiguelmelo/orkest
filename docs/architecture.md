@@ -1,7 +1,7 @@
 # Architecture and extension points
 
 Go platform, independent `agentctl` worker, React UI. These boundaries describe
-current code; refactoring rules may not yet hold in every package.
+current code and are enforced by `make check-runtime-boundaries`.
 
 ## Design approach
 
@@ -9,7 +9,7 @@ current code; refactoring rules may not yet hold in every package.
 - Explicit constructors keep dependencies visible; consumers own interfaces.
 - Services own business rules/authorization; handlers decode/call/encode.
 - Repository adapters load facts/persist transactional decisions; provider adapters translate external behavior.
-- App wiring selects dependencies/manages lifecycle.
+- Command wiring selects dependencies/manages lifecycle before requests are served.
 - Keep SQL-generated/SDK types inside adapters. Avoid base classes, service locators,
   and forwarding-only interfaces; every interface needs a boundary/consumer purpose.
 - Use domain names/focused functions. Comment unexplained invariants, ownership, locks, recovery.
@@ -29,10 +29,13 @@ flowchart LR
     Worker -->|Retain files and sessions| Storage[(Durable storage)]
 ```
 
-- `cmd/orkest` → `bin/orkest`: embedded Goose migrations, optional `web/dist` serving.
+- `cmd/server` → `bin/orkest`: embedded Goose migrations, optional `web/dist` serving.
 - `cmd/agentctl` → `bin/agentctl`: independent worker.
 - SQL inputs: `db/migrations`, `db/queries`; generated persistence types stay in adapters.
-- Web client/validators: generated from platform OpenAPI.
+- Web client/validators: generated from platform OpenAPI. Frontend assets are served
+  from `ORKEST_WEB_DIR`, not embedded in the Go binary.
+- `cmd/server/wiring.go` composes the platform; `cmd/agentctl/wiring.go` and
+  `daemon.go` compose and supervise the independent worker.
 
 ## Platform ownership
 
@@ -40,7 +43,7 @@ Arrows below show calls or implemented contracts, not a complete import graph.
 
 ```mermaid
 flowchart TD
-    Wiring[internal/app: constructors and lifecycle] --> HTTP[httpapi: request handling]
+    Wiring[cmd/server: constructors and lifecycle] --> HTTP[httpapi: request handling]
     Wiring --> Services[Domain services: policy and decisions]
     Wiring --> Adapters[PostgreSQL and external adapters]
     HTTP --> Services
@@ -51,21 +54,49 @@ flowchart TD
 
 | Area | Owns |
 | --- | --- |
-| `cmd/orkest`, `internal/app` | Platform startup, dependency selection, shutdown |
-| `internal/app/httpapi` | Platform routes, wire types, OpenAPI contract |
-| `internal/identity`, `organization`, `workspace` | Identity, memberships, workspace access |
-| `internal/task` | Task content, CRUD, task-owned repository and workflow contracts |
-| `internal/workflow` | Board, stage, and rule configuration |
-| `internal/workflowautomation` | Stage transitions, rule evaluation, start delivery |
-| `internal/orchestration` | Dispatch, run/session identity, launch and reconnect |
-| `internal/artifact` | Task outputs, immutable revisions, publication checks |
-| `internal/postgres` | Persistence adapters and transaction boundaries |
-| `internal/executors` | Docker or Local environment selection and lifecycle |
+| `cmd/server` | Platform startup, dependency selection, shutdown |
+| `internal/adapters/http/server` | Platform routes, wire types, OpenAPI contract |
+| `internal/server/identity`, `internal/server/organization`, `internal/server/workspace` | Identity, memberships, workspace access |
+| `internal/server/task` | Task content, CRUD, task-owned repository and workflow contracts |
+| `internal/server/workflow` | Board, stage, and rule configuration |
+| `internal/server/workflowautomation` | Stage transitions, rule evaluation, start delivery |
+| `internal/server/orchestration` | Dispatch, run/session identity, launch and reconnect |
+| `internal/server/artifact` | Task outputs, immutable revisions, publication checks |
+| `internal/adapters/postgres` | Persistence adapters and transaction boundaries |
+| `internal/adapters/executors` | Docker or Local environment selection and lifecycle |
 | `web/` | UI, scoped query caches, generated platform API client |
 
 `TaskService` receives `TaskRepository`/`TaskWorkflowPlanner` through its constructor,
 requesting movement without importing automation. PostgreSQL commits results/events
 together. See [workflows](guides/workflows.md).
+
+Server domains and worker domains own independent execution/configuration,
+status, activity and permission values. Neither imports the other. Their HTTP
+adapters explicitly map `internal/contracts/agentctl/v1` values; this Go version
+namespace changes no routes, JSON fields, optionality or durable format.
+`internal/adapters/runnerclient/agentctlhttp` implements orchestration's client
+ports and translates transport failures into domain-owned classifications.
+
+`internal/contracts/runtimecatalog` is the focused public runtime/version and
+configuration-validation catalogue used by definitions and worker configuration.
+It contains no persistence/encryption or process operations. Shared public problem
+sentinels live in `internal/contracts/problem`. Technical filesystem, HTTP, ID,
+environment and encryption utilities live in `internal/platform`; it contains
+no domain models. Concrete providers and SDKs remain in `internal/adapters`.
+
+`AgentDefinitionUseCase`, `CodeRepositoryService`, and other domain APIs declare
+their dependencies through constructors and consumer-owned ports. Task execution
+uses `task.StartCommand`, separate from the task entity. Nonempty task listing
+performs a task query and one organization/workspace-scoped repository-reference
+query; an empty listing stops after the task query. The result shape and reference
+order are preserved.
+
+`task.WorkflowPersistenceEffects` and workflow event intents contain the domain's
+outbox/history/work-state decisions. PostgreSQL maps and commits them under the
+existing task/workflow locks. Run outcomes are classified by orchestration.
+Execution delivery uses [fenced short transactions](development/workflow-delivery.md)
+with external dispatch in the use case and stable run reservation. Migration 0038
+adds claim metadata without versioning the worker wire or native storage formats. [Mixed-version upgrade restrictions](operations/migrations.md#workflow-delivery-claims) apply.
 
 ## Worker ownership
 
@@ -81,7 +112,9 @@ flowchart LR
 
 - `config`: settings; `interaction`: commands/approvals/events; `run`: queue/journal/recovery.
 - `runtimehost`: subprocesses/manifests/locks; profiles: native configuration; ACP: translation.
-- Concrete runtimes exclude platform/run dependencies.
+- Concrete runtime adapters consume worker contracts and technical utilities;
+  they never import server domains or the run controller. Pure profiles perform
+  no operational I/O.
 - Contracts/locking: [agentctl development](development/agentctl.md).
 
 ## Add an implementation
@@ -94,8 +127,9 @@ flowchart LR
 | New coding provider | `coderepository.CodingProvider` | Authentication, discovery, checkout details |
 | New persistence adapter | Consumer-owned repository contracts | Database rows and query code |
 
-Extensions need wiring, validation, docs, behavior tests. Runtimes also need saved-session
-compatibility and credentialed qualification before claiming verified live behavior.
+Extensions need wiring, validation, documentation and behavior tests. Runtimes also
+need saved-session compatibility and live qualification with explicit model/settings
+and credentials where required. See [dated verification and remaining limits](status.md#verification-record).
 
 ## Preserve during refactoring
 

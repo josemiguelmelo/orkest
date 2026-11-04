@@ -6,7 +6,7 @@ import (
 
 	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
-	coreruntime "github.com/josemiguelmelo/orkest/internal/core/runtime"
+	coreruntime "github.com/josemiguelmelo/orkest/internal/contracts/runtimecatalog"
 )
 
 // RuntimeHost owns process startup, durable identity, and runtime session setup.

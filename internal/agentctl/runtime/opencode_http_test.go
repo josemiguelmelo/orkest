@@ -12,7 +12,7 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
-	"github.com/josemiguelmelo/orkest/internal/agentctl/httpapi"
+	"github.com/josemiguelmelo/orkest/internal/adapters/http/agentctl"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
 )
 

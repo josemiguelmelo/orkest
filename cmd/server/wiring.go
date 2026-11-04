@@ -1,0 +1,239 @@
+package main
+
+import (
+	"context"
+	"fmt"
+	"log/slog"
+	"net/http"
+	"os"
+	"path/filepath"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/josemiguelmelo/orkest/internal/adapters/runnerclient/agentctlhttp"
+
+	"github.com/josemiguelmelo/orkest/internal/adapters/executors"
+	"github.com/josemiguelmelo/orkest/internal/adapters/http/server"
+	"github.com/josemiguelmelo/orkest/internal/adapters/imagebuild"
+	"github.com/josemiguelmelo/orkest/internal/adapters/imagebuild/buildkit"
+	dockerimage "github.com/josemiguelmelo/orkest/internal/adapters/imagebuild/docker"
+	githubprovider "github.com/josemiguelmelo/orkest/internal/adapters/integrations/coderepository/providers/github"
+	gitlabprovider "github.com/josemiguelmelo/orkest/internal/adapters/integrations/coderepository/providers/gitlab"
+	githubcloud "github.com/josemiguelmelo/orkest/internal/adapters/integrations/taskintegration/providers/githubcloud"
+	jiraserver "github.com/josemiguelmelo/orkest/internal/adapters/integrations/taskintegration/providers/jiraserver"
+	appmcp "github.com/josemiguelmelo/orkest/internal/adapters/mcp"
+	"github.com/josemiguelmelo/orkest/internal/adapters/postgres"
+	coreruntime "github.com/josemiguelmelo/orkest/internal/contracts/runtimecatalog"
+	"github.com/josemiguelmelo/orkest/internal/platform/httplog"
+	"github.com/josemiguelmelo/orkest/internal/platform/httpserver"
+	"github.com/josemiguelmelo/orkest/internal/platform/secretbox"
+	"github.com/josemiguelmelo/orkest/internal/server/agent"
+	"github.com/josemiguelmelo/orkest/internal/server/agentruntimeprofile"
+	"github.com/josemiguelmelo/orkest/internal/server/artifact"
+	"github.com/josemiguelmelo/orkest/internal/server/coderepository"
+	"github.com/josemiguelmelo/orkest/internal/server/executionprofile"
+	"github.com/josemiguelmelo/orkest/internal/server/identity"
+	"github.com/josemiguelmelo/orkest/internal/server/mcpserver"
+	"github.com/josemiguelmelo/orkest/internal/server/orchestration"
+	"github.com/josemiguelmelo/orkest/internal/server/organization"
+	"github.com/josemiguelmelo/orkest/internal/server/skill"
+	"github.com/josemiguelmelo/orkest/internal/server/task"
+	"github.com/josemiguelmelo/orkest/internal/server/taskintegration"
+	"github.com/josemiguelmelo/orkest/internal/server/workflow"
+	workflowautomation "github.com/josemiguelmelo/orkest/internal/server/workflowautomation"
+	"github.com/josemiguelmelo/orkest/internal/server/workspace"
+	"github.com/josemiguelmelo/orkest/internal/server/workspaceenv"
+)
+
+// Run owns the platform HTTP lifecycle; it does not own agent processes.
+func runServer(ctx context.Context, logger *slog.Logger) error {
+	dataRoot := strings.TrimSpace(os.Getenv("ORKEST_DATA_DIR"))
+	if dataRoot == "" {
+		dataRoot = "data"
+	}
+	dataRoot, err := filepath.Abs(dataRoot)
+	if err != nil {
+		return fmt.Errorf("resolve platform data directory: %w", err)
+	}
+	if err = os.MkdirAll(dataRoot, 0o700); err != nil {
+		return fmt.Errorf("create platform data directory: %w", err)
+	}
+
+	addr := os.Getenv("HTTP_ADDR")
+	if addr == "" {
+		addr = "127.0.0.1:8080"
+	}
+
+	database, err := postgres.Initialize(ctx)
+	if err != nil {
+		return err
+	}
+	defer database.Close()
+	users := identity.NewUserRegistrationService(postgres.NewUserPostgresRepository(database))
+	organizations := organization.NewOrganizationService(postgres.NewOrganizationPostgresRepository(database))
+	workspaces := workspace.NewWorkspaceService(postgres.NewWorkspacePostgresRepository(database), organizations)
+	skillCatalog := skill.NewCatalogService(postgres.NewSkillCatalogPostgresRepository(database), organizations, workspaces, users)
+	var secretBox *secretbox.Box
+	if key := os.Getenv("ORKEST_INTEGRATION_ENCRYPTION_KEY"); key != "" {
+		secretBox, err = secretbox.New(key)
+		if err != nil {
+			return err
+		}
+	}
+	mcpServerService := mcpserver.NewMCPServerService(postgres.NewMCPServerPostgresRepository(database), secretBox, workspaces)
+	workspaceEnvironment := workspaceenv.NewWorkspaceEnvironmentService(postgres.NewWorkspaceEnvironmentPostgresRepository(database), workspaces, secretBox)
+	executionProfileRepository := postgres.NewExecutionProfileRepository(database)
+	profileImages := map[coreruntime.Runtime]string{coreruntime.OpenCode: os.Getenv("AGENTCTL_OPENCODE_IMAGE"), coreruntime.ClaudeCode: os.Getenv("AGENTCTL_CLAUDE_CODE_IMAGE"), coreruntime.Codex: os.Getenv("AGENTCTL_CODEX_IMAGE"), coreruntime.GitHubCopilot: os.Getenv("AGENTCTL_GITHUB_COPILOT_IMAGE"), coreruntime.Kiro: os.Getenv("AGENTCTL_KIRO_IMAGE")}
+	executionProfileService := executionprofile.NewExecutionProfileService(executionProfileRepository, workspaces, os.Getenv("ORKEST_EXECUTION_IMAGE_REPOSITORY"), profileImages)
+	agentRepository := postgres.NewAgentPostgresRepository(database, secretBox)
+	agentRuntimeProfileRepository := postgres.NewAgentRuntimeProfilePostgresRepository(database, secretBox)
+	agentRuntimeProfiles := agentruntimeprofile.NewAgentRuntimeProfileService(agentRuntimeProfileRepository, workspaces)
+	agents := agent.NewAgentDefinitionUseCase(agentRepository, workspaces, mcpServerService, skillCatalog, executionProfileService, agentRuntimeProfiles)
+	codeRepositories := coderepository.NewCodeRepositoryService(postgres.NewCodeReposPostgresRepository(database), workspaces, dataRoot, secretBox, githubprovider.NewGitHubProvider(), gitlabprovider.NewGitLabCloudProvider(), gitlabprovider.NewGitLabServerProvider())
+	launchRepo := postgres.NewAgentLaunchPostgresRepository(database, secretBox)
+	client := agentctlhttp.NewHTTPAgentctlClient(httplog.PropagatingHTTPClient(&http.Client{Timeout: 10 * time.Second}))
+	providers := []coderepository.CodingProvider{githubprovider.NewGitHubProvider(), gitlabprovider.NewGitLabCloudProvider(), gitlabprovider.NewGitLabServerProvider()}
+	executorSelection, executorErr := executors.New(ctx, executors.Config{
+		Kind:           os.Getenv("ORKEST_EXECUTOR"),
+		DataRoot:       filepath.Join(dataRoot, "agent-executions"),
+		DockerNetwork:  os.Getenv("ORKEST_AGENTCTL_NETWORK"),
+		CodexAuthFile:  os.Getenv("ORKEST_CODEX_AUTH_FILE"),
+		AgentctlBinary: os.Getenv("ORKEST_AGENTCTL_BINARY"),
+		DockerImages: map[coreruntime.Runtime]string{
+			coreruntime.OpenCode:      os.Getenv("AGENTCTL_OPENCODE_IMAGE"),
+			coreruntime.ClaudeCode:    os.Getenv("AGENTCTL_CLAUDE_CODE_IMAGE"),
+			coreruntime.Codex:         os.Getenv("AGENTCTL_CODEX_IMAGE"),
+			coreruntime.GitHubCopilot: os.Getenv("AGENTCTL_GITHUB_COPILOT_IMAGE"),
+			coreruntime.Kiro:          os.Getenv("AGENTCTL_KIRO_IMAGE"),
+		},
+		ProviderEnv:              splitEnvironmentNames(os.Getenv("ORKEST_AGENT_PROVIDER_ENV")),
+		CodingProviders:          providers,
+		CodingCredentialResolver: codeRepositories,
+	})
+	if executorErr != nil {
+		return fmt.Errorf("initialize agent executor: %w", executorErr)
+	}
+	executor := executorSelection.Executor
+	executorKind := executorSelection.Kind
+	defer func() { _ = executor.Close() }()
+	completion, completionErr := orchestration.NewLaunchCompletionService(launchRepo, executor)
+	if completionErr != nil {
+		return completionErr
+	}
+	if err = completion.RecoverPending(ctx); err != nil {
+		return err
+	}
+	communication, communicationErr := orchestration.NewConnectionService(ctx, client, launchRepo, completion)
+	if communicationErr != nil {
+		return communicationErr
+	}
+	if err = communication.ReconnectRecorded(); err != nil {
+		return err
+	}
+	launcher, err := orchestration.NewAgentLauncher(executor)
+	if err != nil {
+		return err
+	}
+	launchService, err := orchestration.NewLaunchService(launchRepo, launcher, client, communication, completion)
+	if err != nil {
+		return err
+	}
+	taskRepository := postgres.NewTaskPostgresRepository(database)
+	workflows := workflow.NewWorkflowConfigurationService(postgres.NewWorkflowDefinitionPostgresRepository(database), workspaces)
+	taskWorkflows := workflowautomation.NewWorkflowAutomationService(postgres.NewTaskTransitionPostgresRepository(database), postgres.NewAutomationEventPostgresRepository(database), workspaces, workflowautomation.WorkflowRuleEvaluator{})
+	tasks := task.NewTaskService(taskRepository, postgres.NewTaskCreationPostgresRepository(database), postgres.NewTaskUpdatePostgresRepository(database), taskWorkflows, workspaces)
+	artifacts := artifact.NewArtifactService(postgres.NewArtifactPostgresRepository(database), tasks)
+	mcpEndpoint := strings.TrimSpace(os.Getenv("ORKEST_AGENT_MCP_URL"))
+	if mcpEndpoint == "" {
+		mcpEndpoint = "http://127.0.0.1:8080"
+	}
+	mcpKey, err := appmcp.AgentToolsTokenKey(dataRoot, os.Getenv("ORKEST_AGENT_MCP_TOKEN_KEY"))
+	if err != nil {
+		return fmt.Errorf("load agent MCP token key: %w", err)
+	}
+	agentTools, err := appmcp.NewAgentTools(mcpKey, mcpEndpoint, codeRepositories, tasks, artifacts)
+	if err != nil {
+		return fmt.Errorf("initialize agent MCP tools: %w", err)
+	}
+	var profileResolver orchestration.ExecutionImageResolver = executionProfileService
+	if executorKind == executors.Local {
+		profileResolver = localExecutionProfileResolver{}
+	}
+	dispatcher, err := orchestration.NewTaskDispatcher(agents, launchService, mcpServerService, profileResolver, skillCatalog, workspaceEnvironment, codeRepositories, codeRepositories, agentTools, artifacts, workflows)
+	if err != nil {
+		return err
+	}
+	directChats, err := orchestration.NewDirectChatService(launchRepo, dispatcher, launchService)
+	if err != nil {
+		return err
+	}
+	integrations := taskintegration.NewTaskIntegrationService(postgres.NewPostgresTaskIntegrationRepository(database), secretBox, workspaces, organizations, postgres.NewPostgresImportedTaskRepository(database), tasks, githubcloud.NewGitHubCloudProvider(), jiraserver.NewJiraServerProvider())
+	runnerCtx, stopRunner := context.WithCancel(ctx)
+	var runnerWG sync.WaitGroup
+	if os.Getenv("ORKEST_EXECUTION_IMAGE_REPOSITORY") != "" {
+		registry := imagebuild.RegistryMapping{
+			DockerHost:   os.Getenv("ORKEST_DOCKER_REGISTRY_HOST"),
+			BuildKitHost: os.Getenv("ORKEST_BUILDKIT_REGISTRY_HOST"),
+		}
+		imageStore, buildErr := dockerimage.NewImageStore(registry)
+		if buildErr != nil {
+			stopRunner()
+			return buildErr
+		}
+		builder, buildErr := newImageBuilder(os.Getenv("ORKEST_IMAGE_BUILDER"), imageStore, buildkit.Config{
+			Binary:     os.Getenv("ORKEST_BUILDCTL_BINARY"),
+			Address:    os.Getenv("ORKEST_BUILDKIT_ADDR"),
+			Registry:   registry,
+			TLSCA:      os.Getenv("ORKEST_BUILDKIT_TLS_CA"),
+			TLSCert:    os.Getenv("ORKEST_BUILDKIT_TLS_CERT"),
+			TLSKey:     os.Getenv("ORKEST_BUILDKIT_TLS_KEY"),
+			Daemonless: strings.EqualFold(os.Getenv("ORKEST_BUILDKIT_DAEMONLESS"), "true"),
+		})
+		if buildErr != nil {
+			stopRunner()
+			return buildErr
+		}
+		workerCount := 1
+		if configured, parseErr := strconv.Atoi(os.Getenv("ORKEST_EXECUTION_PROFILE_BUILD_WORKERS")); parseErr == nil && configured > 0 {
+			workerCount = configured
+		} else if os.Getenv("ORKEST_EXECUTION_PROFILE_BUILD_WORKERS") != "" {
+			logger.Warn("invalid execution profile build worker count; using default", "setting", "ORKEST_EXECUTION_PROFILE_BUILD_WORKERS", "default", workerCount)
+		}
+		worker := executionprofile.NewExecutionProfileWorker(executionProfileRepository, builder, logger, workerCount)
+		runnerWG.Add(1)
+		go func() { defer runnerWG.Done(); worker.Run(runnerCtx) }()
+	}
+	runnerWG.Add(1)
+	go func() { defer runnerWG.Done(); integrations.Run(runnerCtx) }()
+	execution := workflowautomation.NewWorkflowExecutionService(postgres.NewExecutionCommandPostgresRepository(database), tasks, dispatcher, logger)
+	worker := workflowautomation.NewWorkflowAutomationWorker(taskWorkflows, execution, logger)
+	runnerWG.Add(1)
+	go func() { defer runnerWG.Done(); worker.Run(runnerCtx) }()
+	router, err := httpapi.NewRouter(users, organizations, workspaces, agents, codeRepositories, tasks, integrations, mcpServerService, skillCatalog, launchService, executionProfileService, agentRuntimeProfiles, directChats, workflows, taskWorkflows, workspaceEnvironment, artifacts, agentTools)
+	if err != nil {
+		stopRunner()
+		runnerWG.Wait()
+		return err
+	}
+
+	server := &http.Server{Addr: addr, Handler: httplog.Middleware(logger)(router), ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
+	serverErr := httpserver.Run(ctx, logger, "platform", server)
+	stopRunner()
+	runnerWG.Wait()
+	return serverErr
+}
+
+type localExecutionProfileResolver struct{}
+
+func (localExecutionProfileResolver) Resolve(context.Context, string, string, coreruntime.Runtime) (string, error) {
+	return "", nil
+}
+
+func splitEnvironmentNames(value string) []string {
+	if strings.TrimSpace(value) == "" {
+		return nil
+	}
+	return strings.Split(value, ",")
+}

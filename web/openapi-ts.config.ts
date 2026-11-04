@@ -1,6 +1,6 @@
 import { defineConfig } from '@hey-api/openapi-ts';
 export default defineConfig({
-  input: '../internal/app/httpapi/openapi.yaml',
+  input: '../internal/adapters/http/server/openapi.yaml',
   output: { path: '.api-source' },
   plugins: [
     '@hey-api/typescript',

@@ -31,7 +31,8 @@ ORKEST_AGENTCTL_BINARY=/absolute/path/to/orkest/bin/agentctl
 
 ## Storage and lifecycle
 
-- Worktrees/state: `ORKEST_DATA_DIR/agent-executions`, mode 0700.
+- Worktrees/state: `ORKEST_DATA_DIR/agent-executions/tasks/<scope-hash>/{work,agentctl-state}`,
+  mode 0700. Process identity records live under `agent-executions/runs`.
 - Checkout only task-selected registered repositories; same credential resolution as Docker.
 - Endpoint: loopback/dynamic port. Identity: PID plus observed start-time/command
   fingerprint to reject PID reuse after restart.

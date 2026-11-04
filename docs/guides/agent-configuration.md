@@ -41,6 +41,9 @@ Built-in task/repository/artifact tools are supplied separately.
   Re-resolve current MCP headers by ID.
 - Current workspace environment overrides matching saved values; absent names retain
   saved values. **Removing an entry does not guarantee removal from an existing session.**
+- Every profile must confirm its configured model through ACP before a prompt.
+  Unsupported confirmation fails startup or restore; live support for each
+  provider must be qualified separately. [Current evidence](../status.md#verification-record).
 - New sessions use current configuration. Missing credentials/incompatibility fail
   visibly; never substitute a model or conversation.
 

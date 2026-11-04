@@ -28,7 +28,12 @@ Credentials:
 - One integration per provider/workspace. Credentials are write-only: omit to
   preserve, replace to rotate. Explicit validation needs a newly supplied credential.
 - Launch resolves PATs for agentctl's URL-scoped Git authentication. Platform snapshots
-  encrypt them; plaintext worker checkpoints omit them; never put them in `.git/config`.
+  encrypt them; newly written worker checkpoints omit the structured credential
+  list. Older checkpoints may still contain credentials. Never put them in `.git/config`.
+- A restarted worker requiring Git credentials waits for matching configuration
+  with fresh credentials before restoring. Automatic platform reinjection after
+  reconnect is not established by the worker recovery guard; see
+  [session recovery](../development/sessions.md#restore-and-ownership).
 - Run `gh`/`glab` from the registered checkout: wrappers select its credentials.
   Public registrations without integrations lack authenticated push/CLI access.
 - Commit as `Orkest Agent <agent@orkest.local>`.

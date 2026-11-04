@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
-	coreruntime "github.com/josemiguelmelo/orkest/internal/core/runtime"
+	coreruntime "github.com/josemiguelmelo/orkest/internal/contracts/runtimecatalog"
 )
 
 func TestCheckpointStoragePreservesV1ShapeAndRunMatch(t *testing.T) {

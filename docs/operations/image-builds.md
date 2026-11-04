@@ -10,6 +10,7 @@ Deployment setup for [execution profiles](../guides/execution-profiles.md).
 | `ORKEST_EXECUTION_PROFILE_BUILD_WORKERS` | Concurrent builds per platform process; default `1`; invalid/nonpositive values use default |
 | `ORKEST_IMAGE_BUILDER` | `buildkit` (default) or `docker` |
 | `ORKEST_BUILDCTL_BINARY`, `ORKEST_BUILDKIT_ADDR` | buildctl executable and compatible daemon |
+| `ORKEST_DOCKER_REGISTRY_HOST`, `ORKEST_BUILDKIT_REGISTRY_HOST` | Optional registry host mapping when the Docker and BuildKit daemons reach the same registry through different addresses |
 | `ORKEST_BUILDKIT_TLS_CA`, `ORKEST_BUILDKIT_TLS_CERT`, `ORKEST_BUILDKIT_TLS_KEY` | Optional mTLS |
 | `ORKEST_BUILDKIT_DAEMONLESS=true` | Bundled `buildctl-daemonless.sh` starts rootless BuildKit per build inside platform container |
 
