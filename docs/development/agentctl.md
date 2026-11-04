@@ -97,6 +97,29 @@ and v1 worker checkpoints are different formats; see [session storage](sessions.
 
 ## Replay evidence
 
+Checkpoint read/validation failures fence configuration and launch even before a
+run can be configured. `/health` remains process liveness; `/info` reports blocked
+recovery, interrupted state, and unavailable execution. Commands return the
+sanitized `recovery_blocked` error while the checkpoint fence is held. The daemon
+retries the same checkpoint once per second without repeating failure logs. Repair
+the saved checkpoint/storage and let it reconcile; do not delete state to manufacture
+successful recovery. Missing required Git credentials still permit matching
+configuration reinjection. Failed native restore remains blocked for reconciliation.
+
+Lifecycle transitions are validated before append and during replay using the same
+durable state model. Historical single-turn journals may omit `PromptStarted`.
+Unknown command completion, duplicate acceptance, and ending a run with queued work
+fail visibly. Workflow stage, queue state, runtime availability, and cleanup state
+remain separate dimensions. A runtime interruption leaves unresolved commands for
+reconciliation; cancellation/ordinary failure pauses the queue, and approval waits
+retain execution ownership.
+
+Runtime shutdown closes owned stdio, waits for exit, then kills a child still alive
+after two seconds and joins it before releasing ownership. Tests cover a blocked
+child, concurrent close, and an open pipe. Kernel process waits and local filesystem
+I/O do not offer a universal wall-clock deadline; ownership is never released solely
+because a shutdown deadline elapsed.
+
 - `interaction` owns command markers; run/host own reconciliation and evidence.
 - `LoadSession` collects normalized observations, sealed after load and preceding
   callbacks complete. Replay is never live output.

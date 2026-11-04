@@ -100,6 +100,30 @@ adds claim metadata without versioning the worker wire or native storage formats
 
 ## Worker ownership
 
+Platform supervision has explicit stop/join ownership. Startup failures and normal
+shutdown cancel reconnect and cleanup scheduling before database/executor clients
+close. Joining supervision never terminates healthy independent workers. Terminal
+cleanup may finish its bounded termination/persistence operations after cancellation.
+
+Each run has one stream/monitor supervisor. Initial readiness has a ten-second
+deadline, separate from the established stream lifetime; callers may cancel an
+unready attempt without becoming the owner of accepted execution. At most four
+unready handshakes, four startup reconciliation attempts, and four terminal cleanup
+operations run concurrently. Cleanup retries retain terminal identity and release
+their attempt capacity between retries. These limits do not implement member slots.
+
+Workflow events poll independently of four command-delivery workers. Workers claim
+only when ready to deliver, using the existing fenced reservation/acknowledgement
+protocol. Claim expiry still permits reconciliation only. Persistence prevents late
+startup updates and terminal event replay from reversing terminal intent or a final
+outcome. Historical failed launches without a task session retain their cleanup path.
+
+Composition snapshots its server settings once, uses named router/dispatcher
+dependencies, and injects session persistence directly into dispatch preparation.
+The launcher consumes the executor start capability without a forwarding wrapper.
+Runtime profiles and executor strategies remain the implementation extension points.
+No metrics backend or general plugin/state-machine framework is introduced.
+
 ```mermaid
 flowchart LR
     HTTP[agentctl HTTP API] --> Run[run: execution and recovery]

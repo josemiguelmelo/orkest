@@ -20,6 +20,7 @@ Start with [local setup](../README.md).
 ## Developer references
 
 - [Architecture and package boundaries](architecture.md)
+- [Lifecycle and orchestration improvement plan/evidence](development/architecture-improvements-plan.md)
 - [Verification record and remaining limits](status.md#verification-record)
 - [Agentctl ownership and compatibility](development/agentctl.md)
 - [Session persistence and continuation](development/sessions.md)
