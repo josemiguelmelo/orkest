@@ -22,7 +22,7 @@ const (
 
 // Executor is the application-facing lifecycle contract for an executor.
 type Executor interface {
-	orchestration.ProcessExecutor
+	orchestration.AgentctlStarter
 	orchestration.AgentProcessController
 	Close() error
 }

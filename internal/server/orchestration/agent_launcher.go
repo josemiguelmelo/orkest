@@ -4,8 +4,8 @@ import (
 	"context"
 )
 
-// ProcessExecutor hides process creation behind the selected executor implementation.
-type ProcessExecutor interface {
+// AgentctlStarter starts an independently owned agentctl worker.
+type AgentctlStarter interface {
 	StartAgentctl(context.Context, RunConfig) (Process, error)
 }
 

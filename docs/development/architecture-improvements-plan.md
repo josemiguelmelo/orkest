@@ -103,7 +103,7 @@ Acceptance and verification:
 Primary files: `agent_launcher.go`, `launch_service.go`, `task_dispatcher.go`,
 `direct_chat.go`, `cmd/server/wiring.go`, and `internal/adapters/http/server/router.go`.
 
-- Remove `ExecutorAgentLauncher`; let `LaunchService` consume `ProcessExecutor`
+- Remove `ExecutorAgentLauncher`; let `LaunchService` consume `AgentctlStarter`
   directly. Retain the separate process-inspection/termination capability.
 - Replace long positional router/dispatcher constructors with named dependency
   structs. Validate required dependencies and optional capability combinations.

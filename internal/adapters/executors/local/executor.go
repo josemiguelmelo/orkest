@@ -88,7 +88,7 @@ func New(config Config) (*Executor, error) {
 }
 
 var (
-	_ orchestration.ProcessExecutor        = (*Executor)(nil)
+	_ orchestration.AgentctlStarter        = (*Executor)(nil)
 	_ orchestration.AgentProcessController = (*Executor)(nil)
 )
 

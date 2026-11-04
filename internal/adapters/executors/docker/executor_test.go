@@ -445,6 +445,6 @@ func (f *fakeEngine) ContainerRemove(_ context.Context, id string, _ mobyclient.
 func (*fakeEngine) Close() error { return nil }
 
 var (
-	_ orchestration.ProcessExecutor = (*Executor)(nil)
+	_ orchestration.AgentctlStarter = (*Executor)(nil)
 	_ EngineClient                  = (*fakeEngine)(nil)
 )

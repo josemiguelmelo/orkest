@@ -12,7 +12,7 @@ import (
 
 type LaunchService struct {
 	repo          TaskExecutionRepository
-	executor      ProcessExecutor
+	executor      AgentctlStarter
 	client        AgentctlClient
 	communication AgentCommunication
 	completion    *LaunchCompletionService
@@ -20,7 +20,7 @@ type LaunchService struct {
 
 var ErrTaskRunNotFound = errors.New("task run not found")
 
-func NewLaunchService(repo TaskExecutionRepository, executor ProcessExecutor, client AgentctlClient, communication AgentCommunication, completion *LaunchCompletionService) (*LaunchService, error) {
+func NewLaunchService(repo TaskExecutionRepository, executor AgentctlStarter, client AgentctlClient, communication AgentCommunication, completion *LaunchCompletionService) (*LaunchService, error) {
 	if repo == nil || executor == nil || client == nil || communication == nil {
 		return nil, errors.New("launch dependencies are required")
 	}

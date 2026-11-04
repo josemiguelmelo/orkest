@@ -145,7 +145,7 @@ flowchart LR
 
 | Change | Extension point | Keep outside core policy |
 | --- | --- | --- |
-| New executor | `orchestration.ProcessExecutor` and `AgentProcessController`; select in `executors` | Process/container API details |
+| New executor | `orchestration.AgentctlStarter` and `AgentProcessController`; select in `executors` | Process/container API details |
 | New runtime | `runtime.RuntimeProfile`, protocol factory, optional host preparation strategy | Native configuration and protocol types |
 | New task source | `taskintegration` provider contract and typed config schema | Source API calls and field mapping |
 | New coding provider | `coderepository.CodingProvider` | Authentication, discovery, checkout details |

@@ -138,7 +138,7 @@ func NewWithClient(ctx context.Context, config Config, client EngineClient) (*Ex
 }
 
 var (
-	_ orchestration.ProcessExecutor        = (*Executor)(nil)
+	_ orchestration.AgentctlStarter        = (*Executor)(nil)
 	_ orchestration.AgentProcessController = (*Executor)(nil)
 )
 
