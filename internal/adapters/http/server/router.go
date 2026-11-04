@@ -53,40 +53,22 @@ type RouterDependencies struct {
 
 // NewRouter validates the served OpenAPI contract before exposing routes.
 func NewRouter(ctx context.Context, deps RouterDependencies) (*chi.Mux, error) {
-	users := deps.Users
-	organizations := deps.Organizations
-	workspaces := deps.Workspaces
-	agents := deps.Agents
-	codeRepositories := deps.CodeRepositories
-	tasks := deps.Tasks
-	integrations := deps.Integrations
-	mcpServers := deps.MCPServers
-	skillCatalog := deps.SkillCatalog
-	launches := deps.Launches
-	profiles := deps.Profiles
-	runtimeProfiles := deps.RuntimeProfiles
-	directChats := deps.DirectChats
-	workflows := deps.Workflows
-	automation := deps.Automation
-	environment := deps.Environment
-	artifacts := deps.Artifacts
-	agentTools := deps.AgentTools
-	if profiles == nil {
+	if deps.Profiles == nil {
 		return nil, fmt.Errorf("execution profile service is required")
 	}
-	if runtimeProfiles == nil {
+	if deps.RuntimeProfiles == nil {
 		return nil, fmt.Errorf("agent runtime profile service is required")
 	}
-	if launches == nil {
+	if deps.Launches == nil {
 		return nil, fmt.Errorf("task launch service is required")
 	}
-	if directChats == nil {
+	if deps.DirectChats == nil {
 		return nil, fmt.Errorf("direct chat service is required")
 	}
-	if workflows == nil {
+	if deps.Workflows == nil {
 		return nil, fmt.Errorf("workflow service is required")
 	}
-	if integrations == nil {
+	if deps.Integrations == nil {
 		return nil, fmt.Errorf("task integration service is required")
 	}
 	if _, err := openapi.LoadAndValidateOpenAPIDoc(OpenAPIContract, ctx); err != nil {
@@ -94,7 +76,7 @@ func NewRouter(ctx context.Context, deps RouterDependencies) (*chi.Mux, error) {
 	}
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	auth, err := newOIDCAuth(ctx, users, organizations)
+	auth, err := newOIDCAuth(ctx, deps.Users, deps.Organizations)
 	if err != nil {
 		return nil, err
 	}
@@ -108,37 +90,37 @@ func NewRouter(ctx context.Context, deps RouterDependencies) (*chi.Mux, error) {
 	router.Get("/auth/login", auth.login)
 	router.Get("/auth/callback", auth.callback)
 	router.Post("/auth/logout", auth.logout)
-	if agentTools != nil {
-		router.Handle("/mcp/agent-tools", agentTools.Handler())
+	if deps.AgentTools != nil {
+		router.Handle("/mcp/agent-tools", deps.AgentTools.Handler())
 	}
 	router.Group(func(api chi.Router) {
 		api.Use(auth.middleware)
 		api.Route("/api", func(api chi.Router) {
 			api.Get("/me", auth.currentUser)
 			api.Get("/runtime-providers", listRuntimeProviders)
-			organizationAPI{organizations: organizations, workspaces: workspaces}.routes(api)
-			agentAPI{agents: agents}.routes(api)
-			executionProfileAPI{service: profiles}.routes(api)
-			agentRuntimeProfileAPI{service: runtimeProfiles}.routes(api)
-			if skillCatalog != nil {
-				skillAPI{service: skillCatalog, scope: skill.ScopeGlobal}.routes(api, "/skills")
-				skillAPI{service: skillCatalog, scope: skill.ScopeOrganization}.routes(api, "/organizations/{orgID}/skills")
-				skillAPI{service: skillCatalog, scope: skill.ScopeWorkspace}.routes(api, "/organizations/{orgID}/workspaces/{workspaceID}/skills")
+			organizationAPI{organizations: deps.Organizations, workspaces: deps.Workspaces}.routes(api)
+			agentAPI{agents: deps.Agents}.routes(api)
+			executionProfileAPI{service: deps.Profiles}.routes(api)
+			agentRuntimeProfileAPI{service: deps.RuntimeProfiles}.routes(api)
+			if deps.SkillCatalog != nil {
+				skillAPI{service: deps.SkillCatalog, scope: skill.ScopeGlobal}.routes(api, "/skills")
+				skillAPI{service: deps.SkillCatalog, scope: skill.ScopeOrganization}.routes(api, "/organizations/{orgID}/skills")
+				skillAPI{service: deps.SkillCatalog, scope: skill.ScopeWorkspace}.routes(api, "/organizations/{orgID}/workspaces/{workspaceID}/skills")
 			}
-			if mcpServers != nil {
-				mcpServerAPI{service: mcpServers}.routes(api)
+			if deps.MCPServers != nil {
+				mcpServerAPI{service: deps.MCPServers}.routes(api)
 			}
-			if environment != nil {
-				workspaceEnvironmentAPI{service: environment}.routes(api)
+			if deps.Environment != nil {
+				workspaceEnvironmentAPI{service: deps.Environment}.routes(api)
 			}
-			codeRepositoryAPI{repositories: codeRepositories}.routes(api)
-			codingIntegrationAPI{service: codeRepositories}.routes(api)
-			taskAPI{tasks: tasks, automation: automation}.routes(api)
-			artifactAPI{service: artifacts}.routes(api)
-			workflowAPI{service: workflows}.routes(api)
-			taskRunAPI{tasks: tasks, launches: launches}.routes(api)
-			directChatAPI{chats: directChats, agents: agents, workspaces: workspaces}.routes(api)
-			taskIntegrationAPI{service: integrations}.routes(api)
+			codeRepositoryAPI{repositories: deps.CodeRepositories}.routes(api)
+			codingIntegrationAPI{service: deps.CodeRepositories}.routes(api)
+			taskAPI{tasks: deps.Tasks, automation: deps.Automation}.routes(api)
+			artifactAPI{service: deps.Artifacts}.routes(api)
+			workflowAPI{service: deps.Workflows}.routes(api)
+			taskRunAPI{tasks: deps.Tasks, launches: deps.Launches}.routes(api)
+			directChatAPI{chats: deps.DirectChats, agents: deps.Agents, workspaces: deps.Workspaces}.routes(api)
+			taskIntegrationAPI{service: deps.Integrations}.routes(api)
 		})
 	})
 	openapi.Enable(router, "Orkest API", OpenAPIContract)
