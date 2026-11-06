@@ -69,6 +69,29 @@ func testWorkspaceWorkflow(t *testing.T, db *PostgresDatabase, orgID, actorID, f
 	if definitions, listErr := repo.Definitions(ctx, workspaceID); listErr != nil || len(definitions) != 2 {
 		t.Fatal("workspace workflows were not listed", len(definitions), listErr)
 	}
+
+	// Stage IDs may be shared across workflows; prompts must remain scoped.
+	secondDefinition.Stages[0].CustomPrompt = "Support instructions"
+	secondDefinition, err = repo.Save(ctx, workspaceID, secondDefinition, workflow.PlanConfigurationChange)
+	if err != nil {
+		t.Fatal(err)
+	}
+	loaded, err := repo.Definition(ctx, workspaceID, secondWorkflowID)
+	if err != nil || loaded.Stages[0].CustomPrompt != "Support instructions" {
+		t.Fatal("prompt round trip", err)
+	}
+	if d.Stages[1].CustomPrompt != "" {
+		t.Fatal("default prompt is nonempty")
+	}
+	loaded.Stages[0].CustomPrompt = ""
+	if _, err = repo.Save(ctx, workspaceID, loaded, workflow.PlanConfigurationChange); err != nil {
+		t.Fatal(err)
+	}
+	loaded, err = repo.Definition(ctx, workspaceID, secondWorkflowID)
+	if err != nil || loaded.Stages[0].CustomPrompt != "" {
+		t.Fatal("clear prompt", err)
+	}
+	d.Stages[0].CustomPrompt = "Plan the task"
 	original := d
 	d.Stages[1].ResponsibleAgentID = foreignAgent
 	if _, err = repo.Save(ctx, workspaceID, d, workflow.PlanConfigurationChange); !errors.Is(err, modelerrors.ErrInvalid) {
@@ -94,6 +117,9 @@ func testWorkspaceWorkflow(t *testing.T, db *PostgresDatabase, orgID, actorID, f
 	value, err := createWorkflowTask(ctx, tasks, taskID, workspaceID, taskmodel.TaskInput{WorkflowID: workspaceID, Title: "Workflow", Status: "todo"})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if value.StageCustomPrompt != "Plan the task" {
+		t.Fatal("task projection lost prompt", value.StageCustomPrompt)
 	}
 	secondTaskID := newID()
 	secondTask, err := createWorkflowTask(ctx, tasks, secondTaskID, workspaceID, taskmodel.TaskInput{WorkflowID: secondWorkflowID, Title: "Support task", Status: "todo"})

@@ -110,6 +110,7 @@ export const zWorkflowStage = z.object({
     id: z.string().min(1).max(100),
     name: z.string().min(1).max(200),
     description: z.string().max(2000),
+    customPrompt: z.string().max(32768).optional(),
     responsibleAgentId: z.string()
 });
 export const zWorkflowAutomationRule = z.object({

@@ -1781,6 +1781,7 @@ components:
         id: {type: string, minLength: 1, maxLength: 100}
         name: {type: string, minLength: 1, maxLength: 200}
         description: {type: string, maxLength: 2000}
+        customPrompt: {type: string, maxLength: 32768, description: "Optional stage instructions; maximum 32768 UTF-8 bytes. Sent with task details at every work start."}
         responsibleAgentId: {type: string}
     WorkflowAutomationRule:
       type: object

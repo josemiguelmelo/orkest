@@ -5,6 +5,7 @@ import (
 )
 
 type Task struct {
+	StageCustomPrompt string          `json:"-"`
 	AutomationPending bool            `json:"automationPending"`
 	StageName         string          `json:"-"`
 	StageDescription  string          `json:"-"`

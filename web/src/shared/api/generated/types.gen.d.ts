@@ -101,6 +101,10 @@ export type WorkflowStage = {
     id: string;
     name: string;
     description: string;
+    /**
+     * Optional stage instructions; maximum 32768 UTF-8 bytes. Sent with task details at every work start.
+     */
+    customPrompt?: string;
     responsibleAgentId: string;
 };
 export type WorkflowAutomationRule = {

@@ -86,3 +86,10 @@ Documented hazards below; SQL is the complete inventory.
   workers and reconcile claims/runs first; dropping claim metadata removes delivery
   diagnostics. Neither upgrade nor rollback terminates agentctl or releases its ownership.
 - Protocol and crash cases: [delivery ownership](../development/workflow-delivery.md).
+
+## Stage custom prompts
+
+- **0039:** adds an empty-by-default custom prompt to workflow stages, preserving
+  existing workflow and session behavior.
+- Rollback permanently removes saved stage prompts. Export needed prompts first.
+  Existing reserved prompt outbox entries remain intact.

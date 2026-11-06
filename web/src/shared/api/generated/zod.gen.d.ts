@@ -155,6 +155,7 @@ export declare const zWorkflowStage: z.ZodObject<{
     id: z.ZodString;
     name: z.ZodString;
     description: z.ZodString;
+    customPrompt: z.ZodOptional<z.ZodString>;
     responsibleAgentId: z.ZodString;
 }, z.core.$strip>;
 export declare const zWorkflowAutomationRule: z.ZodObject<{
@@ -211,6 +212,7 @@ export declare const zWorkspaceWorkflow: z.ZodObject<{
         id: z.ZodString;
         name: z.ZodString;
         description: z.ZodString;
+        customPrompt: z.ZodOptional<z.ZodString>;
         responsibleAgentId: z.ZodString;
     }, z.core.$strip>>;
 }, z.core.$strip>;
@@ -1921,6 +1923,7 @@ export declare const zListWorkspaceWorkflowsResponse: z.ZodArray<z.ZodObject<{
         id: z.ZodString;
         name: z.ZodString;
         description: z.ZodString;
+        customPrompt: z.ZodOptional<z.ZodString>;
         responsibleAgentId: z.ZodString;
     }, z.core.$strip>>;
 }, z.core.$strip>>;
@@ -1970,6 +1973,7 @@ export declare const zCreateWorkspaceWorkflowResponse: z.ZodObject<{
         id: z.ZodString;
         name: z.ZodString;
         description: z.ZodString;
+        customPrompt: z.ZodOptional<z.ZodString>;
         responsibleAgentId: z.ZodString;
     }, z.core.$strip>>;
 }, z.core.$strip>;
@@ -2026,6 +2030,7 @@ export declare const zGetWorkspaceWorkflowResponse: z.ZodObject<{
         id: z.ZodString;
         name: z.ZodString;
         description: z.ZodString;
+        customPrompt: z.ZodOptional<z.ZodString>;
         responsibleAgentId: z.ZodString;
     }, z.core.$strip>>;
 }, z.core.$strip>;
@@ -2065,6 +2070,7 @@ export declare const zSaveWorkspaceWorkflowBody: z.ZodObject<{
         id: z.ZodString;
         name: z.ZodString;
         description: z.ZodString;
+        customPrompt: z.ZodOptional<z.ZodString>;
         responsibleAgentId: z.ZodString;
     }, z.core.$strip>>;
 }, z.core.$strip>;
@@ -2112,6 +2118,7 @@ export declare const zSaveWorkspaceWorkflowResponse: z.ZodObject<{
         id: z.ZodString;
         name: z.ZodString;
         description: z.ZodString;
+        customPrompt: z.ZodOptional<z.ZodString>;
         responsibleAgentId: z.ZodString;
     }, z.core.$strip>>;
 }, z.core.$strip>;
