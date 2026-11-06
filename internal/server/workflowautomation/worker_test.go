@@ -8,18 +8,18 @@ import (
 	"testing"
 	"time"
 
-	workflowautomation "github.com/josemiguelmelo/orkest/internal/server/workflowautomation"
-
 	"github.com/josemiguelmelo/orkest/internal/server/task"
-	"github.com/josemiguelmelo/orkest/internal/server/workspace"
+	taskmodel "github.com/josemiguelmelo/orkest/internal/server/task/model"
+	"github.com/josemiguelmelo/orkest/internal/server/workflowautomation"
+	workspacemodel "github.com/josemiguelmelo/orkest/internal/server/workspace/model"
 )
 
 type sessionDispatcher struct {
-	received *task.StartCommand
+	received *taskmodel.StartCommand
 	accepted bool
 }
 
-func (d *sessionDispatcher) StartTask(_ context.Context, _, _ string, value task.StartCommand) error {
+func (d *sessionDispatcher) StartTask(_ context.Context, _, _ string, value taskmodel.StartCommand) error {
 	d.received = &value
 	return nil
 }
@@ -29,7 +29,7 @@ func (d *sessionDispatcher) TaskCommandAccepted(context.Context, string, string,
 }
 
 func TestWorkflowDeliveryPreservesSessionChoiceAndReconciles(t *testing.T) {
-	repo := &taskRepositoryStub{task: task.Task{ID: "task", WorkspaceID: "workspace", Title: "Task", Status: "review", StageVersion: 2, AssigneeAgentID: "agent"}}
+	repo := &taskRepositoryStub{task: taskmodel.Task{ID: "task", WorkspaceID: "workspace", Title: "Task", Status: "review", StageVersion: 2, AssigneeAgentID: "agent"}}
 	dispatcher := &sessionDispatcher{}
 	service := testService(repo, "member")
 	command := workflowautomation.ExecutionCommand{ID: "turn", OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", ActorID: "user", StageVersion: 2, Options: workflowautomation.StartWorkOptions{SessionMode: "new", PromptText: "revise this"}}
@@ -50,7 +50,7 @@ func TestWorkflowDeliveryPreservesSessionChoiceAndReconciles(t *testing.T) {
 }
 
 func TestWorkflowDeliveryLeavesUnspecifiedSessionChoiceForDispatcher(t *testing.T) {
-	repo := &taskRepositoryStub{task: task.Task{ID: "task", WorkspaceID: "workspace", Title: "Task", Status: "review", StageVersion: 2, AssigneeAgentID: "agent"}}
+	repo := &taskRepositoryStub{task: taskmodel.Task{ID: "task", WorkspaceID: "workspace", Title: "Task", Status: "review", StageVersion: 2, AssigneeAgentID: "agent"}}
 	dispatcher := &sessionDispatcher{}
 	service := testService(repo, "member")
 	command := workflowautomation.ExecutionCommand{ID: "turn", OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", ActorID: "user", StageVersion: 2}
@@ -61,7 +61,7 @@ func TestWorkflowDeliveryLeavesUnspecifiedSessionChoiceForDispatcher(t *testing.
 }
 
 func TestWorkflowDeliveryRechecksMutationPermission(t *testing.T) {
-	repo := &taskRepositoryStub{task: task.Task{ID: "task", StageVersion: 1}}
+	repo := &taskRepositoryStub{task: taskmodel.Task{ID: "task", StageVersion: 1}}
 	dispatcher := &sessionDispatcher{}
 	service := testService(repo, "viewer")
 	delivered, err := deliverCommand(context.Background(), service, dispatcher, workflowautomation.ExecutionCommand{StageVersion: 1})
@@ -108,17 +108,17 @@ func TestWorkflowWorkerProcessesEventsBeforeCommands(t *testing.T) {
 // These adapters exercise delivery with the real task authorization service.
 type taskRepositoryStub struct {
 	task.TaskRepository
-	task task.Task
+	task taskmodel.Task
 }
 
-func (r *taskRepositoryStub) Task(context.Context, string, string, string) (task.Task, error) {
+func (r *taskRepositoryStub) Task(context.Context, string, string, string) (taskmodel.Task, error) {
 	return r.task, nil
 }
 
 type workspaceAccessStub struct{ role string }
 
-func (w workspaceAccessStub) GetWorkspace(context.Context, string, string, string) (workspace.Workspace, error) {
-	return workspace.Workspace{Role: w.role}, nil
+func (w workspaceAccessStub) GetWorkspace(context.Context, string, string, string) (workspacemodel.Workspace, error) {
+	return workspacemodel.Workspace{Role: w.role}, nil
 }
 
 func testService(repo *taskRepositoryStub, role string) *task.TaskService {
@@ -160,7 +160,7 @@ func TestExecutionServiceKeepsAcceptedFailuresVisible(t *testing.T) {
 	if _, err := service.ProcessNextCommand(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if repo.effects.CommandState != "delivered" || repo.effects.WorkState != task.WorkStateFailed || dispatcher.received != nil {
+	if repo.effects.CommandState != "delivered" || repo.effects.WorkState != taskmodel.WorkStateFailed || dispatcher.received != nil {
 		t.Fatalf("accepted failure was overwritten or redispatched: %+v", repo.effects)
 	}
 	repo.healthErr = errors.New("health lookup failed")

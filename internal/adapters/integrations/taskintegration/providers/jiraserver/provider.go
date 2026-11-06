@@ -10,9 +10,10 @@ import (
 	"time"
 
 	"github.com/josemiguelmelo/orkest/internal/server/taskintegration"
+	taskintegrationmodel "github.com/josemiguelmelo/orkest/internal/server/taskintegration/model"
 )
 
-const ProviderID taskintegration.TaskIntegrationSourceProvider = "jira_server"
+const ProviderID taskintegrationmodel.TaskIntegrationSourceProvider = "jira_server"
 
 type JiraServerConfig struct {
 	BaseURL  string   `json:"baseUrl" jsonschema:"format=uri,pattern=^https?://[^/?#]+(?:/[^?#]*)?$" jsonschema_description:"Base URL of the Jira Server instance."`
@@ -27,7 +28,7 @@ func NewJiraServerProvider() JiraServerProvider {
 	return JiraServerProvider{Client: &http.Client{Timeout: 20 * time.Second}}
 }
 
-func (JiraServerProvider) Provider() taskintegration.TaskIntegrationSourceProvider {
+func (JiraServerProvider) Provider() taskintegrationmodel.TaskIntegrationSourceProvider {
 	return ProviderID
 }
 
@@ -85,7 +86,7 @@ func (p JiraServerProvider) Validate(ctx context.Context, raw json.RawMessage, t
 	return p.validateConnection(ctx, strings.TrimRight(strings.TrimSpace(c.BaseURL), "/"), token)
 }
 
-func (p JiraServerProvider) Discover(ctx context.Context, raw json.RawMessage, token string, labels []string) ([]taskintegration.DiscoveredTask, error) {
+func (p JiraServerProvider) Discover(ctx context.Context, raw json.RawMessage, token string, labels []string) ([]taskintegrationmodel.DiscoveredTask, error) {
 	if err := p.ValidateConfig(raw); err != nil {
 		return nil, err
 	}
@@ -107,7 +108,7 @@ func (p JiraServerProvider) Discover(ctx context.Context, raw json.RawMessage, t
 		}
 		jql += " AND labels in (" + strings.Join(q, ",") + ")"
 	}
-	out := []taskintegration.DiscoveredTask{}
+	out := []taskintegrationmodel.DiscoveredTask{}
 	start := 0
 	for {
 		result, err := p.searchIssues(ctx, c.BaseURL, jql, start, token)
@@ -116,7 +117,7 @@ func (p JiraServerProvider) Discover(ctx context.Context, raw json.RawMessage, t
 		}
 		for _, issue := range result.Issues {
 			description, _ := issue.Fields.Description.(string)
-			out = append(out, taskintegration.DiscoveredTask{ID: issue.Key, URL: c.BaseURL + "/browse/" + issue.Key, Title: issue.Fields.Summary, Description: description, Labels: issue.Fields.Labels, Closed: issue.Fields.Status.StatusCategory.Key == "done"})
+			out = append(out, taskintegrationmodel.DiscoveredTask{ID: issue.Key, URL: c.BaseURL + "/browse/" + issue.Key, Title: issue.Fields.Summary, Description: description, Labels: issue.Fields.Labels, Closed: issue.Fields.Status.StatusCategory.Key == "done"})
 		}
 		start += len(result.Issues)
 		if len(result.Issues) == 0 || start >= result.Total {

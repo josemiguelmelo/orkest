@@ -3,8 +3,9 @@ package run
 import (
 	"context"
 
-	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
+	runmodel "github.com/josemiguelmelo/orkest/internal/agentctl/run/model"
 	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
 )
 
@@ -53,7 +54,7 @@ func (c *conversation) ReplayAndReconcile(ctx context.Context) error {
 	hasCommands := len(c.state.queue) != 0 || len(c.state.commands) != 0
 	c.mu.RUnlock()
 	if paused {
-		c.setExecutionState(StateInterrupted)
+		c.setExecutionState(runmodel.StateInterrupted)
 		return c.commitEventUnderEventLock(interaction.Event{Type: interaction.EventQueuePaused})
 	}
 	if hasCommands {
@@ -81,7 +82,7 @@ func (c *conversation) unresolvedCommands(history []interaction.Event) []interac
 	return commands
 }
 
-func journalRunEnded(stateDir string, config runconfig.RunConfig) (bool, error) {
+func journalRunEnded(stateDir string, config configmodel.RunConfig) (bool, error) {
 	journal, events, err := loadJournal(stateDir, config, true)
 	if err != nil {
 		return false, err

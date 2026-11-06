@@ -30,3 +30,14 @@ class DependencyRulesTest(unittest.TestCase):
         self.assertEqual(violations(packages, {}, {}), [key])
         self.assertEqual(violations(packages, {}, {key: 'phase 4'}), [])
         self.assertEqual(violations([], {}, {key: 'phase 4'}), ['stale exception: ' + key])
+
+    def test_models_remain_leaves_without_weakening_context_boundaries(self):
+        source = 'internal/server/task/model'
+        for target in ('internal/server/task', 'internal/server/workflow', 'internal/adapters/postgres',
+                       'internal/agentctl/config/model'):
+            with self.subTest(target=target):
+                self.assertTrue(forbidden(source, target))
+        for target in ('internal/server/workflow/model', 'internal/contracts/problem', 'time'):
+            with self.subTest(target=target):
+                self.assertFalse(forbidden(source, target))
+        self.assertTrue(forbidden('internal/agentctl/run/model', 'internal/agentctl/runtime'))

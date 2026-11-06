@@ -1190,7 +1190,7 @@ paths:
       - {name: workspaceID, in: path, required: true, schema: {type: string}}
       - {name: taskID, in: path, required: true, schema: {type: string}}
       - {name: runID, in: path, required: true, schema: {type: string}}
-      - {name: afterSequence, in: query, required: false, schema: {type: integer, minimum: 0}}
+      - {name: afterSequence, in: query, required: false, schema: {type: integer, minimum: 0, maximum: 9223372036854775807}}
     get:
       tags: [Tasks]
       operationId: listTaskRunEvents
@@ -1299,7 +1299,7 @@ paths:
       - {name: workspaceID, in: path, required: true, schema: {type: string}}
       - {name: conversationID, in: path, required: true, schema: {type: string}}
       - {name: runID, in: path, required: true, schema: {type: string}}
-      - {name: afterSequence, in: query, required: false, schema: {type: integer, minimum: 0}}
+      - {name: afterSequence, in: query, required: false, schema: {type: integer, minimum: 0, maximum: 9223372036854775807}}
     get:
       tags: [Agents]
       operationId: listDirectAgentConversationEvents

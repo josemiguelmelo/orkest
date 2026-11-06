@@ -5,6 +5,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/josemiguelmelo/orkest/internal/server/workspaceenv"
+	workspaceenvmodel "github.com/josemiguelmelo/orkest/internal/server/workspaceenv/model"
 )
 
 type workspaceEnvironmentAPI struct {
@@ -25,7 +26,7 @@ func (a workspaceEnvironmentAPI) list(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a workspaceEnvironmentAPI) put(w http.ResponseWriter, r *http.Request) {
-	var input workspaceenv.Input
+	var input workspaceenvmodel.Input
 	if !decodeBody(w, r, &input) {
 		return
 	}

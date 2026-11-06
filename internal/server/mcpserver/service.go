@@ -12,13 +12,14 @@ import (
 	modelerrors "github.com/josemiguelmelo/orkest/internal/contracts/problem"
 	"github.com/josemiguelmelo/orkest/internal/platform/ids"
 	"github.com/josemiguelmelo/orkest/internal/platform/secretbox"
-	"github.com/josemiguelmelo/orkest/internal/server/workspace"
+	mcpservermodel "github.com/josemiguelmelo/orkest/internal/server/mcpserver/model"
+	workspacemodel "github.com/josemiguelmelo/orkest/internal/server/workspace/model"
 )
 
 var headerNamePattern = regexp.MustCompile(`^[!#$%&'*+.^_\x60|~0-9A-Za-z-]+$`)
 
 type WorkspaceAccess interface {
-	GetWorkspace(context.Context, string, string, string) (workspace.Workspace, error)
+	GetWorkspace(context.Context, string, string, string) (workspacemodel.Workspace, error)
 }
 
 type MCPServerService struct {
@@ -31,39 +32,39 @@ func NewMCPServerService(repository MCPServerRepository, box *secretbox.Box, wor
 	return &MCPServerService{repository: repository, box: box, workspaces: workspaces}
 }
 
-func (s *MCPServerService) List(ctx context.Context, userID, orgID, workspaceID string) ([]Server, error) {
+func (s *MCPServerService) List(ctx context.Context, userID, orgID, workspaceID string) ([]mcpservermodel.Server, error) {
 	if _, err := s.workspaces.GetWorkspace(ctx, userID, orgID, workspaceID); err != nil {
 		return nil, err
 	}
 	return s.repository.List(ctx, workspaceID)
 }
 
-func (s *MCPServerService) Create(ctx context.Context, userID, orgID, workspaceID string, in Input) (Server, error) {
+func (s *MCPServerService) Create(ctx context.Context, userID, orgID, workspaceID string, in mcpservermodel.Input) (mcpservermodel.Server, error) {
 	if err := s.authorize(ctx, userID, orgID, workspaceID); err != nil {
-		return Server{}, err
+		return mcpservermodel.Server{}, err
 	}
 	in, err := normalize(in)
 	if err != nil {
-		return Server{}, err
+		return mcpservermodel.Server{}, err
 	}
 	sealed, err := s.seal(in.Headers)
 	if err != nil {
-		return Server{}, err
+		return mcpservermodel.Server{}, err
 	}
 	id, err := ids.NewUUID()
 	if err != nil {
-		return Server{}, err
+		return mcpservermodel.Server{}, err
 	}
 	return s.repository.Create(ctx, id, workspaceID, in.Name, in.URL, string(sealed))
 }
 
-func (s *MCPServerService) Update(ctx context.Context, userID, orgID, workspaceID, serverID string, in Input) (Server, error) {
+func (s *MCPServerService) Update(ctx context.Context, userID, orgID, workspaceID, serverID string, in mcpservermodel.Input) (mcpservermodel.Server, error) {
 	if err := s.authorize(ctx, userID, orgID, workspaceID); err != nil {
-		return Server{}, err
+		return mcpservermodel.Server{}, err
 	}
 	old, encrypted, err := s.repository.Get(ctx, workspaceID, serverID)
 	if err != nil {
-		return Server{}, err
+		return mcpservermodel.Server{}, err
 	}
 	if strings.TrimSpace(in.Name) == "" {
 		in.Name = old.Name
@@ -73,14 +74,14 @@ func (s *MCPServerService) Update(ctx context.Context, userID, orgID, workspaceI
 	}
 	in, err = normalize(in)
 	if err != nil {
-		return Server{}, err
+		return mcpservermodel.Server{}, err
 	}
 	if in.Headers == nil {
 		return s.repository.Update(ctx, workspaceID, serverID, in.Name, in.URL, encrypted)
 	}
 	sealed, err := s.seal(in.Headers)
 	if err != nil {
-		return Server{}, err
+		return mcpservermodel.Server{}, err
 	}
 	return s.repository.Update(ctx, workspaceID, serverID, in.Name, in.URL, string(sealed))
 }
@@ -110,8 +111,8 @@ func (s *MCPServerService) Delete(ctx context.Context, userID, orgID, workspaceI
 	return s.repository.Delete(ctx, workspaceID, serverID)
 }
 
-func (s *MCPServerService) Resolve(ctx context.Context, workspaceID string, serverIDs []string) ([]RuntimeServer, error) {
-	result := make([]RuntimeServer, 0, len(serverIDs))
+func (s *MCPServerService) Resolve(ctx context.Context, workspaceID string, serverIDs []string) ([]mcpservermodel.RuntimeServer, error) {
+	result := make([]mcpservermodel.RuntimeServer, 0, len(serverIDs))
 	for _, id := range serverIDs {
 		server, encrypted, err := s.repository.Get(ctx, workspaceID, id)
 		if err != nil {
@@ -121,7 +122,7 @@ func (s *MCPServerService) Resolve(ctx context.Context, workspaceID string, serv
 		if err != nil {
 			return nil, err
 		}
-		result = append(result, RuntimeServer{ID: server.ID, Name: server.Name, URL: server.URL, Headers: headers})
+		result = append(result, mcpservermodel.RuntimeServer{ID: server.ID, Name: server.Name, URL: server.URL, Headers: headers})
 	}
 	return result, nil
 }
@@ -175,20 +176,20 @@ func (s *MCPServerService) decrypt(encrypted string) (map[string]string, error) 
 	return headers, nil
 }
 
-func normalize(in Input) (Input, error) {
+func normalize(in mcpservermodel.Input) (mcpservermodel.Input, error) {
 	in.Name = strings.TrimSpace(in.Name)
 	in.URL = strings.TrimSpace(in.URL)
 	u, err := url.Parse(in.URL)
 	if in.Name == "" || len(in.Name) > 200 || err != nil || u == nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || u.User != nil || u.Fragment != "" {
-		return Input{}, modelerrors.ErrInvalid
+		return mcpservermodel.Input{}, modelerrors.ErrInvalid
 	}
 	for key, value := range in.Headers {
 		if !headerNamePattern.MatchString(key) || strings.ContainsAny(value, "\r\n") || len(key) > 256 || len(value) > 8192 {
-			return Input{}, modelerrors.ErrInvalid
+			return mcpservermodel.Input{}, modelerrors.ErrInvalid
 		}
 	}
 	if len(in.Headers) > 50 {
-		return Input{}, modelerrors.ErrInvalid
+		return mcpservermodel.Input{}, modelerrors.ErrInvalid
 	}
 	return in, nil
 }

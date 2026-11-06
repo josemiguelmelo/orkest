@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/josemiguelmelo/orkest/internal/adapters/executors/checkout"
 	dockerexecutor "github.com/josemiguelmelo/orkest/internal/adapters/executors/docker"
 	localexecutor "github.com/josemiguelmelo/orkest/internal/adapters/executors/local"
 	coreruntime "github.com/josemiguelmelo/orkest/internal/contracts/runtimecatalog"
@@ -43,9 +44,7 @@ type Config struct {
 	AgentctlBinary           string
 	ProviderEnv              []string
 	CodingProviders          []coderepository.CodingProvider
-	CodingCredentialResolver interface {
-		CodingCredential(context.Context, string, string) (coderepository.Credentials, error)
-	}
+	CodingCredentialResolver checkout.CredentialResolver
 }
 
 // New constructs the configured executor. An empty kind retains Docker as the default.

@@ -5,11 +5,12 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/josemiguelmelo/orkest/internal/server/skill"
+	skillmodel "github.com/josemiguelmelo/orkest/internal/server/skill/model"
 )
 
 type skillAPI struct {
 	service *skill.CatalogService
-	scope   skill.Scope
+	scope   skillmodel.Scope
 }
 
 func (a skillAPI) routes(r chi.Router, base string) {
@@ -35,7 +36,7 @@ func (a skillAPI) get(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a skillAPI) create(w http.ResponseWriter, r *http.Request) {
-	var body skill.Input
+	var body skillmodel.Input
 	if !decodeBody(w, r, &body) {
 		return
 	}
@@ -44,7 +45,7 @@ func (a skillAPI) create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a skillAPI) update(w http.ResponseWriter, r *http.Request) {
-	var body skill.Input
+	var body skillmodel.Input
 	if !decodeBody(w, r, &body) {
 		return
 	}

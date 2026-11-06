@@ -9,9 +9,10 @@ import (
 	"time"
 
 	"github.com/josemiguelmelo/orkest/internal/server/taskintegration"
+	taskintegrationmodel "github.com/josemiguelmelo/orkest/internal/server/taskintegration/model"
 )
 
-const ProviderID taskintegration.TaskIntegrationSourceProvider = "github_cloud"
+const ProviderID taskintegrationmodel.TaskIntegrationSourceProvider = "github_cloud"
 
 type GitHubCloudConfig struct {
 	ProjectURL string `json:"projectUrl" jsonschema:"format=uri,pattern=^https://github\\.com/(orgs|users)/[^/]+/projects/[1-9][0-9]*(/views/[1-9][0-9]*)?$" jsonschema_description:"GitHub Cloud Projects v2 board URL."`
@@ -25,7 +26,7 @@ func NewGitHubCloudProvider() GitHubCloudProvider {
 	return GitHubCloudProvider{Client: &http.Client{Timeout: 20 * time.Second}}
 }
 
-func (GitHubCloudProvider) Provider() taskintegration.TaskIntegrationSourceProvider {
+func (GitHubCloudProvider) Provider() taskintegrationmodel.TaskIntegrationSourceProvider {
 	return ProviderID
 }
 
@@ -73,7 +74,7 @@ func (p GitHubCloudProvider) Validate(ctx context.Context, raw json.RawMessage, 
 	return nil
 }
 
-func (p GitHubCloudProvider) Discover(ctx context.Context, raw json.RawMessage, token string, filters []string) ([]taskintegration.DiscoveredTask, error) {
+func (p GitHubCloudProvider) Discover(ctx context.Context, raw json.RawMessage, token string, filters []string) ([]taskintegrationmodel.DiscoveredTask, error) {
 	if err := p.ValidateConfig(raw); err != nil {
 		return nil, err
 	}
@@ -86,7 +87,7 @@ func (p GitHubCloudProvider) Discover(ctx context.Context, raw json.RawMessage, 
 	if err != nil {
 		return nil, err
 	}
-	out := make([]taskintegration.DiscoveredTask, 0)
+	out := make([]taskintegrationmodel.DiscoveredTask, 0)
 	cursor := ""
 	for {
 		page, fetchErr := p.fetchPage(ctx, target, token, cursor)
@@ -113,7 +114,7 @@ func (p GitHubCloudProvider) Discover(ctx context.Context, raw json.RawMessage, 
 				id = fmt.Sprintf("%s#%d", content.Repository.NameWithOwner, content.Number)
 				sourceURL = content.URL
 			}
-			out = append(out, taskintegration.DiscoveredTask{ID: id, URL: sourceURL, Title: content.Title, Description: content.Body, Labels: labels, Closed: content.State == "CLOSED"})
+			out = append(out, taskintegrationmodel.DiscoveredTask{ID: id, URL: sourceURL, Title: content.Title, Description: content.Body, Labels: labels, Closed: content.State == "CLOSED"})
 		}
 		if !page.Items.PageInfo.HasNextPage {
 			break

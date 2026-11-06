@@ -5,11 +5,11 @@ import (
 	"sync"
 	"testing"
 
-	workflowautomation "github.com/josemiguelmelo/orkest/internal/server/workflowautomation"
-
 	"github.com/josemiguelmelo/orkest/internal/platform/ids"
-	"github.com/josemiguelmelo/orkest/internal/server/task"
+	taskmodel "github.com/josemiguelmelo/orkest/internal/server/task/model"
 	"github.com/josemiguelmelo/orkest/internal/server/workflow"
+	workflowmodel "github.com/josemiguelmelo/orkest/internal/server/workflow/model"
+	"github.com/josemiguelmelo/orkest/internal/server/workflowautomation"
 )
 
 func testWorkflowEventAdmission(t *testing.T, db *PostgresDatabase, orgID, workspaceID, actorID, agentID string) {
@@ -23,7 +23,7 @@ func testWorkflowEventAdmission(t *testing.T, db *PostgresDatabase, orgID, works
 		return id
 	}
 	definitions := NewWorkflowDefinitionPostgresRepository(db)
-	d := workflow.DefaultDefinition("Event admission")
+	d := workflowmodel.DefaultDefinition("Event admission")
 	d.ID = newID()
 	d.ConfiguredBy = actorID
 	d.Stages[1].ResponsibleAgentID = agentID
@@ -32,8 +32,8 @@ func testWorkflowEventAdmission(t *testing.T, db *PostgresDatabase, orgID, works
 	}
 	tasks := NewTaskPostgresRepository(db)
 	worker := newWorkflowTestWorker(tasks)
-	create := func() task.Task {
-		v, err := createWorkflowTask(ctx, tasks, newID(), workspaceID, task.TaskInput{WorkflowID: d.ID, Title: "Event admission", Status: "in_progress", ActorID: actorID})
+	create := func() taskmodel.Task {
+		v, err := createWorkflowTask(ctx, tasks, newID(), workspaceID, taskmodel.TaskInput{WorkflowID: d.ID, Title: "Event admission", Status: "in_progress", ActorID: actorID})
 		if err != nil {
 			t.Fatal(err)
 		}

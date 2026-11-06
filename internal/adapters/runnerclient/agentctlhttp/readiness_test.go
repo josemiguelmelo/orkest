@@ -10,6 +10,7 @@ import (
 
 	"github.com/coder/websocket"
 	"github.com/josemiguelmelo/orkest/internal/server/orchestration"
+	orchestrationmodel "github.com/josemiguelmelo/orkest/internal/server/orchestration/model"
 )
 
 type unusedConnectionRepository struct {
@@ -36,7 +37,7 @@ func TestUpgradedPeerWithoutReadyFrameTimesOutAndDisconnects(t *testing.T) {
 	defer service.Close()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	err = service.Start(ctx, orchestration.Launch{RunID: "run", Endpoint: server.URL})
+	err = service.Start(ctx, orchestrationmodel.Launch{RunID: "run", Endpoint: server.URL})
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("readiness = %v", err)
 	}

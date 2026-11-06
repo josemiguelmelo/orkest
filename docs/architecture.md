@@ -14,6 +14,35 @@ current code and are enforced by `make check-runtime-boundaries`.
   and forwarding-only interfaces; every interface needs a boundary/consumer purpose.
 - Use domain names/focused functions. Comment unexplained invariants, ownership, locks, recovery.
 
+## File and model organization
+
+Files group cohesive responsibilities rather than individual declarations. Related
+entities, inputs, enums, and value types may share a file. Public domain data lives
+in leaf `model` subpackages; services, consumer-owned interfaces, and policies stay
+in the parent. Models may reference other models within the same server/worker
+boundary, shared contracts, and technical utilities, but never domain services,
+their parent package, or concrete adapters. Architecture checks enforce this rule.
+
+For example, `task/model` groups task/repository values, comments, and execution
+inputs in three files. `orchestration/model` groups configuration, launches/status,
+activity, and interactions. `agentctl/config/model` owns worker configuration and
+validation; `agentctl/run/model` owns public execution status. Callers import those
+packages directly, using aliases such as `taskmodel` when several models meet.
+There are no forwarding aliases in service packages.
+
+Private conversation state, checkpoint records, synchronization details, and
+transaction snapshots/effects remain beside their owning implementation or policy.
+Small runtime contracts remain grouped by boundary. HTTP adapters group private
+request/view DTOs by resource, and versioned wire DTOs remain in their existing
+contract package. Generated sqlc files remain generator-owned.
+
+Shared scalar configuration checks live in `internal/contracts/configvalidation`;
+each domain retains its own models and validation errors. Local and Docker
+executors share checkout preparation through `internal/adapters/executors/checkout`
+while preserving their existing directory layouts and lifecycle ownership. Technical
+slice mapping preserves nil versus empty slices; string deduplication is separate
+from validation that rejects duplicate IDs.
+
 ## System boundary
 
 ```mermaid
@@ -86,7 +115,7 @@ no domain models. Concrete providers and SDKs remain in `internal/adapters`.
 
 `AgentDefinitionUseCase`, `CodeRepositoryService`, and other domain APIs declare
 their dependencies through constructors and consumer-owned ports. Task execution
-uses `task.StartCommand`, separate from the task entity. Nonempty task listing
+uses `taskmodel.StartCommand` from `task/model`, separate from the task entity. Nonempty task listing
 performs a task query and one organization/workspace-scoped repository-reference
 query; an empty listing stops after the task query. The result shape and reference
 order are preserved.

@@ -6,6 +6,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/josemiguelmelo/orkest/internal/adapters/postgres/sqlc"
 	"github.com/josemiguelmelo/orkest/internal/server/task"
+	taskmodel "github.com/josemiguelmelo/orkest/internal/server/task/model"
 )
 
 type TaskUpdatePostgresRepository struct {
@@ -18,8 +19,8 @@ func NewTaskUpdatePostgresRepository(database *PostgresDatabase) *TaskUpdatePost
 	return &TaskUpdatePostgresRepository{pool: database.pool, queries: sqlc.New(database.pool), tasks: NewTaskPostgresRepository(database)}
 }
 
-func (r *TaskUpdatePostgresRepository) WithTaskUpdate(ctx context.Context, userID, orgID, workspaceID, id string, input task.TaskInput, decide func(task.TaskWorkflowSnapshot, task.TaskInput) (task.TaskUpdateEffects, error)) (task.Task, error) {
-	return withTaskChange(ctx, r.pool, r.queries, r.tasks, userID, orgID, workspaceID, id, input.CommandID, func(snapshot task.TaskWorkflowSnapshot) (task.TaskWorkflowEffects, *task.TaskInput, error) {
+func (r *TaskUpdatePostgresRepository) WithTaskUpdate(ctx context.Context, userID, orgID, workspaceID, id string, input taskmodel.TaskInput, decide func(task.TaskWorkflowSnapshot, taskmodel.TaskInput) (task.TaskUpdateEffects, error)) (taskmodel.Task, error) {
+	return withTaskChange(ctx, r.pool, r.queries, r.tasks, userID, orgID, workspaceID, id, input.CommandID, func(snapshot task.TaskWorkflowSnapshot) (task.TaskWorkflowEffects, *taskmodel.TaskInput, error) {
 		effects, err := decide(snapshot, input)
 		if err != nil {
 			return task.TaskWorkflowEffects{}, nil, err

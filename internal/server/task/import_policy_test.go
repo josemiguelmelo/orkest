@@ -3,11 +3,11 @@ package task
 import (
 	"testing"
 
-	"github.com/josemiguelmelo/orkest/internal/server/workflow"
+	workflowmodel "github.com/josemiguelmelo/orkest/internal/server/workflow/model"
 )
 
 func TestImportedTaskLifecycleUsesConfiguredStages(t *testing.T) {
-	d := workflow.DefaultDefinition("Imported")
+	d := workflowmodel.DefaultDefinition("Imported")
 	d.InitialStageID = "in_review"
 	d.Stages[2].ResponsibleAgentID = "reviewer"
 	service := &TaskService{}

@@ -6,11 +6,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/josemiguelmelo/orkest/internal/server/executionprofile"
+	executionprofilemodel "github.com/josemiguelmelo/orkest/internal/server/executionprofile/model"
 )
 
 func TestPrepareRendersEmbeddedDockerfileTemplate(t *testing.T) {
-	build := executionprofile.Build{
+	build := executionprofilemodel.Build{
 		Runtime:           "opencode",
 		RuntimeVersion:    "opencode v2.1.4",
 		ResolvedBase:      "registry.example.com/base@sha256:" + strings.Repeat("a", 64),

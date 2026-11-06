@@ -11,9 +11,10 @@ Paths are relative to the repository root.
 
 | Package | Owns |
 | --- | --- |
-| `internal/agentctl/config` | Resolved configuration, validation, cloning |
+| `internal/agentctl/config/model` | Resolved configuration, domain validation errors, validation and cloning |
 | `internal/agentctl/interaction` | Commands, approvals, updates, durable events, command markers |
 | `internal/agentctl/run` | Controller, private conversation engine/reducer, queues, journals, checkpoints and restoration policy |
+| `internal/agentctl/run/model` | Public execution states and run status |
 | `internal/agentctl/runtime` | Normalized host/session, provisioning, protocol and error contracts |
 | `internal/adapters/runtime/runtimehost` | Subprocesses, stdio, task leases, provisioning, native manifests and replay evidence |
 | `internal/adapters/runtime/acp` | ACP SDK communication and normalized callbacks |
@@ -24,7 +25,7 @@ Paths are relative to the repository root.
 
 Server domains own separate execution models. Neither server nor worker domains
 import the other or concrete adapters. HTTP adapters translate transport values;
-SDK types stay inside adapters. `config` and `interaction` do not depend on run
+SDK types stay inside adapters. Configuration models and `interaction` do not depend on run
 execution. Concrete runtime profiles and ACP never import the run controller or
 server services. [Architecture checks](testing.md#architecture-checks) enforce
 these directions.

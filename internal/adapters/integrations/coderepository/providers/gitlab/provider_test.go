@@ -7,7 +7,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/josemiguelmelo/orkest/internal/server/coderepository"
+	coderepositorymodel "github.com/josemiguelmelo/orkest/internal/server/coderepository/model"
 )
 
 func TestGitLabProviderDiscoveryAndAuthentication(t *testing.T) {
@@ -29,10 +29,10 @@ func TestGitLabProviderDiscoveryAndAuthentication(t *testing.T) {
 	}))
 	defer server.Close()
 	provider := Provider{Name: ServerProviderName, Client: server.Client()}
-	if err := provider.ValidateAuthentication(context.Background(), json.RawMessage(`{"baseUrl":"`+server.URL+`"}`), coderepository.Credentials{Token: "secret"}); err != nil {
+	if err := provider.ValidateAuthentication(context.Background(), json.RawMessage(`{"baseUrl":"`+server.URL+`"}`), coderepositorymodel.Credentials{Token: "secret"}); err != nil {
 		t.Fatal(err)
 	}
-	page, err := provider.DiscoverRepositories(context.Background(), json.RawMessage(`{"baseUrl":"`+server.URL+`"}`), coderepository.Credentials{Token: "secret"}, 1, 1)
+	page, err := provider.DiscoverRepositories(context.Background(), json.RawMessage(`{"baseUrl":"`+server.URL+`"}`), coderepositorymodel.Credentials{Token: "secret"}, 1, 1)
 	if err != nil {
 		t.Fatal(err)
 	}

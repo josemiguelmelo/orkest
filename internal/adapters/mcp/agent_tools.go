@@ -17,10 +17,11 @@ import (
 	"time"
 
 	"github.com/josemiguelmelo/orkest/internal/server/artifact"
-	"github.com/josemiguelmelo/orkest/internal/server/coderepository"
-	"github.com/josemiguelmelo/orkest/internal/server/mcpserver"
-	"github.com/josemiguelmelo/orkest/internal/server/orchestration"
-	"github.com/josemiguelmelo/orkest/internal/server/task"
+	artifactmodel "github.com/josemiguelmelo/orkest/internal/server/artifact/model"
+	coderepositorymodel "github.com/josemiguelmelo/orkest/internal/server/coderepository/model"
+	mcpservermodel "github.com/josemiguelmelo/orkest/internal/server/mcpserver/model"
+	orchestrationmodel "github.com/josemiguelmelo/orkest/internal/server/orchestration/model"
+	taskmodel "github.com/josemiguelmelo/orkest/internal/server/task/model"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
@@ -31,10 +32,10 @@ type AgentTools struct {
 	key          []byte
 	endpoint     string
 	repositories interface {
-		List(context.Context, string, string, string) ([]coderepository.CodeRepository, error)
+		List(context.Context, string, string, string) ([]coderepositorymodel.CodeRepository, error)
 	}
 	tasks interface {
-		Get(context.Context, string, string, string, string) (task.Task, error)
+		Get(context.Context, string, string, string, string) (taskmodel.Task, error)
 	}
 }
 
@@ -48,13 +49,13 @@ type agentClaims struct {
 }
 
 type listWorkspaceRepositoriesOutput struct {
-	Repositories []coderepository.CodeRepository `json:"repositories"`
+	Repositories []coderepositorymodel.CodeRepository `json:"repositories"`
 }
 
 func NewAgentTools(key, endpoint string, repositories interface {
-	List(context.Context, string, string, string) ([]coderepository.CodeRepository, error)
+	List(context.Context, string, string, string) ([]coderepositorymodel.CodeRepository, error)
 }, tasks interface {
-	Get(context.Context, string, string, string, string) (task.Task, error)
+	Get(context.Context, string, string, string, string) (taskmodel.Task, error)
 }, artifacts *artifact.ArtifactService,
 ) (*AgentTools, error) {
 	key = strings.TrimSpace(key)
@@ -102,20 +103,20 @@ func AgentToolsTokenKey(dataRoot, configured string) (string, error) {
 	return base64.RawURLEncoding.EncodeToString(value), nil
 }
 
-func (s *AgentTools) RuntimeServer(userID, orgID, workspaceID, taskID string) (mcpserver.RuntimeServer, error) {
+func (s *AgentTools) RuntimeServer(userID, orgID, workspaceID, taskID string) (mcpservermodel.RuntimeServer, error) {
 	return s.RuntimeServerForRun(userID, orgID, workspaceID, taskID, "")
 }
 
-func (s *AgentTools) RuntimeServerForRun(userID, orgID, workspaceID, taskID, runID string) (mcpserver.RuntimeServer, error) {
+func (s *AgentTools) RuntimeServerForRun(userID, orgID, workspaceID, taskID, runID string) (mcpservermodel.RuntimeServer, error) {
 	claims := agentClaims{RunID: runID, UserID: userID, OrgID: orgID, WorkspaceID: workspaceID, TaskID: taskID, Expires: time.Now().Add(24 * time.Hour).Unix()}
 	payload, err := json.Marshal(claims)
 	if err != nil {
-		return mcpserver.RuntimeServer{}, err
+		return mcpservermodel.RuntimeServer{}, err
 	}
 	encoded := base64.RawURLEncoding.EncodeToString(payload)
 	mac := hmac.New(sha256.New, s.key)
 	_, _ = mac.Write([]byte(encoded))
-	return mcpserver.RuntimeServer{ID: orchestration.OrkestMCPServerID, Name: "Orkest", URL: s.endpoint, Headers: map[string]string{"Authorization": "Bearer " + encoded + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil))}}, nil
+	return mcpservermodel.RuntimeServer{ID: orchestrationmodel.OrkestMCPServerID, Name: "Orkest", URL: s.endpoint, Headers: map[string]string{"Authorization": "Bearer " + encoded + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil))}}, nil
 }
 
 func (s *AgentTools) Handler() http.Handler {
@@ -147,7 +148,7 @@ func (s *AgentTools) Handler() http.Handler {
 			return nil, value, nil
 		})
 		if s.artifacts != nil {
-			scope := artifact.Scope{UserID: claims.UserID, OrganizationID: claims.OrgID, WorkspaceID: claims.WorkspaceID, TaskID: claims.TaskID, RunID: claims.RunID}
+			scope := artifactmodel.Scope{UserID: claims.UserID, OrganizationID: claims.OrgID, WorkspaceID: claims.WorkspaceID, TaskID: claims.TaskID, RunID: claims.RunID}
 			mcp.AddTool(server, &mcp.Tool{Name: "list_artifacts", Description: "List current artifact revisions for this task."}, func(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, any, error) {
 				value, err := s.artifacts.List(ctx, scope)
 				if err != nil {
@@ -166,10 +167,10 @@ func (s *AgentTools) Handler() http.Handler {
 				return nil, value, nil
 			})
 			if claims.RunID != "" {
-				mcp.AddTool(server, &mcp.Tool{Name: "publish_artifact", Description: "Publish a task output: stored text/JSON or an external HTTP(S) reference. Reuse idempotencyKey only for an identical retry. To revise, supply artifactId and expectedRevision. Kind and outputName remain fixed."}, func(ctx context.Context, _ *mcp.CallToolRequest, input artifact.PublishInput) (*mcp.CallToolResult, artifact.Revision, error) {
+				mcp.AddTool(server, &mcp.Tool{Name: "publish_artifact", Description: "Publish a task output: stored text/JSON or an external HTTP(S) reference. Reuse idempotencyKey only for an identical retry. To revise, supply artifactId and expectedRevision. Kind and outputName remain fixed."}, func(ctx context.Context, _ *mcp.CallToolRequest, input artifactmodel.PublishInput) (*mcp.CallToolResult, artifactmodel.Revision, error) {
 					value, err := s.artifacts.Publish(ctx, scope, input)
 					if err != nil {
-						return nil, artifact.Revision{}, errors.New("unable to publish artifact: check input, revision and run state")
+						return nil, artifactmodel.Revision{}, errors.New("unable to publish artifact: check input, revision and run state")
 					}
 					return nil, value, nil
 				})

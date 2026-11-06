@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
 	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
 	coreruntime "github.com/josemiguelmelo/orkest/internal/contracts/runtimecatalog"
 )
@@ -48,7 +48,7 @@ func (p Profile) BuildProvisioningPlan(_ agentruntime.ResolvedRuntimeSettings, p
 }
 
 func (Profile) NativeSessionMode(settings agentruntime.ResolvedRuntimeSettings) string {
-	if settings.Agent.PermissionPolicy == runconfig.PermissionPolicyAutonomous {
+	if settings.Agent.PermissionPolicy == configmodel.PermissionPolicyAutonomous {
 		return "bypassPermissions"
 	}
 	return ""
@@ -57,11 +57,11 @@ func (Profile) NativeSessionMode(settings agentruntime.ResolvedRuntimeSettings) 
 func (Profile) ProtocolSessionOptions(settings agentruntime.ResolvedRuntimeSettings, _ agentruntime.ProvisioningPaths) agentruntime.ProtocolSessionOptions {
 	instructions := strings.TrimSpace(settings.Agent.Instructions)
 	for _, skill := range settings.Skills {
-		if runconfig.ValidSkillID(skill.ID) && strings.TrimSpace(skill.SkillMD) != "" {
+		if configmodel.ValidSkillID(skill.ID) && strings.TrimSpace(skill.SkillMD) != "" {
 			instructions += "\n\n## Skill: " + skill.ID + "\n\n" + strings.TrimSpace(skill.SkillMD)
 		}
 	}
-	allowSkipPermissions := settings.Agent.PermissionPolicy == runconfig.PermissionPolicyAutonomous
+	allowSkipPermissions := settings.Agent.PermissionPolicy == configmodel.PermissionPolicyAutonomous
 	return agentruntime.ProtocolSessionOptions{
 		Model: settings.Model.ID,
 		Metadata: map[string]any{

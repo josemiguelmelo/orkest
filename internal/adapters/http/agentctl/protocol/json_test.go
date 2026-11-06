@@ -9,13 +9,12 @@ import (
 	"testing"
 	"time"
 
+	runmodel "github.com/josemiguelmelo/orkest/internal/agentctl/run/model"
 	wire "github.com/josemiguelmelo/orkest/internal/contracts/agentctl/v1"
-
-	agentrun "github.com/josemiguelmelo/orkest/internal/agentctl/run"
 )
 
 func TestSnapshotMapsRunScope(t *testing.T) {
-	status := agentrun.RunStatus{
+	status := runmodel.RunStatus{
 		OrganizationID: "org-1",
 		WorkspaceID:    "workspace-2",
 		TaskID:         "task-3",

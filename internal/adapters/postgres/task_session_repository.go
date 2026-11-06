@@ -12,17 +12,18 @@ import (
 	modelerrors "github.com/josemiguelmelo/orkest/internal/contracts/problem"
 	"github.com/josemiguelmelo/orkest/internal/platform/secretbox"
 	"github.com/josemiguelmelo/orkest/internal/server/orchestration"
+	orchestrationmodel "github.com/josemiguelmelo/orkest/internal/server/orchestration/model"
 )
 
-func (r *AgentLaunchPostgresRepository) CurrentSession(ctx context.Context, orgID, workspaceID, taskID string) (orchestration.RunConfig, bool, error) {
+func (r *AgentLaunchPostgresRepository) CurrentSession(ctx context.Context, orgID, workspaceID, taskID string) (orchestrationmodel.RunConfig, bool, error) {
 	row, err := r.queries.CurrentTaskAgentSession(ctx, sqlc.CurrentTaskAgentSessionParams{OrganizationID: orgID, WorkspaceID: workspaceID, TaskID: taskID})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return orchestration.RunConfig{}, false, nil
+		return orchestrationmodel.RunConfig{}, false, nil
 	}
 	if err != nil {
-		return orchestration.RunConfig{}, false, fmt.Errorf("read current task session: %w", err)
+		return orchestrationmodel.RunConfig{}, false, fmt.Errorf("read current task session: %w", err)
 	}
-	var config orchestration.RunConfig
+	var config orchestrationmodel.RunConfig
 	if err := json.Unmarshal(row.Configuration, &config); err != nil {
 		return config, false, fmt.Errorf("decode session configuration: %w", err)
 	}
@@ -35,8 +36,8 @@ func (r *AgentLaunchPostgresRepository) CurrentSession(ctx context.Context, orgI
 			return config, false, errors.New("decrypt task session environment")
 		}
 		var secrets struct {
-			Environment    map[string]string             `json:"environment"`
-			GitCredentials []orchestration.GitCredential `json:"gitCredentials"`
+			Environment    map[string]string                  `json:"environment"`
+			GitCredentials []orchestrationmodel.GitCredential `json:"gitCredentials"`
 		}
 		if err := json.Unmarshal([]byte(plain), &secrets); err != nil {
 			return config, false, errors.New("decode task session environment")
@@ -54,7 +55,7 @@ func (r *AgentLaunchPostgresRepository) CurrentSession(ctx context.Context, orgI
 	return config, true, nil
 }
 
-func (r *AgentLaunchPostgresRepository) ReserveSessionRun(ctx context.Context, config orchestration.RunConfig, expectedStageVersion int64) error {
+func (r *AgentLaunchPostgresRepository) ReserveSessionRun(ctx context.Context, config orchestrationmodel.RunConfig, expectedStageVersion int64) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err
@@ -123,7 +124,7 @@ func (r *AgentLaunchPostgresRepository) ReserveSessionRun(ctx context.Context, c
 			return err
 		}
 	}
-	if err := q.InsertAgentLaunch(ctx, sqlc.InsertAgentLaunchParams{ExecutionImage: config.ExecutionImage, RunID: config.RunID, OrganizationID: config.OrganizationID, WorkspaceID: config.WorkspaceID, TaskID: config.TaskID, TaskSessionID: pgtype.Text{String: config.TaskSessionID, Valid: true}, Status: string(orchestration.LaunchStarting)}); err != nil {
+	if err := q.InsertAgentLaunch(ctx, sqlc.InsertAgentLaunchParams{ExecutionImage: config.ExecutionImage, RunID: config.RunID, OrganizationID: config.OrganizationID, WorkspaceID: config.WorkspaceID, TaskID: config.TaskID, TaskSessionID: pgtype.Text{String: config.TaskSessionID, Valid: true}, Status: string(orchestrationmodel.LaunchStarting)}); err != nil {
 		return err
 	}
 	if err := q.BindWorkflowRun(ctx, sqlc.BindWorkflowRunParams{WorkspaceID: config.WorkspaceID, ID: config.TaskID, WorkflowRunID: pgtype.Text{String: config.RunID, Valid: true}}); err != nil {
@@ -146,9 +147,9 @@ func (r *AgentLaunchPostgresRepository) ReserveSessionRun(ctx context.Context, c
 	return tx.Commit(ctx)
 }
 
-func (r *AgentLaunchPostgresRepository) sessionSnapshot(config orchestration.RunConfig) ([]byte, error) {
+func (r *AgentLaunchPostgresRepository) sessionSnapshot(config orchestrationmodel.RunConfig) ([]byte, error) {
 	snapshot := config
-	snapshot.MCPServers = append([]orchestration.MCPServer(nil), config.MCPServers...)
+	snapshot.MCPServers = append([]orchestrationmodel.MCPServer(nil), config.MCPServers...)
 	for i := range snapshot.MCPServers {
 		snapshot.MCPServers[i].Headers = nil
 	}
@@ -157,8 +158,8 @@ func (r *AgentLaunchPostgresRepository) sessionSnapshot(config orchestration.Run
 			return nil, secretbox.ErrKeyUnavailable
 		}
 		encoded, err := json.Marshal(struct {
-			Environment    map[string]string             `json:"environment,omitempty"`
-			GitCredentials []orchestration.GitCredential `json:"gitCredentials,omitempty"`
+			Environment    map[string]string                  `json:"environment,omitempty"`
+			GitCredentials []orchestrationmodel.GitCredential `json:"gitCredentials,omitempty"`
 		}{snapshot.Environment, snapshot.GitCredentials})
 		if err != nil {
 			return nil, err
@@ -183,7 +184,7 @@ func (r *AgentLaunchPostgresRepository) RecordPrompt(ctx context.Context, runID,
 		return false, err
 	}
 	if previous.Prompt != prompt {
-		return false, orchestration.ErrCommand
+		return false, orchestrationmodel.ErrCommand
 	}
 	return previous.Delivered, nil
 }
@@ -213,7 +214,7 @@ func (r *AgentLaunchPostgresRepository) TaskCommand(ctx context.Context, orgID, 
 		return false, err
 	}
 	if prompt != "" && prompt != previous {
-		return false, orchestration.ErrCommand
+		return false, orchestrationmodel.ErrCommand
 	}
 	return true, nil
 }

@@ -16,6 +16,7 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/adapters/imagebuild"
 	coreruntime "github.com/josemiguelmelo/orkest/internal/contracts/runtimecatalog"
 	"github.com/josemiguelmelo/orkest/internal/server/executionprofile"
+	executionprofilemodel "github.com/josemiguelmelo/orkest/internal/server/executionprofile/model"
 )
 
 func currentContainerUser() (string, error) {
@@ -140,7 +141,7 @@ func (b *ImageStore) inspect(ctx context.Context, image string) (inspectedImage,
 	return rows[0], nil
 }
 
-func (b *ImageStore) artifact(ctx context.Context, build executionprofile.Build, ref string) (string, error) {
+func (b *ImageStore) artifact(ctx context.Context, build executionprofilemodel.Build, ref string) (string, error) {
 	image, err := b.inspect(ctx, ref)
 	if err != nil {
 		return "", err
@@ -171,7 +172,7 @@ func (b *ImageStore) artifact(ctx context.Context, build executionprofile.Build,
 	return "", errors.New("pushed image digest unavailable")
 }
 
-func (b *ImageStore) validate(ctx context.Context, image string, build executionprofile.Build) error {
+func (b *ImageStore) validate(ctx context.Context, image string, build executionprofilemodel.Build) error {
 	name := "orkest-validate-" + build.ID
 	args := []string{"run", "--name", name, "--rm", "--network", "none", "--memory", "512m", "--pids-limit", "128", "--cpus", "1", "--user", b.user, "--env", "HOME=/agentctl-state", "--env", "XDG_DATA_HOME=/agentctl-state/data", "--env", "XDG_CACHE_HOME=/agentctl-state/cache", "--tmpfs", "/workspace:mode=1777", "--tmpfs", "/agentctl-state:mode=1777", "--entrypoint", "/bin/sh", image, "-c", "test -x /usr/local/bin/agentctl && test -w /workspace && test -w /agentctl-state && " + runtimeProbe(build.Runtime, build.RuntimeVersion)}
 	_, err := b.command(ctx, args...)
@@ -197,7 +198,7 @@ func runtimeProbe(runtime coreruntime.Runtime, version string) string {
 	return "test \"$(codex-acp --version)\" = '@agentclientprotocol/codex-acp " + version + "'"
 }
 
-func (b *ImageStore) Verify(ctx context.Context, build executionprofile.Build, ref string) (string, error) {
+func (b *ImageStore) Verify(ctx context.Context, build executionprofilemodel.Build, ref string) (string, error) {
 	if _, err := b.command(ctx, "pull", b.registry.ForDocker(ref)); err != nil {
 		return "", executionprofile.Failure("verify_pull_image", commandReason(err, "Docker could not pull the image for verification; check registry reachability and credentials."), err)
 	}
@@ -211,7 +212,7 @@ func (b *ImageStore) Verify(ctx context.Context, build executionprofile.Build, r
 	return image, nil
 }
 
-func (b *ImageStore) ResolveInputs(ctx context.Context, build executionprofile.Build) (executionprofile.Build, error) {
+func (b *ImageStore) ResolveInputs(ctx context.Context, build executionprofilemodel.Build) (executionprofilemodel.Build, error) {
 	resolve := func(ref string) (string, error) {
 		dockerRef := b.registry.ForDocker(ref)
 		_, pullErr := b.command(ctx, "pull", dockerRef)

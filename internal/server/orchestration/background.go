@@ -3,6 +3,8 @@ package orchestration
 import (
 	"context"
 	"sync"
+
+	orchestrationmodel "github.com/josemiguelmelo/orkest/internal/server/orchestration/model"
 )
 
 // backgroundWork gates admission before cancellation and joining. It owns only
@@ -40,8 +42,8 @@ func (b *backgroundWork) Close() {
 }
 
 // reconcileBatch uses fixed workers for bounded attempts, never persistent streams.
-func reconcileBatch(ctx context.Context, launches []Launch, attempt func(context.Context, Launch)) {
-	jobs := make(chan Launch)
+func reconcileBatch(ctx context.Context, launches []orchestrationmodel.Launch, attempt func(context.Context, orchestrationmodel.Launch)) {
+	jobs := make(chan orchestrationmodel.Launch)
 	var work sync.WaitGroup
 	for range 4 {
 		work.Go(func() {

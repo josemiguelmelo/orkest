@@ -1,58 +1,30 @@
 package workflowautomation
 
-import "github.com/josemiguelmelo/orkest/internal/server/workflow"
-
-type Event struct{ Type workflow.EventType }
-
-type (
-	EventMatcher interface {
-		Matches(Event, StageTransitionPlan) bool
-	}
-	AutomationAction interface {
-		Plan(workflow.Definition, StageTransitionPlan) (StageTransitionPlan, error)
-	}
-	AutomationEvaluator interface {
-		Evaluate(workflow.Definition, StageTransitionPlan, Event) (StageTransitionPlan, error)
-	}
+import (
+	workflowmodel "github.com/josemiguelmelo/orkest/internal/server/workflow/model"
 )
 
-type StageEventMatcher struct {
-	Event   workflow.EventType
-	StageID string
-}
+type Event struct{ Type workflowmodel.EventType }
 
-func (m StageEventMatcher) Matches(e Event, p StageTransitionPlan) bool {
-	return e.Type == m.Event && p.StageID == m.StageID
-}
-
-type MoveTaskAction struct{ TargetStageID string }
-
-func (a MoveTaskAction) Plan(d workflow.Definition, p StageTransitionPlan) (StageTransitionPlan, error) {
-	return PlanStageTransition(d, p.StageID, a.TargetStageID, p.AssigneeAgentID, Enter)
-}
-
-type StartWorkAction struct{}
-
-func (StartWorkAction) Plan(d workflow.Definition, p StageTransitionPlan) (StageTransitionPlan, error) {
-	return PlanStageTransition(d, p.StageID, "", p.AssigneeAgentID, Start)
+type AutomationEvaluator interface {
+	Evaluate(workflowmodel.Definition, StageTransitionPlan, Event) (StageTransitionPlan, error)
 }
 
 type WorkflowRuleEvaluator struct{}
 
-func (WorkflowRuleEvaluator) Evaluate(d workflow.Definition, p StageTransitionPlan, e Event) (StageTransitionPlan, error) {
-	p.Completed = e.Type == workflow.RunSucceeded || e.Type == workflow.StageCompleted
-	for _, r := range d.Rules {
-		var matcher EventMatcher = StageEventMatcher{Event: r.Event, StageID: r.SourceStageID}
-		if !r.Enabled || !matcher.Matches(e, p) {
+func (WorkflowRuleEvaluator) Evaluate(definition workflowmodel.Definition, plan StageTransitionPlan, event Event) (StageTransitionPlan, error) {
+	plan.Completed = event.Type == workflowmodel.RunSucceeded || event.Type == workflowmodel.StageCompleted
+	for _, rule := range definition.Rules {
+		if !rule.Enabled || rule.Event != event.Type || rule.SourceStageID != plan.StageID {
 			continue
 		}
-		var action AutomationAction = MoveTaskAction{TargetStageID: r.TargetStageID}
-		if r.Action == workflow.StartWork {
-			action = StartWorkAction{}
+		trigger, targetID := Enter, rule.TargetStageID
+		if rule.Action == workflowmodel.StartWork {
+			trigger, targetID = Start, ""
 		}
-		result, err := action.Plan(d, p)
-		result.RuleID = r.ID
+		result, err := PlanStageTransition(definition, plan.StageID, targetID, plan.AssigneeAgentID, trigger)
+		result.RuleID = rule.ID
 		return result, err
 	}
-	return p, nil
+	return plan, nil
 }

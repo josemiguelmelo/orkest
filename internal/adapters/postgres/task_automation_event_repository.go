@@ -4,15 +4,13 @@ import (
 	"context"
 	"errors"
 
-	"github.com/jackc/pgx/v5/pgxpool"
-
-	workflowautomation "github.com/josemiguelmelo/orkest/internal/server/workflowautomation"
-
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/josemiguelmelo/orkest/internal/adapters/postgres/sqlc"
-	"github.com/josemiguelmelo/orkest/internal/server/task"
-	"github.com/josemiguelmelo/orkest/internal/server/workflow"
+	taskmodel "github.com/josemiguelmelo/orkest/internal/server/task/model"
+	workflowmodel "github.com/josemiguelmelo/orkest/internal/server/workflow/model"
+	"github.com/josemiguelmelo/orkest/internal/server/workflowautomation"
 )
 
 // WithAutomationEvent owns one transaction from claim through acknowledgement.
@@ -54,8 +52,8 @@ func (r *AutomationEventPostgresRepository) WithAutomationEvent(ctx context.Cont
 		return false, err
 	}
 	decision, err := decide(workflowautomation.AutomationEventSnapshot{
-		Workflow: d, Event: workflowautomation.AutomationEvent{ID: e.ID, CorrelationID: e.CorrelationID, WorkspaceID: e.WorkspaceID, TaskID: e.TaskID, Type: workflow.EventType(e.EventType), StageVersion: e.StageVersion, RunID: e.RunID, ActorID: e.ActorID},
-		StageID: state.Status, AssigneeAgentID: state.Assignee, RunID: state.WorkflowRunID, StageVersion: state.StageVersion, WorkState: task.WorkState(state.StageWorkState), ActiveLaunch: active,
+		Workflow: d, Event: workflowautomation.AutomationEvent{ID: e.ID, CorrelationID: e.CorrelationID, WorkspaceID: e.WorkspaceID, TaskID: e.TaskID, Type: workflowmodel.EventType(e.EventType), StageVersion: e.StageVersion, RunID: e.RunID, ActorID: e.ActorID},
+		StageID: state.Status, AssigneeAgentID: state.Assignee, RunID: state.WorkflowRunID, StageVersion: state.StageVersion, WorkState: taskmodel.WorkState(state.StageWorkState), ActiveLaunch: active,
 	})
 	if err != nil {
 		return false, err

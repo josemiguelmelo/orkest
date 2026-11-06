@@ -5,14 +5,14 @@ import (
 	"strings"
 	"testing"
 
-	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
 	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
 )
 
 func TestPrepareEnvironmentIncludesConfiguredHTTPMCPServers(t *testing.T) {
 	root := t.TempDir()
 	settings := agentruntime.ResolvedRuntimeSettings{
-		MCPServers: []runconfig.MCPServer{{ID: "server-id", Name: "Example MCP", URL: "https://example.test/mcp", Headers: map[string]string{"Authorization": "Bearer private"}}},
+		MCPServers: []configmodel.MCPServer{{ID: "server-id", Name: "Example MCP", URL: "https://example.test/mcp", Headers: map[string]string{"Authorization": "Bearer private"}}},
 	}
 	plan, err := (Profile{}).BuildProvisioningPlan(settings, agentruntime.ProvisioningPaths{RuntimeRoot: root, WorkDir: t.TempDir(), ConfigSubdir: "config-run"})
 	if err != nil {
@@ -44,7 +44,7 @@ func TestPrepareEnvironmentIncludesConfiguredHTTPMCPServers(t *testing.T) {
 }
 
 func TestAutonomousPolicyAllowsOpenCodeActions(t *testing.T) {
-	plan, err := (Profile{}).BuildProvisioningPlan(agentruntime.ResolvedRuntimeSettings{Agent: runconfig.AgentDefinition{PermissionPolicy: runconfig.PermissionPolicyAutonomous}}, agentruntime.ProvisioningPaths{RuntimeRoot: t.TempDir(), WorkDir: t.TempDir(), ConfigSubdir: "config-run"})
+	plan, err := (Profile{}).BuildProvisioningPlan(agentruntime.ResolvedRuntimeSettings{Agent: configmodel.AgentDefinition{PermissionPolicy: configmodel.PermissionPolicyAutonomous}}, agentruntime.ProvisioningPaths{RuntimeRoot: t.TempDir(), WorkDir: t.TempDir(), ConfigSubdir: "config-run"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +66,7 @@ func TestAutonomousPolicyAllowsOpenCodeActions(t *testing.T) {
 }
 
 func TestConfiguredModelIsExplicitForACPAndRuntimeDefaults(t *testing.T) {
-	settings := agentruntime.ResolvedRuntimeSettings{Model: runconfig.ModelSelection{Provider: "openrouter", ID: "openai/gpt-5.4-mini"}}
+	settings := agentruntime.ResolvedRuntimeSettings{Model: configmodel.ModelSelection{Provider: "openrouter", ID: "openai/gpt-5.4-mini"}}
 	paths := agentruntime.ProvisioningPaths{RuntimeRoot: t.TempDir(), WorkDir: t.TempDir(), ConfigSubdir: "config-run"}
 	plan, err := (Profile{}).BuildProvisioningPlan(settings, paths)
 	if err != nil {

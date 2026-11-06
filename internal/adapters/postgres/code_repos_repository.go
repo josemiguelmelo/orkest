@@ -11,6 +11,7 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/adapters/postgres/sqlc"
 	modelerrors "github.com/josemiguelmelo/orkest/internal/contracts/problem"
 	"github.com/josemiguelmelo/orkest/internal/server/coderepository"
+	coderepositorymodel "github.com/josemiguelmelo/orkest/internal/server/coderepository/model"
 )
 
 type CodeReposPostgresRepository struct{ queries *sqlc.Queries }
@@ -21,30 +22,30 @@ func NewCodeReposPostgresRepository(database *PostgresDatabase) *CodeReposPostgr
 
 var _ coderepository.CodeReposRepository = (*CodeReposPostgresRepository)(nil)
 
-func (r *CodeReposPostgresRepository) CodeRepositories(ctx context.Context, orgID, workspaceID string) ([]coderepository.CodeRepository, error) {
+func (r *CodeReposPostgresRepository) CodeRepositories(ctx context.Context, orgID, workspaceID string) ([]coderepositorymodel.CodeRepository, error) {
 	rows, err := r.queries.ListCodeRepositories(ctx, sqlc.ListCodeRepositoriesParams{OrganizationID: orgID, WorkspaceID: workspaceID})
 	if err != nil {
 		return nil, err
 	}
-	out := make([]coderepository.CodeRepository, 0, len(rows))
+	out := make([]coderepositorymodel.CodeRepository, 0, len(rows))
 	for _, row := range rows {
 		out = append(out, mapCodeRepository(row.ID, row.WorkspaceID, row.ProviderName, row.Url, row.IntegrationID, row.ProviderRepositoryID, row.DefaultBranch, row.DisplayName, row.IsPrivate))
 	}
 	return out, nil
 }
 
-func (r *CodeReposPostgresRepository) CodeRepository(ctx context.Context, orgID, workspaceID, id string) (coderepository.CodeRepository, error) {
+func (r *CodeReposPostgresRepository) CodeRepository(ctx context.Context, orgID, workspaceID, id string) (coderepositorymodel.CodeRepository, error) {
 	row, err := r.queries.GetCodeRepository(ctx, sqlc.GetCodeRepositoryParams{OrganizationID: orgID, WorkspaceID: workspaceID, ID: id})
 	return mapCodeRepository(row.ID, row.WorkspaceID, row.ProviderName, row.Url, row.IntegrationID, row.ProviderRepositoryID, row.DefaultBranch, row.DisplayName, row.IsPrivate), mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
 }
 
-func (r *CodeReposPostgresRepository) CreateIntegratedCodeRepository(ctx context.Context, item coderepository.CodeRepository) (coderepository.CodeRepository, error) {
+func (r *CodeReposPostgresRepository) CreateIntegratedCodeRepository(ctx context.Context, item coderepositorymodel.CodeRepository) (coderepositorymodel.CodeRepository, error) {
 	row, err := r.queries.InsertIntegratedCodeRepository(ctx, sqlc.InsertIntegratedCodeRepositoryParams{ID: item.ID, WorkspaceID: item.WorkspaceID, ProviderName: item.ProviderName, Url: item.URL, IntegrationID: pgtype.Text{String: item.IntegrationID, Valid: true}, ProviderRepositoryID: pgtype.Text{String: item.ProviderRepositoryID, Valid: true}, DefaultBranch: item.DefaultBranch, DisplayName: item.Name, IsPrivate: item.Private})
 	return mapCodeRepository(row.ID, row.WorkspaceID, row.ProviderName, row.Url, row.IntegrationID, row.ProviderRepositoryID, row.DefaultBranch, row.DisplayName, row.IsPrivate), mapError(err, modelerrors.ErrConflict, modelerrors.ErrConflict)
 }
 
-func mapCodeRepository(id, workspaceID, providerName, url string, integrationID, providerRepositoryID pgtype.Text, defaultBranch, name string, isPrivate bool) coderepository.CodeRepository {
-	item := coderepository.CodeRepository{ID: id, WorkspaceID: workspaceID, ProviderName: providerName, URL: url, DefaultBranch: defaultBranch, Name: name, Private: isPrivate}
+func mapCodeRepository(id, workspaceID, providerName, url string, integrationID, providerRepositoryID pgtype.Text, defaultBranch, name string, isPrivate bool) coderepositorymodel.CodeRepository {
+	item := coderepositorymodel.CodeRepository{ID: id, WorkspaceID: workspaceID, ProviderName: providerName, URL: url, DefaultBranch: defaultBranch, Name: name, Private: isPrivate}
 	if integrationID.Valid {
 		item.IntegrationID = integrationID.String
 	}
@@ -71,31 +72,31 @@ func (r *CodeReposPostgresRepository) DeleteCodeRepository(ctx context.Context, 
 
 var _ coderepository.CodingIntegrationRepository = (*CodeReposPostgresRepository)(nil)
 
-func (r *CodeReposPostgresRepository) ListCodingIntegrations(ctx context.Context, workspaceID string) ([]coderepository.CodingIntegration, error) {
+func (r *CodeReposPostgresRepository) ListCodingIntegrations(ctx context.Context, workspaceID string) ([]coderepositorymodel.CodingIntegration, error) {
 	rows, err := r.queries.ListCodingIntegrations(ctx, workspaceID)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]coderepository.CodingIntegration, 0, len(rows))
+	out := make([]coderepositorymodel.CodingIntegration, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, coderepository.CodingIntegration{ID: row.ID, WorkspaceID: row.WorkspaceID, Name: row.Name, ProviderName: row.ProviderName, ProviderConfig: json.RawMessage(row.ProviderConfig), UpdatedAt: row.UpdatedAt.Time.Format(time.RFC3339)})
+		out = append(out, coderepositorymodel.CodingIntegration{ID: row.ID, WorkspaceID: row.WorkspaceID, Name: row.Name, ProviderName: row.ProviderName, ProviderConfig: json.RawMessage(row.ProviderConfig), UpdatedAt: row.UpdatedAt.Time.Format(time.RFC3339)})
 	}
 	return out, nil
 }
 
-func (r *CodeReposPostgresRepository) GetCodingIntegration(ctx context.Context, workspaceID, id string) (coderepository.CodingIntegration, string, error) {
+func (r *CodeReposPostgresRepository) GetCodingIntegration(ctx context.Context, workspaceID, id string) (coderepositorymodel.CodingIntegration, string, error) {
 	row, err := r.queries.GetCodingIntegration(ctx, sqlc.GetCodingIntegrationParams{WorkspaceID: workspaceID, ID: id})
-	item := coderepository.CodingIntegration{ID: row.ID, WorkspaceID: row.WorkspaceID, Name: row.Name, ProviderName: row.ProviderName, ProviderConfig: json.RawMessage(row.ProviderConfig), UpdatedAt: row.UpdatedAt.Time.Format(time.RFC3339)}
+	item := coderepositorymodel.CodingIntegration{ID: row.ID, WorkspaceID: row.WorkspaceID, Name: row.Name, ProviderName: row.ProviderName, ProviderConfig: json.RawMessage(row.ProviderConfig), UpdatedAt: row.UpdatedAt.Time.Format(time.RFC3339)}
 	return item, row.EncryptedCredential, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
 }
 
-func (r *CodeReposPostgresRepository) CreateCodingIntegration(ctx context.Context, item coderepository.CodingIntegration, credential string) (coderepository.CodingIntegration, error) {
+func (r *CodeReposPostgresRepository) CreateCodingIntegration(ctx context.Context, item coderepositorymodel.CodingIntegration, credential string) (coderepositorymodel.CodingIntegration, error) {
 	row, err := r.queries.InsertCodingIntegration(ctx, sqlc.InsertCodingIntegrationParams{ID: item.ID, WorkspaceID: item.WorkspaceID, Name: item.Name, ProviderName: item.ProviderName, ProviderConfig: item.ProviderConfig, EncryptedCredential: credential})
-	item = coderepository.CodingIntegration{ID: row.ID, WorkspaceID: row.WorkspaceID, Name: row.Name, ProviderName: row.ProviderName, ProviderConfig: json.RawMessage(row.ProviderConfig), UpdatedAt: row.UpdatedAt.Time.Format(time.RFC3339)}
+	item = coderepositorymodel.CodingIntegration{ID: row.ID, WorkspaceID: row.WorkspaceID, Name: row.Name, ProviderName: row.ProviderName, ProviderConfig: json.RawMessage(row.ProviderConfig), UpdatedAt: row.UpdatedAt.Time.Format(time.RFC3339)}
 	return item, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
 }
 
-func (r *CodeReposPostgresRepository) UpdateCodingIntegration(ctx context.Context, item coderepository.CodingIntegration, credential string) error {
+func (r *CodeReposPostgresRepository) UpdateCodingIntegration(ctx context.Context, item coderepositorymodel.CodingIntegration, credential string) error {
 	count, err := r.queries.UpdateCodingIntegration(ctx, sqlc.UpdateCodingIntegrationParams{WorkspaceID: item.WorkspaceID, ID: item.ID, Name: item.Name, ProviderConfig: item.ProviderConfig, EncryptedCredential: credential})
 	if err == nil && count == 0 {
 		return modelerrors.ErrNotFound

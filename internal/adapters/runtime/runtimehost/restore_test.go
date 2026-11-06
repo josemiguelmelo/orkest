@@ -14,7 +14,7 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/adapters/runtime/profiles/opencode"
 	"github.com/josemiguelmelo/orkest/internal/adapters/runtime/profiles/opencode/opencodetest"
 	"github.com/josemiguelmelo/orkest/internal/adapters/runtime/runtimehost"
-	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
 	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
 )
@@ -25,7 +25,7 @@ func TestRestoreSessionAcrossRuns(t *testing.T) {
 		t.Fatal(err)
 	}
 	environment := runtimehost.Environment{WorkDir: t.TempDir(), StateDir: t.TempDir(), GrantedEnv: []string{"ORKEST_ACP_FIXTURE=1"}}
-	config := runconfig.RunConfig{RuntimeConfig: runconfig.RuntimeConfig{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", TaskSessionID: "conversation", RunID: "first", Runtime: "opencode", Model: runconfig.ModelSelection{Provider: "provider", ID: "model"}, Agent: runconfig.AgentDefinition{Name: "Work", Instructions: "Work"}}}
+	config := configmodel.RunConfig{RuntimeConfig: configmodel.RuntimeConfig{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", TaskSessionID: "conversation", RunID: "first", Runtime: "opencode", Model: configmodel.ModelSelection{Provider: "provider", ID: "model"}, Agent: configmodel.AgentDefinition{Name: "Work", Instructions: "Work"}}}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	first, err := opencodetest.NewHost(binary, environment).Launch(ctx, config.ForRuntime())
@@ -66,7 +66,7 @@ func TestRestoreUnavailableNeverCreatesSession(t *testing.T) {
 		t.Fatal(err)
 	}
 	environment := runtimehost.Environment{WorkDir: t.TempDir(), StateDir: t.TempDir(), GrantedEnv: []string{"ORKEST_ACP_FIXTURE=1"}}
-	config := runconfig.RunConfig{RuntimeConfig: runconfig.RuntimeConfig{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", TaskSessionID: "conversation", RunID: "run", Runtime: "opencode", Model: runconfig.ModelSelection{Provider: "provider", ID: "model"}, Agent: runconfig.AgentDefinition{Name: "Work", Instructions: "Work"}}}
+	config := configmodel.RunConfig{RuntimeConfig: configmodel.RuntimeConfig{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", TaskSessionID: "conversation", RunID: "run", Runtime: "opencode", Model: configmodel.ModelSelection{Provider: "provider", ID: "model"}, Agent: configmodel.AgentDefinition{Name: "Work", Instructions: "Work"}}}
 	if _, err := opencodetest.NewHost(binary, environment).Restore(context.Background(), config.ForRuntime()); err == nil {
 		t.Fatal("missing session restored")
 	}
@@ -99,7 +99,7 @@ func TestRestoreCollectsAndSealsHistoryBeforeReconciliation(t *testing.T) {
 	host := runtimehost.New(verifiedHistoryProfile{opencode.Profile{Binary: binary}}, sharedacp.Factory{}, runtimehost.Environment{
 		WorkDir: t.TempDir(), StateDir: t.TempDir(), GrantedEnv: []string{"ORKEST_ACP_FIXTURE=1"},
 	})
-	config := runconfig.RuntimeConfig{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", TaskSessionID: "conversation", RunID: "run", Runtime: "opencode", Model: runconfig.ModelSelection{Provider: "provider", ID: "model"}, Agent: runconfig.AgentDefinition{Name: "Work", Instructions: "Work"}}
+	config := configmodel.RuntimeConfig{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", TaskSessionID: "conversation", RunID: "run", Runtime: "opencode", Model: configmodel.ModelSelection{Provider: "provider", ID: "model"}, Agent: configmodel.AgentDefinition{Name: "Work", Instructions: "Work"}}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	first, err := host.Launch(ctx, config)
@@ -143,7 +143,7 @@ func TestV1ManifestRestoreAndFollowUp(t *testing.T) {
 		t.Fatal(err)
 	}
 	environment := runtimehost.Environment{WorkDir: t.TempDir(), StateDir: t.TempDir(), GrantedEnv: []string{"ORKEST_ACP_FIXTURE=1"}}
-	config := runconfig.RuntimeConfig{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", TaskSessionID: "session", RunID: "revision-2", Runtime: "opencode", Agent: runconfig.AgentDefinition{Name: "Work", Description: "Work", Instructions: "Work"}, Model: runconfig.ModelSelection{Provider: "provider", ID: "model"}}
+	config := configmodel.RuntimeConfig{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", TaskSessionID: "session", RunID: "revision-2", Runtime: "opencode", Agent: configmodel.AgentDefinition{Name: "Work", Description: "Work", Instructions: "Work"}, Model: configmodel.ModelSelection{Provider: "provider", ID: "model"}}
 	fixture, err := os.ReadFile("testdata/session-v1.json")
 	if err != nil {
 		t.Fatal(err)
@@ -187,7 +187,7 @@ func TestUnconfirmedModelPreservesSessionAndAllowsCompatibleFollowUp(t *testing.
 		t.Fatal(err)
 	}
 	environment := runtimehost.Environment{WorkDir: t.TempDir(), StateDir: t.TempDir(), GrantedEnv: []string{"ORKEST_ACP_FIXTURE=1"}}
-	config := runconfig.RuntimeConfig{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", TaskSessionID: "session", RunID: "first", Runtime: "opencode", Agent: runconfig.AgentDefinition{Name: "Work", Instructions: "Work"}, Model: runconfig.ModelSelection{Provider: "provider", ID: "model"}}
+	config := configmodel.RuntimeConfig{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", TaskSessionID: "session", RunID: "first", Runtime: "opencode", Agent: configmodel.AgentDefinition{Name: "Work", Instructions: "Work"}, Model: configmodel.ModelSelection{Provider: "provider", ID: "model"}}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	first, err := opencodetest.NewHost(binary, environment).Launch(ctx, config)

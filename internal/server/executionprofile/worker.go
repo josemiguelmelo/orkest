@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/josemiguelmelo/orkest/internal/platform/ids"
+	executionprofilemodel "github.com/josemiguelmelo/orkest/internal/server/executionprofile/model"
 )
 
 type ExecutionProfileWorker struct {
@@ -94,7 +95,7 @@ func (w *ExecutionProfileWorker) process(ctx context.Context) error {
 		stage = "reconcile_registry_artifact"
 		image, err = w.builder.Reconcile(buildCtx, b)
 	} else {
-		var resolved Build
+		var resolved executionprofilemodel.Build
 		resolved, err = w.builder.ResolveInputs(buildCtx, b)
 		if err == nil {
 			b = resolved

@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
 	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
 )
 
@@ -22,7 +22,7 @@ func (GitLabCLIAuthAdapter) ProviderNames() []string {
 	return []string{"gitlab_cloud", "gitlab_server"}
 }
 
-func (GitLabCLIAuthAdapter) ConfigureCLI(runtimeRoot string, environment []string, credentials []runconfig.GitCredential) ([]string, error) {
+func (GitLabCLIAuthAdapter) ConfigureCLI(runtimeRoot string, environment []string, credentials []configmodel.GitCredential) ([]string, error) {
 	glabPath, err := exec.LookPath("glab")
 	if err != nil {
 		return nil, &agentruntime.LaunchError{Message: "GitLab CLI is unavailable", Cause: err}
@@ -55,7 +55,7 @@ func (GitLabCLIAuthAdapter) ConfigureCLI(runtimeRoot string, environment []strin
 	return prependPath(values, binDir), nil
 }
 
-func gitLabCLIHost(credential runconfig.GitCredential) (string, string, error) {
+func gitLabCLIHost(credential configmodel.GitCredential) (string, string, error) {
 	base := "https://gitlab.com"
 	if credential.ProviderName == "gitlab_server" {
 		var config struct {

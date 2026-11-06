@@ -6,7 +6,7 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/josemiguelmelo/orkest/internal/server/orchestration"
+	orchestrationmodel "github.com/josemiguelmelo/orkest/internal/server/orchestration/model"
 )
 
 // The fixture is the pre-refactor v1 configuration from the durable checkpoint.
@@ -15,10 +15,10 @@ func TestWireConfigurationMatchesV1Fixture(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	config := orchestration.RunConfig{RuntimeConfig: orchestration.RuntimeConfig{
+	config := orchestrationmodel.RunConfig{RuntimeConfig: orchestrationmodel.RuntimeConfig{
 		OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", TaskSessionID: "conversation", RunID: "run", Runtime: "opencode",
-		Agent: orchestration.AgentDefinition{Name: "Work", Description: "Work", Instructions: "Complete the task."}, Model: orchestration.ModelSelection{Provider: "provider", ID: "model"},
-	}, Repositories: []orchestration.WorkspaceRepository{{ID: "must-not-leak"}}, InitialPrompt: "must-not-leak"}
+		Agent: orchestrationmodel.AgentDefinition{Name: "Work", Description: "Work", Instructions: "Complete the task."}, Model: orchestrationmodel.ModelSelection{Provider: "provider", ID: "model"},
+	}, Repositories: []orchestrationmodel.WorkspaceRepository{{ID: "must-not-leak"}}, InitialPrompt: "must-not-leak"}
 	got, err := json.Marshal(toWireRunConfig(config))
 	if err != nil {
 		t.Fatal(err)

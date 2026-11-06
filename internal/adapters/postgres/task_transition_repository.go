@@ -4,17 +4,16 @@ import (
 	"context"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-
-	workflowautomation "github.com/josemiguelmelo/orkest/internal/server/workflowautomation"
-
 	"github.com/josemiguelmelo/orkest/internal/adapters/postgres/sqlc"
 	"github.com/josemiguelmelo/orkest/internal/server/task"
+	taskmodel "github.com/josemiguelmelo/orkest/internal/server/task/model"
+	"github.com/josemiguelmelo/orkest/internal/server/workflowautomation"
 )
 
 // WithTaskTransition loads locked facts and persists the task policy's effects.
 // Command reconciliation precedes application of any new effects.
-func (r *TaskTransitionPostgresRepository) WithTaskTransition(ctx context.Context, userID, orgID, workspaceID, id string, command workflowautomation.TransitionCommand, decide func(workflowautomation.TransitionSnapshot, workflowautomation.TransitionCommand) (workflowautomation.TransitionEffects, error)) (task.Task, error) {
-	return withTaskChange(ctx, r.pool, r.queries, r.tasks, userID, orgID, workspaceID, id, command.Input.CommandID, func(snapshot task.TaskWorkflowSnapshot) (task.TaskWorkflowEffects, *task.TaskInput, error) {
+func (r *TaskTransitionPostgresRepository) WithTaskTransition(ctx context.Context, userID, orgID, workspaceID, id string, command workflowautomation.TransitionCommand, decide func(workflowautomation.TransitionSnapshot, workflowautomation.TransitionCommand) (workflowautomation.TransitionEffects, error)) (taskmodel.Task, error) {
+	return withTaskChange(ctx, r.pool, r.queries, r.tasks, userID, orgID, workspaceID, id, command.Input.CommandID, func(snapshot task.TaskWorkflowSnapshot) (task.TaskWorkflowEffects, *taskmodel.TaskInput, error) {
 		effects, err := decide(workflowautomation.TransitionSnapshot{Workflow: snapshot.Workflow, Task: snapshot.Task, ActiveLaunch: snapshot.ActiveLaunch, RecordedCommand: snapshot.RecordedCommand, RecordedInput: snapshot.RecordedInput, ActorID: snapshot.ActorID, RunID: snapshot.RunID, CandidateCommandID: snapshot.CandidateCommandID}, command)
 		if err != nil {
 			return task.TaskWorkflowEffects{}, nil, err

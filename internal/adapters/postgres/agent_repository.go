@@ -6,11 +6,11 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
-
 	"github.com/josemiguelmelo/orkest/internal/adapters/postgres/sqlc"
 	modelerrors "github.com/josemiguelmelo/orkest/internal/contracts/problem"
 	"github.com/josemiguelmelo/orkest/internal/platform/secretbox"
 	"github.com/josemiguelmelo/orkest/internal/server/agent"
+	agentmodel "github.com/josemiguelmelo/orkest/internal/server/agent/model"
 )
 
 type AgentPostgresRepository struct {
@@ -25,14 +25,14 @@ func NewAgentPostgresRepository(database *PostgresDatabase, box *secretbox.Box) 
 
 var _ agent.AgentDefinitionRepository = (*AgentPostgresRepository)(nil)
 
-func (r *AgentPostgresRepository) Agents(ctx context.Context, orgID, workspaceID string) ([]agent.Agent, error) {
+func (r *AgentPostgresRepository) Agents(ctx context.Context, orgID, workspaceID string) ([]agentmodel.Agent, error) {
 	rows, err := r.queries.ListAgents(ctx, sqlc.ListAgentsParams{OrganizationID: orgID, WorkspaceID: workspaceID})
 	if err != nil {
 		return nil, err
 	}
-	out := make([]agent.Agent, 0, len(rows))
+	out := make([]agentmodel.Agent, 0, len(rows))
 	for _, row := range rows {
-		value := agent.Agent{ID: row.ID, WorkspaceID: row.WorkspaceID, AgentDefinition: agent.AgentDefinition{Name: row.Name, Runtime: agent.Runtime(row.Runtime), Provider: row.Provider, Model: row.Model, Description: row.Description, ExecutionProfileID: row.ExecutionProfileID.String, RuntimeProfileID: row.RuntimeProfileID.String, SystemPrompt: row.SystemPrompt, PermissionPolicy: agent.PermissionPolicy(row.PermissionPolicy)}}
+		value := agentmodel.Agent{ID: row.ID, WorkspaceID: row.WorkspaceID, AgentDefinition: agentmodel.AgentDefinition{Name: row.Name, Runtime: agentmodel.Runtime(row.Runtime), Provider: row.Provider, Model: row.Model, Description: row.Description, ExecutionProfileID: row.ExecutionProfileID.String, RuntimeProfileID: row.RuntimeProfileID.String, SystemPrompt: row.SystemPrompt, PermissionPolicy: agentmodel.PermissionPolicy(row.PermissionPolicy)}}
 		value.MCPServerIDs, err = r.mcpServerIDs(ctx, row.ID)
 		if err != nil {
 			return nil, err
@@ -51,15 +51,15 @@ func (r *AgentPostgresRepository) Agents(ctx context.Context, orgID, workspaceID
 	return out, nil
 }
 
-func (r *AgentPostgresRepository) Agent(ctx context.Context, orgID, workspaceID, id string) (agent.Agent, error) {
+func (r *AgentPostgresRepository) Agent(ctx context.Context, orgID, workspaceID, id string) (agentmodel.Agent, error) {
 	row, err := r.queries.GetAgent(ctx, sqlc.GetAgentParams{OrganizationID: orgID, WorkspaceID: workspaceID, ID: id})
 	if err != nil {
-		return agent.Agent{}, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
+		return agentmodel.Agent{}, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
 	}
-	a := agent.Agent{ID: row.ID, WorkspaceID: row.WorkspaceID, AgentDefinition: agent.AgentDefinition{Name: row.Name, Runtime: agent.Runtime(row.Runtime), Provider: row.Provider, Model: row.Model, Description: row.Description, ExecutionProfileID: row.ExecutionProfileID.String, RuntimeProfileID: row.RuntimeProfileID.String, SystemPrompt: row.SystemPrompt, PermissionPolicy: agent.PermissionPolicy(row.PermissionPolicy)}}
+	a := agentmodel.Agent{ID: row.ID, WorkspaceID: row.WorkspaceID, AgentDefinition: agentmodel.AgentDefinition{Name: row.Name, Runtime: agentmodel.Runtime(row.Runtime), Provider: row.Provider, Model: row.Model, Description: row.Description, ExecutionProfileID: row.ExecutionProfileID.String, RuntimeProfileID: row.RuntimeProfileID.String, SystemPrompt: row.SystemPrompt, PermissionPolicy: agentmodel.PermissionPolicy(row.PermissionPolicy)}}
 	a.Configuration, err = r.configuration(ctx, id)
 	if err != nil {
-		return agent.Agent{}, err
+		return agentmodel.Agent{}, err
 	}
 	a.HasConfiguration = len(a.Configuration) > 0
 	a.MCPServerIDs, err = r.mcpServerIDs(ctx, id)
@@ -69,10 +69,10 @@ func (r *AgentPostgresRepository) Agent(ctx context.Context, orgID, workspaceID,
 	return a, err
 }
 
-func (r *AgentPostgresRepository) CreateAgent(ctx context.Context, id, workspaceID string, definition agent.AgentDefinition) (agent.Agent, error) {
+func (r *AgentPostgresRepository) CreateAgent(ctx context.Context, id, workspaceID string, definition agentmodel.AgentDefinition) (agentmodel.Agent, error) {
 	tx, err := r.database.pool.Begin(ctx)
 	if err != nil {
-		return agent.Agent{}, err
+		return agentmodel.Agent{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	queries := r.queries.WithTx(tx)
@@ -93,7 +93,7 @@ func (r *AgentPostgresRepository) CreateAgent(ctx context.Context, id, workspace
 	if err == nil {
 		err = tx.Commit(ctx)
 	}
-	a := agent.Agent{ID: row.ID, WorkspaceID: row.WorkspaceID, AgentDefinition: agent.AgentDefinition{Name: row.Name, Runtime: agent.Runtime(row.Runtime), Provider: row.Provider, Model: row.Model, Description: row.Description, ExecutionProfileID: row.ExecutionProfileID.String, RuntimeProfileID: row.RuntimeProfileID.String, SystemPrompt: row.SystemPrompt, PermissionPolicy: definition.PermissionPolicy}}
+	a := agentmodel.Agent{ID: row.ID, WorkspaceID: row.WorkspaceID, AgentDefinition: agentmodel.AgentDefinition{Name: row.Name, Runtime: agentmodel.Runtime(row.Runtime), Provider: row.Provider, Model: row.Model, Description: row.Description, ExecutionProfileID: row.ExecutionProfileID.String, RuntimeProfileID: row.RuntimeProfileID.String, SystemPrompt: row.SystemPrompt, PermissionPolicy: definition.PermissionPolicy}}
 	a.Configuration = definition.Configuration
 	a.HasConfiguration = len(a.Configuration) > 0
 	a.MCPServerIDs = definition.MCPServerIDs
@@ -101,10 +101,10 @@ func (r *AgentPostgresRepository) CreateAgent(ctx context.Context, id, workspace
 	return a, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
 }
 
-func (r *AgentPostgresRepository) UpdateAgent(ctx context.Context, orgID, workspaceID, id string, definition agent.AgentDefinition) (agent.Agent, error) {
+func (r *AgentPostgresRepository) UpdateAgent(ctx context.Context, orgID, workspaceID, id string, definition agentmodel.AgentDefinition) (agentmodel.Agent, error) {
 	tx, err := r.database.pool.Begin(ctx)
 	if err != nil {
-		return agent.Agent{}, err
+		return agentmodel.Agent{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	queries := r.queries.WithTx(tx)
@@ -125,7 +125,7 @@ func (r *AgentPostgresRepository) UpdateAgent(ctx context.Context, orgID, worksp
 	if err == nil {
 		err = tx.Commit(ctx)
 	}
-	a := agent.Agent{ID: row.ID, WorkspaceID: row.WorkspaceID, AgentDefinition: agent.AgentDefinition{Name: row.Name, Runtime: agent.Runtime(row.Runtime), Provider: row.Provider, Model: row.Model, Description: row.Description, ExecutionProfileID: row.ExecutionProfileID.String, RuntimeProfileID: row.RuntimeProfileID.String, SystemPrompt: row.SystemPrompt, PermissionPolicy: agent.PermissionPolicy(row.PermissionPolicy)}}
+	a := agentmodel.Agent{ID: row.ID, WorkspaceID: row.WorkspaceID, AgentDefinition: agentmodel.AgentDefinition{Name: row.Name, Runtime: agentmodel.Runtime(row.Runtime), Provider: row.Provider, Model: row.Model, Description: row.Description, ExecutionProfileID: row.ExecutionProfileID.String, RuntimeProfileID: row.RuntimeProfileID.String, SystemPrompt: row.SystemPrompt, PermissionPolicy: agentmodel.PermissionPolicy(row.PermissionPolicy)}}
 	a.Configuration = definition.Configuration
 	a.HasConfiguration = len(a.Configuration) > 0
 	a.MCPServerIDs = definition.MCPServerIDs

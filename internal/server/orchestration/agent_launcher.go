@@ -2,11 +2,13 @@ package orchestration
 
 import (
 	"context"
+
+	orchestrationmodel "github.com/josemiguelmelo/orkest/internal/server/orchestration/model"
 )
 
 // AgentctlStarter starts an independently owned agentctl worker.
 type AgentctlStarter interface {
-	StartAgentctl(context.Context, RunConfig) (Process, error)
+	StartAgentctl(context.Context, orchestrationmodel.RunConfig) (orchestrationmodel.Process, error)
 }
 
 // AgentProcessController inspects and closes processes started by an executor.

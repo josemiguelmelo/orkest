@@ -14,7 +14,7 @@ import (
 	"github.com/distribution/reference"
 	dockerrecipes "github.com/josemiguelmelo/orkest/build/docker"
 	coreruntime "github.com/josemiguelmelo/orkest/internal/contracts/runtimecatalog"
-	"github.com/josemiguelmelo/orkest/internal/server/executionprofile"
+	executionprofilemodel "github.com/josemiguelmelo/orkest/internal/server/executionprofile/model"
 )
 
 var versionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$`)
@@ -29,7 +29,7 @@ type Context struct{ Root, Directory, Destination string }
 func (c *Context) Close() error { return os.RemoveAll(c.Root) }
 
 // Prepare validates the inputs before writing a minimal context without task data.
-func Prepare(build executionprofile.Build) (*Context, error) {
+func Prepare(build executionprofilemodel.Build) (*Context, error) {
 	if _, ok := coreruntime.ProviderFor(build.Runtime); !ok {
 		return nil, errors.New("unsupported runtime")
 	}

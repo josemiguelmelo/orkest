@@ -1,10 +1,11 @@
 package httpapi
 
 import (
-	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
 	wire "github.com/josemiguelmelo/orkest/internal/contracts/agentctl/v1"
 	coreruntime "github.com/josemiguelmelo/orkest/internal/contracts/runtimecatalog"
+	"github.com/josemiguelmelo/orkest/internal/platform/sliceutil"
 )
 
 func toWireUpdate(value interaction.Update) wire.Update {
@@ -18,18 +19,8 @@ func toWireUpdate(value interaction.Update) wire.Update {
 	result.Input = value.Input
 	result.Output = value.Output
 	result.Truncated = value.Truncated
-	if value.Locations != nil {
-		result.Locations = make([]wire.ToolLocation, len(value.Locations))
-		for i := range value.Locations {
-			result.Locations[i] = toWireToolLocation(value.Locations[i])
-		}
-	}
-	if value.Content != nil {
-		result.Content = make([]wire.ToolContent, len(value.Content))
-		for i := range value.Content {
-			result.Content[i] = toWireToolContent(value.Content[i])
-		}
-	}
+	result.Locations = sliceutil.Map(value.Locations, toWireToolLocation)
+	result.Content = sliceutil.Map(value.Content, toWireToolContent)
 	return result
 }
 
@@ -90,17 +81,12 @@ func toWirePermission(value interaction.Permission) wire.Permission {
 	result := wire.Permission{}
 	result.ToolCallID = value.ToolCallID
 	result.Title = value.Title
-	if value.Options != nil {
-		result.Options = make([]wire.PermissionOption, len(value.Options))
-		for i := range value.Options {
-			result.Options[i] = toWirePermissionOption(value.Options[i])
-		}
-	}
+	result.Options = sliceutil.Map(value.Options, toWirePermissionOption)
 	return result
 }
 
-func fromWireAgentDefinition(value wire.AgentDefinition) runconfig.AgentDefinition {
-	result := runconfig.AgentDefinition{}
+func fromWireAgentDefinition(value wire.AgentDefinition) configmodel.AgentDefinition {
+	result := configmodel.AgentDefinition{}
 	result.Name = value.Name
 	result.Description = value.Description
 	result.Instructions = value.Instructions
@@ -108,15 +94,15 @@ func fromWireAgentDefinition(value wire.AgentDefinition) runconfig.AgentDefiniti
 	return result
 }
 
-func fromWireModelSelection(value wire.ModelSelection) runconfig.ModelSelection {
-	result := runconfig.ModelSelection{}
+func fromWireModelSelection(value wire.ModelSelection) configmodel.ModelSelection {
+	result := configmodel.ModelSelection{}
 	result.Provider = value.Provider
 	result.ID = value.ID
 	return result
 }
 
-func fromWireMCPServer(value wire.MCPServer) runconfig.MCPServer {
-	result := runconfig.MCPServer{}
+func fromWireMCPServer(value wire.MCPServer) configmodel.MCPServer {
+	result := configmodel.MCPServer{}
 	result.ID = value.ID
 	result.Name = value.Name
 	result.URL = value.URL
@@ -124,15 +110,15 @@ func fromWireMCPServer(value wire.MCPServer) runconfig.MCPServer {
 	return result
 }
 
-func fromWireSkill(value wire.Skill) runconfig.Skill {
-	result := runconfig.Skill{}
+func fromWireSkill(value wire.Skill) configmodel.Skill {
+	result := configmodel.Skill{}
 	result.ID = value.ID
 	result.SkillMD = value.SkillMD
 	return result
 }
 
-func fromWireGitCredential(value wire.GitCredential) runconfig.GitCredential {
-	result := runconfig.GitCredential{}
+func fromWireGitCredential(value wire.GitCredential) configmodel.GitCredential {
+	result := configmodel.GitCredential{}
 	result.ProviderName = value.ProviderName
 	result.ProviderConfig = value.ProviderConfig
 	result.RepositoryURL = value.RepositoryURL
@@ -141,8 +127,8 @@ func fromWireGitCredential(value wire.GitCredential) runconfig.GitCredential {
 	return result
 }
 
-func fromWireRuntimeConfig(value wire.RuntimeConfig) runconfig.RuntimeConfig {
-	result := runconfig.RuntimeConfig{}
+func fromWireRuntimeConfig(value wire.RuntimeConfig) configmodel.RuntimeConfig {
+	result := configmodel.RuntimeConfig{}
 	result.OrganizationID = value.OrganizationID
 	result.WorkspaceID = value.WorkspaceID
 	result.TaskID = value.TaskID
@@ -151,25 +137,10 @@ func fromWireRuntimeConfig(value wire.RuntimeConfig) runconfig.RuntimeConfig {
 	result.Runtime = coreruntime.Runtime(value.Runtime)
 	result.Agent = fromWireAgentDefinition(value.Agent)
 	result.Model = fromWireModelSelection(value.Model)
-	if value.MCPServers != nil {
-		result.MCPServers = make([]runconfig.MCPServer, len(value.MCPServers))
-		for i := range value.MCPServers {
-			result.MCPServers[i] = fromWireMCPServer(value.MCPServers[i])
-		}
-	}
-	if value.Skills != nil {
-		result.Skills = make([]runconfig.Skill, len(value.Skills))
-		for i := range value.Skills {
-			result.Skills[i] = fromWireSkill(value.Skills[i])
-		}
-	}
+	result.MCPServers = sliceutil.Map(value.MCPServers, fromWireMCPServer)
+	result.Skills = sliceutil.Map(value.Skills, fromWireSkill)
 	result.Environment = value.Environment
-	if value.GitCredentials != nil {
-		result.GitCredentials = make([]runconfig.GitCredential, len(value.GitCredentials))
-		for i := range value.GitCredentials {
-			result.GitCredentials[i] = fromWireGitCredential(value.GitCredentials[i])
-		}
-	}
+	result.GitCredentials = sliceutil.Map(value.GitCredentials, fromWireGitCredential)
 	result.GitCredentialsRequired = value.GitCredentialsRequired
 	return result
 }
@@ -184,8 +155,8 @@ func fromWirePermissionResponse(value wire.PermissionResponse) interaction.Permi
 	return result
 }
 
-func fromWireRunConfig(value wire.RunConfig) runconfig.RunConfig {
-	result := runconfig.RunConfig{}
+func fromWireRunConfig(value wire.RunConfig) configmodel.RunConfig {
+	result := configmodel.RunConfig{}
 	result.RuntimeConfig = fromWireRuntimeConfig(value.RuntimeConfig)
 	result.ExecutionProfileID = value.ExecutionProfileID
 	result.ExecutionImage = value.ExecutionImage

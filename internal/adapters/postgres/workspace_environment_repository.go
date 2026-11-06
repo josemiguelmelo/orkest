@@ -6,6 +6,7 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/adapters/postgres/sqlc"
 	modelerrors "github.com/josemiguelmelo/orkest/internal/contracts/problem"
 	"github.com/josemiguelmelo/orkest/internal/server/workspaceenv"
+	workspaceenvmodel "github.com/josemiguelmelo/orkest/internal/server/workspaceenv/model"
 )
 
 type WorkspaceEnvironmentPostgresRepository struct{ queries *sqlc.Queries }
@@ -16,26 +17,26 @@ func NewWorkspaceEnvironmentPostgresRepository(database *PostgresDatabase) *Work
 
 var _ workspaceenv.WorkspaceEnvironmentRepository = (*WorkspaceEnvironmentPostgresRepository)(nil)
 
-func (r *WorkspaceEnvironmentPostgresRepository) List(ctx context.Context, workspaceID string) ([]workspaceenv.StoredValue, error) {
+func (r *WorkspaceEnvironmentPostgresRepository) List(ctx context.Context, workspaceID string) ([]workspaceenvmodel.StoredValue, error) {
 	rows, err := r.queries.ListWorkspaceEnvironment(ctx, workspaceID)
 	if err != nil {
 		return nil, err
 	}
-	result := make([]workspaceenv.StoredValue, 0, len(rows))
+	result := make([]workspaceenvmodel.StoredValue, 0, len(rows))
 	for _, row := range rows {
-		result = append(result, workspaceenv.StoredValue{Name: row.Name, Value: row.Value, Encrypted: row.Encrypted})
+		result = append(result, workspaceenvmodel.StoredValue{Name: row.Name, Value: row.Value, Encrypted: row.Encrypted})
 	}
 	return result, nil
 }
 
-func (r *WorkspaceEnvironmentPostgresRepository) Resolve(ctx context.Context, workspaceID string) ([]workspaceenv.StoredValue, error) {
+func (r *WorkspaceEnvironmentPostgresRepository) Resolve(ctx context.Context, workspaceID string) ([]workspaceenvmodel.StoredValue, error) {
 	rows, err := r.queries.ResolveWorkspaceEnvironment(ctx, workspaceID)
 	if err != nil {
 		return nil, err
 	}
-	result := make([]workspaceenv.StoredValue, 0, len(rows))
+	result := make([]workspaceenvmodel.StoredValue, 0, len(rows))
 	for _, row := range rows {
-		result = append(result, workspaceenv.StoredValue{Name: row.Name, Value: row.Value, Encrypted: row.Encrypted})
+		result = append(result, workspaceenvmodel.StoredValue{Name: row.Name, Value: row.Value, Encrypted: row.Encrypted})
 	}
 	return result, nil
 }

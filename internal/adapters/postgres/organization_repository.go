@@ -8,6 +8,7 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/adapters/postgres/sqlc"
 	modelerrors "github.com/josemiguelmelo/orkest/internal/contracts/problem"
 	"github.com/josemiguelmelo/orkest/internal/server/organization"
+	organizationmodel "github.com/josemiguelmelo/orkest/internal/server/organization/model"
 )
 
 type OrganizationPostgresRepository struct {
@@ -21,33 +22,33 @@ func NewOrganizationPostgresRepository(database *PostgresDatabase) *Organization
 
 var _ organization.OrganizationRepository = (*OrganizationPostgresRepository)(nil)
 
-func (s *OrganizationPostgresRepository) Organizations(ctx context.Context, userID string) ([]organization.Organization, error) {
+func (s *OrganizationPostgresRepository) Organizations(ctx context.Context, userID string) ([]organizationmodel.Organization, error) {
 	rows, err := s.queries.ListOrganizations(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-	result := make([]organization.Organization, 0, len(rows))
+	result := make([]organizationmodel.Organization, 0, len(rows))
 	for _, row := range rows {
-		result = append(result, organization.Organization{ID: row.ID, Name: row.Name, Role: row.Role})
+		result = append(result, organizationmodel.Organization{ID: row.ID, Name: row.Name, Role: row.Role})
 	}
 	return result, nil
 }
 
-func (s *OrganizationPostgresRepository) Organization(ctx context.Context, userID, orgID string) (organization.Organization, error) {
+func (s *OrganizationPostgresRepository) Organization(ctx context.Context, userID, orgID string) (organizationmodel.Organization, error) {
 	row, err := s.queries.GetOrganization(ctx, sqlc.GetOrganizationParams{ID: orgID, UserID: userID})
-	o := organization.Organization{ID: row.ID, Name: row.Name, Role: row.Role}
+	o := organizationmodel.Organization{ID: row.ID, Name: row.Name, Role: row.Role}
 	return o, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
 }
 
-func (s *OrganizationPostgresRepository) CreateOrganization(ctx context.Context, id, userID, name string) (organization.Organization, error) {
+func (s *OrganizationPostgresRepository) CreateOrganization(ctx context.Context, id, userID, name string) (organizationmodel.Organization, error) {
 	tx, err := s.database.pool.Begin(ctx)
 	if err != nil {
-		return organization.Organization{}, err
+		return organizationmodel.Organization{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	qtx := s.queries.WithTx(tx)
 	row, err := qtx.InsertOrganization(ctx, sqlc.InsertOrganizationParams{ID: id, Name: name})
-	o := organization.Organization{ID: row.ID, Name: row.Name}
+	o := organizationmodel.Organization{ID: row.ID, Name: row.Name}
 	if err != nil {
 		return o, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
 	}
@@ -62,9 +63,9 @@ func (s *OrganizationPostgresRepository) CreateOrganization(ctx context.Context,
 	return o, nil
 }
 
-func (s *OrganizationPostgresRepository) UpdateOrganization(ctx context.Context, id, userID, name string) (organization.Organization, error) {
+func (s *OrganizationPostgresRepository) UpdateOrganization(ctx context.Context, id, userID, name string) (organizationmodel.Organization, error) {
 	row, err := s.queries.UpdateOrganization(ctx, sqlc.UpdateOrganizationParams{ID: id, UserID: userID, Name: name})
-	o := organization.Organization{ID: row.ID, Name: row.Name, Role: row.Role}
+	o := organizationmodel.Organization{ID: row.ID, Name: row.Name, Role: row.Role}
 	return o, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
 }
 
@@ -81,14 +82,14 @@ func (s *OrganizationPostgresRepository) OrganizationRole(ctx context.Context, u
 	return role, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
 }
 
-func (s *OrganizationPostgresRepository) OrganizationMembers(ctx context.Context, orgID string) ([]organization.Membership, error) {
+func (s *OrganizationPostgresRepository) OrganizationMembers(ctx context.Context, orgID string) ([]organizationmodel.Membership, error) {
 	rows, err := s.queries.ListOrganizationMembers(ctx, orgID)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]organization.Membership, 0, len(rows))
+	out := make([]organizationmodel.Membership, 0, len(rows))
 	for _, row := range rows {
-		m := organization.Membership{Role: row.Role}
+		m := organizationmodel.Membership{Role: row.Role}
 		m.User.ID, m.User.Username, m.User.Email = row.ID, row.Username, row.Email
 		out = append(out, m)
 	}

@@ -5,33 +5,34 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/josemiguelmelo/orkest/internal/server/agent"
-	"github.com/josemiguelmelo/orkest/internal/server/task"
+	agentmodel "github.com/josemiguelmelo/orkest/internal/server/agent/model"
+	orchestrationmodel "github.com/josemiguelmelo/orkest/internal/server/orchestration/model"
+	taskmodel "github.com/josemiguelmelo/orkest/internal/server/task/model"
 )
 
 var errReservedForTest = errors.New("reserved")
 
 type profileSessionRepo struct {
 	*launchRepoFake
-	current  RunConfig
+	current  orchestrationmodel.RunConfig
 	exists   bool
-	reserved []RunConfig
+	reserved []orchestrationmodel.RunConfig
 }
 
-func (r *profileSessionRepo) CurrentSession(context.Context, string, string, string) (RunConfig, bool, error) {
+func (r *profileSessionRepo) CurrentSession(context.Context, string, string, string) (orchestrationmodel.RunConfig, bool, error) {
 	return r.current, r.exists, nil
 }
 
-func (r *profileSessionRepo) ReserveSessionRun(_ context.Context, c RunConfig, _ int64) error {
+func (r *profileSessionRepo) ReserveSessionRun(_ context.Context, c orchestrationmodel.RunConfig, _ int64) error {
 	r.reserved = append(r.reserved, c)
 	return errReservedForTest
 }
 
 type profileAgentGetter struct{ calls int }
 
-func (g *profileAgentGetter) Get(context.Context, string, string, string, string) (agent.Agent, error) {
+func (g *profileAgentGetter) Get(context.Context, string, string, string, string) (agentmodel.Agent, error) {
 	g.calls++
-	return agent.Agent{AgentDefinition: agent.AgentDefinition{Name: "Backend", Runtime: "opencode", Provider: "test", Model: "model", ExecutionProfileID: "java"}}, nil
+	return agentmodel.Agent{AgentDefinition: agentmodel.AgentDefinition{Name: "Backend", Runtime: "opencode", Provider: "test", Model: "model", ExecutionProfileID: "java"}}, nil
 }
 
 type profileImageResolver struct {
@@ -39,7 +40,7 @@ type profileImageResolver struct {
 	calls int
 }
 
-func (r *profileImageResolver) Resolve(_ context.Context, ws, id string, runtime agent.Runtime) (string, error) {
+func (r *profileImageResolver) Resolve(_ context.Context, ws, id string, runtime agentmodel.Runtime) (string, error) {
 	r.calls++
 	if ws != "workspace" || id != "java" || runtime != "opencode" {
 		return "", errors.New("incorrect binding")
@@ -56,15 +57,15 @@ func TestNextRunAdoptsUpdatedProfileAndRetainsSession(t *testing.T) {
 		t.Fatal(err)
 	}
 	dispatcher.profiles = resolver
-	value := task.Task{ID: "task", WorkspaceID: "workspace", AssigneeAgentID: "agent", Title: "Work"}
-	if err = dispatcher.StartTask(context.Background(), "user", "org", task.StartCommand{Task: value}); !errors.Is(err, errReservedForTest) {
+	value := taskmodel.Task{ID: "task", WorkspaceID: "workspace", AssigneeAgentID: "agent", Title: "Work"}
+	if err = dispatcher.StartTask(context.Background(), "user", "org", taskmodel.StartCommand{Task: value}); !errors.Is(err, errReservedForTest) {
 		t.Fatal(err)
 	}
 	original := repo.reserved[0]
 	repo.current = original
 	repo.exists = true
 	resolver.image = "registry/image@sha256:b"
-	if err = dispatcher.StartTask(context.Background(), "user", "org", task.StartCommand{Task: value}); !errors.Is(err, errReservedForTest) {
+	if err = dispatcher.StartTask(context.Background(), "user", "org", taskmodel.StartCommand{Task: value}); !errors.Is(err, errReservedForTest) {
 		t.Fatal(err)
 	}
 	next := repo.reserved[1]

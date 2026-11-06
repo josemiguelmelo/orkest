@@ -5,12 +5,11 @@ import (
 	"runtime"
 	"time"
 
+	runmodel "github.com/josemiguelmelo/orkest/internal/agentctl/run/model"
 	wire "github.com/josemiguelmelo/orkest/internal/contracts/agentctl/v1"
-
-	agentrun "github.com/josemiguelmelo/orkest/internal/agentctl/run"
 )
 
-func Snapshot(status agentrun.RunStatus, startedAt time.Time) wire.Info {
+func Snapshot(status runmodel.RunStatus, startedAt time.Time) wire.Info {
 	return wire.Info{
 		OrganizationID:     status.OrganizationID,
 		WorkspaceID:        status.WorkspaceID,

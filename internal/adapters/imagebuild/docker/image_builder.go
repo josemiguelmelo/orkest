@@ -7,6 +7,7 @@ import (
 
 	"github.com/josemiguelmelo/orkest/internal/adapters/imagebuild"
 	"github.com/josemiguelmelo/orkest/internal/server/executionprofile"
+	executionprofilemodel "github.com/josemiguelmelo/orkest/internal/server/executionprofile/model"
 )
 
 // ImageBuilder composes and publishes images through the deployment's Docker daemon.
@@ -19,11 +20,11 @@ func NewImageBuilder(store *ImageStore) (*ImageBuilder, error) {
 	return &ImageBuilder{store: store}, nil
 }
 
-func (b *ImageBuilder) ResolveInputs(ctx context.Context, build executionprofile.Build) (executionprofile.Build, error) {
+func (b *ImageBuilder) ResolveInputs(ctx context.Context, build executionprofilemodel.Build) (executionprofilemodel.Build, error) {
 	return b.store.ResolveInputs(ctx, build)
 }
 
-func (b *ImageBuilder) BuildAndPush(ctx context.Context, build executionprofile.Build) (string, error) {
+func (b *ImageBuilder) BuildAndPush(ctx context.Context, build executionprofilemodel.Build) (string, error) {
 	prepared, err := imagebuild.Prepare(build)
 	if err != nil {
 		return "", executionprofile.Failure("prepare_context", "Could not prepare the image build context; verify the runtime and pinned image inputs.", err)
@@ -43,7 +44,7 @@ func (b *ImageBuilder) BuildAndPush(ctx context.Context, build executionprofile.
 	return b.store.Verify(ctx, build, prepared.Destination)
 }
 
-func (b *ImageBuilder) Reconcile(ctx context.Context, build executionprofile.Build) (string, error) {
+func (b *ImageBuilder) Reconcile(ctx context.Context, build executionprofilemodel.Build) (string, error) {
 	return b.store.Verify(ctx, build, build.Destination)
 }
 

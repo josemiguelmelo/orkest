@@ -5,7 +5,7 @@ import (
 	"net/http"
 
 	"github.com/josemiguelmelo/orkest/internal/adapters/http/agentctl/protocol"
-	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
 	agentrun "github.com/josemiguelmelo/orkest/internal/agentctl/run"
 	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
@@ -13,7 +13,7 @@ import (
 
 // writeServiceError exposes known domain errors and sanitizes unexpected failures.
 func writeServiceError(w http.ResponseWriter, err error, status int, code, message string) {
-	var validation *runconfig.ValidationError
+	var validation *configmodel.ValidationError
 	if errors.As(err, &validation) {
 		protocol.WriteValidationError(w, http.StatusBadRequest, "invalid_configuration", &protocol.ValidationError{
 			Field:   validation.Field,

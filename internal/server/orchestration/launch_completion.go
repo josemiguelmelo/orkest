@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	orchestrationmodel "github.com/josemiguelmelo/orkest/internal/server/orchestration/model"
 )
 
 var ErrAgentRunClosed = errors.New("agent run completed and process closed")
@@ -17,7 +19,7 @@ type LaunchCompletionService struct {
 	controller AgentProcessController
 	background *backgroundWork
 	mu         sync.Mutex
-	pending    map[string]Launch
+	pending    map[string]orchestrationmodel.Launch
 	reported   map[string]bool
 	slots      chan struct{}
 }
@@ -26,12 +28,12 @@ func NewLaunchCompletionService(ctx context.Context, repo LaunchRepository, cont
 	if ctx == nil || repo == nil || controller == nil {
 		return nil, errors.New("launch repository and process controller are required")
 	}
-	service := &LaunchCompletionService{repo: repo, controller: controller, background: newBackgroundWork(ctx), pending: make(map[string]Launch), reported: make(map[string]bool), slots: make(chan struct{}, 4)}
+	service := &LaunchCompletionService{repo: repo, controller: controller, background: newBackgroundWork(ctx), pending: make(map[string]orchestrationmodel.Launch), reported: make(map[string]bool), slots: make(chan struct{}, 4)}
 	service.background.Go(service.runCleanup)
 	return service, nil
 }
 
-func (s *LaunchCompletionService) AgentctlRunning(ctx context.Context, launch Launch) (bool, error) {
+func (s *LaunchCompletionService) AgentctlRunning(ctx context.Context, launch orchestrationmodel.Launch) (bool, error) {
 	if strings.TrimSpace(launch.ProcessID) != "" {
 		return s.controller.AgentctlRunning(ctx, launch.ProcessID)
 	}
@@ -40,23 +42,23 @@ func (s *LaunchCompletionService) AgentctlRunning(ctx context.Context, launch La
 
 // HandleEvent durably records terminal intent before stopping the process, so a
 // platform restart can finish cleanup if Docker shutdown was interrupted.
-func (s *LaunchCompletionService) HandleEvent(ctx context.Context, launch Launch, event Event) error {
-	var pendingStatus LaunchStatus
+func (s *LaunchCompletionService) HandleEvent(ctx context.Context, launch orchestrationmodel.Launch, event orchestrationmodel.Event) error {
+	var pendingStatus orchestrationmodel.LaunchStatus
 	switch event.Payload.Type {
-	case EventRunFailed:
-		pendingStatus = LaunchFailedPendingClose
-	case EventRunCompleted:
-		pendingStatus = LaunchCompletedPendingClose
-	case EventPromptCompleted:
+	case orchestrationmodel.EventRunFailed:
+		pendingStatus = orchestrationmodel.LaunchFailedPendingClose
+	case orchestrationmodel.EventRunCompleted:
+		pendingStatus = orchestrationmodel.LaunchCompletedPendingClose
+	case orchestrationmodel.EventPromptCompleted:
 		if event.Payload.TaskSessionID != "" {
 			return s.repo.SaveEvent(ctx, event)
 		}
-		pendingStatus = LaunchCompletedPendingClose
-	case EventPromptFailed:
+		pendingStatus = orchestrationmodel.LaunchCompletedPendingClose
+	case orchestrationmodel.EventPromptFailed:
 		if event.Payload.TaskSessionID != "" {
 			return s.repo.SaveEvent(ctx, event)
 		}
-		pendingStatus = LaunchFailedPendingClose
+		pendingStatus = orchestrationmodel.LaunchFailedPendingClose
 	default:
 		return s.repo.SaveEvent(ctx, event)
 	}
@@ -78,7 +80,7 @@ func (s *LaunchCompletionService) RecoverPending(ctx context.Context) error {
 		return fmt.Errorf("load launches pending process cleanup: %w", err)
 	}
 	for _, launch := range launches {
-		if launch.Status != LaunchCompletedPendingClose && launch.Status != LaunchFailedPendingClose {
+		if launch.Status != orchestrationmodel.LaunchCompletedPendingClose && launch.Status != orchestrationmodel.LaunchFailedPendingClose {
 			continue
 		}
 		s.ScheduleClose(launch)
@@ -87,7 +89,7 @@ func (s *LaunchCompletionService) RecoverPending(ctx context.Context) error {
 }
 
 // ScheduleClose retains terminal intent for bounded, independently retried cleanup.
-func (s *LaunchCompletionService) ScheduleClose(launch Launch) {
+func (s *LaunchCompletionService) ScheduleClose(launch orchestrationmodel.Launch) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, exists := s.pending[launch.RunID]; !exists {
@@ -95,8 +97,8 @@ func (s *LaunchCompletionService) ScheduleClose(launch Launch) {
 	}
 }
 
-func (s *LaunchCompletionService) CloseAbandoned(_ context.Context, launch Launch, status LaunchStatus) {
-	if status != LaunchCompletedPendingClose && status != LaunchFailedPendingClose {
+func (s *LaunchCompletionService) CloseAbandoned(_ context.Context, launch orchestrationmodel.Launch, status orchestrationmodel.LaunchStatus) {
+	if status != orchestrationmodel.LaunchCompletedPendingClose && status != orchestrationmodel.LaunchFailedPendingClose {
 		return
 	}
 	launch.Status = status
@@ -113,12 +115,12 @@ func (s *LaunchCompletionService) runCleanup(ctx context.Context) {
 		case <-ticker.C:
 		}
 		s.mu.Lock()
-		launches := make([]Launch, 0, len(s.pending))
+		launches := make([]orchestrationmodel.Launch, 0, len(s.pending))
 		for _, launch := range s.pending {
 			launches = append(launches, launch)
 		}
 		s.mu.Unlock()
-		reconcileBatch(ctx, launches, func(ctx context.Context, launch Launch) {
+		reconcileBatch(ctx, launches, func(ctx context.Context, launch orchestrationmodel.Launch) {
 			ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 			defer cancel()
 			if err := s.repo.SetLaunchStatus(ctx, PlanLaunchStatus(launch.RunID, launch.Status)); err != nil {
@@ -140,11 +142,11 @@ func (s *LaunchCompletionService) runCleanup(ctx context.Context) {
 // Close joins terminal cleanup before its database and executor clients close.
 func (s *LaunchCompletionService) Close() { s.background.Close() }
 
-func (s *LaunchCompletionService) ClosePending(ctx context.Context, launch Launch) error {
-	finalStatus := LaunchCompleted
-	if launch.Status == LaunchFailedPendingClose {
-		finalStatus = LaunchFailed
-	} else if launch.Status != LaunchCompletedPendingClose {
+func (s *LaunchCompletionService) ClosePending(ctx context.Context, launch orchestrationmodel.Launch) error {
+	finalStatus := orchestrationmodel.LaunchCompleted
+	if launch.Status == orchestrationmodel.LaunchFailedPendingClose {
+		finalStatus = orchestrationmodel.LaunchFailed
+	} else if launch.Status != orchestrationmodel.LaunchCompletedPendingClose {
 		return fmt.Errorf("launch %q is not pending process cleanup", launch.RunID)
 	}
 	admissionCtx, stopAdmission := context.WithTimeout(ctx, 15*time.Second)
@@ -176,7 +178,7 @@ func (s *LaunchCompletionService) ClosePending(ctx context.Context, launch Launc
 	return nil
 }
 
-func (s *LaunchCompletionService) reportCleanupFailure(launch Launch, reason string) {
+func (s *LaunchCompletionService) reportCleanupFailure(launch orchestrationmodel.Launch, reason string) {
 	s.mu.Lock()
 	report := !s.reported[launch.RunID]
 	s.reported[launch.RunID] = true

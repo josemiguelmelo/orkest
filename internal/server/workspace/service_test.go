@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	modelerrors "github.com/josemiguelmelo/orkest/internal/contracts/problem"
+	workspacemodel "github.com/josemiguelmelo/orkest/internal/server/workspace/model"
 )
 
 type workspaceRepositoryStub struct {
@@ -13,29 +14,29 @@ type workspaceRepositoryStub struct {
 	setMemberCalls int
 }
 
-func (r *workspaceRepositoryStub) Workspaces(context.Context, string, string) ([]Workspace, error) {
+func (r *workspaceRepositoryStub) Workspaces(context.Context, string, string) ([]workspacemodel.Workspace, error) {
 	return nil, nil
 }
 
-func (r *workspaceRepositoryStub) Workspace(_ context.Context, organizationID, workspaceID, userID string) (Workspace, error) {
+func (r *workspaceRepositoryStub) Workspace(_ context.Context, organizationID, workspaceID, userID string) (workspacemodel.Workspace, error) {
 	role, ok := r.roles[workspaceID+":"+userID]
 	if !ok {
-		return Workspace{}, modelerrors.ErrNotFound
+		return workspacemodel.Workspace{}, modelerrors.ErrNotFound
 	}
-	return Workspace{ID: workspaceID, OrganizationID: organizationID, Role: role}, nil
+	return workspacemodel.Workspace{ID: workspaceID, OrganizationID: organizationID, Role: role}, nil
 }
 
-func (r *workspaceRepositoryStub) CreateWorkspace(context.Context, string, string, string) (Workspace, error) {
-	return Workspace{}, nil
+func (r *workspaceRepositoryStub) CreateWorkspace(context.Context, string, string, string) (workspacemodel.Workspace, error) {
+	return workspacemodel.Workspace{}, nil
 }
 
-func (r *workspaceRepositoryStub) UpdateWorkspace(context.Context, string, string, string) (Workspace, error) {
-	return Workspace{}, nil
+func (r *workspaceRepositoryStub) UpdateWorkspace(context.Context, string, string, string) (workspacemodel.Workspace, error) {
+	return workspacemodel.Workspace{}, nil
 }
 
 func (r *workspaceRepositoryStub) DeleteWorkspace(context.Context, string, string) error { return nil }
 
-func (r *workspaceRepositoryStub) WorkspaceMembers(context.Context, string, string) ([]Membership, error) {
+func (r *workspaceRepositoryStub) WorkspaceMembers(context.Context, string, string) ([]workspacemodel.Membership, error) {
 	return nil, nil
 }
 

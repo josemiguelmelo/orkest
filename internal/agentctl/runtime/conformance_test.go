@@ -14,7 +14,7 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/adapters/runtime/profiles/opencode"
 	"github.com/josemiguelmelo/orkest/internal/adapters/runtime/profiles/opencode/opencodetest"
 	"github.com/josemiguelmelo/orkest/internal/adapters/runtime/runtimehost"
-	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
 	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
 	coreruntime "github.com/josemiguelmelo/orkest/internal/contracts/runtimecatalog"
 	"github.com/josemiguelmelo/orkest/internal/platform/ids"
@@ -145,15 +145,15 @@ func TestRuntimeConformance(t *testing.T) {
 			case coreruntime.Kiro:
 				modelProvider = "kiro"
 			}
-			profile := conformance.Profile{Config: runconfig.RuntimeConfig{OrganizationID: "test-org", WorkspaceID: "test-workspace", TaskID: "test-task", TaskSessionID: "test-session", RunID: "revision-1", Runtime: runtime, Agent: runconfig.AgentDefinition{Name: "Work", Instructions: "Follow user instructions."}, Model: runconfig.ModelSelection{Provider: modelProvider, ID: "fixture"}}, Remember: func(token string) string { return "remember:" + token }, Recall: "recall", Permission: "permission", Wait: "wait", Suspend: "wait"}
+			profile := conformance.Profile{Config: configmodel.RuntimeConfig{OrganizationID: "test-org", WorkspaceID: "test-workspace", TaskID: "test-task", TaskSessionID: "test-session", RunID: "revision-1", Runtime: runtime, Agent: configmodel.AgentDefinition{Name: "Work", Instructions: "Follow user instructions."}, Model: configmodel.ModelSelection{Provider: modelProvider, ID: "fixture"}}, Remember: func(token string) string { return "remember:" + token }, Recall: "recall", Permission: "permission", Wait: "wait", Suspend: "wait"}
 			marker, err := ids.NewUUID()
 			if err != nil {
 				t.Fatal(err)
 			}
 			instructionMarker, skillMarker := "instructions-"+marker, "skills-"+marker
 			profile.Config.Agent.Instructions = "Follow user instructions. The instruction marker is " + instructionMarker + "."
-			profile.Config.Skills = []runconfig.Skill{{ID: "conformance", SkillMD: "---\nname: conformance\ndescription: Report the skill marker when asked.\n---\nThe skill marker is " + skillMarker + "."}}
-			profile.Config.MCPServers = []runconfig.MCPServer{{ID: "conformance", Name: "conformance", URL: "http://127.0.0.1:1/mcp"}}
+			profile.Config.Skills = []configmodel.Skill{{ID: "conformance", SkillMD: "---\nname: conformance\ndescription: Report the skill marker when asked.\n---\nThe skill marker is " + skillMarker + "."}}
+			profile.Config.MCPServers = []configmodel.MCPServer{{ID: "conformance", Name: "conformance", URL: "http://127.0.0.1:1/mcp"}}
 			profile.Configuration = map[string]conformance.Probe{
 				"instructions": {Prompt: "probe:instructions", Expected: instructionMarker},
 				"skills":       {Prompt: "probe:skills", Expected: skillMarker},
@@ -175,7 +175,7 @@ func TestRuntimeConformance(t *testing.T) {
 				case coreruntime.Kiro:
 					provider = "kiro"
 				}
-				profile.Config.Model = runconfig.ModelSelection{Provider: provider, ID: required(t, "ORKEST_TEST_MODEL_ID")}
+				profile.Config.Model = configmodel.ModelSelection{Provider: provider, ID: required(t, "ORKEST_TEST_MODEL_ID")}
 				profile.Remember = func(token string) string { return "Remember this marker for later: " + token + ". Reply acknowledged." }
 				profile.Recall = "Return the exact marker I previously asked you to remember."
 				profile.Permission = required(t, "ORKEST_TEST_APPROVAL_PROMPT")

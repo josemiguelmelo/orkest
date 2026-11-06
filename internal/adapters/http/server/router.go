@@ -7,8 +7,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/josemiguelmelo/orkest/internal/server/workflowautomation"
-
 	"github.com/go-chi/chi/v5"
 	appmcp "github.com/josemiguelmelo/orkest/internal/adapters/mcp"
 	"github.com/josemiguelmelo/orkest/internal/platform/openapi"
@@ -22,9 +20,11 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/server/orchestration"
 	"github.com/josemiguelmelo/orkest/internal/server/organization"
 	"github.com/josemiguelmelo/orkest/internal/server/skill"
+	skillmodel "github.com/josemiguelmelo/orkest/internal/server/skill/model"
 	"github.com/josemiguelmelo/orkest/internal/server/task"
 	"github.com/josemiguelmelo/orkest/internal/server/taskintegration"
 	"github.com/josemiguelmelo/orkest/internal/server/workflow"
+	"github.com/josemiguelmelo/orkest/internal/server/workflowautomation"
 	"github.com/josemiguelmelo/orkest/internal/server/workspace"
 	"github.com/josemiguelmelo/orkest/internal/server/workspaceenv"
 )
@@ -103,9 +103,9 @@ func NewRouter(ctx context.Context, deps RouterDependencies) (*chi.Mux, error) {
 			executionProfileAPI{service: deps.Profiles}.routes(api)
 			agentRuntimeProfileAPI{service: deps.RuntimeProfiles}.routes(api)
 			if deps.SkillCatalog != nil {
-				skillAPI{service: deps.SkillCatalog, scope: skill.ScopeGlobal}.routes(api, "/skills")
-				skillAPI{service: deps.SkillCatalog, scope: skill.ScopeOrganization}.routes(api, "/organizations/{orgID}/skills")
-				skillAPI{service: deps.SkillCatalog, scope: skill.ScopeWorkspace}.routes(api, "/organizations/{orgID}/workspaces/{workspaceID}/skills")
+				skillAPI{service: deps.SkillCatalog, scope: skillmodel.ScopeGlobal}.routes(api, "/skills")
+				skillAPI{service: deps.SkillCatalog, scope: skillmodel.ScopeOrganization}.routes(api, "/organizations/{orgID}/skills")
+				skillAPI{service: deps.SkillCatalog, scope: skillmodel.ScopeWorkspace}.routes(api, "/organizations/{orgID}/workspaces/{workspaceID}/skills")
 			}
 			if deps.MCPServers != nil {
 				mcpServerAPI{service: deps.MCPServers}.routes(api)

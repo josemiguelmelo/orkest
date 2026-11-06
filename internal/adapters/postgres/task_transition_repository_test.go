@@ -5,12 +5,11 @@ import (
 	"errors"
 	"testing"
 
-	workflowautomation "github.com/josemiguelmelo/orkest/internal/server/workflowautomation"
-
 	modelerrors "github.com/josemiguelmelo/orkest/internal/contracts/problem"
 	"github.com/josemiguelmelo/orkest/internal/platform/ids"
-	"github.com/josemiguelmelo/orkest/internal/server/task"
+	taskmodel "github.com/josemiguelmelo/orkest/internal/server/task/model"
 	"github.com/josemiguelmelo/orkest/internal/server/workflow"
+	"github.com/josemiguelmelo/orkest/internal/server/workflowautomation"
 )
 
 func testTaskTransitionPolicyTransaction(t *testing.T, db *PostgresDatabase, orgID, workspaceID, actorID string) {
@@ -21,7 +20,7 @@ func testTaskTransitionPolicyTransaction(t *testing.T, db *PostgresDatabase, org
 		t.Fatal(err)
 	}
 	repo := NewTaskPostgresRepository(db)
-	initial, err := createWorkflowTask(ctx, repo, id, workspaceID, task.TaskInput{WorkflowID: workspaceID, Title: "Policy transaction", Status: "todo"})
+	initial, err := createWorkflowTask(ctx, repo, id, workspaceID, taskmodel.TaskInput{WorkflowID: workspaceID, Title: "Policy transaction", Status: "todo"})
 	if err != nil {
 		t.Fatal(err)
 	}

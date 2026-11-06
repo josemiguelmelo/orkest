@@ -6,7 +6,8 @@ import (
 	"testing"
 
 	modelerrors "github.com/josemiguelmelo/orkest/internal/contracts/problem"
-	"github.com/josemiguelmelo/orkest/internal/server/workspace"
+	workflowmodel "github.com/josemiguelmelo/orkest/internal/server/workflow/model"
+	workspacemodel "github.com/josemiguelmelo/orkest/internal/server/workspace/model"
 )
 
 type accessStub struct {
@@ -14,8 +15,8 @@ type accessStub struct {
 	err  error
 }
 
-func (a accessStub) GetWorkspace(context.Context, string, string, string) (workspace.Workspace, error) {
-	return workspace.Workspace{Role: a.role}, a.err
+func (a accessStub) GetWorkspace(context.Context, string, string, string) (workspacemodel.Workspace, error) {
+	return workspacemodel.Workspace{Role: a.role}, a.err
 }
 
 type repositoryStub struct {
@@ -23,24 +24,24 @@ type repositoryStub struct {
 	actor string
 }
 
-func (r *repositoryStub) Definitions(context.Context, string) ([]Definition, error) {
+func (r *repositoryStub) Definitions(context.Context, string) ([]workflowmodel.Definition, error) {
 	return nil, nil
 }
 
-func (r *repositoryStub) Definition(_ context.Context, _, workflowID string) (Definition, error) {
-	return Definition{ID: workflowID, Name: "Workflow", Version: 1}, nil
+func (r *repositoryStub) Definition(_ context.Context, _, workflowID string) (workflowmodel.Definition, error) {
+	return workflowmodel.Definition{ID: workflowID, Name: "Workflow", Version: 1}, nil
 }
 
-func (r *repositoryStub) Create(_ context.Context, _ string, d Definition, decide func(ConfigurationSnapshot, Definition) (Definition, error)) (Definition, error) {
+func (r *repositoryStub) Create(_ context.Context, _ string, d workflowmodel.Definition, decide func(ConfigurationSnapshot, workflowmodel.Definition) (workflowmodel.Definition, error)) (workflowmodel.Definition, error) {
 	return decide(ConfigurationSnapshot{}, d)
 }
 
-func (r *repositoryStub) Save(_ context.Context, _ string, d Definition, decide func(ConfigurationSnapshot, Definition) (Definition, error)) (Definition, error) {
+func (r *repositoryStub) Save(_ context.Context, _ string, d workflowmodel.Definition, decide func(ConfigurationSnapshot, workflowmodel.Definition) (workflowmodel.Definition, error)) (workflowmodel.Definition, error) {
 	var err error
-	current := Definition{ID: d.ID, Name: "Workflow", Version: d.Version}
+	current := workflowmodel.Definition{ID: d.ID, Name: "Workflow", Version: d.Version}
 	d, err = decide(ConfigurationSnapshot{Current: &current}, d)
 	if err != nil {
-		return Definition{}, err
+		return workflowmodel.Definition{}, err
 	}
 	r.saved = true
 	r.actor = d.ConfiguredBy
@@ -56,7 +57,7 @@ func TestConfigurationRequiresWorkspaceAdministration(t *testing.T) {
 		t.Run(role, func(t *testing.T) {
 			repo := &repositoryStub{}
 			s := NewWorkflowConfigurationService(repo, accessStub{role: role})
-			d := Definition{InitialStageID: "only", ClosedStageID: "only", Version: 1, ConfiguredBy: "forged", Stages: []Stage{{ID: "only", Name: "Only"}}}
+			d := workflowmodel.Definition{InitialStageID: "only", ClosedStageID: "only", Version: 1, ConfiguredBy: "forged", Stages: []workflowmodel.Stage{{ID: "only", Name: "Only"}}}
 			_, err := s.Save(context.Background(), "actor", "org", "workspace", "flow", d)
 			allowed := role == "admin" || role == "owner"
 			if allowed {
@@ -78,16 +79,18 @@ func TestReadRespectsWorkspaceBoundary(t *testing.T) {
 }
 
 func TestConfigurationChangeValidatesLockedReferences(t *testing.T) {
-	original := DefaultDefinition("Board")
+	original := workflowmodel.DefaultDefinition("Board")
 	original.ID = "flow"
 	cases := []struct {
 		name   string
-		change func(*ConfigurationSnapshot, *Definition)
+		change func(*ConfigurationSnapshot, *workflowmodel.Definition)
 		want   error
 	}{
-		{"stale version", func(s *ConfigurationSnapshot, d *Definition) { d.Version++ }, modelerrors.ErrConflict},
-		{"unknown agent", func(s *ConfigurationSnapshot, d *Definition) { d.Stages[0].ResponsibleAgentID = "missing" }, modelerrors.ErrInvalid},
-		{"occupied stage removal", func(s *ConfigurationSnapshot, d *Definition) {
+		{"stale version", func(s *ConfigurationSnapshot, d *workflowmodel.Definition) { d.Version++ }, modelerrors.ErrConflict},
+		{"unknown agent", func(s *ConfigurationSnapshot, d *workflowmodel.Definition) {
+			d.Stages[0].ResponsibleAgentID = "missing"
+		}, modelerrors.ErrInvalid},
+		{"occupied stage removal", func(s *ConfigurationSnapshot, d *workflowmodel.Definition) {
 			s.OccupiedStageIDs = []string{"in_review"}
 			d.Stages = append(d.Stages[:2], d.Stages[3:]...)
 			d.Rules = nil
@@ -97,7 +100,7 @@ func TestConfigurationChangeValidatesLockedReferences(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			current := original
 			input := original
-			input.Stages = append([]Stage(nil), original.Stages...)
+			input.Stages = append([]workflowmodel.Stage(nil), original.Stages...)
 			snapshot := ConfigurationSnapshot{Current: &current}
 			tc.change(&snapshot, &input)
 			if _, err := PlanConfigurationChange(snapshot, input); !errors.Is(err, tc.want) {

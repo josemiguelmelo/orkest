@@ -9,8 +9,9 @@ import (
 	"sync/atomic"
 	"testing"
 
-	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
+	runmodel "github.com/josemiguelmelo/orkest/internal/agentctl/run/model"
 	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
 	coreruntime "github.com/josemiguelmelo/orkest/internal/contracts/runtimecatalog"
 )
@@ -22,7 +23,8 @@ type fakeRuntimeHost struct {
 }
 
 func (p *fakeRuntimeHost) Runtime() coreruntime.Runtime { return coreruntime.OpenCode }
-func (p *fakeRuntimeHost) Launch(context.Context, runconfig.RuntimeConfig) (agentruntime.RuntimeSession, error) {
+
+func (p *fakeRuntimeHost) Launch(context.Context, configmodel.RuntimeConfig) (agentruntime.RuntimeSession, error) {
 	p.calls.Add(1)
 	return p.process, p.err
 }
@@ -41,9 +43,12 @@ func (p *fakeRuntimeSession) Err() error {
 		return nil
 	}
 }
-func (p *fakeRuntimeSession) SessionID() string     { return "session" }
+
+func (p *fakeRuntimeSession) SessionID() string { return "session" }
+
 func (p *fakeRuntimeSession) Done() <-chan struct{} { return p.done }
-func (p *fakeRuntimeSession) Close() error          { p.once.Do(func() { close(p.done) }); return nil }
+
+func (p *fakeRuntimeSession) Close() error { p.once.Do(func() { close(p.done) }); return nil }
 
 func TestProviderLaunchOwnership(t *testing.T) {
 	p := &fakeRuntimeHost{process: &fakeRuntimeSession{done: make(chan struct{})}}
@@ -117,7 +122,7 @@ func TestUnexpectedProcessExitIsFailed(t *testing.T) {
 	if err := process.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if status := controller.Status(); status.State != StateFailed || status.ProcessAlive {
+	if status := controller.Status(); status.State != runmodel.StateFailed || status.ProcessAlive {
 		t.Fatalf("unexpected status: %+v", status)
 	}
 }
@@ -157,7 +162,7 @@ func TestStartupPersistenceFailureClosesSessionAndBlocksRecovery(t *testing.T) {
 				t.Fatalf("startup did not report persistence failure: %v", err)
 			}
 			status := controller.Status()
-			if status.ProcessAlive || !status.RecoveryBlocked || status.State != StateInterrupted || controller.CanAutoRestore() {
+			if status.ProcessAlive || !status.RecoveryBlocked || status.State != runmodel.StateInterrupted || controller.CanAutoRestore() {
 				t.Fatalf("failed startup left execution available: %+v", status)
 			}
 			select {
@@ -170,14 +175,17 @@ func TestStartupPersistenceFailureClosesSessionAndBlocksRecovery(t *testing.T) {
 }
 
 func (p *fakeRuntimeHost) Version() string { return "fixture-v1" }
-func (p *fakeRuntimeHost) Restore(ctx context.Context, c runconfig.RuntimeConfig) (agentruntime.RuntimeSession, error) {
+
+func (p *fakeRuntimeHost) Restore(ctx context.Context, c configmodel.RuntimeConfig) (agentruntime.RuntimeSession, error) {
 	return p.Launch(ctx, c)
 }
 
 func (p *fakeRuntimeSession) Prompt(context.Context, interaction.Command, agentruntime.PromptObserver) (agentruntime.StopReason, error) {
 	return agentruntime.StopReasonEndTurn, nil
 }
+
 func (p *fakeRuntimeSession) Cancel(context.Context) error { return nil }
+
 func (p *fakeRuntimeSession) Reconcile(context.Context, interaction.Command) (agentruntime.RecoveryDecision, error) {
 	return agentruntime.RecoveryDecision{Action: agentruntime.RecoveryPause}, nil
 }

@@ -5,7 +5,6 @@ package runtimehost
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -18,7 +17,7 @@ import (
 	"strings"
 
 	"github.com/josemiguelmelo/orkest/internal/adapters/gitprovider"
-	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
 	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
 	coreruntime "github.com/josemiguelmelo/orkest/internal/contracts/runtimecatalog"
 )
@@ -60,15 +59,15 @@ func (h *Host) Runtime() coreruntime.Runtime { return h.profile.Descriptor().Run
 
 func (h *Host) Version() string { return h.profile.Descriptor().Version }
 
-func (h *Host) Launch(ctx context.Context, config runconfig.RuntimeConfig) (agentruntime.RuntimeSession, error) {
+func (h *Host) Launch(ctx context.Context, config configmodel.RuntimeConfig) (agentruntime.RuntimeSession, error) {
 	return h.start(ctx, config, false)
 }
 
-func (h *Host) Restore(ctx context.Context, config runconfig.RuntimeConfig) (agentruntime.RuntimeSession, error) {
+func (h *Host) Restore(ctx context.Context, config configmodel.RuntimeConfig) (agentruntime.RuntimeSession, error) {
 	return h.start(ctx, config, true)
 }
 
-func (h *Host) start(ctx context.Context, config runconfig.RuntimeConfig, restoring bool) (agentruntime.RuntimeSession, error) {
+func (h *Host) start(ctx context.Context, config configmodel.RuntimeConfig, restoring bool) (agentruntime.RuntimeSession, error) {
 	config = config.Clone()
 	descriptor := h.profile.Descriptor()
 	if err := h.validateStartup(ctx, config, descriptor); err != nil {
@@ -94,43 +93,7 @@ func (h *Host) start(ctx context.Context, config runconfig.RuntimeConfig, restor
 		err = store.reserveCreation(config)
 	}
 	if err != nil {
-		operation := "load_session"
-		if !restoring {
-			operation = "reserve_session_creation"
-		}
-		logAttrs := []any{
-			"organization_id", config.OrganizationID,
-			"workspace_id", config.WorkspaceID,
-			"task_id", config.TaskID,
-			"run_id", config.RunID,
-			"task_session_id", config.TaskSessionID,
-			"operation", operation,
-			"restoring", restoring,
-			"storage_root", store.Root(config),
-			"error", err,
-		}
-		var compatibilityError *sessionManifestCompatibilityError
-		if errors.As(err, &compatibilityError) {
-			logAttrs = append(logAttrs, "compatibility_mismatches", compatibilityError.Mismatches)
-			if slices.Contains(compatibilityError.Mismatches, "configuration_mismatch") {
-				if compatibilityError.Legacy {
-					logAttrs = append(logAttrs, "configuration_mismatch_detail", "legacy_manifest_has_no_field_fingerprints")
-				} else {
-					logAttrs = append(logAttrs, "configuration_mismatch_fields", compatibilityError.Fields)
-				}
-			}
-		}
-		slog.Default().Error("runtime durable session storage operation failed", logAttrs...)
-		message := "could not reserve durable session storage; check storage availability and permissions"
-		switch {
-		case errors.Is(err, errSessionAlreadyExists):
-			message = "saved session already exists; continue that session or explicitly start a new session"
-		case errors.Is(err, os.ErrExist):
-			message = "session creation was already reserved by a previous attempt; reconcile it or explicitly start a new session"
-		default:
-			message += ": " + err.Error()
-		}
-		return nil, &agentruntime.LaunchError{Message: message, Cause: err}
+		return nil, sessionStorageError(config, store, restoring, err)
 	}
 	settings := agentruntime.ResolvedRuntimeSettings{Agent: config.Agent, Model: config.Model, MCPServers: config.MCPServers, Skills: config.Skills}
 	paths := h.provisioningPaths(config, store)
@@ -148,29 +111,8 @@ func (h *Host) start(ctx context.Context, config runconfig.RuntimeConfig, restor
 			_ = session.Close()
 		}
 	}()
-	for _, entry := range h.environment.GrantedEnv {
-		name, value, ok := strings.Cut(entry, "=")
-		name = strings.ToLower(name)
-		if ok && (strings.Contains(name, "key") || strings.Contains(name, "token") || strings.Contains(name, "secret") || strings.Contains(name, "password")) {
-			session.callbacks.AddSecretValues(value)
-		}
-	}
-	for _, value := range config.Environment {
-		if value != "" {
-			session.callbacks.AddSecretValues(value)
-		}
-	}
-	session.callbacks.AddSecretValues(prepared.SecretValues...)
-	for _, credential := range config.GitCredentials {
-		if credential.Token != "" {
-			session.callbacks.AddSecretValues(credential.Token, base64.StdEncoding.EncodeToString([]byte("x-access-token:"+credential.Token)))
-		}
-	}
-	for _, server := range config.MCPServers {
-		for _, value := range server.Headers {
-			session.callbacks.AddSecretValues(value)
-		}
-	}
+	h.registerSessionSecrets(session, config, prepared)
+
 	options := h.profile.ProtocolSessionOptions(settings, paths)
 	if err := h.initializeSession(ctx, session, settings, options, descriptor, nativeID, restoring); err != nil {
 		return nil, err
@@ -183,7 +125,7 @@ func (h *Host) start(ctx context.Context, config runconfig.RuntimeConfig, restor
 	return session, nil
 }
 
-func (h *Host) validateStartup(ctx context.Context, config runconfig.RuntimeConfig, descriptor agentruntime.RuntimeDescriptor) error {
+func (h *Host) validateStartup(ctx context.Context, config configmodel.RuntimeConfig, descriptor agentruntime.RuntimeDescriptor) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -209,7 +151,7 @@ type preparedRuntime struct {
 	SecretValues []string
 }
 
-func (h *Host) prepareRuntime(ctx context.Context, config runconfig.RuntimeConfig, settings agentruntime.ResolvedRuntimeSettings, store sessionStorage, descriptor agentruntime.RuntimeDescriptor, restoring bool) (preparedRuntime, error) {
+func (h *Host) prepareRuntime(ctx context.Context, config configmodel.RuntimeConfig, settings agentruntime.ResolvedRuntimeSettings, store sessionStorage, descriptor agentruntime.RuntimeDescriptor, restoring bool) (preparedRuntime, error) {
 	paths := h.provisioningPaths(config, store)
 	plan, err := h.profile.BuildProvisioningPlan(settings, paths)
 	if err != nil {
@@ -246,7 +188,7 @@ func (h *Host) prepareRuntime(ctx context.Context, config runconfig.RuntimeConfi
 	return preparedRuntime{Executable: executable, Environment: environment, SecretValues: prepared.SecretValues}, nil
 }
 
-func (h *Host) provisioningPaths(config runconfig.RuntimeConfig, store sessionStorage) agentruntime.ProvisioningPaths {
+func (h *Host) provisioningPaths(config configmodel.RuntimeConfig, store sessionStorage) agentruntime.ProvisioningPaths {
 	identity := config.RunID
 	if config.TaskSessionID != "" {
 		identity = config.TaskSessionID

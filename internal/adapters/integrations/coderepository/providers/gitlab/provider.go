@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/josemiguelmelo/orkest/internal/server/coderepository"
+	coderepositorymodel "github.com/josemiguelmelo/orkest/internal/server/coderepository/model"
 )
 
 const (
@@ -33,7 +34,9 @@ var _ coderepository.CodingProvider = Provider{}
 func NewGitLabCloudProvider() Provider {
 	return Provider{Name: CloudProviderName}
 }
+
 func NewGitLabServerProvider() Provider { return Provider{Name: ServerProviderName} }
+
 func (p Provider) ProviderName() string { return p.Name }
 
 func (p Provider) ConfigSchema() json.RawMessage {
@@ -83,13 +86,13 @@ func (p Provider) baseURL(raw json.RawMessage) (string, error) {
 	return strings.TrimRight(strings.TrimSpace(cfg.BaseURL), "/"), nil
 }
 
-func (p Provider) ValidateAuthentication(ctx context.Context, cfg json.RawMessage, credential coderepository.Credentials) error {
+func (p Provider) ValidateAuthentication(ctx context.Context, cfg json.RawMessage, credential coderepositorymodel.Credentials) error {
 	base, err := p.baseURL(cfg)
 	if err != nil {
 		return err
 	}
 	if strings.TrimSpace(credential.Token) == "" {
-		return &coderepository.ProviderError{Code: "gitlab_token_required", Status: http.StatusBadRequest}
+		return &coderepositorymodel.ProviderError{Code: "gitlab_token_required", Status: http.StatusBadRequest}
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/api/v4/user", nil)
 	if err != nil {
@@ -110,13 +113,13 @@ func (p Provider) ValidateAuthentication(ctx context.Context, cfg json.RawMessag
 	return nil
 }
 
-func (p Provider) DiscoverRepositories(ctx context.Context, cfg json.RawMessage, credential coderepository.Credentials, page, perPage int) (coderepository.RepositoryPage, error) {
+func (p Provider) DiscoverRepositories(ctx context.Context, cfg json.RawMessage, credential coderepositorymodel.Credentials, page, perPage int) (coderepositorymodel.RepositoryPage, error) {
 	base, err := p.baseURL(cfg)
 	if err != nil {
-		return coderepository.RepositoryPage{}, err
+		return coderepositorymodel.RepositoryPage{}, err
 	}
 	if strings.TrimSpace(credential.Token) == "" {
-		return coderepository.RepositoryPage{}, providerError("gitlab_token_required", http.StatusBadRequest)
+		return coderepositorymodel.RepositoryPage{}, providerError("gitlab_token_required", http.StatusBadRequest)
 	}
 	if page < 1 {
 		page = 1
@@ -127,22 +130,22 @@ func (p Provider) DiscoverRepositories(ctx context.Context, cfg json.RawMessage,
 	endpoint := base + "/api/v4/projects?membership=true&simple=true&order_by=name&sort=asc&page=" + strconv.Itoa(page) + "&per_page=" + strconv.Itoa(perPage)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
-		return coderepository.RepositoryPage{}, providerError("gitlab_repository_request_failed", http.StatusBadGateway)
+		return coderepositorymodel.RepositoryPage{}, providerError("gitlab_repository_request_failed", http.StatusBadGateway)
 	}
 	req.Header.Set("PRIVATE-TOKEN", credential.Token)
 	resp, err := p.client().Do(req)
 	if err != nil {
-		return coderepository.RepositoryPage{}, providerError("gitlab_repository_request_failed", http.StatusBadGateway)
+		return coderepositorymodel.RepositoryPage{}, providerError("gitlab_repository_request_failed", http.StatusBadGateway)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode == http.StatusUnauthorized {
-		return coderepository.RepositoryPage{}, providerError("gitlab_token_invalid_or_revoked", http.StatusBadGateway)
+		return coderepositorymodel.RepositoryPage{}, providerError("gitlab_token_invalid_or_revoked", http.StatusBadGateway)
 	}
 	if resp.StatusCode == http.StatusForbidden {
-		return coderepository.RepositoryPage{}, providerError("gitlab_permission_denied", http.StatusBadGateway)
+		return coderepositorymodel.RepositoryPage{}, providerError("gitlab_permission_denied", http.StatusBadGateway)
 	}
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		return coderepository.RepositoryPage{}, providerError("gitlab_repository_request_failed", http.StatusBadGateway)
+		return coderepositorymodel.RepositoryPage{}, providerError("gitlab_repository_request_failed", http.StatusBadGateway)
 	}
 	var entries []struct {
 		ID            int64  `json:"id"`
@@ -152,14 +155,14 @@ func (p Provider) DiscoverRepositories(ctx context.Context, cfg json.RawMessage,
 		DefaultBranch string `json:"default_branch"`
 	}
 	if json.NewDecoder(resp.Body).Decode(&entries) != nil {
-		return coderepository.RepositoryPage{}, providerError("gitlab_repository_response_invalid", http.StatusBadGateway)
+		return coderepositorymodel.RepositoryPage{}, providerError("gitlab_repository_response_invalid", http.StatusBadGateway)
 	}
-	result := coderepository.RepositoryPage{Repositories: make([]coderepository.RepositoryMetadata, 0, len(entries))}
+	result := coderepositorymodel.RepositoryPage{Repositories: make([]coderepositorymodel.RepositoryMetadata, 0, len(entries))}
 	for _, item := range entries {
 		if err := p.validateCloneURL(base, item.CloneURL); err != nil {
-			return coderepository.RepositoryPage{}, providerError("gitlab_repository_response_invalid", http.StatusBadGateway)
+			return coderepositorymodel.RepositoryPage{}, providerError("gitlab_repository_response_invalid", http.StatusBadGateway)
 		}
-		result.Repositories = append(result.Repositories, coderepository.RepositoryMetadata{ID: strconv.FormatInt(item.ID, 10), Name: item.Name, CloneURL: item.CloneURL, Private: item.Visibility != "public", DefaultBranch: item.DefaultBranch})
+		result.Repositories = append(result.Repositories, coderepositorymodel.RepositoryMetadata{ID: strconv.FormatInt(item.ID, 10), Name: item.Name, CloneURL: item.CloneURL, Private: item.Visibility != "public", DefaultBranch: item.DefaultBranch})
 	}
 	if len(entries) == perPage {
 		result.NextPage = page + 1
@@ -186,11 +189,11 @@ func (p Provider) validateCloneURL(base, cloneURL string) error {
 	return nil
 }
 
-func (p Provider) ResolveRepository(ctx context.Context, cfg json.RawMessage, credential coderepository.Credentials, id string) (coderepository.RepositoryMetadata, error) {
+func (p Provider) ResolveRepository(ctx context.Context, cfg json.RawMessage, credential coderepositorymodel.Credentials, id string) (coderepositorymodel.RepositoryMetadata, error) {
 	for page := 1; page <= 100; page++ {
 		result, err := p.DiscoverRepositories(ctx, cfg, credential, page, 100)
 		if err != nil {
-			return coderepository.RepositoryMetadata{}, err
+			return coderepositorymodel.RepositoryMetadata{}, err
 		}
 		for _, repo := range result.Repositories {
 			if repo.ID == id {
@@ -201,7 +204,7 @@ func (p Provider) ResolveRepository(ctx context.Context, cfg json.RawMessage, cr
 			break
 		}
 	}
-	return coderepository.RepositoryMetadata{}, providerError("gitlab_repository_unavailable", http.StatusNotFound)
+	return coderepositorymodel.RepositoryMetadata{}, providerError("gitlab_repository_unavailable", http.StatusNotFound)
 }
 
 func (Provider) NormalizeRepositoryURL(value string) (string, error) {
@@ -221,22 +224,22 @@ func parsedPath(u *url.URL) string {
 	return u.Path
 }
 
-func (p Provider) CloneAuthenticated(ctx context.Context, repo coderepository.RepositoryMetadata, credential coderepository.Credentials, path string) error {
+func (p Provider) CloneAuthenticated(ctx context.Context, repo coderepositorymodel.RepositoryMetadata, credential coderepositorymodel.Credentials, path string) error {
 	return p.git(ctx, repo, credential, path, "clone")
 }
 
-func (p Provider) SyncAuthenticated(ctx context.Context, repo coderepository.RepositoryMetadata, credential coderepository.Credentials, path string) error {
+func (p Provider) SyncAuthenticated(ctx context.Context, repo coderepositorymodel.RepositoryMetadata, credential coderepositorymodel.Credentials, path string) error {
 	return p.git(ctx, repo, credential, path, "sync")
 }
 
-func (p Provider) PrepareAuthenticatedTaskCheckout(ctx context.Context, repo coderepository.RepositoryMetadata, credential coderepository.Credentials, path, branch string) error {
+func (p Provider) PrepareAuthenticatedTaskCheckout(ctx context.Context, repo coderepositorymodel.RepositoryMetadata, credential coderepositorymodel.Credentials, path, branch string) error {
 	if branch == "" {
 		return p.git(ctx, repo, credential, path, "task")
 	}
 	return p.git(ctx, repo, credential, path, "task", branch)
 }
 
-func (p Provider) git(ctx context.Context, repo coderepository.RepositoryMetadata, credential coderepository.Credentials, path, operation string, branch ...string) error {
+func (p Provider) git(ctx context.Context, repo coderepositorymodel.RepositoryMetadata, credential coderepositorymodel.Credentials, path, operation string, branch ...string) error {
 	canonical, err := p.NormalizeRepositoryURL(repo.CloneURL)
 	if err != nil || canonicalURL(canonical) != canonicalURL(repo.CloneURL) {
 		return errors.New("registered GitLab origin is invalid")
@@ -341,9 +344,11 @@ func (p Provider) client() *http.Client {
 }
 
 func providerError(code string, status int) error {
-	return &coderepository.ProviderError{Code: code, Status: status}
+	return &coderepositorymodel.ProviderError{Code: code, Status: status}
 }
+
 func canonicalURL(value string) string { return strings.TrimSuffix(strings.TrimSpace(value), "/") }
+
 func gitOutput(ctx context.Context, path string, args ...string) (string, error) {
 	command := exec.CommandContext(ctx, "git", append([]string{"-C", path}, args...)...)
 	out, err := command.Output()

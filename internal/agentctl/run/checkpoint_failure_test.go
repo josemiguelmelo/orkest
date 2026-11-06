@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
+	runmodel "github.com/josemiguelmelo/orkest/internal/agentctl/run/model"
 )
 
 func TestUnreadableCheckpointBlocksReplacementAndCanRetrySavedState(t *testing.T) {
@@ -28,7 +29,7 @@ func TestUnreadableCheckpointBlocksReplacementAndCanRetrySavedState(t *testing.T
 		t.Fatalf("configuration bypassed fence: %v", err)
 	}
 	status := controller.Status()
-	if !status.RecoveryBlocked || status.State != StateInterrupted || status.ExecutionAvailable || !controller.CheckpointRecoveryPending() {
+	if !status.RecoveryBlocked || status.State != runmodel.StateInterrupted || status.ExecutionAvailable || !controller.CheckpointRecoveryPending() {
 		t.Fatalf("status=%+v", status)
 	}
 	if err := controller.Launch(); !errors.Is(err, ErrRecoveryBlocked) {

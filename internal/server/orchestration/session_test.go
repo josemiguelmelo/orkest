@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"testing"
+
+	orchestrationmodel "github.com/josemiguelmelo/orkest/internal/server/orchestration/model"
 )
 
 type sessionProcessController struct{ closed int }
@@ -34,9 +36,9 @@ func TestSessionCompletionWaitsForQueueDrain(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer service.Close()
-	launch := Launch{RunID: "run", TaskSessionID: "conversation", ProcessID: "container"}
-	for _, kind := range []EventType{EventPromptCompleted, EventPromptFailed, EventQueuePaused} {
-		event := Event{RunID: "run", Payload: AgentActivityEvent{Type: kind, TaskSessionID: "conversation"}}
+	launch := orchestrationmodel.Launch{RunID: "run", TaskSessionID: "conversation", ProcessID: "container"}
+	for _, kind := range []orchestrationmodel.EventType{orchestrationmodel.EventPromptCompleted, orchestrationmodel.EventPromptFailed, orchestrationmodel.EventQueuePaused} {
+		event := orchestrationmodel.Event{RunID: "run", Payload: orchestrationmodel.AgentActivityEvent{Type: kind, TaskSessionID: "conversation"}}
 		if err := service.HandleEvent(context.Background(), launch, event); err != nil {
 			t.Fatal(err)
 		}
@@ -44,7 +46,7 @@ func TestSessionCompletionWaitsForQueueDrain(t *testing.T) {
 	if controller.closed != 0 {
 		t.Fatal("prompt completion or pause stopped the session")
 	}
-	event := Event{RunID: "run", Payload: AgentActivityEvent{Type: EventRunCompleted, TaskSessionID: "conversation"}}
+	event := orchestrationmodel.Event{RunID: "run", Payload: orchestrationmodel.AgentActivityEvent{Type: orchestrationmodel.EventRunCompleted, TaskSessionID: "conversation"}}
 	if err := service.HandleEvent(context.Background(), launch, event); !errors.Is(err, ErrAgentRunClosed) {
 		t.Fatal(err)
 	}

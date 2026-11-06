@@ -4,7 +4,7 @@ import (
 	"reflect"
 	"testing"
 
-	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
 	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
 	coreruntime "github.com/josemiguelmelo/orkest/internal/contracts/runtimecatalog"
 )
@@ -21,10 +21,10 @@ func TestDescriptorPinsACPAdapterAndReservesConfiguration(t *testing.T) {
 
 func TestProtocolOptionsCarryModelInstructionsSkillsAndMCP(t *testing.T) {
 	settings := agentruntime.ResolvedRuntimeSettings{
-		Agent:      runconfig.AgentDefinition{Instructions: "Follow the task."},
-		Model:      runconfig.ModelSelection{Provider: "anthropic", ID: "claude-sonnet-test"},
-		Skills:     []runconfig.Skill{{ID: "review", SkillMD: "Review carefully."}},
-		MCPServers: []runconfig.MCPServer{{ID: "mcp-1", Name: "Tracker", URL: "https://mcp.example.test", Headers: map[string]string{"Authorization": "secret"}}},
+		Agent:      configmodel.AgentDefinition{Instructions: "Follow the task."},
+		Model:      configmodel.ModelSelection{Provider: "anthropic", ID: "claude-sonnet-test"},
+		Skills:     []configmodel.Skill{{ID: "review", SkillMD: "Review carefully."}},
+		MCPServers: []configmodel.MCPServer{{ID: "mcp-1", Name: "Tracker", URL: "https://mcp.example.test", Headers: map[string]string{"Authorization": "secret"}}},
 	}
 	got := (Profile{}).ProtocolSessionOptions(settings, agentruntime.ProvisioningPaths{})
 	if got.Metadata["systemPrompt"] != "Follow the task.\n\n## Skill: review\n\nReview carefully." {
@@ -41,7 +41,7 @@ func TestProtocolOptionsCarryModelInstructionsSkillsAndMCP(t *testing.T) {
 }
 
 func TestAutonomousPolicySelectsClaudeBypassMode(t *testing.T) {
-	settings := agentruntime.ResolvedRuntimeSettings{Agent: runconfig.AgentDefinition{PermissionPolicy: runconfig.PermissionPolicyAutonomous}}
+	settings := agentruntime.ResolvedRuntimeSettings{Agent: configmodel.AgentDefinition{PermissionPolicy: configmodel.PermissionPolicyAutonomous}}
 	options := (Profile{}).ProtocolSessionOptions(settings, agentruntime.ProvisioningPaths{})
 	claude := options.Metadata["claudeCode"].(map[string]any)
 	claudeOptions := claude["options"].(map[string]any)

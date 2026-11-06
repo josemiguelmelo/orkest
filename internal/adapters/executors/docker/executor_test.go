@@ -11,9 +11,11 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/josemiguelmelo/orkest/internal/adapters/executors/checkout"
 	coreruntime "github.com/josemiguelmelo/orkest/internal/contracts/runtimecatalog"
-	"github.com/josemiguelmelo/orkest/internal/server/coderepository"
+	coderepositorymodel "github.com/josemiguelmelo/orkest/internal/server/coderepository/model"
 	"github.com/josemiguelmelo/orkest/internal/server/orchestration"
+	orchestrationmodel "github.com/josemiguelmelo/orkest/internal/server/orchestration/model"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/network"
 	mobyclient "github.com/moby/moby/client"
@@ -120,7 +122,7 @@ func TestCodexAuthFileIsMountedReadOnlyOnlyForCodex(t *testing.T) {
 	}
 	config := runConfig()
 	config.Runtime = coreruntime.Codex
-	config.Model = orchestration.ModelSelection{Provider: "openai", ID: "gpt-5-codex"}
+	config.Model = orchestrationmodel.ModelSelection{Provider: "openai", ID: "gpt-5-codex"}
 	if _, err := executor.StartAgentctl(context.Background(), config); err != nil {
 		t.Fatal(err)
 	}
@@ -159,10 +161,10 @@ func TestCodexAuthFileIsMountedReadOnlyOnlyForCodex(t *testing.T) {
 
 func TestPrepareRepositoriesUsesProviderAndTaskWorkspacePaths(t *testing.T) {
 	provider := &checkoutProviderStub{}
-	executor := &Executor{repositoryProviders: map[string]coderepository.CodingProvider{"test": provider}}
+	executor := &Executor{repositoryProviders: map[string]checkout.Provider{"test": provider}}
 	workDir := t.TempDir()
 	config := runConfig()
-	config.Repositories = []orchestration.WorkspaceRepository{{ID: "repo-id", ProviderName: "test", URL: "https://example.test/repo.git"}}
+	config.Repositories = []orchestrationmodel.WorkspaceRepository{{ID: "repo-id", ProviderName: "test", URL: "https://example.test/repo.git"}}
 	if err := executor.prepareRepositories(context.Background(), workDir, config); err != nil {
 		t.Fatalf("prepare repositories: %v", err)
 	}
@@ -319,8 +321,8 @@ func TestNewWithClientRejectsInvalidSettings(t *testing.T) {
 	}
 }
 
-func runConfig() orchestration.RunConfig {
-	return orchestration.RunConfig{RuntimeConfig: orchestration.RuntimeConfig{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", RunID: "run", Runtime: "opencode", Model: orchestration.ModelSelection{Provider: "provider", ID: "model"}, Agent: orchestration.AgentDefinition{Name: "Work", Description: "Work", Instructions: "work"}}}
+func runConfig() orchestrationmodel.RunConfig {
+	return orchestrationmodel.RunConfig{RuntimeConfig: orchestrationmodel.RuntimeConfig{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", RunID: "run", Runtime: "opencode", Model: orchestrationmodel.ModelSelection{Provider: "provider", ID: "model"}, Agent: orchestrationmodel.AgentDefinition{Name: "Work", Description: "Work", Instructions: "work"}}}
 }
 
 type fakeEngine struct {
@@ -339,42 +341,48 @@ type fakeEngine struct {
 
 type checkoutProviderStub struct {
 	url, path, branch string
-	credential        coderepository.Credentials
-	metadata          coderepository.RepositoryMetadata
+	credential        coderepositorymodel.Credentials
+	metadata          coderepositorymodel.RepositoryMetadata
 }
 
-func (*checkoutProviderStub) ProviderName() string                              { return "test" }
+func (*checkoutProviderStub) ProviderName() string { return "test" }
+
 func (*checkoutProviderStub) ClonePublic(context.Context, string, string) error { return nil }
-func (*checkoutProviderStub) SyncPublic(context.Context, string, string) error  { return nil }
+
+func (*checkoutProviderStub) SyncPublic(context.Context, string, string) error { return nil }
+
 func (p *checkoutProviderStub) PreparePublicTaskCheckout(_ context.Context, url, path, branch string) error {
 	p.url, p.path, p.branch = url, path, branch
 	return nil
 }
-func (*checkoutProviderStub) ConfigSchema() json.RawMessage        { return json.RawMessage(`{}`) }
+
+func (*checkoutProviderStub) ConfigSchema() json.RawMessage { return json.RawMessage(`{}`) }
+
 func (*checkoutProviderStub) ValidateConfig(json.RawMessage) error { return nil }
-func (*checkoutProviderStub) ValidateAuthentication(context.Context, json.RawMessage, coderepository.Credentials) error {
+
+func (*checkoutProviderStub) ValidateAuthentication(context.Context, json.RawMessage, coderepositorymodel.Credentials) error {
 	return nil
 }
 
-func (*checkoutProviderStub) DiscoverRepositories(context.Context, json.RawMessage, coderepository.Credentials, int, int) (coderepository.RepositoryPage, error) {
-	return coderepository.RepositoryPage{}, nil
+func (*checkoutProviderStub) DiscoverRepositories(context.Context, json.RawMessage, coderepositorymodel.Credentials, int, int) (coderepositorymodel.RepositoryPage, error) {
+	return coderepositorymodel.RepositoryPage{}, nil
 }
 
-func (*checkoutProviderStub) ResolveRepository(context.Context, json.RawMessage, coderepository.Credentials, string) (coderepository.RepositoryMetadata, error) {
-	return coderepository.RepositoryMetadata{}, nil
+func (*checkoutProviderStub) ResolveRepository(context.Context, json.RawMessage, coderepositorymodel.Credentials, string) (coderepositorymodel.RepositoryMetadata, error) {
+	return coderepositorymodel.RepositoryMetadata{}, nil
 }
 
 func (*checkoutProviderStub) NormalizeRepositoryURL(value string) (string, error) { return value, nil }
 
-func (*checkoutProviderStub) CloneAuthenticated(context.Context, coderepository.RepositoryMetadata, coderepository.Credentials, string) error {
+func (*checkoutProviderStub) CloneAuthenticated(context.Context, coderepositorymodel.RepositoryMetadata, coderepositorymodel.Credentials, string) error {
 	return nil
 }
 
-func (*checkoutProviderStub) SyncAuthenticated(context.Context, coderepository.RepositoryMetadata, coderepository.Credentials, string) error {
+func (*checkoutProviderStub) SyncAuthenticated(context.Context, coderepositorymodel.RepositoryMetadata, coderepositorymodel.Credentials, string) error {
 	return nil
 }
 
-func (p *checkoutProviderStub) PrepareAuthenticatedTaskCheckout(_ context.Context, metadata coderepository.RepositoryMetadata, credential coderepository.Credentials, path, branch string) error {
+func (p *checkoutProviderStub) PrepareAuthenticatedTaskCheckout(_ context.Context, metadata coderepositorymodel.RepositoryMetadata, credential coderepositorymodel.Credentials, path, branch string) error {
 	p.metadata = metadata
 	p.credential = credential
 	p.path = path
@@ -384,18 +392,18 @@ func (p *checkoutProviderStub) PrepareAuthenticatedTaskCheckout(_ context.Contex
 
 type credentialResolverStub struct{ workspaceID, integrationID string }
 
-func (r *credentialResolverStub) CodingCredential(_ context.Context, workspaceID, integrationID string) (coderepository.Credentials, error) {
+func (r *credentialResolverStub) CodingCredential(_ context.Context, workspaceID, integrationID string) (coderepositorymodel.Credentials, error) {
 	r.workspaceID = workspaceID
 	r.integrationID = integrationID
-	return coderepository.Credentials{Token: "secret-token"}, nil
+	return coderepositorymodel.Credentials{Token: "secret-token"}, nil
 }
 
 func TestTaskCheckoutResolvesCredentialFromScopedIntegrationReference(t *testing.T) {
 	provider := &checkoutProviderStub{}
 	resolver := &credentialResolverStub{}
-	executor := &Executor{repositoryProviders: map[string]coderepository.CodingProvider{"github": provider}, config: Config{CodingCredentialResolver: resolver}}
+	executor := &Executor{repositoryProviders: map[string]checkout.Provider{"github": provider}, config: Config{CodingCredentialResolver: resolver}}
 	run := runConfig()
-	run.Repositories = []orchestration.WorkspaceRepository{{ID: "repo", ProviderName: "github", URL: "https://github.com/acme/project.git", IntegrationID: "integration", ProviderRepositoryID: "42", DefaultBranch: "trunk", Name: "acme/project"}}
+	run.Repositories = []orchestrationmodel.WorkspaceRepository{{ID: "repo", ProviderName: "github", URL: "https://github.com/acme/project.git", IntegrationID: "integration", ProviderRepositoryID: "42", DefaultBranch: "trunk", Name: "acme/project"}}
 	if err := executor.prepareRepositories(context.Background(), t.TempDir(), run); err != nil {
 		t.Fatal(err)
 	}
@@ -442,6 +450,7 @@ func (f *fakeEngine) ContainerRemove(_ context.Context, id string, _ mobyclient.
 	f.removedID = id
 	return mobyclient.ContainerRemoveResult{}, f.removeErr
 }
+
 func (*fakeEngine) Close() error { return nil }
 
 var (

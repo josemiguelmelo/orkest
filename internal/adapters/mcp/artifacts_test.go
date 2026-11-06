@@ -9,21 +9,22 @@ import (
 	"time"
 
 	"github.com/josemiguelmelo/orkest/internal/server/artifact"
-	"github.com/josemiguelmelo/orkest/internal/server/coderepository"
-	"github.com/josemiguelmelo/orkest/internal/server/task"
+	artifactmodel "github.com/josemiguelmelo/orkest/internal/server/artifact/model"
+	coderepositorymodel "github.com/josemiguelmelo/orkest/internal/server/coderepository/model"
+	taskmodel "github.com/josemiguelmelo/orkest/internal/server/task/model"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 type artifactTestServices struct {
 	artifact.ArtifactRepository
-	scope artifact.Scope
+	scope artifactmodel.Scope
 }
 
-func (*artifactTestServices) Get(context.Context, string, string, string, string) (task.Task, error) {
-	return task.Task{}, nil
+func (*artifactTestServices) Get(context.Context, string, string, string, string) (taskmodel.Task, error) {
+	return taskmodel.Task{}, nil
 }
 
-func (*artifactTestServices) List(context.Context, string, string, string) ([]coderepository.CodeRepository, error) {
+func (*artifactTestServices) List(context.Context, string, string, string) ([]coderepositorymodel.CodeRepository, error) {
 	return nil, nil
 }
 
@@ -36,9 +37,9 @@ type artifactTestRepository struct {
 	services *artifactTestServices
 }
 
-func (r artifactTestRepository) Publish(_ context.Context, scope artifact.Scope, _ artifact.PublishInput) (artifact.Revision, error) {
+func (r artifactTestRepository) Publish(_ context.Context, scope artifactmodel.Scope, _ artifactmodel.PublishInput) (artifactmodel.Revision, error) {
 	r.services.scope = scope
-	return artifact.Revision{ID: "revision"}, nil
+	return artifactmodel.Revision{ID: "revision"}, nil
 }
 
 type bearerTransport struct{ token string }
@@ -74,7 +75,7 @@ func TestArtifactMCPPublishingUsesAuthenticatedRun(t *testing.T) {
 	if err != nil || result.IsError {
 		t.Fatalf("publish: %+v %v", result, err)
 	}
-	if services.scope != (artifact.Scope{UserID: "user", OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", RunID: "run"}) {
+	if services.scope != (artifactmodel.Scope{UserID: "user", OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", RunID: "run"}) {
 		t.Fatalf("unbound scope: %+v", services.scope)
 	}
 }

@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/josemiguelmelo/orkest/internal/server/coderepository"
+	coderepositorymodel "github.com/josemiguelmelo/orkest/internal/server/coderepository/model"
 )
 
 type codingIntegrationAPI struct {
@@ -36,7 +37,7 @@ func (a codingIntegrationAPI) list(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a codingIntegrationAPI) create(w http.ResponseWriter, r *http.Request) {
-	var body coderepository.CodingIntegrationInput
+	var body coderepositorymodel.CodingIntegrationInput
 	if !decodeBody(w, r, &body) {
 		return
 	}
@@ -45,7 +46,7 @@ func (a codingIntegrationAPI) create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a codingIntegrationAPI) update(w http.ResponseWriter, r *http.Request) {
-	var body coderepository.CodingIntegrationInput
+	var body coderepositorymodel.CodingIntegrationInput
 	if !decodeBody(w, r, &body) {
 		return
 	}

@@ -8,6 +8,7 @@ import (
 
 	modelerrors "github.com/josemiguelmelo/orkest/internal/contracts/problem"
 	"github.com/josemiguelmelo/orkest/internal/platform/ids"
+	organizationmodel "github.com/josemiguelmelo/orkest/internal/server/organization/model"
 )
 
 type OrganizationService struct{ repository OrganizationRepository }
@@ -25,37 +26,37 @@ func (s *OrganizationService) RoleForUser(ctx context.Context, userID, organizat
 	return s.repository.OrganizationRole(ctx, userID, organizationID)
 }
 
-func (s *OrganizationService) ListOrganizations(ctx context.Context, userID string) ([]Organization, error) {
+func (s *OrganizationService) ListOrganizations(ctx context.Context, userID string) ([]organizationmodel.Organization, error) {
 	return s.repository.Organizations(ctx, userID)
 }
 
-func (s *OrganizationService) GetOrganization(ctx context.Context, userID, orgID string) (Organization, error) {
+func (s *OrganizationService) GetOrganization(ctx context.Context, userID, orgID string) (organizationmodel.Organization, error) {
 	return s.repository.Organization(ctx, userID, orgID)
 }
 
-func (s *OrganizationService) CreateOrganization(ctx context.Context, userID, name string) (Organization, error) {
+func (s *OrganizationService) CreateOrganization(ctx context.Context, userID, name string) (organizationmodel.Organization, error) {
 	var valid bool
 	if name, valid = normalizeName(name); !valid {
-		return Organization{}, modelerrors.ErrInvalid
+		return organizationmodel.Organization{}, modelerrors.ErrInvalid
 	}
 	id, err := ids.NewUUID()
 	if err != nil {
-		return Organization{}, fmt.Errorf("generate organization ID: %w", err)
+		return organizationmodel.Organization{}, fmt.Errorf("generate organization ID: %w", err)
 	}
 	return s.repository.CreateOrganization(ctx, id, userID, name)
 }
 
-func (s *OrganizationService) UpdateOrganization(ctx context.Context, userID, orgID, name string) (Organization, error) {
+func (s *OrganizationService) UpdateOrganization(ctx context.Context, userID, orgID, name string) (organizationmodel.Organization, error) {
 	var valid bool
 	if name, valid = normalizeName(name); !valid {
-		return Organization{}, modelerrors.ErrInvalid
+		return organizationmodel.Organization{}, modelerrors.ErrInvalid
 	}
 	role, err := s.repository.OrganizationRole(ctx, userID, orgID)
 	if err != nil {
-		return Organization{}, err
+		return organizationmodel.Organization{}, err
 	}
 	if role != "owner" && role != "admin" {
-		return Organization{}, modelerrors.ErrForbidden
+		return organizationmodel.Organization{}, modelerrors.ErrForbidden
 	}
 	return s.repository.UpdateOrganization(ctx, orgID, userID, name)
 }
@@ -71,7 +72,7 @@ func (s *OrganizationService) DeleteOrganization(ctx context.Context, userID, or
 	return s.repository.DeleteOrganization(ctx, orgID)
 }
 
-func (s *OrganizationService) ListOrganizationMembers(ctx context.Context, userID, orgID string) ([]Membership, error) {
+func (s *OrganizationService) ListOrganizationMembers(ctx context.Context, userID, orgID string) ([]organizationmodel.Membership, error) {
 	if _, err := s.repository.Organization(ctx, userID, orgID); err != nil {
 		return nil, err
 	}

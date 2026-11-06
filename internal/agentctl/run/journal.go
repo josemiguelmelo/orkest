@@ -14,7 +14,7 @@ import (
 	"syscall"
 	"time"
 
-	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
 )
 
@@ -49,7 +49,7 @@ type Journal struct {
 	events     []interaction.Event
 }
 
-func loadJournal(stateDir string, config runconfig.RunConfig, restore bool) (*Journal, []interaction.Event, error) {
+func loadJournal(stateDir string, config configmodel.RunConfig, restore bool) (*Journal, []interaction.Event, error) {
 	if !filepath.IsAbs(stateDir) {
 		return nil, nil, fmt.Errorf("%w: absolute state directory required", ErrJournal)
 	}

@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
+	runmodel "github.com/josemiguelmelo/orkest/internal/agentctl/run/model"
 )
 
 type pendingPermission struct {
@@ -20,7 +21,7 @@ func (c *conversation) registerPermission(ctx context.Context, commandID string,
 	c.eventMu.Lock()
 	defer c.eventMu.Unlock()
 	c.mu.Lock()
-	if c.closed || c.executionState == StateInterrupted || c.state.activeCommandID != commandID || ctx.Err() != nil {
+	if c.closed || c.executionState == runmodel.StateInterrupted || c.state.activeCommandID != commandID || ctx.Err() != nil {
 		c.mu.Unlock()
 		return "", nil, interaction.ErrConversation
 	}
@@ -37,7 +38,7 @@ func (c *conversation) registerPermission(ctx context.Context, commandID string,
 		return "", nil, interaction.ErrConversation
 	}
 	c.pending[id] = pending
-	c.executionState = StateWaitingPermission
+	c.executionState = runmodel.StateWaitingPermission
 	return id, pending, nil
 }
 
@@ -63,8 +64,8 @@ func (c *conversation) removePendingPermission(id string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	delete(c.pending, id)
-	if c.executionState == StateWaitingPermission && len(c.pending) == 0 {
-		c.executionState = StateRunning
+	if c.executionState == runmodel.StateWaitingPermission && len(c.pending) == 0 {
+		c.executionState = runmodel.StateRunning
 	}
 }
 
@@ -92,7 +93,7 @@ func (c *conversation) RespondPermission(response interaction.PermissionResponse
 func (c *conversation) validatePermissionResponse(response interaction.PermissionResponse) (*pendingPermission, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	if c.closed || c.executionState == StateInterrupted || c.config == nil || c.session == nil {
+	if c.closed || c.executionState == runmodel.StateInterrupted || c.config == nil || c.session == nil {
 		return nil, interaction.ErrPermission
 	}
 	if response.TaskID != c.config.TaskID || response.RunID != c.config.RunID || response.SessionID != c.session.SessionID() {

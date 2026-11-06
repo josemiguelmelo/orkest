@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/josemiguelmelo/orkest/internal/server/orchestration"
+	orchestrationmodel "github.com/josemiguelmelo/orkest/internal/server/orchestration/model"
 )
 
 // Literals capture the previous HTTP representation, not a new-code round trip.
@@ -42,7 +42,7 @@ func TestPreviousV1CommandAndStatusPayloads(t *testing.T) {
 	if err := client.CancelPrompt(ctx, server.URL, "command"); err != nil {
 		t.Fatal(err)
 	}
-	if err := client.RespondPermission(ctx, server.URL, orchestration.PermissionResponse{TaskID: "task", RunID: "run", SessionID: "native", RequestID: "request", OptionID: "allow-once"}); err != nil {
+	if err := client.RespondPermission(ctx, server.URL, orchestrationmodel.PermissionResponse{TaskID: "task", RunID: "run", SessionID: "native", RequestID: "request", OptionID: "allow-once"}); err != nil {
 		t.Fatal(err)
 	}
 	for _, expected := range []struct{ path, body string }{
@@ -67,7 +67,7 @@ func TestPreviousV1CommandAndStatusPayloads(t *testing.T) {
 		}
 	}
 	status, err := client.Status(ctx, server.URL)
-	if err != nil || status.OrganizationID != "org" || status.WorkspaceID != "workspace" || status.TaskID != "task" || status.RunID != "run" || status.SessionID != "native" || status.TaskSessionID != "conversation" || status.State != orchestration.StateWaitingPermission || !status.Configured || !status.ExecutionAvailable || !status.ProcessAlive || !status.QueuePaused || status.QueueDepth != 2 || status.RunEnded || !status.RecoveryBlocked || status.ActiveCommandID != "command" {
+	if err != nil || status.OrganizationID != "org" || status.WorkspaceID != "workspace" || status.TaskID != "task" || status.RunID != "run" || status.SessionID != "native" || status.TaskSessionID != "conversation" || status.State != orchestrationmodel.StateWaitingPermission || !status.Configured || !status.ExecutionAvailable || !status.ProcessAlive || !status.QueuePaused || status.QueueDepth != 2 || status.RunEnded || !status.RecoveryBlocked || status.ActiveCommandID != "command" {
 		t.Fatalf("v1 status lost fields: %+v %v", status, err)
 	}
 }

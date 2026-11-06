@@ -2,17 +2,19 @@ package orchestration
 
 import (
 	"context"
+
+	orchestrationmodel "github.com/josemiguelmelo/orkest/internal/server/orchestration/model"
 )
 
 // SessionRepository owns task session selection and atomic run reservation.
 type SessionRepository interface {
-	CurrentSession(context.Context, string, string, string) (RunConfig, bool, error)
-	ReserveSessionRun(context.Context, RunConfig, int64) error
+	CurrentSession(context.Context, string, string, string) (orchestrationmodel.RunConfig, bool, error)
+	ReserveSessionRun(context.Context, orchestrationmodel.RunConfig, int64) error
 }
 
 type directSessionRepository interface {
-	CurrentDirectSession(context.Context, string, string, string) (RunConfig, bool, error)
-	ReserveDirectSessionRun(context.Context, RunConfig) error
+	CurrentDirectSession(context.Context, string, string, string) (orchestrationmodel.RunConfig, bool, error)
+	ReserveDirectSessionRun(context.Context, orchestrationmodel.RunConfig) error
 }
 
 type PromptDelivery struct{ CommandID, Text string }

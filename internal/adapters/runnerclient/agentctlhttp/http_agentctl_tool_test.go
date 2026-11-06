@@ -9,10 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/josemiguelmelo/orkest/internal/server/orchestration"
-
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
+	orchestrationmodel "github.com/josemiguelmelo/orkest/internal/server/orchestration/model"
 )
 
 func TestAgentctlStreamPreservesToolDetails(t *testing.T) {
@@ -37,8 +36,8 @@ func TestAgentctlStreamPreservesToolDetails(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	done := errors.New("event received")
-	var received orchestration.AgentActivityEvent
-	err := NewHTTPAgentctlClient(server.Client()).Connect(ctx, server.URL, 0, func() {}, func(event orchestration.AgentActivityEvent) error { received = event; return done })
+	var received orchestrationmodel.AgentActivityEvent
+	err := NewHTTPAgentctlClient(server.Client()).Connect(ctx, server.URL, 0, func() {}, func(event orchestrationmodel.AgentActivityEvent) error { received = event; return done })
 	if !errors.Is(err, done) {
 		t.Fatalf("stream failed: %v", err)
 	}

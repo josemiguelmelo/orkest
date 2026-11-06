@@ -10,6 +10,7 @@ import (
 	modelerrors "github.com/josemiguelmelo/orkest/internal/contracts/problem"
 	coreruntime "github.com/josemiguelmelo/orkest/internal/contracts/runtimecatalog"
 	"github.com/josemiguelmelo/orkest/internal/platform/ids"
+	executionprofilemodel "github.com/josemiguelmelo/orkest/internal/server/executionprofile/model"
 )
 
 var ErrNotConfigured = errors.New("execution image registry is not configured")
@@ -25,14 +26,14 @@ func NewExecutionProfileService(profileRepository ExecutionProfileRepository, ac
 	return &ExecutionProfileService{profileRepository: profileRepository, access: access, imageRepository: imageRepository, images: images}
 }
 
-func (s *ExecutionProfileService) List(ctx context.Context, user, org, ws string) ([]Profile, error) {
+func (s *ExecutionProfileService) List(ctx context.Context, user, org, ws string) ([]executionprofilemodel.Profile, error) {
 	if _, err := s.access.GetWorkspace(ctx, user, org, ws); err != nil {
 		return nil, err
 	}
 	return s.profileRepository.List(ctx, ws)
 }
 
-func (s *ExecutionProfileService) Builds(ctx context.Context, user, org, ws, id string) ([]Build, error) {
+func (s *ExecutionProfileService) Builds(ctx context.Context, user, org, ws, id string) ([]executionprofilemodel.Build, error) {
 	if _, err := s.access.GetWorkspace(ctx, user, org, ws); err != nil {
 		return nil, err
 	}
@@ -43,43 +44,43 @@ func (s *ExecutionProfileService) Builds(ctx context.Context, user, org, ws, id 
 }
 
 // Save snapshots build inputs and enqueues atomically; generation is optimistic concurrency control.
-func (s *ExecutionProfileService) Save(ctx context.Context, user, org, ws, id string, generation int64, input Input) (Profile, error) {
+func (s *ExecutionProfileService) Save(ctx context.Context, user, org, ws, id string, generation int64, input executionprofilemodel.Input) (executionprofilemodel.Profile, error) {
 	w, err := s.access.GetWorkspace(ctx, user, org, ws)
 	if err != nil {
-		return Profile{}, err
+		return executionprofilemodel.Profile{}, err
 	}
 	if w.Role != "admin" && w.Role != "owner" {
-		return Profile{}, modelerrors.ErrForbidden
+		return executionprofilemodel.Profile{}, modelerrors.ErrForbidden
 	}
 	input.Name = strings.TrimSpace(input.Name)
 	input.ToolchainImage = strings.TrimSpace(input.ToolchainImage)
 	if input.Name == "" || len(input.Name) > 200 || len(input.Description) > 2000 || !input.Runtime.Available() {
-		return Profile{}, modelerrors.ErrInvalid
+		return executionprofilemodel.Profile{}, modelerrors.ErrInvalid
 	}
 	if _, err = reference.ParseNormalizedNamed(input.ToolchainImage); err != nil {
-		return Profile{}, modelerrors.ErrInvalid
+		return executionprofilemodel.Profile{}, modelerrors.ErrInvalid
 	}
 	if s.imageRepository == "" {
-		return Profile{}, ErrNotConfigured
+		return executionprofilemodel.Profile{}, ErrNotConfigured
 	}
 	target, parseErr := reference.ParseNormalizedNamed(s.imageRepository)
 	if parseErr != nil || !reference.IsNameOnly(target) {
-		return Profile{}, ErrNotConfigured
+		return executionprofilemodel.Profile{}, ErrNotConfigured
 	}
 
 	create := id == ""
 	if create {
 		id, err = ids.NewUUID()
 		if err != nil {
-			return Profile{}, err
+			return executionprofilemodel.Profile{}, err
 		}
 	} else {
 		previous, getErr := s.profileRepository.Get(ctx, ws, id)
 		if getErr != nil {
-			return Profile{}, getErr
+			return executionprofilemodel.Profile{}, getErr
 		}
 		if previous.Runtime != input.Runtime {
-			return Profile{}, fmt.Errorf("%w: create another profile to change runtime", modelerrors.ErrInvalid)
+			return executionprofilemodel.Profile{}, fmt.Errorf("%w: create another profile to change runtime", modelerrors.ErrInvalid)
 		}
 	}
 	base := s.images[input.Runtime]
@@ -89,11 +90,11 @@ func (s *ExecutionProfileService) Save(ctx context.Context, user, org, ws, id st
 	}
 	buildID, err := ids.NewUUID()
 	if err != nil {
-		return Profile{}, err
+		return executionprofilemodel.Profile{}, err
 	}
-	p := Profile{ID: id, WorkspaceID: ws, Input: input, Generation: generation}
+	p := executionprofilemodel.Profile{ID: id, WorkspaceID: ws, Input: input, Generation: generation}
 	provider, _ := coreruntime.ProviderFor(input.Runtime)
-	b := Build{RuntimeVersion: provider.Version(), ID: buildID, ProfileID: id, WorkspaceID: ws, Runtime: input.Runtime, ToolchainImage: input.ToolchainImage, BaseImage: base, Destination: s.imageRepository + ":build-" + buildID}
+	b := executionprofilemodel.Build{RuntimeVersion: provider.Version(), ID: buildID, ProfileID: id, WorkspaceID: ws, Runtime: input.Runtime, ToolchainImage: input.ToolchainImage, BaseImage: base, Destination: s.imageRepository + ":build-" + buildID}
 	return s.profileRepository.Save(ctx, p, b, create)
 }
 

@@ -10,8 +10,9 @@ import (
 	"sync"
 	"time"
 
-	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
+	runmodel "github.com/josemiguelmelo/orkest/internal/agentctl/run/model"
 	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
 )
 
@@ -22,26 +23,6 @@ var (
 	ErrNotConfigured         = errors.New("configure the agent before launching")
 )
 
-type RunStatus struct {
-	OrganizationID     string
-	WorkspaceID        string
-	TaskID             string
-	RunID              string
-	RecoveryBlocked    bool
-	Configured         bool
-	ExecutionAvailable bool
-	State              ExecutionState
-	ProcessAlive       bool
-	SessionID          string
-	TaskSessionID      string
-	ActiveCommandID    string
-	QueueDepth         int
-	QueuePaused        bool
-	RunEnded           bool
-	RunCancelled       bool
-	RecoveryPermitted  bool
-}
-
 // RunController owns the lifecycle and conversation of one execution run.
 // Configuring a run never starts work.
 type RunController struct {
@@ -51,7 +32,7 @@ type RunController struct {
 	// mu protects configuration and session lifecycle. When needed, acquire it
 	// before the conversation lock; conversation operations never acquire this lock.
 	mu              sync.RWMutex
-	runConfig       *runconfig.RunConfig
+	runConfig       *configmodel.RunConfig
 	host            agentruntime.RuntimeHost
 	stateDir        string
 	ctx             context.Context
@@ -60,7 +41,7 @@ type RunController struct {
 	checkpoints     checkpointStore
 	launchAttempted bool
 	closed          bool
-	launchState     ExecutionState
+	launchState     runmodel.ExecutionState
 	startupWorkers  sync.WaitGroup
 	restoreMu       sync.Mutex
 	conversation    *conversation
@@ -81,11 +62,11 @@ func NewRunController(ctx context.Context, host agentruntime.RuntimeHost, stateD
 }
 
 // Configure accepts identical resubmissions and atomically rejects changed bindings.
-func (c *RunController) Configure(config runconfig.RunConfig) error {
+func (c *RunController) Configure(config configmodel.RunConfig) error {
 	return c.configure(config, false)
 }
 
-func (c *RunController) configure(config runconfig.RunConfig, recovering bool) error {
+func (c *RunController) configure(config configmodel.RunConfig, recovering bool) error {
 	config = config.Clone()
 	if err := config.Validate(); err != nil {
 		return err
@@ -119,10 +100,10 @@ func (c *RunController) configure(config runconfig.RunConfig, recovering bool) e
 	return nil
 }
 
-func (c *RunController) Status() RunStatus {
+func (c *RunController) Status() runmodel.RunStatus {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	status := RunStatus{
+	status := runmodel.RunStatus{
 		RecoveryBlocked:    c.recoveryBlocked,
 		Configured:         c.runConfig != nil,
 		ExecutionAvailable: c.host != nil && !c.closed && !c.recoveryBlocked,
@@ -147,71 +128,6 @@ func (c *RunController) Status() RunStatus {
 		status.State, status.ProcessAlive = observedExecutionState(conversation.State, c.session)
 	}
 	return status
-}
-
-// CanAutoRestore keeps recovery policy with the controller; the daemon
-// only schedules periodic supervision.
-func (c *RunController) CanAutoRestore() bool {
-	status := c.Status()
-	c.mu.RLock()
-	credentialsReady := c.runConfig != nil && (!c.runConfig.GitCredentialsRequired || len(c.runConfig.GitCredentials) > 0)
-	c.mu.RUnlock()
-	return credentialsReady && !status.RecoveryBlocked && status.RecoveryPermitted && !status.RunCancelled && !status.RunEnded && status.TaskSessionID != "" && status.SessionID != "" &&
-		!status.ProcessAlive && (status.State == StateExited || status.State == StateFailed || status.State == StateInterrupted)
-}
-
-// RestoreSession serializes replacement of a terminated runtime session.
-func (c *RunController) RestoreSession() error {
-	if !c.restoreMu.TryLock() {
-		return ErrLaunchConflict
-	}
-	defer c.restoreMu.Unlock()
-	c.mu.Lock()
-	if c.runConfig != nil && c.runConfig.GitCredentialsRequired && len(c.runConfig.GitCredentials) == 0 {
-		c.mu.Unlock()
-		return ErrNotConfigured
-	}
-	if c.checkpointBlocked {
-		c.mu.Unlock()
-		return ErrRecoveryBlocked
-	}
-	if c.closed || c.launchState == StateStarting {
-		c.mu.Unlock()
-		return ErrLaunchConflict
-	}
-	if c.conversation.Snapshot().RunEnded {
-		c.mu.Unlock()
-		return ErrLaunchConflict
-	}
-	var oldConversation *conversation
-	if c.launchAttempted && c.session != nil {
-		select {
-		case <-c.session.Done():
-			oldConversation = c.conversation
-			c.conversation = newConversation(c.ctx, c.stateDir, c.logger)
-			c.session = nil
-		default:
-			c.mu.Unlock()
-			return ErrLaunchConflict
-		}
-	}
-	if c.launchAttempted && c.session == nil {
-		c.launchAttempted = false
-	}
-	if c.runConfig == nil || c.host == nil {
-		c.mu.Unlock()
-		return ErrNotConfigured
-	}
-	c.recoveryBlocked = false
-	c.launchAttempted, c.launchState = true, StateStarting
-	config := *c.runConfig
-	c.startupWorkers.Add(1)
-	c.mu.Unlock()
-	defer c.startupWorkers.Done()
-	if oldConversation != nil {
-		_ = oldConversation.close()
-	}
-	return c.startReservedSession(restoreSession, config)
 }
 
 type sessionStartMode uint8
@@ -242,7 +158,7 @@ func (c *RunController) Launch() error {
 		return agentruntime.ErrRuntimeHostUnavailable
 	}
 	c.launchAttempted = true
-	c.launchState = StateStarting
+	c.launchState = runmodel.StateStarting
 	config := *c.runConfig
 	c.startupWorkers.Add(1)
 	c.mu.Unlock()
@@ -250,7 +166,7 @@ func (c *RunController) Launch() error {
 	return c.startReservedSession(createSession, config)
 }
 
-func (c *RunController) startReservedSession(mode sessionStartMode, config runconfig.RunConfig) error {
+func (c *RunController) startReservedSession(mode sessionStartMode, config configmodel.RunConfig) error {
 	startedAt := time.Now()
 	launchAttrs := append(runLogAttrs(config), "task_session_id", config.TaskSessionID, "restore_session", mode == restoreSession)
 	c.logger.Info("runtime launch started", launchAttrs...)
@@ -263,21 +179,10 @@ func (c *RunController) startReservedSession(mode sessionStartMode, config runco
 	} else {
 		session, err = c.host.Launch(ctx, config.ForRuntime())
 	}
-	c.mu.Lock()
 	if err != nil {
-		if c.closed {
-			c.mu.Unlock()
-			return nil
-		}
-		c.launchState = StateFailed
-		if mode == restoreSession {
-			c.launchState = StateInterrupted
-			c.recoveryBlocked = true
-		}
-		c.logger.Error("runtime launch failed", append(launchAttrs, "error_type", fmt.Sprintf("%T", err), "duration_ms", time.Since(startedAt).Milliseconds())...)
-		c.mu.Unlock()
-		return err
+		return c.recordStartupFailure(mode, launchAttrs, startedAt, err)
 	}
+	c.mu.Lock()
 	if c.closed {
 		c.mu.Unlock()
 		_ = session.Close()
@@ -287,19 +192,12 @@ func (c *RunController) startReservedSession(mode sessionStartMode, config runco
 	c.conversation.bind(config, session)
 	conversation := c.conversation
 	c.mu.Unlock()
-	if config.TaskSessionID != "" {
-		if c.checkpoints.Save(config) != nil {
-			err = ErrJournal
-		}
-	}
-	if err == nil && mode == restoreSession {
-		err = conversation.ReplayAndReconcile(ctx)
-	}
+	err = c.initializeConversation(ctx, mode, config, conversation)
 	if err != nil {
 		_ = session.Close()
-		conversation.setExecutionState(StateInterrupted)
+		conversation.setExecutionState(runmodel.StateInterrupted)
 		c.mu.Lock()
-		c.launchState, c.recoveryBlocked = StateInterrupted, true
+		c.launchState, c.recoveryBlocked = runmodel.StateInterrupted, true
 		c.mu.Unlock()
 		return err
 	}
@@ -309,7 +207,7 @@ func (c *RunController) startReservedSession(mode sessionStartMode, config runco
 		_ = session.Close()
 		return nil
 	}
-	c.launchState = StateReady
+	c.launchState = runmodel.StateReady
 	c.logger.Info("runtime session ready", append(runLogAttrs(config), "session_id", session.SessionID(), "duration_ms", time.Since(startedAt).Milliseconds())...)
 	c.mu.Unlock()
 	return nil
@@ -350,66 +248,8 @@ func (c *RunController) Subscribe(after uint64) ([]interaction.Event, <-chan int
 	return c.currentConversation().Subscribe(after)
 }
 
-func runLogAttrs(config runconfig.RunConfig) []any {
+func runLogAttrs(config configmodel.RunConfig) []any {
 	return []any{"organization_id", config.OrganizationID, "workspace_id", config.WorkspaceID, "task_id", config.TaskID, "run_id", config.RunID, "runtime", config.Runtime}
-}
-
-// RecoverFromCheckpoint restores the last bound run on daemon restart. Runtime ownership must
-// be acquired before any prompt is admitted. Finished runs are never resumed.
-func (c *RunController) RecoverFromCheckpoint(expectedRunID string) (result error) {
-	c.checkpointMu.Lock()
-	defer c.checkpointMu.Unlock()
-	c.mu.Lock()
-	if c.closed || c.launchAttempted {
-		c.mu.Unlock()
-		return ErrLaunchConflict
-	}
-	c.checkpointBlocked = true
-	c.mu.Unlock()
-	defer func() {
-		c.mu.Lock()
-		defer c.mu.Unlock()
-		if result != nil && c.checkpointBlocked {
-			c.recoveryBlocked, c.launchState = true, StateInterrupted
-		}
-	}()
-	config, found, err := c.checkpoints.Load(expectedRunID)
-	if err != nil {
-		return err
-	}
-	if !found {
-		c.mu.Lock()
-		c.checkpointBlocked, c.recoveryBlocked = false, false
-		c.mu.Unlock()
-		return nil
-	}
-	if err := c.configure(config, true); err != nil {
-		return err
-	}
-	if config.GitCredentialsRequired && len(config.GitCredentials) == 0 {
-		c.mu.Lock()
-		c.checkpointBlocked, c.recoveryBlocked = false, false
-		c.mu.Unlock()
-		return nil
-	}
-	if config.TaskSessionID != "" {
-		ended, err := journalRunEnded(c.stateDir, config)
-		if err != nil {
-			return err
-		}
-		if ended {
-			c.mu.Lock()
-			c.checkpointBlocked, c.recoveryBlocked = false, false
-			c.launchAttempted, c.launchState = true, StateExited
-			c.conversation.markRecoveredRunEnded()
-			c.mu.Unlock()
-			return nil
-		}
-	}
-	c.mu.Lock()
-	c.checkpointBlocked, c.recoveryBlocked = false, false
-	c.mu.Unlock()
-	return c.RestoreSession()
 }
 
 func (c *RunController) currentConversation() *conversation {
@@ -426,10 +266,26 @@ func (c *RunController) ResumeQueue() error { return c.currentConversation().Res
 
 func (c *RunController) DiscardQueue() error { return c.currentConversation().DiscardQueue() }
 
-// CheckpointRecoveryPending permits retrying the saved checkpoint only. It never
-// authorizes creating a session when the checkpoint cannot be read or validated.
-func (c *RunController) CheckpointRecoveryPending() bool {
-	c.mu.RLock()
-	defer c.mu.RUnlock()
-	return c.checkpointBlocked && !c.closed
+func (c *RunController) recordStartupFailure(mode sessionStartMode, attrs []any, startedAt time.Time, err error) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.closed {
+		return nil
+	}
+	c.launchState = runmodel.StateFailed
+	if mode == restoreSession {
+		c.launchState, c.recoveryBlocked = runmodel.StateInterrupted, true
+	}
+	c.logger.Error("runtime launch failed", append(attrs, "error_type", fmt.Sprintf("%T", err), "duration_ms", time.Since(startedAt).Milliseconds())...)
+	return err
+}
+
+func (c *RunController) initializeConversation(ctx context.Context, mode sessionStartMode, config configmodel.RunConfig, conversation *conversation) error {
+	if config.TaskSessionID != "" && c.checkpoints.Save(config) != nil {
+		return ErrJournal
+	}
+	if mode == restoreSession {
+		return conversation.ReplayAndReconcile(ctx)
+	}
+	return nil
 }

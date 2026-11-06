@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/josemiguelmelo/orkest/internal/platform/ids"
-
 	modelerrors "github.com/josemiguelmelo/orkest/internal/contracts/problem"
-	"github.com/josemiguelmelo/orkest/internal/server/workflow"
+	"github.com/josemiguelmelo/orkest/internal/platform/ids"
+	taskmodel "github.com/josemiguelmelo/orkest/internal/server/task/model"
+	workflowmodel "github.com/josemiguelmelo/orkest/internal/server/workflow/model"
 )
 
 // WorkflowCommand is the canonical identity payload for task workflow mutations.
@@ -22,8 +22,8 @@ type WorkflowCommand struct {
 }
 
 type TaskWorkflowSnapshot struct {
-	Workflow           workflow.Definition
-	Task               Task
+	Workflow           workflowmodel.Definition
+	Task               taskmodel.Task
 	ActiveLaunch       bool
 	RecordedCommand    bool
 	RecordedInput      *WorkflowCommand
@@ -41,7 +41,7 @@ type TaskWorkflowEffects struct {
 }
 
 type TaskUpdateEffects struct {
-	Content  TaskInput
+	Content  taskmodel.TaskInput
 	Workflow TaskWorkflowEffects
 }
 
@@ -52,37 +52,37 @@ type TaskWorkflowPlanner interface {
 }
 
 type TaskUpdateRepository interface {
-	WithTaskUpdate(context.Context, string, string, string, string, TaskInput, func(TaskWorkflowSnapshot, TaskInput) (TaskUpdateEffects, error)) (Task, error)
+	WithTaskUpdate(context.Context, string, string, string, string, taskmodel.TaskInput, func(TaskWorkflowSnapshot, taskmodel.TaskInput) (TaskUpdateEffects, error)) (taskmodel.Task, error)
 }
 
-func (s *TaskService) Update(ctx context.Context, userID, orgID, workspaceID, taskID string, input TaskInput) (Task, error) {
+func (s *TaskService) Update(ctx context.Context, userID, orgID, workspaceID, taskID string, input taskmodel.TaskInput) (taskmodel.Task, error) {
 	if err := s.authorize(ctx, userID, orgID, workspaceID); err != nil {
-		return Task{}, err
+		return taskmodel.Task{}, err
 	}
 	if err := NormalizeTaskContent(&input); err != nil {
-		return Task{}, err
+		return taskmodel.Task{}, err
 	}
 	if err := ValidateWorkOptions(input.SessionMode, input.PromptText, input.CommandID); err != nil {
-		return Task{}, err
+		return taskmodel.Task{}, err
 	}
 	if input.Status == "" {
-		return Task{}, modelerrors.ErrInvalid
+		return taskmodel.Task{}, modelerrors.ErrInvalid
 	}
 	candidateID := ""
 	if input.StartWork && input.CommandID == "" {
 		var err error
 		candidateID, err = ids.NewUUID()
 		if err != nil {
-			return Task{}, fmt.Errorf("generate task execution command ID: %w", err)
+			return taskmodel.Task{}, fmt.Errorf("generate task execution command ID: %w", err)
 		}
 	}
-	return s.updates.WithTaskUpdate(ctx, userID, orgID, workspaceID, taskID, input, func(snapshot TaskWorkflowSnapshot, input TaskInput) (TaskUpdateEffects, error) {
+	return s.updates.WithTaskUpdate(ctx, userID, orgID, workspaceID, taskID, input, func(snapshot TaskWorkflowSnapshot, input taskmodel.TaskInput) (TaskUpdateEffects, error) {
 		snapshot.CandidateCommandID = candidateID
 		return s.planTaskUpdate(snapshot, input)
 	})
 }
 
-func (s *TaskService) planTaskUpdate(snapshot TaskWorkflowSnapshot, input TaskInput) (TaskUpdateEffects, error) {
+func (s *TaskService) planTaskUpdate(snapshot TaskWorkflowSnapshot, input taskmodel.TaskInput) (TaskUpdateEffects, error) {
 	command := WorkflowCommand{Action: "move", StageID: input.Status, StageVersion: input.StageVersion, CommandID: input.CommandID, SessionMode: input.SessionMode, PromptText: input.PromptText}
 	if input.StartWork {
 		command.Action = "start"

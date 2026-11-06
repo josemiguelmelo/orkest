@@ -6,7 +6,8 @@ import (
 
 	modelerrors "github.com/josemiguelmelo/orkest/internal/contracts/problem"
 	"github.com/josemiguelmelo/orkest/internal/server/task"
-	definition "github.com/josemiguelmelo/orkest/internal/server/workflow"
+	taskmodel "github.com/josemiguelmelo/orkest/internal/server/task/model"
+	workflowmodel "github.com/josemiguelmelo/orkest/internal/server/workflow/model"
 )
 
 // ProcessNextEvent processes and acknowledges one durable event atomically.
@@ -17,29 +18,29 @@ func (s *WorkflowAutomationService) ProcessNextEvent(ctx context.Context) (bool,
 // AutomationEventSnapshot contains persistence-independent facts read under the
 // repository's event, workflow and task locks. The callback performs no I/O.
 type AutomationEventSnapshot struct {
-	Workflow                        definition.Definition
+	Workflow                        workflowmodel.Definition
 	Event                           AutomationEvent
 	StageID, AssigneeAgentID, RunID string
 	StageVersion                    int64
-	WorkState                       task.WorkState
+	WorkState                       taskmodel.WorkState
 	ActiveLaunch                    bool
 }
 
 type AutomationEvent struct {
 	ID, CorrelationID, WorkspaceID, TaskID string
-	Type                                   definition.EventType
+	Type                                   workflowmodel.EventType
 	StageVersion                           int64
 	RunID, ActorID                         string
 }
 
-// A nil StageTransitionPlan and empty task.WorkState acknowledge an obsolete or superseded event.
+// A nil StageTransitionPlan and empty taskmodel.WorkState acknowledge an obsolete or superseded event.
 type AutomationEventEffects struct {
 	Plan                 *StageTransitionPlan
 	Moved                bool
 	Persistence          task.WorkflowPersistenceEffects
 	ConfigurationVersion int64
 	AcknowledgeID        string
-	WorkState            task.WorkState
+	WorkState            taskmodel.WorkState
 	RuleID, ActorID      string
 }
 
@@ -56,25 +57,25 @@ func (s *WorkflowAutomationService) planEvent(snapshot AutomationEventSnapshot) 
 		return AutomationEventEffects{}, nil
 	}
 	switch e.Type {
-	case definition.RunSucceeded, definition.RunFailed:
-		if snapshot.RunID != e.RunID || snapshot.WorkState == task.WorkStateCompleted || snapshot.WorkState == task.WorkStateFailed {
+	case workflowmodel.RunSucceeded, workflowmodel.RunFailed:
+		if snapshot.RunID != e.RunID || snapshot.WorkState == taskmodel.WorkStateCompleted || snapshot.WorkState == taskmodel.WorkStateFailed {
 			return AutomationEventEffects{}, nil
 		}
-	case definition.StageEntered:
-		if snapshot.WorkState != task.WorkStateIdle || snapshot.RunID != "" {
+	case workflowmodel.StageEntered:
+		if snapshot.WorkState != taskmodel.WorkStateIdle || snapshot.RunID != "" {
 			return AutomationEventEffects{}, nil
 		}
-	case definition.StageCompleted:
-		if snapshot.WorkState != task.WorkStateCompleted || snapshot.RunID != e.RunID {
+	case workflowmodel.StageCompleted:
+		if snapshot.WorkState != taskmodel.WorkStateCompleted || snapshot.RunID != e.RunID {
 			return AutomationEventEffects{}, nil
 		}
 	}
-	if e.Type == definition.RunFailed {
-		return AutomationEventEffects{WorkState: task.WorkStateFailed}, nil
+	if e.Type == workflowmodel.RunFailed {
+		return AutomationEventEffects{WorkState: taskmodel.WorkStateFailed}, nil
 	}
 	plan, err := s.evaluator.Evaluate(snapshot.Workflow, StageTransitionPlan{StageID: snapshot.StageID, AssigneeAgentID: snapshot.AssigneeAgentID}, Event{Type: e.Type})
 	if errors.Is(err, modelerrors.ErrConflict) {
-		return AutomationEventEffects{RuleID: plan.RuleID, WorkState: task.WorkStateFailed}, nil
+		return AutomationEventEffects{RuleID: plan.RuleID, WorkState: taskmodel.WorkStateFailed}, nil
 	}
 	if err != nil {
 		return AutomationEventEffects{}, err
@@ -87,7 +88,7 @@ func (s *WorkflowAutomationService) planEvent(snapshot AutomationEventSnapshot) 
 		actor = snapshot.Workflow.ConfiguredBy
 	}
 	if plan.Start && actor == "" {
-		return AutomationEventEffects{RuleID: plan.RuleID, WorkState: task.WorkStateFailed}, nil
+		return AutomationEventEffects{RuleID: plan.RuleID, WorkState: taskmodel.WorkStateFailed}, nil
 	}
 	moved := plan.StageID != snapshot.StageID
 	version := snapshot.StageVersion

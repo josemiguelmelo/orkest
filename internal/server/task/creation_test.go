@@ -6,25 +6,26 @@ import (
 	"testing"
 
 	modelerrors "github.com/josemiguelmelo/orkest/internal/contracts/problem"
-	"github.com/josemiguelmelo/orkest/internal/server/workflow"
-	"github.com/josemiguelmelo/orkest/internal/server/workspace"
+	taskmodel "github.com/josemiguelmelo/orkest/internal/server/task/model"
+	workflowmodel "github.com/josemiguelmelo/orkest/internal/server/workflow/model"
+	workspacemodel "github.com/josemiguelmelo/orkest/internal/server/workspace/model"
 )
 
-type creationRepositoryStub struct{ created TaskInput }
+type creationRepositoryStub struct{ created taskmodel.TaskInput }
 
-func (r *creationRepositoryStub) WithTaskCreation(_ context.Context, id, workspaceID string, input TaskInput, decide func(TaskCreationSnapshot, TaskInput) (TaskCreationEffects, error)) (Task, error) {
-	effects, err := decide(TaskCreationSnapshot{Workflow: workflow.DefaultDefinition("Board")}, input)
+func (r *creationRepositoryStub) WithTaskCreation(_ context.Context, id, workspaceID string, input taskmodel.TaskInput, decide func(TaskCreationSnapshot, taskmodel.TaskInput) (TaskCreationEffects, error)) (taskmodel.Task, error) {
+	effects, err := decide(TaskCreationSnapshot{Workflow: workflowmodel.DefaultDefinition("Board")}, input)
 	if err != nil {
-		return Task{}, err
+		return taskmodel.Task{}, err
 	}
 	r.created = effects.Input
-	return Task{ID: id, WorkspaceID: workspaceID, Title: r.created.Title, Status: r.created.Status}, nil
+	return taskmodel.Task{ID: id, WorkspaceID: workspaceID, Title: r.created.Title, Status: r.created.Status}, nil
 }
 
 type creationAccessStub struct{ role string }
 
-func (a creationAccessStub) GetWorkspace(context.Context, string, string, string) (workspace.Workspace, error) {
-	return workspace.Workspace{Role: a.role}, nil
+func (a creationAccessStub) GetWorkspace(context.Context, string, string, string) (workspacemodel.Workspace, error) {
+	return workspacemodel.Workspace{Role: a.role}, nil
 }
 
 func creationTestService(repo *creationRepositoryStub, role string) *TaskService {
@@ -34,7 +35,7 @@ func creationTestService(repo *creationRepositoryStub, role string) *TaskService
 func TestCreateTaskDefaultsAndNormalizes(t *testing.T) {
 	repository := &creationRepositoryStub{}
 	service := creationTestService(repository, "member")
-	created, err := service.Create(context.Background(), "user", "org", "workspace", TaskInput{
+	created, err := service.Create(context.Background(), "user", "org", "workspace", taskmodel.TaskInput{
 		WorkflowID: "workspace", Title: "  Add task API  ", Labels: []string{" backend ", "backend", ""},
 	})
 	if err != nil {
@@ -54,7 +55,7 @@ func TestCreateTaskDefaultsAndNormalizes(t *testing.T) {
 func TestViewerCannotCreateTask(t *testing.T) {
 	repository := &creationRepositoryStub{}
 	service := creationTestService(repository, "viewer")
-	_, err := service.Create(context.Background(), "user", "org", "workspace", TaskInput{Title: "Task"})
+	_, err := service.Create(context.Background(), "user", "org", "workspace", taskmodel.TaskInput{Title: "Task"})
 	if !errors.Is(err, modelerrors.ErrForbidden) {
 		t.Fatalf("create error = %v, want forbidden", err)
 	}
@@ -63,7 +64,7 @@ func TestViewerCannotCreateTask(t *testing.T) {
 func TestInvalidWorkflowStatusIsRejected(t *testing.T) {
 	repository := &creationRepositoryStub{}
 	service := creationTestService(repository, "member")
-	_, err := service.Create(context.Background(), "user", "org", "workspace", TaskInput{WorkflowID: "workspace", Title: "Task", Status: "blocked"})
+	_, err := service.Create(context.Background(), "user", "org", "workspace", taskmodel.TaskInput{WorkflowID: "workspace", Title: "Task", Status: "blocked"})
 	if !errors.Is(err, modelerrors.ErrInvalid) {
 		t.Fatalf("create error = %v, want invalid", err)
 	}

@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
 	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
 	coreruntime "github.com/josemiguelmelo/orkest/internal/contracts/runtimecatalog"
@@ -33,13 +33,14 @@ func (p *chatRuntimeSession) Prompt(ctx context.Context, _ interaction.Command, 
 		return "", ctx.Err()
 	}
 }
+
 func (p *chatRuntimeSession) Cancel(context.Context) error { return nil }
 
 type chatRuntimeHost struct{ session *chatRuntimeSession }
 
 func (p chatRuntimeHost) Runtime() coreruntime.Runtime { return coreruntime.OpenCode }
 
-func (p chatRuntimeHost) Launch(context.Context, runconfig.RuntimeConfig) (agentruntime.RuntimeSession, error) {
+func (p chatRuntimeHost) Launch(context.Context, configmodel.RuntimeConfig) (agentruntime.RuntimeSession, error) {
 	return p.session, nil
 }
 
@@ -154,6 +155,7 @@ func TestJournalFailurePreventsProviderPrompt(t *testing.T) {
 }
 
 func (p chatRuntimeHost) Version() string { return "fixture-v1" }
-func (p chatRuntimeHost) Restore(ctx context.Context, c runconfig.RuntimeConfig) (agentruntime.RuntimeSession, error) {
+
+func (p chatRuntimeHost) Restore(ctx context.Context, c configmodel.RuntimeConfig) (agentruntime.RuntimeSession, error) {
 	return p.Launch(ctx, c)
 }

@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
 	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
 	coreruntime "github.com/josemiguelmelo/orkest/internal/contracts/runtimecatalog"
@@ -65,7 +65,8 @@ type delayedLaunchHost struct {
 }
 
 func (p delayedLaunchHost) Runtime() coreruntime.Runtime { return coreruntime.OpenCode }
-func (p delayedLaunchHost) Launch(context.Context, runconfig.RuntimeConfig) (agentruntime.RuntimeSession, error) {
+
+func (p delayedLaunchHost) Launch(context.Context, configmodel.RuntimeConfig) (agentruntime.RuntimeSession, error) {
 	close(p.started)
 	<-p.release
 	return p.session, nil
@@ -108,6 +109,7 @@ func TestControllerShutdownDuringConversationBinding(t *testing.T) {
 }
 
 func (p delayedLaunchHost) Version() string { return "fixture-v1" }
-func (p delayedLaunchHost) Restore(ctx context.Context, c runconfig.RuntimeConfig) (agentruntime.RuntimeSession, error) {
+
+func (p delayedLaunchHost) Restore(ctx context.Context, c configmodel.RuntimeConfig) (agentruntime.RuntimeSession, error) {
 	return p.Launch(ctx, c)
 }

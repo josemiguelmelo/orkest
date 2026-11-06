@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/josemiguelmelo/orkest/internal/server/coderepository"
+	coderepositorymodel "github.com/josemiguelmelo/orkest/internal/server/coderepository/model"
 )
 
 func TestAuthenticatedRepositoryDiscoveryPaginatesAndSanitizesFailures(t *testing.T) {
@@ -37,26 +37,26 @@ func TestAuthenticatedRepositoryDiscoveryPaginatesAndSanitizesFailures(t *testin
 	}))
 	defer server.Close()
 	provider := GitHubProvider{Client: server.Client(), APIBaseURL: server.URL}
-	first, err := provider.DiscoverRepositories(context.Background(), json.RawMessage(`{}`), coderepository.Credentials{Token: "secret-token"}, 1, 1)
+	first, err := provider.DiscoverRepositories(context.Background(), json.RawMessage(`{}`), coderepositorymodel.Credentials{Token: "secret-token"}, 1, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if len(first.Repositories) != 1 || first.NextPage != 2 || first.Repositories[0].DefaultBranch != "trunk" || !first.Repositories[0].Private {
 		t.Fatalf("first page=%+v", first)
 	}
-	second, err := provider.DiscoverRepositories(context.Background(), json.RawMessage(`{}`), coderepository.Credentials{Token: "secret-token"}, first.NextPage, 1)
+	second, err := provider.DiscoverRepositories(context.Background(), json.RawMessage(`{}`), coderepositorymodel.Credentials{Token: "secret-token"}, first.NextPage, 1)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if second.Repositories[0].ID != "2" || second.Repositories[0].DefaultBranch != "release" {
 		t.Fatalf("second page=%+v", second)
 	}
-	_, err = provider.DiscoverRepositories(context.Background(), json.RawMessage(`{}`), coderepository.Credentials{Token: "secret-token"}, 3, 10)
-	var providerErr *coderepository.ProviderError
+	_, err = provider.DiscoverRepositories(context.Background(), json.RawMessage(`{}`), coderepositorymodel.Credentials{Token: "secret-token"}, 3, 10)
+	var providerErr *coderepositorymodel.ProviderError
 	if !errors.As(err, &providerErr) || providerErr.Code != "github_token_invalid_or_revoked" || strings.Contains(err.Error(), "secret-token") {
 		t.Fatalf("sanitized auth error=%v", err)
 	}
-	_, err = provider.DiscoverRepositories(context.Background(), json.RawMessage(`{}`), coderepository.Credentials{Token: "secret-token"}, 4, 10)
+	_, err = provider.DiscoverRepositories(context.Background(), json.RawMessage(`{}`), coderepositorymodel.Credentials{Token: "secret-token"}, 4, 10)
 	if !errors.As(err, &providerErr) || providerErr.Code != "github_permission_denied_or_rate_limited" || strings.Contains(err.Error(), "secret-token") {
 		t.Fatalf("sanitized rate-limit error=%v", err)
 	}
@@ -77,7 +77,7 @@ func TestAuthenticatedGitOperationsKeepTokenOutOfArguments(t *testing.T) {
 	}
 	token := "do-not-leak-this-token"
 	provider := NewGitHubProvider()
-	err := provider.SyncAuthenticated(context.Background(), coderepository.RepositoryMetadata{ID: "42", CloneURL: "https://github.com/acme/project.git", DefaultBranch: "release"}, coderepository.Credentials{Token: token}, path)
+	err := provider.SyncAuthenticated(context.Background(), coderepositorymodel.RepositoryMetadata{ID: "42", CloneURL: "https://github.com/acme/project.git", DefaultBranch: "release"}, coderepositorymodel.Credentials{Token: token}, path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +106,7 @@ func TestAuthenticatedTaskCheckoutRejectsMismatchedOriginBeforeUsingCredentials(
 	if err := os.MkdirAll(filepath.Join(checkout, ".git"), 0o700); err != nil {
 		t.Fatal(err)
 	}
-	err := NewGitHubProvider().PrepareAuthenticatedTaskCheckout(context.Background(), coderepository.RepositoryMetadata{ID: "42", CloneURL: "https://github.com/acme/project.git", DefaultBranch: "main"}, coderepository.Credentials{Token: "sensitive-token"}, checkout, "orkest/task-1")
+	err := NewGitHubProvider().PrepareAuthenticatedTaskCheckout(context.Background(), coderepositorymodel.RepositoryMetadata{ID: "42", CloneURL: "https://github.com/acme/project.git", DefaultBranch: "main"}, coderepositorymodel.Credentials{Token: "sensitive-token"}, checkout, "orkest/task-1")
 	if err == nil || !strings.Contains(err.Error(), "origin") || strings.Contains(err.Error(), "sensitive-token") {
 		t.Fatalf("origin mismatch error=%v", err)
 	}

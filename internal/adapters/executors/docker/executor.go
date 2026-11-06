@@ -18,10 +18,12 @@ import (
 	"time"
 
 	"github.com/containerd/errdefs"
+	"github.com/josemiguelmelo/orkest/internal/adapters/executors/checkout"
 	coreruntime "github.com/josemiguelmelo/orkest/internal/contracts/runtimecatalog"
 	"github.com/josemiguelmelo/orkest/internal/platform/agentctllogs"
 	"github.com/josemiguelmelo/orkest/internal/server/coderepository"
 	"github.com/josemiguelmelo/orkest/internal/server/orchestration"
+	orchestrationmodel "github.com/josemiguelmelo/orkest/internal/server/orchestration/model"
 	"github.com/moby/moby/api/pkg/stdcopy"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/mount"
@@ -56,15 +58,13 @@ type Config struct {
 	CodexAuthFile            string
 	ProviderEnv              []string
 	CodingProviders          []coderepository.CodingProvider
-	CodingCredentialResolver interface {
-		CodingCredential(context.Context, string, string) (coderepository.Credentials, error)
-	}
+	CodingCredentialResolver checkout.CredentialResolver
 }
 
 type Executor struct {
 	client              EngineClient
 	config              Config
-	repositoryProviders map[string]coderepository.CodingProvider
+	repositoryProviders map[string]checkout.Provider
 }
 
 func New(ctx context.Context, config Config) (*Executor, error) {
@@ -127,7 +127,7 @@ func NewWithClient(ctx context.Context, config Config, client EngineClient) (*Ex
 	}
 	config.DataRoot, config.Images, config.AgentctlPort, config.ContainerUser, config.CodexAuthFile = root, images, port, containerUser, codexAuthFile
 	config.NetworkName = strings.TrimSpace(config.NetworkName)
-	providers := make(map[string]coderepository.CodingProvider, len(config.CodingProviders))
+	providers := make(map[string]checkout.Provider, len(config.CodingProviders))
 	for _, provider := range config.CodingProviders {
 		if provider == nil || strings.TrimSpace(provider.ProviderName()) == "" {
 			return nil, errors.New("code repository provider name is required")
@@ -142,28 +142,28 @@ var (
 	_ orchestration.AgentProcessController = (*Executor)(nil)
 )
 
-func (e *Executor) StartAgentctl(ctx context.Context, config orchestration.RunConfig) (orchestration.Process, error) {
+func (e *Executor) StartAgentctl(ctx context.Context, config orchestrationmodel.RunConfig) (orchestrationmodel.Process, error) {
 	if err := config.Validate(); err != nil {
-		return orchestration.Process{}, err
+		return orchestrationmodel.Process{}, err
 	}
 	image := config.ExecutionImage
 	if image == "" {
 		image = e.config.Images[config.Runtime]
 	}
 	if image == "" {
-		return orchestration.Process{}, fmt.Errorf("no Docker image configured for runtime %q", config.Runtime)
+		return orchestrationmodel.Process{}, fmt.Errorf("no Docker image configured for runtime %q", config.Runtime)
 	}
 	slog.Default().Info("starting agentctl container", "organization_id", config.OrganizationID, "workspace_id", config.WorkspaceID, "task_id", config.TaskID, "run_id", config.RunID, "runtime", config.Runtime, "image", image)
 	workDir, stateDir, err := e.taskDirectories(config)
 	if err != nil {
-		return orchestration.Process{}, err
+		return orchestrationmodel.Process{}, err
 	}
 	if err = e.prepareRepositories(ctx, workDir, config); err != nil {
-		return orchestration.Process{}, fmt.Errorf("prepare task repositories: %w", err)
+		return orchestrationmodel.Process{}, fmt.Errorf("prepare task repositories: %w", err)
 	}
 	labels, err := labelsFor(config)
 	if err != nil {
-		return orchestration.Process{}, err
+		return orchestrationmodel.Process{}, err
 	}
 	port := network.MustParsePort(fmt.Sprintf("%d/tcp", e.config.AgentctlPort))
 	providerEnv := e.providerEnvironment()
@@ -224,9 +224,9 @@ func (e *Executor) StartAgentctl(ctx context.Context, config orchestration.RunCo
 	if err != nil {
 		// The deterministic name is a usable reconciliation identity when the
 		// daemon created the container but the API response was lost.
-		return orchestration.Process{ID: name}, fmt.Errorf("create agentctl container: %w", err)
+		return orchestrationmodel.Process{ID: name}, fmt.Errorf("create agentctl container: %w", err)
 	}
-	process := orchestration.Process{ID: created.ID}
+	process := orchestrationmodel.Process{ID: created.ID}
 	if err = ctx.Err(); err != nil {
 		return process, e.removeAfterFailure(ctx, created.ID, fmt.Errorf("start agentctl container: %w", err))
 	}
@@ -267,46 +267,9 @@ func (e *Executor) StartAgentctl(ctx context.Context, config orchestration.RunCo
 	return process, nil
 }
 
-func (e *Executor) prepareRepositories(ctx context.Context, workDir string, config orchestration.RunConfig) error {
-	for _, repository := range config.Repositories {
-		provider, ok := e.repositoryProviders[repository.ProviderName]
-		if !ok {
-			return fmt.Errorf("repository provider %q is unavailable", repository.ProviderName)
-		}
-		if !safePathComponent(repository.ProviderName) || !safePathComponent(repository.ID) {
-			return errors.New("repository identity is invalid")
-		}
-		path := filepath.Join(workDir, "repositories", repository.ProviderName, repository.ID)
-		if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-			return fmt.Errorf("create repository directory: %w", err)
-		}
-		var checkoutErr error
-		if repository.IntegrationID != "" {
-			if e.config.CodingCredentialResolver == nil {
-				return errors.New("coding credential resolver is unavailable")
-			}
-			credential, resolveErr := e.config.CodingCredentialResolver.CodingCredential(ctx, config.WorkspaceID, repository.IntegrationID)
-			if resolveErr != nil {
-				return fmt.Errorf("resolve coding integration credential: %w", resolveErr)
-			}
-			metadata := coderepository.RepositoryMetadata{ID: repository.ProviderRepositoryID, Name: repository.Name, CloneURL: repository.URL, DefaultBranch: repository.DefaultBranch}
-			checkoutErr = provider.PrepareAuthenticatedTaskCheckout(ctx, metadata, credential, path, "")
-		} else {
-			legacy, ok := provider.(coderepository.LegacyRepositoryCheckout)
-			if !ok {
-				return errors.New("legacy repository checkout is unavailable")
-			}
-			checkoutErr = legacy.PreparePublicTaskCheckout(ctx, repository.URL, path, "")
-		}
-		if checkoutErr != nil {
-			return fmt.Errorf("prepare repository %q: %w", repository.ID, checkoutErr)
-		}
-	}
-	return nil
-}
-
-func safePathComponent(value string) bool {
-	return value != "" && value != "." && value != ".." && filepath.Base(value) == value && !strings.ContainsRune(value, filepath.Separator)
+func (e *Executor) prepareRepositories(ctx context.Context, workDir string, config orchestrationmodel.RunConfig) error {
+	preparer := checkout.Preparer{Providers: e.repositoryProviders, Credentials: e.config.CodingCredentialResolver}
+	return preparer.Prepare(ctx, workDir, config.WorkspaceID, config.Repositories)
 }
 
 func (e *Executor) providerEnvironment() []string {
@@ -426,7 +389,7 @@ func (e *Executor) AgentctlRunningByRunID(ctx context.Context, runID string) (bo
 	return false, nil
 }
 
-func (e *Executor) taskDirectories(config orchestration.RunConfig) (string, string, error) {
+func (e *Executor) taskDirectories(config orchestrationmodel.RunConfig) (string, string, error) {
 	scope, err := json.Marshal([]string{config.OrganizationID, config.WorkspaceID, config.TaskID})
 	if err != nil {
 		return "", "", fmt.Errorf("encode task storage scope: %w", err)
@@ -469,7 +432,7 @@ func (e *Executor) removeAfterFailure(ctx context.Context, containerID string, c
 	return cause
 }
 
-func labelsFor(config orchestration.RunConfig) (map[string]string, error) {
+func labelsFor(config orchestrationmodel.RunConfig) (map[string]string, error) {
 	values := []string{config.OrganizationID, config.WorkspaceID, config.TaskID, config.RunID}
 	labels := make(map[string]string, len(values)+2)
 	for i, key := range []string{"organization", "workspace", "task", "run"} {

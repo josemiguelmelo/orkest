@@ -7,23 +7,24 @@ import (
 
 	"github.com/josemiguelmelo/orkest/internal/platform/ids"
 	"github.com/josemiguelmelo/orkest/internal/server/orchestration"
+	orchestrationmodel "github.com/josemiguelmelo/orkest/internal/server/orchestration/model"
 )
 
 func testLaunchTransitionFencing(t *testing.T, db *PostgresDatabase, orgID, workspaceID, taskID string) {
 	ctx := context.Background()
 	repo := NewAgentLaunchPostgresRepository(db, nil)
-	for _, final := range []orchestration.LaunchStatus{orchestration.LaunchCompleted, orchestration.LaunchFailed} {
+	for _, final := range []orchestrationmodel.LaunchStatus{orchestrationmodel.LaunchCompleted, orchestrationmodel.LaunchFailed} {
 		runID, err := ids.NewUUID()
 		if err != nil {
 			t.Fatal(err)
 		}
-		launch := orchestration.Launch{RunID: runID, OrganizationID: orgID, WorkspaceID: workspaceID, TaskID: taskID, Status: orchestration.LaunchReady}
+		launch := orchestrationmodel.Launch{RunID: runID, OrganizationID: orgID, WorkspaceID: workspaceID, TaskID: taskID, Status: orchestrationmodel.LaunchReady}
 		if err = repo.CreateLaunch(ctx, launch); err != nil {
 			t.Fatal(err)
 		}
-		pending := orchestration.LaunchCompletedPendingClose
-		opposite := orchestration.LaunchFailedPendingClose
-		if final == orchestration.LaunchFailed {
+		pending := orchestrationmodel.LaunchCompletedPendingClose
+		opposite := orchestrationmodel.LaunchFailedPendingClose
+		if final == orchestrationmodel.LaunchFailed {
 			pending, opposite = opposite, pending
 		}
 		if err = repo.SetLaunchStatus(ctx, orchestration.PlanLaunchStatus(runID, pending)); err != nil {
@@ -51,11 +52,11 @@ func testLaunchTransitionFencing(t *testing.T, db *PostgresDatabase, orgID, work
 			t.Fatal(err)
 		}
 		// Late event replay must retain final state, including the legacy failed state.
-		event := orchestration.Event{RunID: runID, Sequence: 1, Payload: orchestration.AgentActivityEvent{RunID: runID, Sequence: 1, Type: orchestration.EventRunCompleted}}
-		if err = repo.SaveTerminalEvent(ctx, event, orchestration.LaunchCompletedPendingClose); err != nil {
+		event := orchestrationmodel.Event{RunID: runID, Sequence: 1, Payload: orchestrationmodel.AgentActivityEvent{RunID: runID, Sequence: 1, Type: orchestrationmodel.EventRunCompleted}}
+		if err = repo.SaveTerminalEvent(ctx, event, orchestrationmodel.LaunchCompletedPendingClose); err != nil {
 			t.Fatal(err)
 		}
-		if err = repo.SetLaunchStatus(ctx, orchestration.PlanLaunchStatus(runID, orchestration.LaunchCompleted)); err != nil {
+		if err = repo.SetLaunchStatus(ctx, orchestration.PlanLaunchStatus(runID, orchestrationmodel.LaunchCompleted)); err != nil {
 			t.Fatal(err)
 		}
 		if err = db.pool.QueryRow(ctx, "SELECT status FROM agent_launches WHERE run_id=$1", runID).Scan(&status); err != nil || status != string(final) {

@@ -9,6 +9,7 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/adapters/postgres/sqlc"
 	modelerrors "github.com/josemiguelmelo/orkest/internal/contracts/problem"
 	"github.com/josemiguelmelo/orkest/internal/server/skill"
+	skillmodel "github.com/josemiguelmelo/orkest/internal/server/skill/model"
 )
 
 type SkillCatalogPostgresRepository struct{ queries *sqlc.Queries }
@@ -19,38 +20,38 @@ func NewSkillCatalogPostgresRepository(database *PostgresDatabase) *SkillCatalog
 
 var _ skill.CatalogRepository = (*SkillCatalogPostgresRepository)(nil)
 
-func (r *SkillCatalogPostgresRepository) Skills(ctx context.Context, orgID, workspaceID string) ([]skill.Skill, error) {
+func (r *SkillCatalogPostgresRepository) Skills(ctx context.Context, orgID, workspaceID string) ([]skillmodel.Skill, error) {
 	rows, err := r.queries.ListVisibleSkills(ctx, sqlc.ListVisibleSkillsParams{OrganizationID: nullableText(orgID), WorkspaceID: nullableText(workspaceID)})
 	if err != nil {
 		return nil, err
 	}
-	out := make([]skill.Skill, 0, len(rows))
+	out := make([]skillmodel.Skill, 0, len(rows))
 	for _, row := range rows {
 		out = append(out, fromSQLSkill(row))
 	}
 	return out, nil
 }
 
-func (r *SkillCatalogPostgresRepository) Skill(ctx context.Context, orgID, workspaceID, id string) (skill.Skill, error) {
+func (r *SkillCatalogPostgresRepository) Skill(ctx context.Context, orgID, workspaceID, id string) (skillmodel.Skill, error) {
 	row, err := r.queries.GetVisibleSkill(ctx, sqlc.GetVisibleSkillParams{OrganizationID: nullableText(orgID), WorkspaceID: nullableText(workspaceID), ID: id})
 	if err != nil {
-		return skill.Skill{}, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
+		return skillmodel.Skill{}, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
 	}
 	return fromSQLSkill(row), nil
 }
 
-func (r *SkillCatalogPostgresRepository) CreateSkill(ctx context.Context, id string, scope skill.Scope, orgID, workspaceID, skillMD string) (skill.Skill, error) {
+func (r *SkillCatalogPostgresRepository) CreateSkill(ctx context.Context, id string, scope skillmodel.Scope, orgID, workspaceID, skillMD string) (skillmodel.Skill, error) {
 	row, err := r.queries.InsertSkill(ctx, sqlc.InsertSkillParams{ID: id, Scope: string(scope), Column3: orgID, Column4: workspaceID, SkillMd: skillMD})
 	if err != nil {
-		return skill.Skill{}, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
+		return skillmodel.Skill{}, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
 	}
 	return fromSQLSkill(row), nil
 }
 
-func (r *SkillCatalogPostgresRepository) UpdateSkill(ctx context.Context, id, skillMD string) (skill.Skill, error) {
+func (r *SkillCatalogPostgresRepository) UpdateSkill(ctx context.Context, id, skillMD string) (skillmodel.Skill, error) {
 	row, err := r.queries.UpdateSkill(ctx, sqlc.UpdateSkillParams{ID: id, SkillMd: skillMD})
 	if err != nil {
-		return skill.Skill{}, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
+		return skillmodel.Skill{}, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
 	}
 	return fromSQLSkill(row), nil
 }
@@ -63,8 +64,8 @@ func (r *SkillCatalogPostgresRepository) DeleteSkill(ctx context.Context, id str
 	return err
 }
 
-func (r *SkillCatalogPostgresRepository) VisibleSkills(ctx context.Context, orgID, workspaceID string, ids []string) ([]skill.Skill, error) {
-	out := make([]skill.Skill, 0, len(ids))
+func (r *SkillCatalogPostgresRepository) VisibleSkills(ctx context.Context, orgID, workspaceID string, ids []string) ([]skillmodel.Skill, error) {
+	out := make([]skillmodel.Skill, 0, len(ids))
 	for _, id := range ids {
 		row, err := r.queries.GetVisibleSkill(ctx, sqlc.GetVisibleSkillParams{OrganizationID: nullableText(orgID), WorkspaceID: nullableText(workspaceID), ID: id})
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -78,8 +79,8 @@ func (r *SkillCatalogPostgresRepository) VisibleSkills(ctx context.Context, orgI
 	return out, nil
 }
 
-func fromSQLSkill(value sqlc.Skill) skill.Skill {
-	result := skill.Skill{ID: value.ID, Scope: skill.Scope(value.Scope), SkillMD: value.SkillMd, CreatedAt: value.CreatedAt.Time, UpdatedAt: value.UpdatedAt.Time}
+func fromSQLSkill(value sqlc.Skill) skillmodel.Skill {
+	result := skillmodel.Skill{ID: value.ID, Scope: skillmodel.Scope(value.Scope), SkillMD: value.SkillMd, CreatedAt: value.CreatedAt.Time, UpdatedAt: value.UpdatedAt.Time}
 	if value.OrganizationID.Valid {
 		result.OrganizationID = value.OrganizationID.String
 	}

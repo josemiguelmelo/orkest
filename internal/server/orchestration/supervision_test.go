@@ -9,7 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/josemiguelmelo/orkest/internal/server/mcpserver"
+	mcpservermodel "github.com/josemiguelmelo/orkest/internal/server/mcpserver/model"
+	orchestrationmodel "github.com/josemiguelmelo/orkest/internal/server/orchestration/model"
 )
 
 type supervisedClient struct {
@@ -20,7 +21,7 @@ type supervisedClient struct {
 	connections atomic.Int32
 }
 
-func (c *supervisedClient) Connect(ctx context.Context, _ string, _ uint64, ready func(), _ func(AgentActivityEvent) error) error {
+func (c *supervisedClient) Connect(ctx context.Context, _ string, _ uint64, ready func(), _ func(orchestrationmodel.AgentActivityEvent) error) error {
 	c.connections.Add(1)
 	if c.entered != nil {
 		close(c.entered)
@@ -41,7 +42,7 @@ func TestConnectionReadinessTimeoutJoinsAttempt(t *testing.T) {
 	}
 	defer service.Close()
 	service.readinessTimeout = 20 * time.Millisecond
-	err = service.Start(context.Background(), Launch{RunID: "run", Endpoint: "http://worker:8081"})
+	err = service.Start(context.Background(), orchestrationmodel.Launch{RunID: "run", Endpoint: "http://worker:8081"})
 	if !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("readiness error = %v", err)
 	}
@@ -60,7 +61,7 @@ func TestReadyConnectionSurvivesStartupDeadlineAndDeduplicates(t *testing.T) {
 	}
 	defer service.Close()
 	service.readinessTimeout = 20 * time.Millisecond
-	launch := Launch{RunID: "run", Endpoint: "http://worker:8081"}
+	launch := orchestrationmodel.Launch{RunID: "run", Endpoint: "http://worker:8081"}
 	ctx, cancel := context.WithCancel(context.Background())
 	if err = service.Start(ctx, launch); err != nil {
 		t.Fatal(err)
@@ -103,7 +104,9 @@ func TestConnectionCallerCancellationJoinsUnreadyAttempt(t *testing.T) {
 	defer service.Close()
 	ctx, cancel := context.WithCancel(context.Background())
 	result := make(chan error, 1)
-	go func() { result <- service.Start(ctx, Launch{RunID: "run", Endpoint: "http://worker:8081"}) }()
+	go func() {
+		result <- service.Start(ctx, orchestrationmodel.Launch{RunID: "run", Endpoint: "http://worker:8081"})
+	}()
 	<-client.entered
 	cancel()
 	if err = <-result; !errors.Is(err, context.Canceled) {
@@ -139,7 +142,7 @@ func TestBackgroundCloseGatesAdmissionAndJoins(t *testing.T) {
 func TestReconcileBatchBoundsConcurrentAttempts(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	launches := make([]Launch, 100)
+	launches := make([]orchestrationmodel.Launch, 100)
 	for i := range launches {
 		launches[i].RunID = fmt.Sprint(i)
 	}
@@ -148,7 +151,7 @@ func TestReconcileBatchBoundsConcurrentAttempts(t *testing.T) {
 	release, done := make(chan struct{}), make(chan struct{})
 	go func() {
 		defer close(done)
-		reconcileBatch(ctx, launches, func(ctx context.Context, _ Launch) {
+		reconcileBatch(ctx, launches, func(ctx context.Context, _ orchestrationmodel.Launch) {
 			n := active.Add(1)
 			defer active.Add(-1)
 			for old := maximum.Load(); n > old; old = maximum.Load() {
@@ -178,15 +181,15 @@ func TestReconcileBatchBoundsConcurrentAttempts(t *testing.T) {
 }
 
 func TestRefreshMCPHeadersIsAtomicAndPreservesSavedSettings(t *testing.T) {
-	saved := []MCPServer{{ID: "one", URL: "https://saved", Headers: map[string]string{"token": "old"}}, {ID: "two"}}
-	resolved := []mcpserver.RuntimeServer{{ID: "one", URL: "https://changed", Headers: map[string]string{"token": "fresh"}}}
+	saved := []orchestrationmodel.MCPServer{{ID: "one", URL: "https://saved", Headers: map[string]string{"token": "old"}}, {ID: "two"}}
+	resolved := []mcpservermodel.RuntimeServer{{ID: "one", URL: "https://changed", Headers: map[string]string{"token": "fresh"}}}
 	if _, err := refreshSessionMCPHeaders(saved, resolved); err == nil {
 		t.Fatal("missing server accepted")
 	}
 	if saved[0].Headers["token"] != "old" {
 		t.Fatal("partially changed saved headers")
 	}
-	resolved = append(resolved, mcpserver.RuntimeServer{ID: "two"})
+	resolved = append(resolved, mcpservermodel.RuntimeServer{ID: "two"})
 	updated, err := refreshSessionMCPHeaders(saved, resolved)
 	if err != nil {
 		t.Fatal(err)
@@ -213,7 +216,7 @@ func (c *blockingCleanupController) TerminateAgentctl(ctx context.Context, _ str
 }
 
 func TestCompletionShutdownJoinsBoundedTerminalCleanup(t *testing.T) {
-	repo := &launchRepoFake{reconnect: []Launch{{RunID: "terminal", ProcessID: "worker", Status: LaunchCompletedPendingClose}}}
+	repo := &launchRepoFake{reconnect: []orchestrationmodel.Launch{{RunID: "terminal", ProcessID: "worker", Status: orchestrationmodel.LaunchCompletedPendingClose}}}
 	controller := &blockingCleanupController{entered: make(chan context.Context, 1), release: make(chan struct{})}
 	service, err := NewLaunchCompletionService(context.Background(), repo, controller)
 	if err != nil {
@@ -244,7 +247,7 @@ func TestCompletionShutdownJoinsBoundedTerminalCleanup(t *testing.T) {
 	<-returned
 	repo.mu.Lock()
 	defer repo.mu.Unlock()
-	if repo.reconnect[0].Status != LaunchCompleted {
+	if repo.reconnect[0].Status != orchestrationmodel.LaunchCompleted {
 		t.Fatal("shutdown did not join terminal persistence")
 	}
 }
@@ -255,7 +258,7 @@ func TestConnectionCloseRacesWithAdmission(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	launch := Launch{RunID: "run", Endpoint: "http://worker:8081"}
+	launch := orchestrationmodel.Launch{RunID: "run", Endpoint: "http://worker:8081"}
 	if err = service.Start(context.Background(), launch); err != nil {
 		t.Fatal(err)
 	}
@@ -277,7 +280,7 @@ type cappedHandshakeClient struct {
 	maximum atomic.Int32
 }
 
-func (c *cappedHandshakeClient) Connect(ctx context.Context, _ string, _ uint64, _ func(), _ func(AgentActivityEvent) error) error {
+func (c *cappedHandshakeClient) Connect(ctx context.Context, _ string, _ uint64, _ func(), _ func(orchestrationmodel.AgentActivityEvent) error) error {
 	n := c.active.Add(1)
 	defer c.active.Add(-1)
 	for old := c.maximum.Load(); n > old; old = c.maximum.Load() {
@@ -300,7 +303,7 @@ func TestUnreadyHandshakesAreBoundedAndJoined(t *testing.T) {
 	var callers sync.WaitGroup
 	for i := range 20 {
 		callers.Go(func() {
-			_ = service.Start(context.Background(), Launch{RunID: fmt.Sprint(i), Endpoint: "http://worker:8081"})
+			_ = service.Start(context.Background(), orchestrationmodel.Launch{RunID: fmt.Sprint(i), Endpoint: "http://worker:8081"})
 		})
 	}
 	for range 4 {

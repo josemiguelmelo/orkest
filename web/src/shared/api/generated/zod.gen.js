@@ -1127,7 +1127,7 @@ export const zListTaskRunEventsPath = z.object({
     runID: z.string()
 });
 export const zListTaskRunEventsQuery = z.object({
-    afterSequence: z.int().gte(0).optional()
+    afterSequence: z.int().gte(0).lte(9223372036854776000).optional()
 });
 /**
  * Ordered run activity
@@ -1213,7 +1213,7 @@ export const zListDirectAgentConversationEventsPath = z.object({
     runID: z.string()
 });
 export const zListDirectAgentConversationEventsQuery = z.object({
-    afterSequence: z.int().gte(0).optional()
+    afterSequence: z.int().gte(0).lte(9223372036854776000).optional()
 });
 /**
  * Ordered run activity

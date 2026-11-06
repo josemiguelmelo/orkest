@@ -2,21 +2,23 @@ package orchestration
 
 import (
 	"context"
+
+	orchestrationmodel "github.com/josemiguelmelo/orkest/internal/server/orchestration/model"
 )
 
 // LaunchRepository persists launch lifecycle state and ordered agent activity.
 type LaunchRepository interface {
-	CreateLaunch(context.Context, Launch) error
-	UpdateLaunch(context.Context, Launch) error
-	ListReconnectableLaunches(context.Context) ([]Launch, error)
-	SaveEvent(context.Context, Event) error
-	SaveTerminalEvent(context.Context, Event, LaunchStatus) error
+	CreateLaunch(context.Context, orchestrationmodel.Launch) error
+	UpdateLaunch(context.Context, orchestrationmodel.Launch) error
+	ListReconnectableLaunches(context.Context) ([]orchestrationmodel.Launch, error)
+	SaveEvent(context.Context, orchestrationmodel.Event) error
+	SaveTerminalEvent(context.Context, orchestrationmodel.Event, orchestrationmodel.LaunchStatus) error
 	SetLaunchStatus(context.Context, LaunchStatusEffects) error
 }
 
 type TaskLaunchReader interface {
-	ListTaskLaunches(context.Context, string, string, string) ([]Launch, error)
-	ListTaskLaunchEvents(context.Context, string, uint64) ([]Event, error)
+	ListTaskLaunches(context.Context, string, string, string) ([]orchestrationmodel.Launch, error)
+	ListTaskLaunchEvents(context.Context, string, uint64) ([]orchestrationmodel.Event, error)
 }
 
 // TaskExecutionRepository explicitly supplies the durable features consumed by task starts.

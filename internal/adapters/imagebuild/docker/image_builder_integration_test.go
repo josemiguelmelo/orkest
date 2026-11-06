@@ -17,6 +17,7 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/adapters/imagebuild/buildkit"
 	"github.com/josemiguelmelo/orkest/internal/platform/ids"
 	"github.com/josemiguelmelo/orkest/internal/server/executionprofile"
+	executionprofilemodel "github.com/josemiguelmelo/orkest/internal/server/executionprofile/model"
 )
 
 // TestDockerImageComposition requires buildctl, registry:3, moby/buildkit:v0.34.1, and the built base image.
@@ -129,7 +130,7 @@ func TestDockerImageComposition(t *testing.T) {
 
 func testPublishedComposition(t *testing.T, ctx context.Context, builder *ImageStore, composer executionprofile.Builder, registry, source, id string) {
 	t.Helper()
-	build := executionprofile.Build{ID: id, Runtime: "opencode", RuntimeVersion: "opencode v2.1.4", ToolchainImage: source, BaseImage: source, Destination: registry + "/execution:build-" + id}
+	build := executionprofilemodel.Build{ID: id, Runtime: "opencode", RuntimeVersion: "opencode v2.1.4", ToolchainImage: source, BaseImage: source, Destination: registry + "/execution:build-" + id}
 	build, err := composer.ResolveInputs(ctx, build)
 	if err != nil {
 		t.Fatal("resolve", err)

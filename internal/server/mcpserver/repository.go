@@ -1,11 +1,15 @@
 package mcpserver
 
-import "context"
+import (
+	"context"
+
+	mcpservermodel "github.com/josemiguelmelo/orkest/internal/server/mcpserver/model"
+)
 
 type MCPServerRepository interface {
-	Create(context.Context, string, string, string, string, string) (Server, error)
-	Update(context.Context, string, string, string, string, string) (Server, error)
+	Create(context.Context, string, string, string, string, string) (mcpservermodel.Server, error)
+	Update(context.Context, string, string, string, string, string) (mcpservermodel.Server, error)
 	Delete(context.Context, string, string) error
-	Get(context.Context, string, string) (Server, string, error)
-	List(context.Context, string) ([]Server, error)
+	Get(context.Context, string, string) (mcpservermodel.Server, string, error)
+	List(context.Context, string) ([]mcpservermodel.Server, error)
 }

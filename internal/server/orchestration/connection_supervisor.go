@@ -8,6 +8,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	orchestrationmodel "github.com/josemiguelmelo/orkest/internal/server/orchestration/model"
 )
 
 type connectionMode uint8
@@ -17,7 +19,7 @@ const (
 	reconnectConnection
 )
 
-func (s *ConnectionService) start(launch Launch, mode connectionMode) (*connectionRun, error) {
+func (s *ConnectionService) start(launch orchestrationmodel.Launch, mode connectionMode) (*connectionRun, error) {
 	if strings.TrimSpace(launch.RunID) == "" || !validEndpoint(launch.Endpoint) {
 		return nil, errors.New("run identity and valid agentctl endpoint are required")
 	}
@@ -40,7 +42,7 @@ func (s *ConnectionService) start(launch Launch, mode connectionMode) (*connecti
 	return run, nil
 }
 
-func (s *ConnectionService) supervise(run *connectionRun, launch Launch, mode connectionMode) {
+func (s *ConnectionService) supervise(run *connectionRun, launch orchestrationmodel.Launch, mode connectionMode) {
 	var monitor sync.WaitGroup
 	notified := false
 	notify := func(err error) {
@@ -83,14 +85,14 @@ func (s *ConnectionService) supervise(run *connectionRun, launch Launch, mode co
 				disconnected = false
 			}
 			startMonitor()
-		}, func(event AgentActivityEvent) error {
+		}, func(event orchestrationmodel.AgentActivityEvent) error {
 			if launch.TaskSessionID != "" && (event.TaskSessionID != launch.TaskSessionID || event.OrganizationID != launch.OrganizationID || event.WorkspaceID != launch.WorkspaceID || event.TaskID != launch.TaskID) {
 				return errors.New("agentctl event scope mismatch")
 			}
 			if event.RunID != launch.RunID {
 				return errors.New("agentctl event run identity mismatch")
 			}
-			wrapped := Event{RunID: launch.RunID, Sequence: event.Sequence, Payload: event}
+			wrapped := orchestrationmodel.Event{RunID: launch.RunID, Sequence: event.Sequence, Payload: event}
 			if s.completion != nil {
 				if err := s.completion.HandleEvent(run.ctx, launch, wrapped); err != nil {
 					return err
@@ -123,7 +125,7 @@ func (s *ConnectionService) supervise(run *connectionRun, launch Launch, mode co
 
 // The handshake timer cancels only an unready attempt. Once ready, its context
 // remains owned by supervision rather than the caller or startup deadline.
-func (s *ConnectionService) connectAttempt(ctx context.Context, launch Launch, ready func(), event func(AgentActivityEvent) error) error {
+func (s *ConnectionService) connectAttempt(ctx context.Context, launch orchestrationmodel.Launch, ready func(), event func(orchestrationmodel.AgentActivityEvent) error) error {
 	attemptCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	var mu sync.Mutex

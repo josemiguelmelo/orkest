@@ -2,7 +2,9 @@ package task
 
 import (
 	modelerrors "github.com/josemiguelmelo/orkest/internal/contracts/problem"
+	taskmodel "github.com/josemiguelmelo/orkest/internal/server/task/model"
 	"github.com/josemiguelmelo/orkest/internal/server/workflow"
+	workflowmodel "github.com/josemiguelmelo/orkest/internal/server/workflow/model"
 )
 
 // WorkflowPersistenceEffects contains all outbox and history effects of a decision.
@@ -11,7 +13,7 @@ type WorkflowPersistenceEffects struct {
 	Events       []workflow.EventIntent
 	Execution    *WorkflowExecutionIntent
 	History      *WorkflowCommand
-	WorkState    WorkState
+	WorkState    taskmodel.WorkState
 	StageVersion int64
 }
 
@@ -32,10 +34,10 @@ func PlanWorkflowPersistence(taskID, runID string, effects TaskWorkflowEffects, 
 	out := WorkflowPersistenceEffects{StageVersion: effects.StageVersion}
 	in := effects.Command
 	if effects.Completed && in.Action == "complete" {
-		out.Events = append(out.Events, workflow.StageEvent(taskID, effects.StageVersion, workflow.StageCompleted, runID, in.CommandID, in.CommandID))
+		out.Events = append(out.Events, workflow.StageEvent(taskID, effects.StageVersion, workflowmodel.StageCompleted, runID, in.CommandID, in.CommandID))
 	}
 	if effects.Moved {
-		out.Events = append(out.Events, workflow.StageEvent(taskID, effects.StageVersion, workflow.StageEntered, "", cause, correlation))
+		out.Events = append(out.Events, workflow.StageEvent(taskID, effects.StageVersion, workflowmodel.StageEntered, "", cause, correlation))
 	}
 	if effects.Start {
 		id := in.CommandID
@@ -47,9 +49,9 @@ func PlanWorkflowPersistence(taskID, runID string, effects TaskWorkflowEffects, 
 		}
 
 		out.Execution = &WorkflowExecutionIntent{ID: id, Options: WorkflowExecutionOptions{Action: "start", CommandID: id, StageVersion: in.StageVersion, SessionMode: in.SessionMode, PromptText: in.PromptText}}
-		out.WorkState = WorkStateQueued
+		out.WorkState = taskmodel.WorkStateQueued
 	} else if effects.Completed {
-		out.WorkState = WorkStateCompleted
+		out.WorkState = taskmodel.WorkStateCompleted
 	}
 	if in.CommandID != "" && (!effects.Start || in.Action == "move") {
 		out.History = &in

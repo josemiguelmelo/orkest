@@ -8,10 +8,12 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	orchestrationmodel "github.com/josemiguelmelo/orkest/internal/server/orchestration/model"
 )
 
 type AgentCommunication interface {
-	Start(context.Context, Launch) error
+	Start(context.Context, orchestrationmodel.Launch) error
 }
 
 type connectionRun struct {
@@ -64,7 +66,7 @@ func NewConnectionService(ctx context.Context, client AgentConnectionClient, rep
 }
 
 // Start performs an initial WebSocket handshake, then reconnects in the background.
-func (s *ConnectionService) Start(ctx context.Context, launch Launch) error {
+func (s *ConnectionService) Start(ctx context.Context, launch orchestrationmodel.Launch) error {
 	run, err := s.start(launch, initialConnection)
 	if err != nil {
 		return err
@@ -99,11 +101,11 @@ func (s *ConnectionService) ReconnectRecorded() error {
 		return fmt.Errorf("load launches for reconnect: %w", err)
 	}
 	s.background.Go(func(ctx context.Context) {
-		reconcileBatch(ctx, launches, func(ctx context.Context, launch Launch) {
-			if launch.Status == LaunchCompletedPendingClose || launch.Status == LaunchFailedPendingClose {
+		reconcileBatch(ctx, launches, func(ctx context.Context, launch orchestrationmodel.Launch) {
+			if launch.Status == orchestrationmodel.LaunchCompletedPendingClose || launch.Status == orchestrationmodel.LaunchFailedPendingClose {
 				return
 			}
-			if s.completion != nil && (launch.Status == LaunchStarting || launch.Status == LaunchFailed || strings.TrimSpace(launch.ProcessID) == "" || !validEndpoint(launch.Endpoint)) {
+			if s.completion != nil && (launch.Status == orchestrationmodel.LaunchStarting || launch.Status == orchestrationmodel.LaunchFailed || strings.TrimSpace(launch.ProcessID) == "" || !validEndpoint(launch.Endpoint)) {
 				status := terminalPendingStatus(launch)
 				s.completion.CloseAbandoned(ctx, launch, status)
 				return
@@ -120,20 +122,20 @@ func (s *ConnectionService) ReconnectRecorded() error {
 	return nil
 }
 
-func terminalPendingStatus(launch Launch) LaunchStatus {
-	if launch.LastEventType == string(EventRunCompleted) || (launch.TaskSessionID == "" && launch.LastEventType == string(EventPromptCompleted)) {
-		return LaunchCompletedPendingClose
+func terminalPendingStatus(launch orchestrationmodel.Launch) orchestrationmodel.LaunchStatus {
+	if launch.LastEventType == string(orchestrationmodel.EventRunCompleted) || (launch.TaskSessionID == "" && launch.LastEventType == string(orchestrationmodel.EventPromptCompleted)) {
+		return orchestrationmodel.LaunchCompletedPendingClose
 	}
-	return LaunchFailedPendingClose
+	return orchestrationmodel.LaunchFailedPendingClose
 }
 
-func (s *ConnectionService) reconcileAndReconnect(ctx context.Context, launch Launch) {
-	if launch.LastEventType == string(EventRunCompleted) || (launch.TaskSessionID == "" && launch.LastEventType == string(EventPromptCompleted)) {
-		s.completion.CloseAbandoned(ctx, launch, LaunchCompletedPendingClose)
+func (s *ConnectionService) reconcileAndReconnect(ctx context.Context, launch orchestrationmodel.Launch) {
+	if launch.LastEventType == string(orchestrationmodel.EventRunCompleted) || (launch.TaskSessionID == "" && launch.LastEventType == string(orchestrationmodel.EventPromptCompleted)) {
+		s.completion.CloseAbandoned(ctx, launch, orchestrationmodel.LaunchCompletedPendingClose)
 		return
 	}
-	if launch.LastEventType == string(EventRunFailed) || (launch.TaskSessionID == "" && launch.LastEventType == string(EventPromptFailed)) {
-		s.completion.CloseAbandoned(ctx, launch, LaunchFailedPendingClose)
+	if launch.LastEventType == string(orchestrationmodel.EventRunFailed) || (launch.TaskSessionID == "" && launch.LastEventType == string(orchestrationmodel.EventPromptFailed)) {
+		s.completion.CloseAbandoned(ctx, launch, orchestrationmodel.LaunchFailedPendingClose)
 		return
 	}
 	statusCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -143,11 +145,11 @@ func (s *ConnectionService) reconcileAndReconnect(ctx context.Context, launch La
 		return
 	}
 	if err == nil && agentctlProcessHasEnded(status) {
-		s.completion.CloseAbandoned(ctx, launch, LaunchFailedPendingClose)
+		s.completion.CloseAbandoned(ctx, launch, orchestrationmodel.LaunchFailedPendingClose)
 		return
 	}
 	if err != nil && s.containerConfirmedStopped(ctx, launch) {
-		s.completion.CloseAbandoned(ctx, launch, LaunchFailedPendingClose)
+		s.completion.CloseAbandoned(ctx, launch, orchestrationmodel.LaunchFailedPendingClose)
 		return
 	}
 	if err := s.reconcilePrompts(ctx, launch); err != nil && ctx.Err() == nil {
@@ -156,23 +158,23 @@ func (s *ConnectionService) reconcileAndReconnect(ctx context.Context, launch La
 	_, _ = s.start(launch, reconnectConnection)
 }
 
-func agentctlProcessHasEnded(status RunStatus) bool {
+func agentctlProcessHasEnded(status orchestrationmodel.RunStatus) bool {
 	if !status.Configured {
 		return true
 	}
 	if status.TaskSessionID != "" {
 		return false
 	}
-	if status.State == StateFailed || status.State == StateInterrupted || status.State == StateExited {
+	if status.State == orchestrationmodel.StateFailed || status.State == orchestrationmodel.StateInterrupted || status.State == orchestrationmodel.StateExited {
 		return true
 	}
-	if status.State == StateStarting {
+	if status.State == orchestrationmodel.StateStarting {
 		return false
 	}
 	return status.Configured && (!status.ProcessAlive || !status.ExecutionAvailable)
 }
 
-func (s *ConnectionService) monitorLaunch(ctx context.Context, launch Launch) {
+func (s *ConnectionService) monitorLaunch(ctx context.Context, launch orchestrationmodel.Launch) {
 	reconciliationFailed := false
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
@@ -188,7 +190,7 @@ func (s *ConnectionService) monitorLaunch(ctx context.Context, launch Launch) {
 		if err != nil {
 			if s.containerConfirmedStopped(ctx, launch) {
 				s.cancelRun(launch.RunID)
-				s.completion.CloseAbandoned(s.ctx, launch, LaunchFailedPendingClose)
+				s.completion.CloseAbandoned(s.ctx, launch, orchestrationmodel.LaunchFailedPendingClose)
 				return
 			}
 			continue
@@ -205,12 +207,12 @@ func (s *ConnectionService) monitorLaunch(ctx context.Context, launch Launch) {
 			continue
 		}
 		s.cancelRun(launch.RunID)
-		s.completion.CloseAbandoned(s.ctx, launch, LaunchFailedPendingClose)
+		s.completion.CloseAbandoned(s.ctx, launch, orchestrationmodel.LaunchFailedPendingClose)
 		return
 	}
 }
 
-func (s *ConnectionService) containerConfirmedStopped(ctx context.Context, launch Launch) bool {
+func (s *ConnectionService) containerConfirmedStopped(ctx context.Context, launch orchestrationmodel.Launch) bool {
 	inspectCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 	running, err := s.completion.AgentctlRunning(inspectCtx, launch)
@@ -237,7 +239,7 @@ func waitForRetry(ctx context.Context) bool {
 	}
 }
 
-func (s *ConnectionService) reconcilePrompts(ctx context.Context, launch Launch) error {
+func (s *ConnectionService) reconcilePrompts(ctx context.Context, launch orchestrationmodel.Launch) error {
 	if launch.TaskSessionID != "" {
 		status, err := s.client.Status(ctx, launch.Endpoint)
 		if err != nil {

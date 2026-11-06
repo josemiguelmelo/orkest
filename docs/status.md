@@ -42,6 +42,15 @@ nor authorizes new behavior.
 
 ## Verification record
 
+Additional uncommitted model-organization and simplification work on 2026-11-04
+passed `make check`, deterministic runtime conformance and race suites, real
+isolated PostgreSQL checks, rebuilt Docker launch smoke, and pinned OpenCode
+handshake/session reload. See the separate [implementation and verification
+note](development/simplification-progress.md). These new checks sent no model
+prompts; live continuation and full Docker session recovery remain unverified for
+this tree without explicit model settings. Historical results below do not replace
+that limitation.
+
 The refactor session reported these results on **2026-11-03/04**, in an uncommitted
 working tree based on `115fc6311dc31270c721f8be5fcc7e2ea8f0dae8`. These are historical
 results for the tested tree, not a new test run during this documentation review.

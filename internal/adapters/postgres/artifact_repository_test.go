@@ -9,7 +9,7 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/adapters/postgres/sqlc"
 	modelerrors "github.com/josemiguelmelo/orkest/internal/contracts/problem"
 	"github.com/josemiguelmelo/orkest/internal/platform/ids"
-	"github.com/josemiguelmelo/orkest/internal/server/artifact"
+	artifactmodel "github.com/josemiguelmelo/orkest/internal/server/artifact/model"
 )
 
 func testTaskArtifacts(t *testing.T, db *PostgresDatabase, orgID, workspaceID, taskID, userID string) {
@@ -24,13 +24,13 @@ func testTaskArtifacts(t *testing.T, db *PostgresDatabase, orgID, workspaceID, t
 	}
 	taskID = isolatedID
 	repo := NewArtifactPostgresRepository(db)
-	scope := artifact.Scope{UserID: userID, OrganizationID: orgID, WorkspaceID: workspaceID, TaskID: taskID}
+	scope := artifactmodel.Scope{UserID: userID, OrganizationID: orgID, WorkspaceID: workspaceID, TaskID: taskID}
 	text := "# Implementation plan"
 	key, err := ids.NewUUID()
 	if err != nil {
 		t.Fatal(err)
 	}
-	input := artifact.PublishInput{Kind: "plan", Title: "Implementation plan", OutputName: "plan", IdempotencyKey: key, Content: artifact.Content{MediaType: "text/markdown", Text: &text}}
+	input := artifactmodel.PublishInput{Kind: "plan", Title: "Implementation plan", OutputName: "plan", IdempotencyKey: key, Content: artifactmodel.Content{MediaType: "text/markdown", Text: &text}}
 	first, err := repo.Publish(ctx, scope, input)
 	if err != nil {
 		t.Fatal(err)
