@@ -244,6 +244,8 @@ WITH inserted AS (
 UPDATE agent_launches AS launch
 SET status = $4, last_sequence = GREATEST(launch.last_sequence, $2), updated_at = now()
 WHERE launch.run_id = $1
+  AND launch.status NOT IN ('completed', 'failed')
+  AND (launch.status NOT IN ('completed_pending_close', 'failed_pending_close') OR launch.status = $4)
   AND (EXISTS (SELECT 1 FROM inserted) OR EXISTS (
       SELECT 1 FROM agent_launch_events AS event
       WHERE event.run_id = $1 AND event.sequence = $2
@@ -267,10 +269,15 @@ func (q *Queries) SaveTerminalAgentLaunchEvent(ctx context.Context, arg SaveTerm
 	return err
 }
 
-const setAgentLaunchStatus = `-- name: SetAgentLaunchStatus :exec
+const setAgentLaunchStatus = `-- name: SetAgentLaunchStatus :execrows
 UPDATE agent_launches
 SET status = $2, updated_at = now()
 WHERE run_id = $1
+  AND (status NOT IN ('completed', 'failed') OR status = $2
+       OR (status = 'failed' AND $2 = 'failed_pending_close' AND task_session_id IS NULL))
+  AND (status NOT IN ('completed_pending_close', 'failed_pending_close')
+       OR (status = 'completed_pending_close' AND $2 IN ('completed_pending_close', 'completed'))
+       OR (status = 'failed_pending_close' AND $2 IN ('failed_pending_close', 'failed')))
 `
 
 type SetAgentLaunchStatusParams struct {
@@ -278,9 +285,12 @@ type SetAgentLaunchStatusParams struct {
 	Status string `json:"status"`
 }
 
-func (q *Queries) SetAgentLaunchStatus(ctx context.Context, arg SetAgentLaunchStatusParams) error {
-	_, err := q.db.Exec(ctx, setAgentLaunchStatus, arg.RunID, arg.Status)
-	return err
+func (q *Queries) SetAgentLaunchStatus(ctx context.Context, arg SetAgentLaunchStatusParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setAgentLaunchStatus, arg.RunID, arg.Status)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const updateAgentLaunch = `-- name: UpdateAgentLaunch :exec
@@ -288,6 +298,8 @@ UPDATE agent_launches
 SET status = $2, process_id = $3, endpoint = $4, failure_stage = $5,
     failure_reason = $6, updated_at = now()
 WHERE run_id = $1
+  AND status NOT IN ('completed', 'completed_pending_close', 'failed_pending_close')
+  AND (status <> 'failed' OR status = $2)
 `
 
 type UpdateAgentLaunchParams struct {

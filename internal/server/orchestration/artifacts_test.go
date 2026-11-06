@@ -3,14 +3,14 @@ package orchestration
 import (
 	"testing"
 
-	"github.com/josemiguelmelo/orkest/internal/server/artifact"
-	"github.com/josemiguelmelo/orkest/internal/server/workflow"
+	artifactmodel "github.com/josemiguelmelo/orkest/internal/server/artifact/model"
+	workflowmodel "github.com/josemiguelmelo/orkest/internal/server/workflow/model"
 )
 
 func TestResolveArtifactHandoff(t *testing.T) {
-	stage := workflow.Stage{ArtifactInputs: []workflow.ArtifactInput{{Name: "plan", SourceStageID: "planning", OutputName: "implementation_plan", Required: true}}}
-	definition := workflow.Definition{Stages: []workflow.Stage{{ID: "planning", ArtifactOutputs: []workflow.ArtifactOutput{{Name: "implementation_plan", Kind: "plan"}}}}}
-	available := []artifact.Revision{
+	stage := workflowmodel.Stage{ArtifactInputs: []workflowmodel.ArtifactInput{{Name: "plan", SourceStageID: "planning", OutputName: "implementation_plan", Required: true}}}
+	definition := workflowmodel.Definition{Stages: []workflowmodel.Stage{{ID: "planning", ArtifactOutputs: []workflowmodel.ArtifactOutput{{Name: "implementation_plan", Kind: "plan"}}}}}
+	available := []artifactmodel.Revision{
 		{ID: "old", Kind: "plan", StageID: "planning", OutputName: "implementation_plan", StageVersion: 1},
 		{ID: "first", Kind: "plan", StageID: "planning", OutputName: "implementation_plan", StageVersion: 3},
 		{ID: "second", Kind: "plan", StageID: "planning", OutputName: "implementation_plan", StageVersion: 3},

@@ -6,6 +6,7 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/adapters/postgres/sqlc"
 	modelerrors "github.com/josemiguelmelo/orkest/internal/contracts/problem"
 	"github.com/josemiguelmelo/orkest/internal/server/workspace"
+	workspacemodel "github.com/josemiguelmelo/orkest/internal/server/workspace/model"
 )
 
 type WorkspacePostgresRepository struct {
@@ -18,33 +19,33 @@ func NewWorkspacePostgresRepository(database *PostgresDatabase) *WorkspacePostgr
 
 var _ workspace.WorkspaceRepository = (*WorkspacePostgresRepository)(nil)
 
-func (s *WorkspacePostgresRepository) Workspaces(ctx context.Context, orgID, userID string) ([]workspace.Workspace, error) {
+func (s *WorkspacePostgresRepository) Workspaces(ctx context.Context, orgID, userID string) ([]workspacemodel.Workspace, error) {
 	rows, err := s.queries.ListWorkspaces(ctx, sqlc.ListWorkspacesParams{OrganizationID: orgID, UserID: userID})
 	if err != nil {
 		return nil, err
 	}
-	out := make([]workspace.Workspace, 0, len(rows))
+	out := make([]workspacemodel.Workspace, 0, len(rows))
 	for _, row := range rows {
-		out = append(out, workspace.Workspace{ID: row.ID, OrganizationID: row.OrganizationID, Name: row.Name, Role: row.Role})
+		out = append(out, workspacemodel.Workspace{ID: row.ID, OrganizationID: row.OrganizationID, Name: row.Name, Role: row.Role})
 	}
 	return out, nil
 }
 
-func (s *WorkspacePostgresRepository) Workspace(ctx context.Context, orgID, id, userID string) (workspace.Workspace, error) {
+func (s *WorkspacePostgresRepository) Workspace(ctx context.Context, orgID, id, userID string) (workspacemodel.Workspace, error) {
 	row, err := s.queries.GetWorkspace(ctx, sqlc.GetWorkspaceParams{OrganizationID: orgID, ID: id, UserID: userID})
-	w := workspace.Workspace{ID: row.ID, OrganizationID: row.OrganizationID, Name: row.Name, Role: row.Role}
+	w := workspacemodel.Workspace{ID: row.ID, OrganizationID: row.OrganizationID, Name: row.Name, Role: row.Role}
 	return w, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
 }
 
-func (s *WorkspacePostgresRepository) CreateWorkspace(ctx context.Context, id, orgID, name string) (workspace.Workspace, error) {
+func (s *WorkspacePostgresRepository) CreateWorkspace(ctx context.Context, id, orgID, name string) (workspacemodel.Workspace, error) {
 	row, err := s.queries.InsertWorkspace(ctx, sqlc.InsertWorkspaceParams{ID: id, OrganizationID: orgID, Name: name})
-	w := workspace.Workspace{ID: row.ID, OrganizationID: row.OrganizationID, Name: row.Name}
+	w := workspacemodel.Workspace{ID: row.ID, OrganizationID: row.OrganizationID, Name: row.Name}
 	return w, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
 }
 
-func (s *WorkspacePostgresRepository) UpdateWorkspace(ctx context.Context, orgID, id, name string) (workspace.Workspace, error) {
+func (s *WorkspacePostgresRepository) UpdateWorkspace(ctx context.Context, orgID, id, name string) (workspacemodel.Workspace, error) {
 	row, err := s.queries.UpdateWorkspace(ctx, sqlc.UpdateWorkspaceParams{OrganizationID: orgID, ID: id, Name: name})
-	w := workspace.Workspace{ID: row.ID, OrganizationID: row.OrganizationID, Name: row.Name}
+	w := workspacemodel.Workspace{ID: row.ID, OrganizationID: row.OrganizationID, Name: row.Name}
 	return w, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
 }
 
@@ -56,14 +57,14 @@ func (s *WorkspacePostgresRepository) DeleteWorkspace(ctx context.Context, orgID
 	return err
 }
 
-func (s *WorkspacePostgresRepository) WorkspaceMembers(ctx context.Context, orgID, workspaceID string) ([]workspace.Membership, error) {
+func (s *WorkspacePostgresRepository) WorkspaceMembers(ctx context.Context, orgID, workspaceID string) ([]workspacemodel.Membership, error) {
 	rows, err := s.queries.ListWorkspaceMembers(ctx, sqlc.ListWorkspaceMembersParams{OrganizationID: orgID, WorkspaceID: workspaceID})
 	if err != nil {
 		return nil, err
 	}
-	out := make([]workspace.Membership, 0, len(rows))
+	out := make([]workspacemodel.Membership, 0, len(rows))
 	for _, row := range rows {
-		m := workspace.Membership{Role: row.Role}
+		m := workspacemodel.Membership{Role: row.Role}
 		m.User.ID, m.User.Username, m.User.Email = row.ID, row.Username, row.Email
 		out = append(out, m)
 	}

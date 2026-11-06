@@ -16,7 +16,9 @@ import (
 	"github.com/coreos/go-oidc/v3/oidc"
 	"github.com/josemiguelmelo/orkest/internal/platform/httplog"
 	"github.com/josemiguelmelo/orkest/internal/server/identity"
+	identitymodel "github.com/josemiguelmelo/orkest/internal/server/identity/model"
 	"github.com/josemiguelmelo/orkest/internal/server/organization"
+	organizationmodel "github.com/josemiguelmelo/orkest/internal/server/organization/model"
 	"golang.org/x/oauth2"
 )
 
@@ -195,7 +197,7 @@ func (a *oidcAuth) logout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *oidcAuth) currentUser(w http.ResponseWriter, r *http.Request) {
-	user, ok := r.Context().Value(userContextKey{}).(identity.User)
+	user, ok := r.Context().Value(userContextKey{}).(identitymodel.User)
 	if !ok {
 		writeError(w, http.StatusUnauthorized, "unauthorized")
 		return
@@ -214,9 +216,9 @@ func (a *oidcAuth) currentUser(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(struct {
-		PlatformAdmin bool                        `json:"platformAdmin"`
-		User          identity.User               `json:"user"`
-		Organizations []organization.Organization `json:"organizations"`
+		PlatformAdmin bool                             `json:"platformAdmin"`
+		User          identitymodel.User               `json:"user"`
+		Organizations []organizationmodel.Organization `json:"organizations"`
 	}{platformAdmin, user, organizations})
 }
 
@@ -292,7 +294,7 @@ func logServerError(r *http.Request, message string, err error) {
 }
 
 func currentUserID(r *http.Request) string {
-	user, _ := r.Context().Value(userContextKey{}).(identity.User)
+	user, _ := r.Context().Value(userContextKey{}).(identitymodel.User)
 	return user.ID
 }
 

@@ -1,25 +1,28 @@
 package workflow
 
-import modelerrors "github.com/josemiguelmelo/orkest/internal/contracts/problem"
+import (
+	modelerrors "github.com/josemiguelmelo/orkest/internal/contracts/problem"
+	workflowmodel "github.com/josemiguelmelo/orkest/internal/server/workflow/model"
+)
 
 // ConfigurationSnapshot contains reference facts loaded under the configuration lock.
 type ConfigurationSnapshot struct {
-	Current          *Definition
+	Current          *workflowmodel.Definition
 	AgentIDs         []string
 	OccupiedStageIDs []string
 }
 
-func PlanConfigurationChange(snapshot ConfigurationSnapshot, input Definition) (Definition, error) {
+func PlanConfigurationChange(snapshot ConfigurationSnapshot, input workflowmodel.Definition) (workflowmodel.Definition, error) {
 	if snapshot.Current != nil {
 		if input.Version != snapshot.Current.Version {
-			return Definition{}, modelerrors.ErrConflict
+			return workflowmodel.Definition{}, modelerrors.ErrConflict
 		}
 		if input.Name == "" {
 			input.Name = snapshot.Current.Name
 		}
 	}
 	if err := input.Validate(); err != nil {
-		return Definition{}, err
+		return workflowmodel.Definition{}, err
 	}
 	agents := make(map[string]bool, len(snapshot.AgentIDs))
 	for _, id := range snapshot.AgentIDs {
@@ -27,12 +30,12 @@ func PlanConfigurationChange(snapshot ConfigurationSnapshot, input Definition) (
 	}
 	for _, stage := range input.Stages {
 		if stage.ResponsibleAgentID != "" && !agents[stage.ResponsibleAgentID] {
-			return Definition{}, modelerrors.ErrInvalid
+			return workflowmodel.Definition{}, modelerrors.ErrInvalid
 		}
 	}
 	for _, id := range snapshot.OccupiedStageIDs {
 		if _, exists := input.Stage(id); !exists {
-			return Definition{}, modelerrors.ErrConflict
+			return workflowmodel.Definition{}, modelerrors.ErrConflict
 		}
 	}
 	return input, nil

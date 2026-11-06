@@ -7,12 +7,12 @@ import (
 	"path/filepath"
 	"testing"
 
-	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
 )
 
 func TestPrepareRuntimeConfiguresGitForMultipleRepositories(t *testing.T) {
 	workDir := t.TempDir()
-	credentials := []runconfig.GitCredential{
+	credentials := []configmodel.GitCredential{
 		{ProviderName: "github", RepositoryURL: "https://github.com/acme/one.git", RepositoryPath: "repositories/github/one", Token: "github-secret"},
 		{ProviderName: "gitlab_server", RepositoryURL: "https://gitlab.example/group/two.git", RepositoryPath: "repositories/gitlab/two", Token: "gitlab-secret"},
 	}

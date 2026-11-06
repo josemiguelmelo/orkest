@@ -10,12 +10,12 @@ import (
 	"testing"
 	"time"
 
-	wire "github.com/josemiguelmelo/orkest/internal/contracts/agentctl/v1"
-
 	ws "github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
 	agentrun "github.com/josemiguelmelo/orkest/internal/agentctl/run"
+	runmodel "github.com/josemiguelmelo/orkest/internal/agentctl/run/model"
+	wire "github.com/josemiguelmelo/orkest/internal/contracts/agentctl/v1"
 )
 
 func TestStream(t *testing.T) {
@@ -113,8 +113,8 @@ type streamController struct {
 	subscribeError error
 }
 
-func (c *streamController) Status() agentrun.RunStatus {
-	return agentrun.RunStatus{Configured: c.configured}
+func (c *streamController) Status() runmodel.RunStatus {
+	return runmodel.RunStatus{Configured: c.configured}
 }
 
 func (c *streamController) Subscribe(uint64) ([]interaction.Event, <-chan interaction.Event, func(), error) {

@@ -7,25 +7,28 @@ import (
 
 	modelerrors "github.com/josemiguelmelo/orkest/internal/contracts/problem"
 	"github.com/josemiguelmelo/orkest/internal/platform/secretbox"
-	"github.com/josemiguelmelo/orkest/internal/server/workspace"
+	workspacemodel "github.com/josemiguelmelo/orkest/internal/server/workspace/model"
+	workspaceenvmodel "github.com/josemiguelmelo/orkest/internal/server/workspaceenv/model"
 )
 
-type repositoryStub struct{ values map[string]StoredValue }
+type repositoryStub struct {
+	values map[string]workspaceenvmodel.StoredValue
+}
 
-func (r *repositoryStub) List(context.Context, string) ([]StoredValue, error) {
-	values := make([]StoredValue, 0, len(r.values))
+func (r *repositoryStub) List(context.Context, string) ([]workspaceenvmodel.StoredValue, error) {
+	values := make([]workspaceenvmodel.StoredValue, 0, len(r.values))
 	for _, value := range r.values {
 		values = append(values, value)
 	}
 	return values, nil
 }
 
-func (r *repositoryStub) Resolve(ctx context.Context, workspaceID string) ([]StoredValue, error) {
+func (r *repositoryStub) Resolve(ctx context.Context, workspaceID string) ([]workspaceenvmodel.StoredValue, error) {
 	return r.List(ctx, workspaceID)
 }
 
 func (r *repositoryStub) Put(_ context.Context, _, name, value string, secret bool) error {
-	r.values[name] = StoredValue{Name: name, Value: value, Encrypted: secret}
+	r.values[name] = workspaceenvmodel.StoredValue{Name: name, Value: value, Encrypted: secret}
 	return nil
 }
 
@@ -39,8 +42,8 @@ func (r *repositoryStub) Delete(_ context.Context, _, name string) error {
 
 type workspaceStub struct{ role string }
 
-func (w workspaceStub) GetWorkspace(context.Context, string, string, string) (workspace.Workspace, error) {
-	return workspace.Workspace{Role: w.role}, nil
+func (w workspaceStub) GetWorkspace(context.Context, string, string, string) (workspacemodel.Workspace, error) {
+	return workspacemodel.Workspace{Role: w.role}, nil
 }
 
 func TestSecretsAreWriteOnlyAndResolveForRuns(t *testing.T) {
@@ -48,9 +51,9 @@ func TestSecretsAreWriteOnlyAndResolveForRuns(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	repo := &repositoryStub{values: map[string]StoredValue{}}
+	repo := &repositoryStub{values: map[string]workspaceenvmodel.StoredValue{}}
 	service := NewWorkspaceEnvironmentService(repo, workspaceStub{role: "admin"}, box)
-	if err := service.Put(context.Background(), "user", "org", "workspace", "API_TOKEN", Input{Value: "top-secret", Secret: true}); err != nil {
+	if err := service.Put(context.Background(), "user", "org", "workspace", "API_TOKEN", workspaceenvmodel.Input{Value: "top-secret", Secret: true}); err != nil {
 		t.Fatal(err)
 	}
 	if repo.values["API_TOKEN"].Value == "top-secret" {
@@ -70,14 +73,14 @@ func TestSecretsAreWriteOnlyAndResolveForRuns(t *testing.T) {
 }
 
 func TestManageRequiresAdminAndValidNames(t *testing.T) {
-	repo := &repositoryStub{values: map[string]StoredValue{}}
+	repo := &repositoryStub{values: map[string]workspaceenvmodel.StoredValue{}}
 	member := NewWorkspaceEnvironmentService(repo, workspaceStub{role: "member"}, nil)
-	if err := member.Put(context.Background(), "user", "org", "workspace", "VALUE", Input{Value: "x"}); !errors.Is(err, modelerrors.ErrForbidden) {
+	if err := member.Put(context.Background(), "user", "org", "workspace", "VALUE", workspaceenvmodel.Input{Value: "x"}); !errors.Is(err, modelerrors.ErrForbidden) {
 		t.Fatalf("expected forbidden, got %v", err)
 	}
 	admin := NewWorkspaceEnvironmentService(repo, workspaceStub{role: "admin"}, nil)
 	for _, name := range []string{"1INVALID", "ORKEST_TOKEN", "OPENCODE_CONFIG"} {
-		if err := admin.Put(context.Background(), "user", "org", "workspace", name, Input{Value: "x"}); !errors.Is(err, modelerrors.ErrInvalid) {
+		if err := admin.Put(context.Background(), "user", "org", "workspace", name, workspaceenvmodel.Input{Value: "x"}); !errors.Is(err, modelerrors.ErrInvalid) {
 			t.Errorf("%s: expected invalid, got %v", name, err)
 		}
 	}
@@ -89,7 +92,7 @@ func TestEnvironmentSnapshotIsEncrypted(t *testing.T) {
 		t.Fatal(err)
 	}
 	service := NewWorkspaceEnvironmentService(nil, nil, box)
-	sealed, err := service.SealSnapshot(RuntimeValues{"TOKEN": "sensitive"})
+	sealed, err := service.SealSnapshot(workspaceenvmodel.RuntimeValues{"TOKEN": "sensitive"})
 	if err != nil {
 		t.Fatal(err)
 	}

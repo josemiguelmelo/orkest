@@ -5,6 +5,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/josemiguelmelo/orkest/internal/server/taskintegration"
+	taskintegrationmodel "github.com/josemiguelmelo/orkest/internal/server/taskintegration/model"
 )
 
 type taskIntegrationAPI struct {
@@ -35,7 +36,7 @@ func (a taskIntegrationAPI) list(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a taskIntegrationAPI) create(w http.ResponseWriter, r *http.Request) {
-	var body taskintegration.TaskIntegrationInput
+	var body taskintegrationmodel.TaskIntegrationInput
 	if !decodeBody(w, r, &body) {
 		return
 	}
@@ -44,7 +45,7 @@ func (a taskIntegrationAPI) create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a taskIntegrationAPI) update(w http.ResponseWriter, r *http.Request) {
-	var body taskintegration.TaskIntegrationInput
+	var body taskintegrationmodel.TaskIntegrationInput
 	if !decodeBody(w, r, &body) {
 		return
 	}
@@ -57,7 +58,7 @@ func (a taskIntegrationAPI) delete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a taskIntegrationAPI) validate(w http.ResponseWriter, r *http.Request) {
-	var body taskintegration.TaskIntegrationInput
+	var body taskintegrationmodel.TaskIntegrationInput
 	if !decodeBody(w, r, &body) {
 		return
 	}

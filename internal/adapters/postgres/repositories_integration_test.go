@@ -8,9 +8,9 @@ import (
 
 	modelerrors "github.com/josemiguelmelo/orkest/internal/contracts/problem"
 	"github.com/josemiguelmelo/orkest/internal/platform/ids"
-	"github.com/josemiguelmelo/orkest/internal/server/agent"
-	"github.com/josemiguelmelo/orkest/internal/server/coderepository"
-	"github.com/josemiguelmelo/orkest/internal/server/task"
+	agentmodel "github.com/josemiguelmelo/orkest/internal/server/agent/model"
+	coderepositorymodel "github.com/josemiguelmelo/orkest/internal/server/coderepository/model"
+	taskmodel "github.com/josemiguelmelo/orkest/internal/server/task/model"
 )
 
 func TestPostgresRepositories(t *testing.T) {
@@ -138,18 +138,18 @@ func TestPostgresRepositories(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	integration, err := codeRepositoryRepository.CreateCodingIntegration(ctx, coderepository.CodingIntegration{ID: integrationID, WorkspaceID: workspaceID, Name: "GitHub", ProviderName: "github", ProviderConfig: []byte(`{}`)}, "encrypted-token")
+	integration, err := codeRepositoryRepository.CreateCodingIntegration(ctx, coderepositorymodel.CodingIntegration{ID: integrationID, WorkspaceID: workspaceID, Name: "GitHub", ProviderName: "github", ProviderConfig: []byte(`{}`)}, "encrypted-token")
 	if err != nil {
 		t.Fatalf("create coding integration: %v", err)
 	}
-	attached, err := codeRepositoryRepository.CreateIntegratedCodeRepository(ctx, coderepository.CodeRepository{ID: "replacement-id", WorkspaceID: workspaceID, ProviderName: "github", URL: codeRepository.URL, IntegrationID: integration.ID, ProviderRepositoryID: "42", DefaultBranch: "trunk", Name: "acme/project", Private: true})
+	attached, err := codeRepositoryRepository.CreateIntegratedCodeRepository(ctx, coderepositorymodel.CodeRepository{ID: "replacement-id", WorkspaceID: workspaceID, ProviderName: "github", URL: codeRepository.URL, IntegrationID: integration.ID, ProviderRepositoryID: "42", DefaultBranch: "trunk", Name: "acme/project", Private: true})
 	if err != nil || attached.ID != codeRepositoryID || attached.IntegrationID != integrationID || attached.DefaultBranch != "trunk" || !attached.Private {
 		t.Fatalf("attach matching repository: item=%+v err=%v", attached, err)
 	}
 	if err = codeRepositoryRepository.DeleteCodingIntegration(ctx, workspaceID, integrationID); !errors.Is(err, modelerrors.ErrConflict) {
 		t.Fatalf("delete referenced coding integration error=%v", err)
 	}
-	if _, err = codeRepositoryRepository.CreateIntegratedCodeRepository(ctx, coderepository.CodeRepository{ID: "duplicate-repository", WorkspaceID: workspaceID, ProviderName: "github", URL: "https://github.com/acme/project-renamed.git", IntegrationID: integrationID, ProviderRepositoryID: "42", DefaultBranch: "trunk"}); !errors.Is(err, modelerrors.ErrConflict) {
+	if _, err = codeRepositoryRepository.CreateIntegratedCodeRepository(ctx, coderepositorymodel.CodeRepository{ID: "duplicate-repository", WorkspaceID: workspaceID, ProviderName: "github", URL: "https://github.com/acme/project-renamed.git", IntegrationID: integrationID, ProviderRepositoryID: "42", DefaultBranch: "trunk"}); !errors.Is(err, modelerrors.ErrConflict) {
 		t.Fatalf("duplicate provider repository identity error=%v", err)
 	}
 
@@ -158,7 +158,7 @@ func TestPostgresRepositories(t *testing.T) {
 		t.Fatal(err)
 	}
 	agentRepository := NewAgentPostgresRepository(database, nil)
-	worker, err := agentRepository.CreateAgent(ctx, agentID, workspaceID, agent.AgentDefinition{Name: "worker", Runtime: agent.RuntimeOpenCode, Provider: "test", Model: "test-model", PermissionPolicy: agent.PermissionPolicyAsk})
+	worker, err := agentRepository.CreateAgent(ctx, agentID, workspaceID, agentmodel.AgentDefinition{Name: "worker", Runtime: agentmodel.RuntimeOpenCode, Provider: "test", Model: "test-model", PermissionPolicy: agentmodel.PermissionPolicyAsk})
 	if err != nil {
 		t.Fatalf("create agent: %v", err)
 	}
@@ -167,7 +167,7 @@ func TestPostgresRepositories(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	createdTask, err := createWorkflowTask(ctx, taskRepository, taskID, workspaceID, task.TaskInput{WorkflowID: workspaceID, Title: "Add endpoint", Description: "Task body", Status: "todo", AssigneeAgentID: worker.ID, Labels: []string{"api"}, RepositoryIDs: []string{codeRepositoryID}})
+	createdTask, err := createWorkflowTask(ctx, taskRepository, taskID, workspaceID, taskmodel.TaskInput{WorkflowID: workspaceID, Title: "Add endpoint", Description: "Task body", Status: "todo", AssigneeAgentID: worker.ID, Labels: []string{"api"}, RepositoryIDs: []string{codeRepositoryID}})
 	if err != nil || createdTask.SourceProvider != "manual" || createdTask.AssigneeAgentID != worker.ID || len(createdTask.Repositories) != 1 || createdTask.Repositories[0].ID != codeRepositoryID {
 		t.Fatalf("create task: task=%+v err=%v", createdTask, err)
 	}
@@ -179,6 +179,7 @@ func TestPostgresRepositories(t *testing.T) {
 	t.Run("workspace workflow transitions", func(t *testing.T) { testWorkspaceWorkflow(t, database, org.ID, owner.ID, worker.ID) })
 	t.Run("task artifacts", func(t *testing.T) { testTaskArtifacts(t, database, org.ID, workspaceID, taskID, owner.ID) })
 	t.Run("task sessions and prompt delivery", func(t *testing.T) { testTaskSessions(t, database, org.ID, workspaceID, taskID) })
+	t.Run("launch transition fencing", func(t *testing.T) { testLaunchTransitionFencing(t, database, org.ID, workspaceID, taskID) })
 	commentID, err := ids.NewUUID()
 	if err != nil {
 		t.Fatal(err)

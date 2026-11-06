@@ -11,6 +11,7 @@ func (c *conversation) ensureJournalUnderEventLock() error {
 	journal := c.journal
 	config := *c.config
 	replay := c.replayExistingJournal
+	usesTaskSession := c.state.usesTaskSession
 	c.mu.RUnlock()
 	if journal != nil {
 		return nil
@@ -19,14 +20,19 @@ func (c *conversation) ensureJournalUnderEventLock() error {
 	if err != nil {
 		return err
 	}
+	state := conversationState{usesTaskSession: usesTaskSession}
+	for _, event := range history {
+		if err := state.validate(event); err != nil {
+			_ = journal.Close()
+			return err
+		}
+		state.apply(event)
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.journal = journal
-	c.state.commands = make(map[string]commandRecord)
+	c.state = state
 	c.pending = make(map[string]*pendingPermission)
-	for _, event := range history {
-		c.state.apply(event)
-	}
 	return nil
 }
 
@@ -42,7 +48,12 @@ func (c *conversation) commitEventUnderEventLock(event interaction.Event) error 
 	event.TaskSessionID = config.TaskSessionID
 	event.SessionID = c.session.SessionID()
 	journal := c.journal
+	validationErr := c.state.validate(event)
 	c.mu.RUnlock()
+	if validationErr != nil {
+		c.interrupt()
+		return validationErr
+	}
 
 	committed, err := journal.Append(event)
 	if err != nil {

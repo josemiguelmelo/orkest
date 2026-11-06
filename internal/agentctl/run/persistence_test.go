@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
+	runmodel "github.com/josemiguelmelo/orkest/internal/agentctl/run/model"
 )
 
 // blockedFile lets a test hold a commit in flight without relying on slow disks.
@@ -132,7 +133,7 @@ func TestFailedPermissionPersistenceWakesWaiters(t *testing.T) {
 					t.Fatal("permission remained blocked after journal failure")
 				}
 			}
-			if c.Snapshot().State != StateInterrupted {
+			if c.Snapshot().State != runmodel.StateInterrupted {
 				t.Fatal("interruption missing")
 			}
 			if err := c.RespondPermission(response); !errors.Is(err, interaction.ErrPermission) {

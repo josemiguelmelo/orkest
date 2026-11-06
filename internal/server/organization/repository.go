@@ -1,15 +1,19 @@
 package organization
 
-import "context"
+import (
+	"context"
+
+	organizationmodel "github.com/josemiguelmelo/orkest/internal/server/organization/model"
+)
 
 type OrganizationRepository interface {
-	Organizations(context.Context, string) ([]Organization, error)
-	Organization(context.Context, string, string) (Organization, error)
-	CreateOrganization(context.Context, string, string, string) (Organization, error)
-	UpdateOrganization(context.Context, string, string, string) (Organization, error)
+	Organizations(context.Context, string) ([]organizationmodel.Organization, error)
+	Organization(context.Context, string, string) (organizationmodel.Organization, error)
+	CreateOrganization(context.Context, string, string, string) (organizationmodel.Organization, error)
+	UpdateOrganization(context.Context, string, string, string) (organizationmodel.Organization, error)
 	DeleteOrganization(context.Context, string) error
 	OrganizationRole(context.Context, string, string) (string, error)
-	OrganizationMembers(context.Context, string) ([]Membership, error)
+	OrganizationMembers(context.Context, string) ([]organizationmodel.Membership, error)
 	SetOrganizationMember(context.Context, string, string, string, string) error
 	RemoveOrganizationMember(context.Context, string, string, string) error
 }

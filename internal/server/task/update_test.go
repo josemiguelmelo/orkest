@@ -6,15 +6,16 @@ import (
 	"testing"
 
 	"github.com/josemiguelmelo/orkest/internal/server/task"
-	"github.com/josemiguelmelo/orkest/internal/server/workflow"
+	taskmodel "github.com/josemiguelmelo/orkest/internal/server/task/model"
+	workflowmodel "github.com/josemiguelmelo/orkest/internal/server/workflow/model"
 	"github.com/josemiguelmelo/orkest/internal/server/workflowautomation"
-	"github.com/josemiguelmelo/orkest/internal/server/workspace"
+	workspacemodel "github.com/josemiguelmelo/orkest/internal/server/workspace/model"
 )
 
 func updateSnapshot() task.TaskWorkflowSnapshot {
-	d := workflow.DefaultDefinition("Board")
+	d := workflowmodel.DefaultDefinition("Board")
 	d.Stages[1].ResponsibleAgentID = "stage-agent"
-	return task.TaskWorkflowSnapshot{Workflow: d, Task: task.Task{Status: "todo", StageVersion: 4, AssigneeAgentID: "agent", SourceProvider: "manual", Title: "Original", Description: "Original description", Labels: []string{"original"}, StageWorkState: task.WorkStateIdle}}
+	return task.TaskWorkflowSnapshot{Workflow: d, Task: taskmodel.Task{Status: "todo", StageVersion: 4, AssigneeAgentID: "agent", SourceProvider: "manual", Title: "Original", Description: "Original description", Labels: []string{"original"}, StageWorkState: taskmodel.WorkStateIdle}}
 }
 
 type updateRepositoryStub struct {
@@ -22,19 +23,19 @@ type updateRepositoryStub struct {
 	effects  task.TaskUpdateEffects
 }
 
-func (r *updateRepositoryStub) WithTaskUpdate(_ context.Context, _, _, _, _ string, input task.TaskInput, decide func(task.TaskWorkflowSnapshot, task.TaskInput) (task.TaskUpdateEffects, error)) (task.Task, error) {
+func (r *updateRepositoryStub) WithTaskUpdate(_ context.Context, _, _, _, _ string, input taskmodel.TaskInput, decide func(task.TaskWorkflowSnapshot, taskmodel.TaskInput) (task.TaskUpdateEffects, error)) (taskmodel.Task, error) {
 	var err error
 	r.effects, err = decide(r.snapshot, input)
-	return task.Task{}, err
+	return taskmodel.Task{}, err
 }
 
 type updateAccessStub struct{}
 
-func (updateAccessStub) GetWorkspace(context.Context, string, string, string) (workspace.Workspace, error) {
-	return workspace.Workspace{Role: "member"}, nil
+func (updateAccessStub) GetWorkspace(context.Context, string, string, string) (workspacemodel.Workspace, error) {
+	return workspacemodel.Workspace{Role: "member"}, nil
 }
 
-func runTaskUpdate(snapshot task.TaskWorkflowSnapshot, input task.TaskInput) (task.TaskUpdateEffects, error) {
+func runTaskUpdate(snapshot task.TaskWorkflowSnapshot, input taskmodel.TaskInput) (task.TaskUpdateEffects, error) {
 	if input.Title == "" {
 		input.Title = "Edited"
 	}
@@ -49,12 +50,12 @@ func TestTaskUpdatePreservesSourceContent(t *testing.T) {
 	for _, imported := range []bool{false, true} {
 		t.Run(map[bool]string{false: "manual", true: "imported"}[imported], func(t *testing.T) {
 			snapshot := updateSnapshot()
-			snapshot.Task.StageWorkState = task.WorkStateRunning
+			snapshot.Task.StageWorkState = taskmodel.WorkStateRunning
 			snapshot.ActiveLaunch = true
 			if imported {
 				snapshot.Task.SourceProvider = "github_cloud"
 			}
-			input := task.TaskInput{Title: "Edited", Description: "Edited description", Labels: []string{"edited"}, Status: "todo", StageVersion: 4, AssigneeAgentID: "agent", RepositoryIDs: []string{"repo"}}
+			input := taskmodel.TaskInput{Title: "Edited", Description: "Edited description", Labels: []string{"edited"}, Status: "todo", StageVersion: 4, AssigneeAgentID: "agent", RepositoryIDs: []string{"repo"}}
 			before := input
 			decision, err := runTaskUpdate(snapshot, input)
 			if err != nil || decision.Workflow.Moved || decision.Workflow.Start {
@@ -74,7 +75,7 @@ func TestTaskUpdatePreservesSourceContent(t *testing.T) {
 func TestTaskUpdateMovementTakesPrecedence(t *testing.T) {
 	snapshot := updateSnapshot()
 	for _, start := range []bool{false, true} {
-		input := task.TaskInput{Status: "in_progress", AssigneeAgentID: "agent", StageVersion: 4, StartWork: start, CompleteStage: !start}
+		input := taskmodel.TaskInput{Status: "in_progress", AssigneeAgentID: "agent", StageVersion: 4, StartWork: start, CompleteStage: !start}
 		decision, err := runTaskUpdate(snapshot, input)
 		if err != nil || decision.Workflow.Command.Action != "move" || !decision.Workflow.Moved || decision.Workflow.Start || decision.Workflow.Completed {
 			t.Fatalf("legacy movement: %+v, %v", decision, err)

@@ -5,6 +5,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/josemiguelmelo/orkest/internal/server/agentruntimeprofile"
+	agentruntimeprofilemodel "github.com/josemiguelmelo/orkest/internal/server/agentruntimeprofile/model"
 )
 
 type agentRuntimeProfileAPI struct {
@@ -12,7 +13,7 @@ type agentRuntimeProfileAPI struct {
 }
 
 type runtimeProfileRequest struct {
-	agentruntimeprofile.Profile
+	agentruntimeprofilemodel.Profile
 	Configuration map[string]string `json:"configuration"`
 }
 

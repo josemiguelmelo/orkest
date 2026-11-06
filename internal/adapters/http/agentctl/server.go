@@ -9,17 +9,17 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
-	agentrun "github.com/josemiguelmelo/orkest/internal/agentctl/run"
+	runmodel "github.com/josemiguelmelo/orkest/internal/agentctl/run/model"
 	"github.com/josemiguelmelo/orkest/internal/platform/httplog"
 	"github.com/josemiguelmelo/orkest/internal/platform/openapi"
 )
 
 // Controller describes the execution operations consumed by the HTTP API.
 type Controller interface {
-	Status() agentrun.RunStatus
-	Configure(runconfig.RunConfig) error
+	Status() runmodel.RunStatus
+	Configure(configmodel.RunConfig) error
 	Launch() error
 	RestoreSession() error
 	CommandStatus(string) (interaction.CommandStatus, error)

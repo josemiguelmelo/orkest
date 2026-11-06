@@ -6,7 +6,7 @@ import (
 	"errors"
 	"path/filepath"
 
-	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
 	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
 	coreruntime "github.com/josemiguelmelo/orkest/internal/contracts/runtimecatalog"
 )
@@ -38,11 +38,13 @@ type runtimeConfiguration struct {
 	Permissions []permissionRule  `json:"permissions,omitempty"`
 	MCP         *runtimeMCPConfig `json:"mcp,omitempty"`
 }
+
 type permissionRule struct {
 	Action   string `json:"action"`
 	Resource string `json:"resource"`
 	Effect   string `json:"effect"`
 }
+
 type (
 	runtimeMCPConfig struct {
 		Servers map[string]runtimeMCP `json:"servers"`
@@ -76,7 +78,7 @@ func (p Profile) BuildProvisioningPlan(settings agentruntime.ResolvedRuntimeSett
 	agentContents := "---\ndescription: " + string(description) + "\nmode: primary\nmodel: " + string(model) + "\n---\n\n" + settings.Agent.Instructions + "\n"
 	files := map[string][]byte{filepath.ToSlash(filepath.Join(configRoot, "agents", agentName+".md")): []byte(agentContents)}
 	for _, skill := range settings.Skills {
-		if !runconfig.ValidSkillID(skill.ID) {
+		if !configmodel.ValidSkillID(skill.ID) {
 			return agentruntime.ProvisioningPlan{}, errors.New("invalid skill ID")
 		}
 		files[filepath.ToSlash(filepath.Join(configRoot, "skills", skill.ID, "SKILL.md"))] = []byte(skill.SkillMD + "\n")
@@ -86,7 +88,7 @@ func (p Profile) BuildProvisioningPlan(settings agentruntime.ResolvedRuntimeSett
 		return agentruntime.ProvisioningPlan{}, err
 	}
 	runtimeConfig := runtimeConfiguration{Model: settings.Model.Provider + "/" + settings.Model.ID, Share: "disabled", MCP: mcp}
-	if settings.Agent.PermissionPolicy == runconfig.PermissionPolicyAutonomous {
+	if settings.Agent.PermissionPolicy == configmodel.PermissionPolicyAutonomous {
 		runtimeConfig.Permissions = []permissionRule{{Action: "*", Resource: "*", Effect: "allow"}}
 	}
 	encoded, err := json.Marshal(runtimeConfig)
@@ -122,7 +124,7 @@ func (Profile) ProtocolSessionOptions(settings agentruntime.ResolvedRuntimeSetti
 	return agentruntime.ProtocolSessionOptions{Model: settings.Model.Provider + "/" + settings.Model.ID}
 }
 
-func buildMCPConfiguration(servers []runconfig.MCPServer) (*runtimeMCPConfig, error) {
+func buildMCPConfiguration(servers []configmodel.MCPServer) (*runtimeMCPConfig, error) {
 	if len(servers) == 0 {
 		return nil, nil
 	}

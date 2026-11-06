@@ -10,11 +10,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/josemiguelmelo/orkest/internal/adapters/runnerclient/agentctlhttp"
-
 	"github.com/containerd/errdefs"
+	"github.com/josemiguelmelo/orkest/internal/adapters/runnerclient/agentctlhttp"
 	coreruntime "github.com/josemiguelmelo/orkest/internal/contracts/runtimecatalog"
-	"github.com/josemiguelmelo/orkest/internal/server/orchestration"
+	orchestrationmodel "github.com/josemiguelmelo/orkest/internal/server/orchestration/model"
 	mobyclient "github.com/moby/moby/client"
 )
 
@@ -51,8 +50,8 @@ func TestDockerSessionRestore(t *testing.T) {
 	}
 	defer func() { _ = executor.Close() }()
 	httpClient := agentctlhttp.NewHTTPAgentctlClient(&http.Client{Timeout: 35 * time.Second})
-	run := orchestration.RunConfig{RuntimeConfig: orchestration.RuntimeConfig{OrganizationID: "restore-org", WorkspaceID: "restore-workspace", TaskID: "restore-task", TaskSessionID: "session-one", RunID: "run-one", Runtime: "opencode", Model: orchestration.ModelSelection{Provider: provider, ID: model}, Agent: orchestration.AgentDefinition{Name: "Test", Instructions: "test"}}}
-	start := func() orchestration.Process {
+	run := orchestrationmodel.RunConfig{RuntimeConfig: orchestrationmodel.RuntimeConfig{OrganizationID: "restore-org", WorkspaceID: "restore-workspace", TaskID: "restore-task", TaskSessionID: "session-one", RunID: "run-one", Runtime: "opencode", Model: orchestrationmodel.ModelSelection{Provider: provider, ID: model}, Agent: orchestrationmodel.AgentDefinition{Name: "Test", Instructions: "test"}}}
+	start := func() orchestrationmodel.Process {
 		t.Helper()
 		process, err := executor.StartAgentctl(ctx, run)
 		if err != nil {

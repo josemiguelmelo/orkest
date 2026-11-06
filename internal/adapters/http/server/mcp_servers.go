@@ -5,6 +5,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/josemiguelmelo/orkest/internal/server/mcpserver"
+	mcpservermodel "github.com/josemiguelmelo/orkest/internal/server/mcpserver/model"
 )
 
 type mcpServerAPI struct{ service *mcpserver.MCPServerService }
@@ -23,7 +24,7 @@ func (a mcpServerAPI) list(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a mcpServerAPI) create(w http.ResponseWriter, r *http.Request) {
-	var body mcpserver.Input
+	var body mcpservermodel.Input
 	if !decodeBody(w, r, &body) {
 		return
 	}
@@ -32,7 +33,7 @@ func (a mcpServerAPI) create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a mcpServerAPI) update(w http.ResponseWriter, r *http.Request) {
-	var body mcpserver.Input
+	var body mcpservermodel.Input
 	if !decodeBody(w, r, &body) {
 		return
 	}

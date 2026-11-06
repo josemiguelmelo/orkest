@@ -5,34 +5,36 @@ import (
 	"testing"
 
 	modelerrors "github.com/josemiguelmelo/orkest/internal/contracts/problem"
-	"github.com/josemiguelmelo/orkest/internal/server/workspace"
+	agentmodel "github.com/josemiguelmelo/orkest/internal/server/agent/model"
+	workspacemodel "github.com/josemiguelmelo/orkest/internal/server/workspace/model"
 )
 
-type repositoryStub struct{ value Agent }
+type repositoryStub struct{ value agentmodel.Agent }
 
-func (r *repositoryStub) Agents(context.Context, string, string) ([]Agent, error) {
-	return []Agent{r.value}, nil
+func (r *repositoryStub) Agents(context.Context, string, string) ([]agentmodel.Agent, error) {
+	return []agentmodel.Agent{r.value}, nil
 }
 
-func (r *repositoryStub) Agent(context.Context, string, string, string) (Agent, error) {
+func (r *repositoryStub) Agent(context.Context, string, string, string) (agentmodel.Agent, error) {
 	return r.value, nil
 }
 
-func (r *repositoryStub) CreateAgent(_ context.Context, id, workspaceID string, definition AgentDefinition) (Agent, error) {
-	r.value = Agent{ID: id, WorkspaceID: workspaceID, AgentDefinition: definition}
+func (r *repositoryStub) CreateAgent(_ context.Context, id, workspaceID string, definition agentmodel.AgentDefinition) (agentmodel.Agent, error) {
+	r.value = agentmodel.Agent{ID: id, WorkspaceID: workspaceID, AgentDefinition: definition}
 	return r.value, nil
 }
 
-func (r *repositoryStub) UpdateAgent(_ context.Context, _, workspaceID, id string, definition AgentDefinition) (Agent, error) {
-	r.value = Agent{ID: id, WorkspaceID: workspaceID, AgentDefinition: definition}
+func (r *repositoryStub) UpdateAgent(_ context.Context, _, workspaceID, id string, definition agentmodel.AgentDefinition) (agentmodel.Agent, error) {
+	r.value = agentmodel.Agent{ID: id, WorkspaceID: workspaceID, AgentDefinition: definition}
 	return r.value, nil
 }
+
 func (*repositoryStub) DeleteAgent(context.Context, string, string, string) error { return nil }
 
 type workspaceStub struct{ role string }
 
-func (w workspaceStub) GetWorkspace(context.Context, string, string, string) (workspace.Workspace, error) {
-	return workspace.Workspace{Role: w.role}, nil
+func (w workspaceStub) GetWorkspace(context.Context, string, string, string) (workspacemodel.Workspace, error) {
+	return workspacemodel.Workspace{Role: w.role}, nil
 }
 
 type mcpAccessStub struct{ valid bool }
@@ -41,14 +43,14 @@ func (m mcpAccessStub) Exists(context.Context, string, string, []string) (bool, 
 	return m.valid, nil
 }
 
-type runtimeProfileStub struct{ runtime Runtime }
+type runtimeProfileStub struct{ runtime agentmodel.Runtime }
 
-func (p runtimeProfileStub) ResolveAgentProfile(context.Context, string, string) (Runtime, string, string, map[string]string, error) {
+func (p runtimeProfileStub) ResolveAgentProfile(context.Context, string, string) (agentmodel.Runtime, string, string, map[string]string, error) {
 	return p.runtime, "anthropic", "gateway/claude-sonnet", nil, nil
 }
 
-func validDefinition() AgentDefinition {
-	return AgentDefinition{Name: "Work", Runtime: RuntimeOpenCode, Provider: "provider", Model: "model", Description: "work"}
+func validDefinition() agentmodel.AgentDefinition {
+	return agentmodel.AgentDefinition{Name: "Work", Runtime: agentmodel.RuntimeOpenCode, Provider: "provider", Model: "model", Description: "work"}
 }
 
 func TestPermissionPolicyDefaultsToAskAndRejectsUnknownValues(t *testing.T) {
@@ -56,7 +58,7 @@ func TestPermissionPolicyDefaultsToAskAndRejectsUnknownValues(t *testing.T) {
 	if err := validate(&definition); err != nil {
 		t.Fatal(err)
 	}
-	if definition.PermissionPolicy != PermissionPolicyAsk {
+	if definition.PermissionPolicy != agentmodel.PermissionPolicyAsk {
 		t.Fatalf("default policy = %q, want ask", definition.PermissionPolicy)
 	}
 	definition.PermissionPolicy = "unexpected"
@@ -75,7 +77,7 @@ func TestCreateRejectsMCPServerOutsideWorkspace(t *testing.T) {
 }
 
 func TestUpdatePreservesMCPSelectionWhenFieldOmitted(t *testing.T) {
-	repository := &repositoryStub{value: Agent{ID: "agent", WorkspaceID: "workspace", AgentDefinition: validDefinition()}}
+	repository := &repositoryStub{value: agentmodel.Agent{ID: "agent", WorkspaceID: "workspace", AgentDefinition: validDefinition()}}
 	repository.value.MCPServerIDs = []string{"selected-server"}
 	service := NewAgentDefinitionUseCase(repository, workspaceStub{role: "member"}, mcpAccessStub{valid: true}, nil, nil, nil)
 	updated, err := service.Update(context.Background(), "user", "org", "workspace", "agent", validDefinition())
@@ -89,7 +91,7 @@ func TestUpdatePreservesMCPSelectionWhenFieldOmitted(t *testing.T) {
 
 func TestDefinitionValidationDelegatesToRuntimeProvider(t *testing.T) {
 	definition := validDefinition()
-	definition.Runtime = RuntimeClaudeCode
+	definition.Runtime = agentmodel.RuntimeClaudeCode
 	definition.Provider = "openai"
 	service := NewAgentDefinitionUseCase(&repositoryStub{}, workspaceStub{role: "member"}, mcpAccessStub{valid: true}, nil, nil, nil)
 	if err := service.validateDefinition(&definition); err != modelerrors.ErrInvalid {
@@ -103,14 +105,14 @@ func TestDefinitionValidationDelegatesToRuntimeProvider(t *testing.T) {
 func TestCreateResolvesRuntimeProfileSettings(t *testing.T) {
 	repository := &repositoryStub{}
 	service := NewAgentDefinitionUseCase(repository, workspaceStub{role: "member"}, mcpAccessStub{valid: true}, nil, nil, nil)
-	service.runtimeProfiles = runtimeProfileStub{runtime: RuntimeClaudeCode}
+	service.runtimeProfiles = runtimeProfileStub{runtime: agentmodel.RuntimeClaudeCode}
 	definition := validDefinition()
 	definition.RuntimeProfileID = "profile"
 	created, err := service.Create(context.Background(), "user", "org", "workspace", definition)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if created.Runtime != RuntimeClaudeCode || created.Provider != "anthropic" || created.Model != "gateway/claude-sonnet" {
+	if created.Runtime != agentmodel.RuntimeClaudeCode || created.Provider != "anthropic" || created.Model != "gateway/claude-sonnet" {
 		t.Fatalf("runtime profile settings were not applied: %#v", created.AgentDefinition)
 	}
 }

@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/josemiguelmelo/orkest/internal/server/executionprofile"
+	executionprofilemodel "github.com/josemiguelmelo/orkest/internal/server/executionprofile/model"
 )
 
 type storeFake struct {
@@ -17,19 +17,19 @@ type storeFake struct {
 	resolves int
 }
 
-func (s *storeFake) ResolveInputs(_ context.Context, b executionprofile.Build) (executionprofile.Build, error) {
+func (s *storeFake) ResolveInputs(_ context.Context, b executionprofilemodel.Build) (executionprofilemodel.Build, error) {
 	s.resolves++
 	return b, nil
 }
 
-func (s *storeFake) Verify(_ context.Context, _ executionprofile.Build, ref string) (string, error) {
+func (s *storeFake) Verify(_ context.Context, _ executionprofilemodel.Build, ref string) (string, error) {
 	s.verified = append(s.verified, ref)
 	return ref, nil
 }
 
-func buildFixture() executionprofile.Build {
+func buildFixture() executionprofilemodel.Build {
 	hash := "sha256:" + strings.Repeat("a", 64)
-	return executionprofile.Build{ID: "attempt", Runtime: "opencode", RuntimeVersion: "opencode v2.1.4", ResolvedBase: "example.com/base@" + hash, ResolvedToolchain: "example.com/tools@" + hash, Destination: "example.com/output:build-attempt"}
+	return executionprofilemodel.Build{ID: "attempt", Runtime: "opencode", RuntimeVersion: "opencode v2.1.4", ResolvedBase: "example.com/base@" + hash, ResolvedToolchain: "example.com/tools@" + hash, Destination: "example.com/output:build-attempt"}
 }
 
 func buildctlScript(t *testing.T, script string) string {

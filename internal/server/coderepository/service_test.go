@@ -11,34 +11,35 @@ import (
 
 	modelerrors "github.com/josemiguelmelo/orkest/internal/contracts/problem"
 	"github.com/josemiguelmelo/orkest/internal/platform/secretbox"
-	"github.com/josemiguelmelo/orkest/internal/server/workspace"
+	coderepositorymodel "github.com/josemiguelmelo/orkest/internal/server/coderepository/model"
+	workspacemodel "github.com/josemiguelmelo/orkest/internal/server/workspace/model"
 )
 
 type repositoryStub struct {
-	items        []CodeRepository
-	integrations map[string]CodingIntegration
+	items        []coderepositorymodel.CodeRepository
+	integrations map[string]coderepositorymodel.CodingIntegration
 	credentials  map[string]string
 }
 
-func (r *repositoryStub) CodeRepositories(context.Context, string, string) ([]CodeRepository, error) {
+func (r *repositoryStub) CodeRepositories(context.Context, string, string) ([]coderepositorymodel.CodeRepository, error) {
 	return r.items, nil
 }
 
-func (r *repositoryStub) CodeRepository(_ context.Context, _, _, id string) (CodeRepository, error) {
+func (r *repositoryStub) CodeRepository(_ context.Context, _, _, id string) (coderepositorymodel.CodeRepository, error) {
 	for _, item := range r.items {
 		if item.ID == id {
 			return item, nil
 		}
 	}
-	return CodeRepository{}, modelerrors.ErrNotFound
+	return coderepositorymodel.CodeRepository{}, modelerrors.ErrNotFound
 }
 
 func (*repositoryStub) DeleteCodeRepository(context.Context, string, string, string) error {
 	return nil
 }
 
-func (r *repositoryStub) ListCodingIntegrations(_ context.Context, workspaceID string) ([]CodingIntegration, error) {
-	out := []CodingIntegration{}
+func (r *repositoryStub) ListCodingIntegrations(_ context.Context, workspaceID string) ([]coderepositorymodel.CodingIntegration, error) {
+	out := []coderepositorymodel.CodingIntegration{}
 	for _, item := range r.integrations {
 		if item.WorkspaceID == workspaceID {
 			out = append(out, item)
@@ -47,17 +48,17 @@ func (r *repositoryStub) ListCodingIntegrations(_ context.Context, workspaceID s
 	return out, nil
 }
 
-func (r *repositoryStub) GetCodingIntegration(_ context.Context, workspaceID, id string) (CodingIntegration, string, error) {
+func (r *repositoryStub) GetCodingIntegration(_ context.Context, workspaceID, id string) (coderepositorymodel.CodingIntegration, string, error) {
 	item, ok := r.integrations[id]
 	if !ok || item.WorkspaceID != workspaceID {
-		return CodingIntegration{}, "", modelerrors.ErrNotFound
+		return coderepositorymodel.CodingIntegration{}, "", modelerrors.ErrNotFound
 	}
 	return item, r.credentials[id], nil
 }
 
-func (r *repositoryStub) CreateCodingIntegration(_ context.Context, item CodingIntegration, credential string) (CodingIntegration, error) {
+func (r *repositoryStub) CreateCodingIntegration(_ context.Context, item coderepositorymodel.CodingIntegration, credential string) (coderepositorymodel.CodingIntegration, error) {
 	if r.integrations == nil {
-		r.integrations = map[string]CodingIntegration{}
+		r.integrations = map[string]coderepositorymodel.CodingIntegration{}
 	}
 	if r.credentials == nil {
 		r.credentials = map[string]string{}
@@ -67,7 +68,7 @@ func (r *repositoryStub) CreateCodingIntegration(_ context.Context, item CodingI
 	return item, nil
 }
 
-func (r *repositoryStub) UpdateCodingIntegration(_ context.Context, item CodingIntegration, credential string) error {
+func (r *repositoryStub) UpdateCodingIntegration(_ context.Context, item coderepositorymodel.CodingIntegration, credential string) error {
 	if _, ok := r.integrations[item.ID]; !ok {
 		return modelerrors.ErrNotFound
 	}
@@ -90,15 +91,15 @@ func (r *repositoryStub) DeleteCodingIntegration(_ context.Context, workspaceID,
 	return modelerrors.ErrNotFound
 }
 
-func (r *repositoryStub) CreateIntegratedCodeRepository(_ context.Context, item CodeRepository) (CodeRepository, error) {
+func (r *repositoryStub) CreateIntegratedCodeRepository(_ context.Context, item coderepositorymodel.CodeRepository) (coderepositorymodel.CodeRepository, error) {
 	r.items = append(r.items, item)
 	return item, nil
 }
 
 type workspaceStub struct{ role string }
 
-func (w workspaceStub) GetWorkspace(context.Context, string, string, string) (workspace.Workspace, error) {
-	return workspace.Workspace{Role: w.role}, nil
+func (w workspaceStub) GetWorkspace(context.Context, string, string, string) (workspacemodel.Workspace, error) {
+	return workspacemodel.Workspace{Role: w.role}, nil
 }
 
 type providerStub struct {
@@ -107,6 +108,7 @@ type providerStub struct {
 }
 
 func (providerStub) ProviderName() string { return "github" }
+
 func (p *providerStub) ClonePublic(_ context.Context, repositoryURL, path string) error {
 	p.cloneURL, p.clonePath = repositoryURL, path
 	return nil
@@ -125,36 +127,38 @@ func (providerStub) ConfigSchema() json.RawMessage { return json.RawMessage(`{}`
 
 func (providerStub) ValidateConfig(json.RawMessage) error { return nil }
 
-func (providerStub) ValidateAuthentication(context.Context, json.RawMessage, Credentials) error {
+func (providerStub) ValidateAuthentication(context.Context, json.RawMessage, coderepositorymodel.Credentials) error {
 	return nil
 }
 
-func (providerStub) DiscoverRepositories(context.Context, json.RawMessage, Credentials, int, int) (RepositoryPage, error) {
-	return RepositoryPage{}, nil
+func (providerStub) DiscoverRepositories(context.Context, json.RawMessage, coderepositorymodel.Credentials, int, int) (coderepositorymodel.RepositoryPage, error) {
+	return coderepositorymodel.RepositoryPage{}, nil
 }
 
-func (providerStub) ResolveRepository(_ context.Context, _ json.RawMessage, _ Credentials, id string) (RepositoryMetadata, error) {
+func (providerStub) ResolveRepository(_ context.Context, _ json.RawMessage, _ coderepositorymodel.Credentials, id string) (coderepositorymodel.RepositoryMetadata, error) {
 	if id != "42" {
-		return RepositoryMetadata{}, fmt.Errorf("repository unavailable")
+		return coderepositorymodel.RepositoryMetadata{}, fmt.Errorf("repository unavailable")
 	}
-	return RepositoryMetadata{ID: id, Name: "acme/project", CloneURL: "https://github.com/acme/project.git", Private: true, DefaultBranch: "trunk"}, nil
+	return coderepositorymodel.RepositoryMetadata{ID: id, Name: "acme/project", CloneURL: "https://github.com/acme/project.git", Private: true, DefaultBranch: "trunk"}, nil
 }
+
 func (providerStub) NormalizeRepositoryURL(value string) (string, error) { return value, nil }
-func (providerStub) CloneAuthenticated(context.Context, RepositoryMetadata, Credentials, string) error {
+
+func (providerStub) CloneAuthenticated(context.Context, coderepositorymodel.RepositoryMetadata, coderepositorymodel.Credentials, string) error {
 	return nil
 }
 
-func (providerStub) SyncAuthenticated(context.Context, RepositoryMetadata, Credentials, string) error {
+func (providerStub) SyncAuthenticated(context.Context, coderepositorymodel.RepositoryMetadata, coderepositorymodel.Credentials, string) error {
 	return nil
 }
 
-func (providerStub) PrepareAuthenticatedTaskCheckout(context.Context, RepositoryMetadata, Credentials, string, string) error {
+func (providerStub) PrepareAuthenticatedTaskCheckout(context.Context, coderepositorymodel.RepositoryMetadata, coderepositorymodel.Credentials, string, string) error {
 	return nil
 }
 
 func TestCloneAndSyncUseRegisteredProviderAndRequestedPath(t *testing.T) {
 	provider := &providerStub{}
-	repository := &repositoryStub{items: []CodeRepository{{ID: "repo", ProviderName: "github", URL: "https://github.com/acme/project.git"}}}
+	repository := &repositoryStub{items: []coderepositorymodel.CodeRepository{{ID: "repo", ProviderName: "github", URL: "https://github.com/acme/project.git"}}}
 	dataRoot := t.TempDir()
 	service := NewCodeRepositoryService(repository, workspaceStub{role: "member"}, dataRoot, nil, provider)
 	if err := service.Clone(context.Background(), "user", "org", "workspace", "repo"); err != nil {
@@ -181,10 +185,10 @@ func TestCodingIntegrationCredentialsAreEncryptedWriteOnlyAndRotatable(t *testin
 	service := NewCodeRepositoryService(repository, workspaceStub{role: "admin"}, t.TempDir(), nil, &providerStub{})
 	service.secretBox = box
 	withoutBox := NewCodeRepositoryService(&repositoryStub{}, workspaceStub{role: "admin"}, t.TempDir(), nil, &providerStub{})
-	if _, err := withoutBox.CreateIntegration(context.Background(), "user", "org", "workspace", CodingIntegrationInput{Name: "No key", ProviderName: "github", Credential: "token"}); !errors.Is(err, secretbox.ErrKeyUnavailable) {
+	if _, err := withoutBox.CreateIntegration(context.Background(), "user", "org", "workspace", coderepositorymodel.CodingIntegrationInput{Name: "No key", ProviderName: "github", Credential: "token"}); !errors.Is(err, secretbox.ErrKeyUnavailable) {
 		t.Fatalf("missing encryption key error=%v", err)
 	}
-	created, err := service.CreateIntegration(context.Background(), "user", "org", "workspace", CodingIntegrationInput{Name: "GitHub", ProviderName: "github", Credential: "first-token"})
+	created, err := service.CreateIntegration(context.Background(), "user", "org", "workspace", coderepositorymodel.CodingIntegrationInput{Name: "GitHub", ProviderName: "github", Credential: "first-token"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -203,7 +207,7 @@ func TestCodingIntegrationCredentialsAreEncryptedWriteOnlyAndRotatable(t *testin
 	if string(encoded) == "" || string(encoded) == "first-token" || containsSecret(string(encoded), "first-token") {
 		t.Fatalf("credential leaked in list: %s", encoded)
 	}
-	if err = service.UpdateIntegration(context.Background(), "user", "org", "workspace", created.ID, CodingIntegrationInput{Name: "GitHub rotated", Credential: "rotated-token"}); err != nil {
+	if err = service.UpdateIntegration(context.Background(), "user", "org", "workspace", created.ID, coderepositorymodel.CodingIntegrationInput{Name: "GitHub rotated", Credential: "rotated-token"}); err != nil {
 		t.Fatal(err)
 	}
 	credential, err := service.CodingCredential(context.Background(), "workspace", created.ID)
@@ -220,12 +224,12 @@ func TestCodingIntegrationRolesAndRepositoryResolution(t *testing.T) {
 	repository := &repositoryStub{}
 	memberService := NewCodeRepositoryService(repository, workspaceStub{role: "member"}, t.TempDir(), nil, &providerStub{})
 	memberService.secretBox = box
-	if _, err := memberService.CreateIntegration(context.Background(), "u", "o", "w", CodingIntegrationInput{Name: "No", ProviderName: "github", Credential: "token"}); !errors.Is(err, modelerrors.ErrForbidden) {
+	if _, err := memberService.CreateIntegration(context.Background(), "u", "o", "w", coderepositorymodel.CodingIntegrationInput{Name: "No", ProviderName: "github", Credential: "token"}); !errors.Is(err, modelerrors.ErrForbidden) {
 		t.Fatalf("member create integration error=%v", err)
 	}
 	service := NewCodeRepositoryService(repository, workspaceStub{role: "owner"}, t.TempDir(), nil, &providerStub{})
 	service.secretBox = box
-	integration, err := service.CreateIntegration(context.Background(), "u", "o", "w", CodingIntegrationInput{Name: "GitHub", ProviderName: "github", Credential: "token"})
+	integration, err := service.CreateIntegration(context.Background(), "u", "o", "w", coderepositorymodel.CodingIntegrationInput{Name: "GitHub", ProviderName: "github", Credential: "token"})
 	if err != nil {
 		t.Fatal(err)
 	}

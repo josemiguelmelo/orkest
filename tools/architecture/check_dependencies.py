@@ -21,6 +21,8 @@ def layer(path):
 
 def forbidden(source, target):
     owner, dependency = layer(source), layer(target)
+    if source.endswith('/model') and dependency in ('server', 'worker') and not target.endswith('/model'):
+        return True
     if owner in ('server', 'worker'):
         return dependency in ('adapter', 'command') or (owner, dependency) in (
             ('server', 'worker'), ('worker', 'server'))

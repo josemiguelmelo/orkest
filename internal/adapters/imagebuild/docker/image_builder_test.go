@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	coreruntime "github.com/josemiguelmelo/orkest/internal/contracts/runtimecatalog"
-	"github.com/josemiguelmelo/orkest/internal/server/executionprofile"
+	executionprofilemodel "github.com/josemiguelmelo/orkest/internal/server/executionprofile/model"
 )
 
 func TestDockerBuilderPublishesAndReconciles(t *testing.T) {
@@ -32,7 +32,7 @@ fi
 	if err != nil {
 		t.Fatal(err)
 	}
-	build := executionprofile.Build{ID: "attempt", Runtime: "opencode", RuntimeVersion: "opencode v2.1.4", ResolvedBase: "example.com/base@" + hash, ResolvedToolchain: "example.com/tools@" + hash, Destination: "example.com/output:build-attempt"}
+	build := executionprofilemodel.Build{ID: "attempt", Runtime: "opencode", RuntimeVersion: "opencode v2.1.4", ResolvedBase: "example.com/base@" + hash, ResolvedToolchain: "example.com/tools@" + hash, Destination: "example.com/output:build-attempt"}
 	artifact, err := builder.BuildAndPush(context.Background(), build)
 	if err != nil {
 		t.Fatal(err)
@@ -103,7 +103,7 @@ fi
 		t.Fatal(err)
 	}
 	hash := "sha256:" + strings.Repeat("a", 64)
-	build := executionprofile.Build{ID: "attempt", Runtime: "opencode", RuntimeVersion: "opencode v2.1.4", ResolvedBase: "example.com/base@" + hash, ResolvedToolchain: "example.com/tools@" + hash, Destination: "example.com/output:build-attempt"}
+	build := executionprofilemodel.Build{ID: "attempt", Runtime: "opencode", RuntimeVersion: "opencode v2.1.4", ResolvedBase: "example.com/base@" + hash, ResolvedToolchain: "example.com/tools@" + hash, Destination: "example.com/output:build-attempt"}
 	if _, err = builder.BuildAndPush(context.Background(), build); err == nil || strings.Contains(err.Error(), "private-token") {
 		t.Fatal("invalid validation failure handling", err)
 	}

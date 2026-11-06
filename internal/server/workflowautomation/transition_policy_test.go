@@ -4,16 +4,15 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/josemiguelmelo/orkest/internal/server/task"
-
 	modelerrors "github.com/josemiguelmelo/orkest/internal/contracts/problem"
-	definition "github.com/josemiguelmelo/orkest/internal/server/workflow"
+	taskmodel "github.com/josemiguelmelo/orkest/internal/server/task/model"
+	workflowmodel "github.com/josemiguelmelo/orkest/internal/server/workflow/model"
 )
 
 func transitionSnapshot() TransitionSnapshot {
-	d := definition.DefaultDefinition("Board")
+	d := workflowmodel.DefaultDefinition("Board")
 	d.Stages[1].ResponsibleAgentID = "stage-agent"
-	return TransitionSnapshot{Workflow: d, Task: task.Task{Status: "todo", StageVersion: 4, AssigneeAgentID: "agent", SourceProvider: "manual", Title: "Original", Description: "Original description", Labels: []string{"original"}, StageWorkState: task.WorkStateIdle}}
+	return TransitionSnapshot{Workflow: d, Task: taskmodel.Task{Status: "todo", StageVersion: 4, AssigneeAgentID: "agent", SourceProvider: "manual", Title: "Original", Description: "Original description", Labels: []string{"original"}, StageWorkState: taskmodel.WorkStateIdle}}
 }
 
 func TestTransitionPolicyConflicts(t *testing.T) {
@@ -23,8 +22,8 @@ func TestTransitionPolicyConflicts(t *testing.T) {
 		want   error
 	}{
 		{"stale version", func(s *TransitionSnapshot, c *TransitionCommand) { c.Input.StageVersion-- }, modelerrors.ErrConflict},
-		{"queued move", func(s *TransitionSnapshot, c *TransitionCommand) { s.Task.StageWorkState = task.WorkStateQueued }, modelerrors.ErrConflict},
-		{"running move", func(s *TransitionSnapshot, c *TransitionCommand) { s.Task.StageWorkState = task.WorkStateRunning }, modelerrors.ErrConflict},
+		{"queued move", func(s *TransitionSnapshot, c *TransitionCommand) { s.Task.StageWorkState = taskmodel.WorkStateQueued }, modelerrors.ErrConflict},
+		{"running move", func(s *TransitionSnapshot, c *TransitionCommand) { s.Task.StageWorkState = taskmodel.WorkStateRunning }, modelerrors.ErrConflict},
 		{"active launch", func(s *TransitionSnapshot, c *TransitionCommand) { s.ActiveLaunch = true }, modelerrors.ErrConflict},
 		{"closed task", func(s *TransitionSnapshot, c *TransitionCommand) { s.Task.Status = "done" }, modelerrors.ErrConflict},
 		{"unknown destination", func(s *TransitionSnapshot, c *TransitionCommand) { c.Input.StageID = "missing" }, modelerrors.ErrInvalid},
@@ -35,11 +34,11 @@ func TestTransitionPolicyConflicts(t *testing.T) {
 		}, modelerrors.ErrConflict},
 		{"closed start", func(s *TransitionSnapshot, c *TransitionCommand) { s.Task.Status = "done"; c.Input.Action = "start" }, modelerrors.ErrConflict},
 		{"queued start", func(s *TransitionSnapshot, c *TransitionCommand) {
-			s.Task.StageWorkState = task.WorkStateQueued
+			s.Task.StageWorkState = taskmodel.WorkStateQueued
 			c.Input.Action = "start"
 		}, modelerrors.ErrConflict},
 		{"running completion", func(s *TransitionSnapshot, c *TransitionCommand) {
-			s.Task.StageWorkState = task.WorkStateRunning
+			s.Task.StageWorkState = taskmodel.WorkStateRunning
 			c.Input.Action = "complete"
 		}, modelerrors.ErrConflict},
 		{"active reassignment", func(s *TransitionSnapshot, c *TransitionCommand) {
@@ -88,7 +87,7 @@ func TestTransitionReplayDefersToPersistence(t *testing.T) {
 	snapshot := transitionSnapshot()
 	snapshot.RecordedCommand = true
 	snapshot.Task.Status = "done"
-	snapshot.Task.StageWorkState = task.WorkStateRunning
+	snapshot.Task.StageWorkState = taskmodel.WorkStateRunning
 	snapshot.ActiveLaunch = true
 	decision, err := PlanTaskTransition(snapshot, TransitionCommand{Input: TransitionRequest{Action: "start", StageID: "ignored", StageVersion: 1, CommandID: "recorded"}})
 	if err != nil || decision.Input.StageID != "" || decision.Input.StageVersion != 1 || decision.Plan.Start || decision.Moved || decision.CompleteStage {

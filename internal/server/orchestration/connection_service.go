@@ -4,50 +4,94 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync"
 	"time"
+
+	orchestrationmodel "github.com/josemiguelmelo/orkest/internal/server/orchestration/model"
 )
 
 type AgentCommunication interface {
-	Start(Launch) error
+	Start(context.Context, orchestrationmodel.Launch) error
 }
 
 type connectionRun struct {
 	ctx    context.Context
 	cancel context.CancelFunc
+	ready  chan struct{}
+	done   chan struct{}
+	err    error
 }
 
 type ConnectionService struct {
-	ctx        context.Context
-	client     AgentConnectionClient
-	repo       ConnectionRepository
-	completion *LaunchCompletionService
-	mu         sync.Mutex
-	runs       map[string]connectionRun
+	ctx              context.Context
+	client           AgentConnectionClient
+	repo             ConnectionRepository
+	completion       *LaunchCompletionService
+	mu               sync.Mutex
+	runs             map[string]*connectionRun
+	background       *backgroundWork
+	readinessTimeout time.Duration
+	handshakes       chan struct{}
 }
 
-func NewConnectionService(ctx context.Context, client AgentConnectionClient, repo ConnectionRepository, completion *LaunchCompletionService) (*ConnectionService, error) {
+// ConnectionOption configures optional supervision policies.
+type ConnectionOption func(*ConnectionService) error
+
+func WithConnectionReadinessTimeout(timeout time.Duration) ConnectionOption {
+	return func(service *ConnectionService) error {
+		if timeout <= 0 {
+			return errors.New("connection readiness timeout must be positive")
+		}
+		service.readinessTimeout = timeout
+		return nil
+	}
+}
+
+func NewConnectionService(ctx context.Context, client AgentConnectionClient, repo ConnectionRepository, completion *LaunchCompletionService, options ...ConnectionOption) (*ConnectionService, error) {
 	if ctx == nil || client == nil || repo == nil {
 		return nil, errors.New("agentctl client and launch repository are required")
 	}
-	service := &ConnectionService{ctx: ctx, client: client, repo: repo, runs: make(map[string]connectionRun)}
+	background := newBackgroundWork(ctx)
+	service := &ConnectionService{ctx: background.ctx, background: background, client: client, repo: repo, runs: make(map[string]*connectionRun), readinessTimeout: 10 * time.Second, handshakes: make(chan struct{}, 4)}
 	service.completion = completion
+	for _, option := range options {
+		if err := option(service); err != nil {
+			background.Close()
+			return nil, err
+		}
+	}
 	return service, nil
 }
 
 // Start performs an initial WebSocket handshake, then reconnects in the background.
-func (s *ConnectionService) Start(launch Launch) error {
-	if err := s.start(launch, true, false); err != nil {
+func (s *ConnectionService) Start(ctx context.Context, launch orchestrationmodel.Launch) error {
+	run, err := s.start(launch, initialConnection)
+	if err != nil {
 		return err
 	}
-	if s.completion != nil {
-		if runCtx := s.runContext(launch.RunID); runCtx != nil {
-			go s.monitorLaunch(runCtx, launch)
+	select {
+	case <-run.ready:
+		if run.err != nil {
+			<-run.done
 		}
+		return run.err
+	case <-ctx.Done():
+		select {
+		case <-run.ready:
+			if run.err == nil {
+				return nil
+			}
+		default:
+		}
+		run.cancel()
+		<-run.done
+		return ctx.Err()
 	}
-	return nil
 }
+
+func (s *ConnectionService) Close() { s.background.Close() }
 
 // ReconnectRecorded resumes event streams for persisted active launches. It never
 // starts, configures, or replaces an agent process.
@@ -56,83 +100,82 @@ func (s *ConnectionService) ReconnectRecorded() error {
 	if err != nil {
 		return fmt.Errorf("load launches for reconnect: %w", err)
 	}
-	for _, launch := range launches {
-		if launch.Status == LaunchCompletedPendingClose || launch.Status == LaunchFailedPendingClose {
-			continue
-		}
-		if s.completion != nil && (launch.Status == LaunchStarting || launch.Status == LaunchFailed) {
-			pendingStatus := LaunchFailedPendingClose
-			if launch.LastEventType == string(EventRunCompleted) || (launch.TaskSessionID == "" && launch.LastEventType == string(EventPromptCompleted)) {
-				pendingStatus = LaunchCompletedPendingClose
+	s.background.Go(func(ctx context.Context) {
+		reconcileBatch(ctx, launches, func(ctx context.Context, launch orchestrationmodel.Launch) {
+			if launch.Status == orchestrationmodel.LaunchCompletedPendingClose || launch.Status == orchestrationmodel.LaunchFailedPendingClose {
+				return
 			}
-			go s.completion.CloseAbandoned(s.ctx, launch, pendingStatus)
-			continue
-		}
-		if strings.TrimSpace(launch.RunID) == "" || strings.TrimSpace(launch.ProcessID) == "" || !validEndpoint(launch.Endpoint) {
-			if s.completion != nil {
-				go s.completion.CloseAbandoned(s.ctx, launch, LaunchFailedPendingClose)
+			if s.completion != nil && (launch.Status == orchestrationmodel.LaunchStarting || launch.Status == orchestrationmodel.LaunchFailed || strings.TrimSpace(launch.ProcessID) == "" || !validEndpoint(launch.Endpoint)) {
+				status := terminalPendingStatus(launch)
+				s.completion.CloseAbandoned(ctx, launch, status)
+				return
 			}
-			continue
-		}
-		if s.completion == nil {
-			if err = s.start(launch, false, true); err != nil {
-				return fmt.Errorf("reconnect launch %q: %w", launch.RunID, err)
+			if s.completion == nil {
+				_, _ = s.start(launch, reconnectConnection)
+				return
 			}
-			continue
-		}
-		go s.reconcileAndReconnect(launch)
-	}
+			attemptCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			defer cancel()
+			s.reconcileAndReconnect(attemptCtx, launch)
+		})
+	})
 	return nil
 }
 
-func (s *ConnectionService) reconcileAndReconnect(launch Launch) {
-	if launch.LastEventType == string(EventRunCompleted) || (launch.TaskSessionID == "" && launch.LastEventType == string(EventPromptCompleted)) {
-		s.completion.CloseAbandoned(s.ctx, launch, LaunchCompletedPendingClose)
+func terminalPendingStatus(launch orchestrationmodel.Launch) orchestrationmodel.LaunchStatus {
+	if launch.LastEventType == string(orchestrationmodel.EventRunCompleted) || (launch.TaskSessionID == "" && launch.LastEventType == string(orchestrationmodel.EventPromptCompleted)) {
+		return orchestrationmodel.LaunchCompletedPendingClose
+	}
+	return orchestrationmodel.LaunchFailedPendingClose
+}
+
+func (s *ConnectionService) reconcileAndReconnect(ctx context.Context, launch orchestrationmodel.Launch) {
+	if launch.LastEventType == string(orchestrationmodel.EventRunCompleted) || (launch.TaskSessionID == "" && launch.LastEventType == string(orchestrationmodel.EventPromptCompleted)) {
+		s.completion.CloseAbandoned(ctx, launch, orchestrationmodel.LaunchCompletedPendingClose)
 		return
 	}
-	if launch.LastEventType == string(EventRunFailed) || (launch.TaskSessionID == "" && launch.LastEventType == string(EventPromptFailed)) {
-		s.completion.CloseAbandoned(s.ctx, launch, LaunchFailedPendingClose)
+	if launch.LastEventType == string(orchestrationmodel.EventRunFailed) || (launch.TaskSessionID == "" && launch.LastEventType == string(orchestrationmodel.EventPromptFailed)) {
+		s.completion.CloseAbandoned(ctx, launch, orchestrationmodel.LaunchFailedPendingClose)
 		return
 	}
-	statusCtx, cancel := context.WithTimeout(s.ctx, 5*time.Second)
+	statusCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	status, err := s.client.Status(statusCtx, launch.Endpoint)
 	cancel()
 	if err == nil && launch.TaskSessionID != "" && !matchesExecution(launch, status) {
 		return
 	}
 	if err == nil && agentctlProcessHasEnded(status) {
-		s.completion.CloseAbandoned(s.ctx, launch, LaunchFailedPendingClose)
+		s.completion.CloseAbandoned(ctx, launch, orchestrationmodel.LaunchFailedPendingClose)
 		return
 	}
-	if err != nil && s.containerConfirmedStopped(s.ctx, launch) {
-		s.completion.CloseAbandoned(s.ctx, launch, LaunchFailedPendingClose)
+	if err != nil && s.containerConfirmedStopped(ctx, launch) {
+		s.completion.CloseAbandoned(ctx, launch, orchestrationmodel.LaunchFailedPendingClose)
 		return
 	}
-	s.reconcilePrompts(s.ctx, launch)
-	if s.start(launch, false, true) == nil {
-		if runCtx := s.runContext(launch.RunID); runCtx != nil {
-			go s.monitorLaunch(runCtx, launch)
-		}
+	if err := s.reconcilePrompts(ctx, launch); err != nil && ctx.Err() == nil {
+		slog.Default().Warn("prompt reconciliation deferred", "run_id", launch.RunID, "workspace_id", launch.WorkspaceID, "reason", "delivery_unavailable")
 	}
+	_, _ = s.start(launch, reconnectConnection)
 }
 
-func agentctlProcessHasEnded(status RunStatus) bool {
+func agentctlProcessHasEnded(status orchestrationmodel.RunStatus) bool {
 	if !status.Configured {
 		return true
 	}
 	if status.TaskSessionID != "" {
 		return false
 	}
-	if status.State == StateFailed || status.State == StateInterrupted || status.State == StateExited {
+	if status.State == orchestrationmodel.StateFailed || status.State == orchestrationmodel.StateInterrupted || status.State == orchestrationmodel.StateExited {
 		return true
 	}
-	if status.State == StateStarting {
+	if status.State == orchestrationmodel.StateStarting {
 		return false
 	}
 	return status.Configured && (!status.ProcessAlive || !status.ExecutionAvailable)
 }
 
-func (s *ConnectionService) monitorLaunch(ctx context.Context, launch Launch) {
+func (s *ConnectionService) monitorLaunch(ctx context.Context, launch orchestrationmodel.Launch) {
+	reconciliationFailed := false
 	ticker := time.NewTicker(5 * time.Second)
 	defer ticker.Stop()
 	for {
@@ -147,7 +190,7 @@ func (s *ConnectionService) monitorLaunch(ctx context.Context, launch Launch) {
 		if err != nil {
 			if s.containerConfirmedStopped(ctx, launch) {
 				s.cancelRun(launch.RunID)
-				s.completion.CloseAbandoned(s.ctx, launch, LaunchFailedPendingClose)
+				s.completion.CloseAbandoned(s.ctx, launch, orchestrationmodel.LaunchFailedPendingClose)
 				return
 			}
 			continue
@@ -156,127 +199,31 @@ func (s *ConnectionService) monitorLaunch(ctx context.Context, launch Launch) {
 			continue
 		}
 		if !agentctlProcessHasEnded(status) {
-			s.reconcilePrompts(ctx, launch)
+			err := s.reconcilePrompts(ctx, launch)
+			if err != nil && !reconciliationFailed && ctx.Err() == nil {
+				slog.Default().Warn("prompt reconciliation deferred", "run_id", launch.RunID, "workspace_id", launch.WorkspaceID, "reason", "delivery_unavailable")
+			}
+			reconciliationFailed = err != nil
 			continue
 		}
 		s.cancelRun(launch.RunID)
-		s.completion.CloseAbandoned(s.ctx, launch, LaunchFailedPendingClose)
+		s.completion.CloseAbandoned(s.ctx, launch, orchestrationmodel.LaunchFailedPendingClose)
 		return
 	}
 }
 
-func (s *ConnectionService) containerConfirmedStopped(ctx context.Context, launch Launch) bool {
+func (s *ConnectionService) containerConfirmedStopped(ctx context.Context, launch orchestrationmodel.Launch) bool {
 	inspectCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
 	defer cancel()
 	running, err := s.completion.AgentctlRunning(inspectCtx, launch)
 	return err == nil && !running
 }
 
-func (s *ConnectionService) start(launch Launch, waitForConnection, retryInitial bool) error {
-	if strings.TrimSpace(launch.RunID) == "" || !validEndpoint(launch.Endpoint) {
-		return errors.New("run identity and valid agentctl endpoint are required")
-	}
-	ctx := s.ctx
-	if err := ctx.Err(); err != nil {
-		return err
-	}
-	s.mu.Lock()
-	if _, exists := s.runs[launch.RunID]; exists {
-		s.mu.Unlock()
-		return nil
-	}
-	runCtx, cancelRun := context.WithCancel(ctx)
-	s.runs[launch.RunID] = connectionRun{ctx: runCtx, cancel: cancelRun}
-	s.mu.Unlock()
-
-	var connected chan error
-	if waitForConnection {
-		connected = make(chan error, 1)
-	}
-	go func() {
-		defer func() {
-			s.mu.Lock()
-			delete(s.runs, launch.RunID)
-			s.mu.Unlock()
-			cancelRun()
-		}()
-		first := true
-		for {
-			connectErr := s.client.Connect(runCtx, launch.Endpoint, launch.LastSequence, func() {
-				if first {
-					if connected != nil {
-						connected <- nil
-					}
-					first = false
-				}
-			}, func(event AgentActivityEvent) error {
-				if launch.TaskSessionID != "" && (event.TaskSessionID != launch.TaskSessionID || event.OrganizationID != launch.OrganizationID || event.WorkspaceID != launch.WorkspaceID || event.TaskID != launch.TaskID) {
-					return errors.New("agentctl event scope mismatch")
-				}
-				if event.RunID != launch.RunID {
-					return errors.New("agentctl event run identity mismatch")
-				}
-				wrapped := Event{RunID: launch.RunID, Sequence: event.Sequence, Payload: event}
-				if s.completion != nil {
-					if err := s.completion.HandleEvent(runCtx, launch, wrapped); err != nil {
-						return err
-					}
-				} else if err := s.repo.SaveEvent(runCtx, wrapped); err != nil {
-					return err
-				}
-				launch.LastSequence = event.Sequence
-				return nil
-			})
-			if errors.Is(connectErr, ErrAgentRunClosed) {
-				cancelRun()
-				return
-			}
-			if first {
-				if retryInitial && runCtx.Err() == nil {
-					if !waitForRetry(runCtx) {
-						return
-					}
-					continue
-				}
-				if connected != nil {
-					connected <- connectErr
-				}
-				if connectErr != nil || runCtx.Err() != nil {
-					return
-				}
-				first = false
-			}
-			if runCtx.Err() != nil || !waitForRetry(runCtx) {
-				return
-			}
-		}
-	}()
-	if connected == nil {
-		return nil
-	}
-	select {
-	case <-runCtx.Done():
-		return runCtx.Err()
-	case err := <-connected:
-		return err
-	}
-}
-
-func (s *ConnectionService) runContext(runID string) context.Context {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	run, exists := s.runs[runID]
-	if !exists {
-		return nil
-	}
-	return run.ctx
-}
-
 func (s *ConnectionService) cancelRun(runID string) {
 	s.mu.Lock()
 	run := s.runs[runID]
 	s.mu.Unlock()
-	if run.cancel != nil {
+	if run != nil {
 		run.cancel()
 	}
 }
@@ -292,26 +239,29 @@ func waitForRetry(ctx context.Context) bool {
 	}
 }
 
-func (s *ConnectionService) reconcilePrompts(ctx context.Context, launch Launch) {
+func (s *ConnectionService) reconcilePrompts(ctx context.Context, launch orchestrationmodel.Launch) error {
 	if launch.TaskSessionID != "" {
 		status, err := s.client.Status(ctx, launch.Endpoint)
-		if err != nil || !matchesExecution(launch, status) {
-			return
+		if err != nil {
+			return err
+		}
+		if !matchesExecution(launch, status) {
+			return errors.New("agentctl execution identity mismatch")
 		}
 	}
-	outbox := s.repo
-	prompts, err := outbox.PendingPrompts(ctx, launch.RunID)
+	prompts, err := s.repo.PendingPrompts(ctx, launch.RunID)
 	if err != nil {
-		return
+		return err
 	}
 	for _, prompt := range prompts {
 		// Same identity and text are idempotent even if acceptance was recorded
 		// before the previous connection disappeared.
 		if err := s.client.Prompt(ctx, launch.Endpoint, prompt.CommandID, prompt.Text); err != nil {
-			return
+			return err
 		}
-		if err := outbox.PromptDelivered(ctx, launch.RunID, prompt.CommandID); err != nil {
-			return
+		if err := s.repo.PromptDelivered(ctx, launch.RunID, prompt.CommandID); err != nil {
+			return err
 		}
 	}
+	return nil
 }

@@ -5,11 +5,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
 )
 
 func TestV1SessionCompatibility(t *testing.T) {
-	config := runconfig.RuntimeConfig{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", TaskSessionID: "session", RunID: "revision-2", Runtime: "opencode", Agent: runconfig.AgentDefinition{Name: "Work", Description: "Work", Instructions: "Work"}, Model: runconfig.ModelSelection{Provider: "provider", ID: "model"}}
+	config := configmodel.RuntimeConfig{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", TaskSessionID: "session", RunID: "revision-2", Runtime: "opencode", Agent: configmodel.AgentDefinition{Name: "Work", Description: "Work", Instructions: "Work"}, Model: configmodel.ModelSelection{Provider: "provider", ID: "model"}}
 	store := sessionStorage{StateDir: t.TempDir(), WorkDir: "/workspace/project", RuntimeVersion: "opencode v2.1.4"}
 	if got := configurationFingerprint(config); got != "de63fb245afd0d6666f1f100f13d747de1adce188947918e172ad9d7642ca078" {
 		t.Fatalf("v1 fingerprint changed: %s", got)
@@ -42,7 +42,7 @@ func TestV1SessionCompatibility(t *testing.T) {
 }
 
 func TestSessionIdentityIgnoresOnlyRunAndCredentials(t *testing.T) {
-	config := runconfig.RuntimeConfig{RunID: "first", MCPServers: []runconfig.MCPServer{{ID: "mcp", URL: "https://example.test", Headers: map[string]string{"Authorization": "first"}}}}
+	config := configmodel.RuntimeConfig{RunID: "first", MCPServers: []configmodel.MCPServer{{ID: "mcp", URL: "https://example.test", Headers: map[string]string{"Authorization": "first"}}}}
 	first := configurationFingerprint(config)
 	config.RunID = "second"
 	config.MCPServers[0].Headers["Authorization"] = "second"

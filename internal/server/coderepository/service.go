@@ -11,11 +11,12 @@ import (
 
 	modelerrors "github.com/josemiguelmelo/orkest/internal/contracts/problem"
 	"github.com/josemiguelmelo/orkest/internal/platform/secretbox"
-	"github.com/josemiguelmelo/orkest/internal/server/workspace"
+	coderepositorymodel "github.com/josemiguelmelo/orkest/internal/server/coderepository/model"
+	workspacemodel "github.com/josemiguelmelo/orkest/internal/server/workspace/model"
 )
 
 type WorkspaceAccess interface {
-	GetWorkspace(context.Context, string, string, string) (workspace.Workspace, error)
+	GetWorkspace(context.Context, string, string, string) (workspacemodel.Workspace, error)
 }
 
 type CodeRepositoryService struct {
@@ -35,16 +36,16 @@ func NewCodeRepositoryService(repository CodeReposRepository, workspaces Workspa
 	return &CodeRepositoryService{repository: repository, workspaces: workspaces, dataRoot: dataRoot, providers: providerMap, secretBox: box}
 }
 
-func (s *CodeRepositoryService) List(ctx context.Context, userID, orgID, workspaceID string) ([]CodeRepository, error) {
+func (s *CodeRepositoryService) List(ctx context.Context, userID, orgID, workspaceID string) ([]coderepositorymodel.CodeRepository, error) {
 	if _, err := s.workspaces.GetWorkspace(ctx, userID, orgID, workspaceID); err != nil {
 		return nil, err
 	}
 	return s.repository.CodeRepositories(ctx, orgID, workspaceID)
 }
 
-func (s *CodeRepositoryService) Get(ctx context.Context, userID, orgID, workspaceID, id string) (CodeRepository, error) {
+func (s *CodeRepositoryService) Get(ctx context.Context, userID, orgID, workspaceID, id string) (coderepositorymodel.CodeRepository, error) {
 	if _, err := s.workspaces.GetWorkspace(ctx, userID, orgID, workspaceID); err != nil {
-		return CodeRepository{}, err
+		return coderepositorymodel.CodeRepository{}, err
 	}
 	return s.repository.CodeRepository(ctx, orgID, workspaceID, id)
 }
@@ -93,7 +94,7 @@ func (s *CodeRepositoryService) runOperation(ctx context.Context, userID, orgID,
 		if credentialErr != nil {
 			return credentialErr
 		}
-		metadata := RepositoryMetadata{ID: repository.ProviderRepositoryID, Name: repository.Name, CloneURL: repository.URL, DefaultBranch: repository.DefaultBranch, Private: repository.Private}
+		metadata := coderepositorymodel.RepositoryMetadata{ID: repository.ProviderRepositoryID, Name: repository.Name, CloneURL: repository.URL, DefaultBranch: repository.DefaultBranch, Private: repository.Private}
 		if clone {
 			return provider.CloneAuthenticated(ctx, metadata, credential, path)
 		}

@@ -12,7 +12,7 @@ import (
 	"strings"
 	"syscall"
 
-	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
 	"github.com/josemiguelmelo/orkest/internal/platform/durablefile"
 )
 
@@ -47,12 +47,12 @@ func (e *sessionManifestCompatibilityError) Error() string {
 	return message
 }
 
-func taskStorageRoot(stateDir string, config runconfig.RuntimeConfig) string {
+func taskStorageRoot(stateDir string, config configmodel.RuntimeConfig) string {
 	scope, _ := json.Marshal([]string{config.OrganizationID, config.WorkspaceID, config.TaskID})
 	return filepath.Join(stateDir, fmt.Sprintf("%x", sha256.Sum256(scope)))
 }
 
-func (s sessionStorage) Root(config runconfig.RuntimeConfig) string {
+func (s sessionStorage) Root(config configmodel.RuntimeConfig) string {
 	root := taskStorageRoot(s.StateDir, config)
 	if config.TaskSessionID != "" {
 		return filepath.Join(root, "sessions", fmt.Sprintf("%x", sha256.Sum256([]byte(config.TaskSessionID))))
@@ -60,13 +60,13 @@ func (s sessionStorage) Root(config runconfig.RuntimeConfig) string {
 	return root
 }
 
-func configurationFingerprint(config runconfig.RuntimeConfig) string {
+func configurationFingerprint(config configmodel.RuntimeConfig) string {
 	config = fingerprintableConfiguration(config)
 	data, _ := json.Marshal(config)
 	return fmt.Sprintf("%x", sha256.Sum256(data))
 }
 
-func sessionConfigurationFingerprint(config runconfig.RuntimeConfig) string {
+func sessionConfigurationFingerprint(config configmodel.RuntimeConfig) string {
 	config = config.Clone()
 	config = fingerprintableConfiguration(config)
 	config.Environment = nil
@@ -74,7 +74,7 @@ func sessionConfigurationFingerprint(config runconfig.RuntimeConfig) string {
 	return fmt.Sprintf("%x", sha256.Sum256(data))
 }
 
-func configurationFieldFingerprints(config runconfig.RuntimeConfig) map[string]string {
+func configurationFieldFingerprints(config configmodel.RuntimeConfig) map[string]string {
 	config = config.Clone()
 	config = fingerprintableConfiguration(config)
 	config.Environment = nil
@@ -97,7 +97,7 @@ func configurationFieldFingerprints(config runconfig.RuntimeConfig) map[string]s
 	return fingerprints
 }
 
-func configurationMismatchFields(saved map[string]string, config runconfig.RuntimeConfig) []string {
+func configurationMismatchFields(saved map[string]string, config configmodel.RuntimeConfig) []string {
 	current := configurationFieldFingerprints(config)
 	fields := make([]string, 0)
 	for name, fingerprint := range current {
@@ -114,9 +114,9 @@ func configurationMismatchFields(saved map[string]string, config runconfig.Runti
 	return fields
 }
 
-func fingerprintableConfiguration(config runconfig.RuntimeConfig) runconfig.RuntimeConfig {
+func fingerprintableConfiguration(config configmodel.RuntimeConfig) configmodel.RuntimeConfig {
 	config.RunID = ""
-	config.MCPServers = append([]runconfig.MCPServer(nil), config.MCPServers...)
+	config.MCPServers = append([]configmodel.MCPServer(nil), config.MCPServers...)
 	for i := range config.MCPServers {
 		config.MCPServers[i].Headers = nil
 	}
@@ -125,13 +125,13 @@ func fingerprintableConfiguration(config runconfig.RuntimeConfig) runconfig.Runt
 	return config
 }
 
-func legacyConfigurationFingerprints(config runconfig.RuntimeConfig) []string {
+func legacyConfigurationFingerprints(config configmodel.RuntimeConfig) []string {
 	config.RunID = ""
-	config.MCPServers = append([]runconfig.MCPServer(nil), config.MCPServers...)
+	config.MCPServers = append([]configmodel.MCPServer(nil), config.MCPServers...)
 	for i := range config.MCPServers {
 		config.MCPServers[i].Headers = nil
 	}
-	values := []runconfig.RuntimeConfig{config, config}
+	values := []configmodel.RuntimeConfig{config, config}
 	values[1].GitCredentials = nil
 	values[1].GitCredentialsRequired = false
 	fingerprints := make([]string, 0, len(values))
@@ -142,7 +142,7 @@ func legacyConfigurationFingerprints(config runconfig.RuntimeConfig) []string {
 	return fingerprints
 }
 
-func (s sessionStorage) acquire(config runconfig.RuntimeConfig) (*os.File, error) {
+func (s sessionStorage) acquire(config configmodel.RuntimeConfig) (*os.File, error) {
 	root := taskStorageRoot(s.StateDir, config)
 	if err := os.MkdirAll(root, 0o700); err != nil {
 		return nil, fmt.Errorf("create task storage: %w", err)
@@ -158,7 +158,7 @@ func (s sessionStorage) acquire(config runconfig.RuntimeConfig) (*os.File, error
 	return file, nil
 }
 
-func (s sessionStorage) reserveCreation(config runconfig.RuntimeConfig) error {
+func (s sessionStorage) reserveCreation(config configmodel.RuntimeConfig) error {
 	root := s.Root(config)
 	if _, err := os.Stat(filepath.Join(root, "session.json")); err == nil {
 		return errSessionAlreadyExists
@@ -180,7 +180,7 @@ func (s sessionStorage) reserveCreation(config runconfig.RuntimeConfig) error {
 	return file.Close()
 }
 
-func (s sessionStorage) load(config runconfig.RuntimeConfig) (string, error) {
+func (s sessionStorage) load(config configmodel.RuntimeConfig) (string, error) {
 	data, err := os.ReadFile(filepath.Join(s.Root(config), "session.json"))
 	if err != nil {
 		return "", err
@@ -238,7 +238,7 @@ func (s sessionStorage) load(config runconfig.RuntimeConfig) (string, error) {
 	return manifest.SessionID, nil
 }
 
-func (s sessionStorage) save(config runconfig.RuntimeConfig, id string) error {
+func (s sessionStorage) save(config configmodel.RuntimeConfig, id string) error {
 	data, err := json.Marshal(sessionManifest{
 		Version:                  3,
 		RuntimeVersion:           s.RuntimeVersion,

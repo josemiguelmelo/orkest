@@ -2,13 +2,13 @@
 package gitprovider
 
 import (
-	"github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
 )
 
 // CLIAuthAdapter configures a provider CLI for credentials in the runtime.
 type CLIAuthAdapter interface {
 	ProviderNames() []string
-	ConfigureCLI(runtimeRoot string, environment []string, credentials []config.GitCredential) ([]string, error)
+	ConfigureCLI(runtimeRoot string, environment []string, credentials []configmodel.GitCredential) ([]string, error)
 }
 
 // DefaultCLIAuthAdapters returns the CLI auth strategies shipped with agentctl.
@@ -16,7 +16,7 @@ func DefaultCLIAuthAdapters() []CLIAuthAdapter {
 	return []CLIAuthAdapter{GitHubCLIAuthAdapter{}, GitLabCLIAuthAdapter{}}
 }
 
-func configureCLIs(runtimeRoot string, environment []string, credentials []config.GitCredential, adapters []CLIAuthAdapter) ([]string, error) {
+func configureCLIs(runtimeRoot string, environment []string, credentials []configmodel.GitCredential, adapters []CLIAuthAdapter) ([]string, error) {
 	for _, adapter := range adapters {
 		matched := credentialsFor(credentials, adapter.ProviderNames())
 		if len(matched) == 0 {
@@ -31,12 +31,12 @@ func configureCLIs(runtimeRoot string, environment []string, credentials []confi
 	return environment, nil
 }
 
-func credentialsFor(credentials []config.GitCredential, providers []string) []config.GitCredential {
+func credentialsFor(credentials []configmodel.GitCredential, providers []string) []configmodel.GitCredential {
 	allowed := make(map[string]struct{}, len(providers))
 	for _, provider := range providers {
 		allowed[provider] = struct{}{}
 	}
-	matched := make([]config.GitCredential, 0, len(credentials))
+	matched := make([]configmodel.GitCredential, 0, len(credentials))
 	for _, credential := range credentials {
 		if _, ok := allowed[credential.ProviderName]; ok {
 			matched = append(matched, credential)

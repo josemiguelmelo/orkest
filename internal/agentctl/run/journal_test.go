@@ -6,7 +6,7 @@ import (
 	"sync"
 	"testing"
 
-	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
 )
 
@@ -18,7 +18,9 @@ func (f failingFile) Write(data []byte) (int, error) {
 	}
 	return len(data), nil
 }
-func (f failingFile) Sync() error  { return errors.New("disk sync failed") }
+
+func (f failingFile) Sync() error { return errors.New("disk sync failed") }
+
 func (f failingFile) Close() error { return nil }
 
 func TestJournalFailureDoesNotPublishOrAdvance(t *testing.T) {
@@ -68,8 +70,10 @@ func TestJournalReplayWindow(t *testing.T) {
 type successfulFile struct{}
 
 func (successfulFile) Write(data []byte) (int, error) { return len(data), nil }
-func (successfulFile) Sync() error                    { return nil }
-func (successfulFile) Close() error                   { return nil }
+
+func (successfulFile) Sync() error { return nil }
+
+func (successfulFile) Close() error { return nil }
 
 func TestJournalReplayEventLimit(t *testing.T) {
 	journal := &Journal{file: successfulFile{}}
@@ -128,7 +132,7 @@ func TestJournalAssignsOrderedCommitMetadata(t *testing.T) {
 	}
 }
 
-func openJournal(stateDir string, config runconfig.RunConfig) (*Journal, error) {
+func openJournal(stateDir string, config configmodel.RunConfig) (*Journal, error) {
 	journal, _, err := loadJournal(stateDir, config, false)
 	return journal, err
 }

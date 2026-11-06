@@ -9,7 +9,9 @@ import (
 	"testing"
 
 	"github.com/josemiguelmelo/orkest/internal/server/identity"
+	identitymodel "github.com/josemiguelmelo/orkest/internal/server/identity/model"
 	"github.com/josemiguelmelo/orkest/internal/server/organization"
+	organizationmodel "github.com/josemiguelmelo/orkest/internal/server/organization/model"
 )
 
 type adminProfileRepository struct {
@@ -26,20 +28,20 @@ type profileOrganizationsRepository struct {
 	organization.OrganizationRepository
 }
 
-func (profileOrganizationsRepository) Organizations(context.Context, string) ([]organization.Organization, error) {
-	return []organization.Organization{}, nil
+func (profileOrganizationsRepository) Organizations(context.Context, string) ([]organizationmodel.Organization, error) {
+	return []organizationmodel.Organization{}, nil
 }
 
 func TestCurrentUserPlatformAdmin(t *testing.T) {
 	for _, admin := range []bool{false, true} {
 		auth := oidcAuth{users: identity.NewUserRegistrationService(adminProfileRepository{admin: admin}), organizations: organization.NewOrganizationService(profileOrganizationsRepository{})}
 		request := httptest.NewRequest(http.MethodGet, "/api/me", nil)
-		request = request.WithContext(context.WithValue(request.Context(), userContextKey{}, identity.User{ID: "user", Username: "name"}))
+		request = request.WithContext(context.WithValue(request.Context(), userContextKey{}, identitymodel.User{ID: "user", Username: "name"}))
 		recorder := httptest.NewRecorder()
 		auth.currentUser(recorder, request)
 		var result struct {
-			PlatformAdmin bool          `json:"platformAdmin"`
-			User          identity.User `json:"user"`
+			PlatformAdmin bool               `json:"platformAdmin"`
+			User          identitymodel.User `json:"user"`
 		}
 		if recorder.Code != http.StatusOK {
 			t.Fatalf("status %d", recorder.Code)
@@ -56,7 +58,7 @@ func TestCurrentUserPlatformAdmin(t *testing.T) {
 func TestCurrentUserAdminLookupFailure(t *testing.T) {
 	auth := oidcAuth{users: identity.NewUserRegistrationService(adminProfileRepository{err: errors.New("private database detail")}), organizations: organization.NewOrganizationService(profileOrganizationsRepository{})}
 	request := httptest.NewRequest(http.MethodGet, "/api/me", nil)
-	request = request.WithContext(context.WithValue(request.Context(), userContextKey{}, identity.User{ID: "user"}))
+	request = request.WithContext(context.WithValue(request.Context(), userContextKey{}, identitymodel.User{ID: "user"}))
 	recorder := httptest.NewRecorder()
 	auth.currentUser(recorder, request)
 	if recorder.Code != http.StatusInternalServerError || recorder.Body.String() != "{\"error\":\"internal_error\"}\n" {

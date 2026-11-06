@@ -9,16 +9,17 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/josemiguelmelo/orkest/internal/server/workspace"
+	workspacemodel "github.com/josemiguelmelo/orkest/internal/server/workspace/model"
 )
 
 type routeWorkspaceRepository struct{ workspace.WorkspaceRepository }
 
-func (routeWorkspaceRepository) Workspace(_ context.Context, orgID, id, _ string) (workspace.Workspace, error) {
-	return workspace.Workspace{ID: id, OrganizationID: orgID, Name: "Workspace", Role: "viewer"}, nil
+func (routeWorkspaceRepository) Workspace(_ context.Context, orgID, id, _ string) (workspacemodel.Workspace, error) {
+	return workspacemodel.Workspace{ID: id, OrganizationID: orgID, Name: "Workspace", Role: "viewer"}, nil
 }
 
-func (routeWorkspaceRepository) WorkspaceMembers(context.Context, string, string) ([]workspace.Membership, error) {
-	return []workspace.Membership{}, nil
+func (routeWorkspaceRepository) WorkspaceMembers(context.Context, string, string) ([]workspacemodel.Membership, error) {
+	return []workspacemodel.Membership{}, nil
 }
 
 func TestTaskRoutesPreserveWorkspaceRoutes(t *testing.T) {

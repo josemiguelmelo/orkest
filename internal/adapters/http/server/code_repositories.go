@@ -5,6 +5,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/josemiguelmelo/orkest/internal/server/coderepository"
+	coderepositorymodel "github.com/josemiguelmelo/orkest/internal/server/coderepository/model"
 )
 
 type codeRepositoryAPI struct {
@@ -35,7 +36,7 @@ func (a codeRepositoryAPI) get(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a codeRepositoryAPI) create(w http.ResponseWriter, r *http.Request) {
-	var body coderepository.CreateRequest
+	var body coderepositorymodel.CreateRequest
 	if !decodeBody(w, r, &body) {
 		return
 	}

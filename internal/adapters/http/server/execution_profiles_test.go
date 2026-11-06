@@ -9,13 +9,14 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/josemiguelmelo/orkest/internal/server/executionprofile"
-	"github.com/josemiguelmelo/orkest/internal/server/workspace"
+	executionprofilemodel "github.com/josemiguelmelo/orkest/internal/server/executionprofile/model"
+	workspacemodel "github.com/josemiguelmelo/orkest/internal/server/workspace/model"
 )
 
 type profileRouteAccess struct{ role string }
 
-func (a profileRouteAccess) GetWorkspace(context.Context, string, string, string) (workspace.Workspace, error) {
-	return workspace.Workspace{Role: a.role}, nil
+func (a profileRouteAccess) GetWorkspace(context.Context, string, string, string) (workspacemodel.Workspace, error) {
+	return workspacemodel.Workspace{Role: a.role}, nil
 }
 
 type profileRouteRepository struct {
@@ -23,7 +24,7 @@ type profileRouteRepository struct {
 	saved int
 }
 
-func (r *profileRouteRepository) Save(_ context.Context, p executionprofile.Profile, b executionprofile.Build, _ bool) (executionprofile.Profile, error) {
+func (r *profileRouteRepository) Save(_ context.Context, p executionprofilemodel.Profile, b executionprofilemodel.Build, _ bool) (executionprofilemodel.Profile, error) {
 	r.saved++
 	p.Status = "queued"
 	p.Generation = 1

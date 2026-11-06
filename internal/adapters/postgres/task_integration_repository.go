@@ -3,19 +3,19 @@ package postgres
 import (
 	"context"
 	"encoding/json"
+	stderrors "errors"
 	"fmt"
 	"time"
 
-	"github.com/josemiguelmelo/orkest/internal/server/task"
-
-	stderrors "errors"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/josemiguelmelo/orkest/internal/adapters/postgres/sqlc"
 	"github.com/josemiguelmelo/orkest/internal/contracts/problem"
 	"github.com/josemiguelmelo/orkest/internal/platform/ids"
+	"github.com/josemiguelmelo/orkest/internal/server/task"
 	"github.com/josemiguelmelo/orkest/internal/server/taskintegration"
+	taskintegrationmodel "github.com/josemiguelmelo/orkest/internal/server/taskintegration/model"
 )
 
 type PostgresTaskIntegrationRepository struct{ queries *sqlc.Queries }
@@ -26,26 +26,26 @@ func NewPostgresTaskIntegrationRepository(database *PostgresDatabase) *PostgresT
 
 var _ taskintegration.TaskIntegrationRepository = (*PostgresTaskIntegrationRepository)(nil)
 
-func (r *PostgresTaskIntegrationRepository) Create(ctx context.Context, s taskintegration.TaskIntegration, secret string) (taskintegration.TaskIntegration, error) {
+func (r *PostgresTaskIntegrationRepository) Create(ctx context.Context, s taskintegrationmodel.TaskIntegration, secret string) (taskintegrationmodel.TaskIntegration, error) {
 	seconds, err := intervalSeconds(s.Interval)
 	if err != nil {
-		return taskintegration.TaskIntegration{}, err
+		return taskintegrationmodel.TaskIntegration{}, err
 	}
 	row, err := r.queries.CreateTaskIntegration(ctx, sqlc.CreateTaskIntegrationParams{ID: s.ID, WorkspaceID: s.WorkspaceID, WorkflowID: s.WorkflowID, Provider: string(s.Provider), Name: s.Name, Enabled: s.Enabled, ProviderConfig: s.Config, Labels: s.Labels, IntervalSeconds: seconds, EncryptedCredential: secret})
 	if err != nil {
-		return taskintegration.TaskIntegration{}, mapError(err, errors.ErrNotFound, errors.ErrConflict)
+		return taskintegrationmodel.TaskIntegration{}, mapError(err, errors.ErrNotFound, errors.ErrConflict)
 	}
 	return taskIntegrationFromRow(row), nil
 }
 
-func (r *PostgresTaskIntegrationRepository) Update(ctx context.Context, workspaceID, id string, s taskintegration.TaskIntegration, secret string) (taskintegration.TaskIntegration, error) {
+func (r *PostgresTaskIntegrationRepository) Update(ctx context.Context, workspaceID, id string, s taskintegrationmodel.TaskIntegration, secret string) (taskintegrationmodel.TaskIntegration, error) {
 	seconds, err := intervalSeconds(s.Interval)
 	if err != nil {
-		return taskintegration.TaskIntegration{}, err
+		return taskintegrationmodel.TaskIntegration{}, err
 	}
 	row, err := r.queries.UpdateTaskIntegration(ctx, sqlc.UpdateTaskIntegrationParams{WorkspaceID: workspaceID, ID: id, WorkflowID: s.WorkflowID, Provider: string(s.Provider), Name: s.Name, Enabled: s.Enabled, ProviderConfig: s.Config, Labels: s.Labels, IntervalSeconds: seconds, EncryptedCredential: secret})
 	if err != nil {
-		return taskintegration.TaskIntegration{}, mapError(err, errors.ErrNotFound, errors.ErrConflict)
+		return taskintegrationmodel.TaskIntegration{}, mapError(err, errors.ErrNotFound, errors.ErrConflict)
 	}
 	return taskIntegrationFromRow(row), nil
 }
@@ -61,32 +61,32 @@ func (r *PostgresTaskIntegrationRepository) Delete(ctx context.Context, workspac
 	return nil
 }
 
-func (r *PostgresTaskIntegrationRepository) Get(ctx context.Context, workspaceID, id string) (taskintegration.TaskIntegration, string, error) {
+func (r *PostgresTaskIntegrationRepository) Get(ctx context.Context, workspaceID, id string) (taskintegrationmodel.TaskIntegration, string, error) {
 	row, err := r.queries.GetTaskIntegration(ctx, sqlc.GetTaskIntegrationParams{WorkspaceID: workspaceID, ID: id})
 	if err != nil {
-		return taskintegration.TaskIntegration{}, "", mapError(err, errors.ErrNotFound, errors.ErrConflict)
+		return taskintegrationmodel.TaskIntegration{}, "", mapError(err, errors.ErrNotFound, errors.ErrConflict)
 	}
 	return taskIntegrationFromRow(row), row.EncryptedCredential, nil
 }
 
-func (r *PostgresTaskIntegrationRepository) List(ctx context.Context, workspaceID string) ([]taskintegration.TaskIntegration, error) {
+func (r *PostgresTaskIntegrationRepository) List(ctx context.Context, workspaceID string) ([]taskintegrationmodel.TaskIntegration, error) {
 	rows, err := r.queries.ListTaskIntegrations(ctx, workspaceID)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]taskintegration.TaskIntegration, 0, len(rows))
+	out := make([]taskintegrationmodel.TaskIntegration, 0, len(rows))
 	for _, row := range rows {
 		out = append(out, taskIntegrationFromRow(row))
 	}
 	return out, nil
 }
 
-func (r *PostgresTaskIntegrationRepository) Due(ctx context.Context, at time.Time) ([]taskintegration.TaskIntegration, error) {
+func (r *PostgresTaskIntegrationRepository) Due(ctx context.Context, at time.Time) ([]taskintegrationmodel.TaskIntegration, error) {
 	rows, err := r.queries.DueTaskIntegrations(ctx, pgtype.Timestamptz{Time: at, Valid: true})
 	if err != nil {
 		return nil, err
 	}
-	out := make([]taskintegration.TaskIntegration, 0, len(rows))
+	out := make([]taskintegrationmodel.TaskIntegration, 0, len(rows))
 	for _, row := range rows {
 		out = append(out, taskIntegrationFromRow(row))
 	}
@@ -108,7 +108,7 @@ func NewPostgresImportedTaskRepository(database *PostgresDatabase) *PostgresImpo
 
 var _ taskintegration.ImportedTaskRepository = (*PostgresImportedTaskRepository)(nil)
 
-func (r *PostgresImportedTaskRepository) UpsertImportedTask(ctx context.Context, workspaceID, integrationID, workflowID, provider string, item taskintegration.DiscoveredTask, decide func(task.ImportedTaskSnapshot) (task.ImportedTaskEffects, error)) error {
+func (r *PostgresImportedTaskRepository) UpsertImportedTask(ctx context.Context, workspaceID, integrationID, workflowID, provider string, item taskintegrationmodel.DiscoveredTask, decide func(task.ImportedTaskSnapshot) (task.ImportedTaskEffects, error)) error {
 	if decide == nil {
 		return fmt.Errorf("imported task entry decider is required")
 	}
@@ -185,9 +185,9 @@ func (r *PostgresImportedTaskRepository) RemoveMissingImportedTasks(ctx context.
 	return r.queries.RemoveMissingImportedTasks(ctx, sqlc.RemoveMissingImportedTasksParams{WorkspaceID: workspaceID, SourceIntegrationID: pgtype.Text{String: integrationID, Valid: true}, SourceIds: sourceIDs})
 }
 
-func taskIntegrationFromRow(row sqlc.TaskIntegration) taskintegration.TaskIntegration {
+func taskIntegrationFromRow(row sqlc.TaskIntegration) taskintegrationmodel.TaskIntegration {
 	interval := time.Duration(row.IntervalSeconds) * time.Second
-	s := taskintegration.TaskIntegration{ID: row.ID, WorkspaceID: row.WorkspaceID, WorkflowID: row.WorkflowID, Provider: taskintegration.TaskIntegrationSourceProvider(row.Provider), Name: row.Name, Enabled: row.Enabled, Config: json.RawMessage(row.ProviderConfig), Labels: row.Labels, Interval: interval.String(), LastError: row.LastError, CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time}
+	s := taskintegrationmodel.TaskIntegration{ID: row.ID, WorkspaceID: row.WorkspaceID, WorkflowID: row.WorkflowID, Provider: taskintegrationmodel.TaskIntegrationSourceProvider(row.Provider), Name: row.Name, Enabled: row.Enabled, Config: json.RawMessage(row.ProviderConfig), Labels: row.Labels, Interval: interval.String(), LastError: row.LastError, CreatedAt: row.CreatedAt.Time, UpdatedAt: row.UpdatedAt.Time}
 	if row.LastSyncedAt.Valid {
 		lastSynced := row.LastSyncedAt.Time
 		s.LastSynced = &lastSynced

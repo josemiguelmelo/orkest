@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
 	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
 	coreruntime "github.com/josemiguelmelo/orkest/internal/contracts/runtimecatalog"
 )
@@ -33,7 +33,7 @@ func (Profile) BuildProvisioningPlan(settings agentruntime.ResolvedRuntimeSettin
 		return agentruntime.ProvisioningPlan{}, errors.New("runtime provisioning paths are required")
 	}
 	for _, skill := range settings.Skills {
-		if !runconfig.ValidSkillID(skill.ID) {
+		if !configmodel.ValidSkillID(skill.ID) {
 			return agentruntime.ProvisioningPlan{}, errors.New("invalid skill ID")
 		}
 	}
@@ -49,7 +49,7 @@ func (Profile) BuildProvisioningPlan(settings agentruntime.ResolvedRuntimeSettin
 		return agentruntime.ProvisioningPlan{}, errors.New("encode Codex configuration failed")
 	}
 	initialAgentMode := "workspace-write"
-	if settings.Agent.PermissionPolicy == runconfig.PermissionPolicyAutonomous {
+	if settings.Agent.PermissionPolicy == configmodel.PermissionPolicyAutonomous {
 		initialAgentMode = "agent-full-access"
 	}
 	return agentruntime.ProvisioningPlan{
@@ -70,7 +70,7 @@ func (Profile) BuildProvisioningPlan(settings agentruntime.ResolvedRuntimeSettin
 }
 
 func (Profile) NativeSessionMode(settings agentruntime.ResolvedRuntimeSettings) string {
-	if settings.Agent.PermissionPolicy == runconfig.PermissionPolicyAutonomous {
+	if settings.Agent.PermissionPolicy == configmodel.PermissionPolicyAutonomous {
 		return "agent-full-access"
 	}
 	return ""

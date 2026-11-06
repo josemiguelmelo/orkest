@@ -34,6 +34,10 @@ func RunAgentctl(ctx context.Context, logger *slog.Logger, address string, host 
 				return
 			case <-ticker.C:
 			}
+			if controller.CheckpointRecoveryPending() {
+				_ = controller.RecoverFromCheckpoint(expectedRunID)
+				continue
+			}
 			if controller.CanAutoRestore() {
 				if err := controller.RestoreSession(); err != nil {
 					logger.Error("runtime restoration requires reconciliation", "reason", "restore_failed")

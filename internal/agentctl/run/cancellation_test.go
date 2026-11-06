@@ -9,8 +9,9 @@ import (
 	"testing"
 	"time"
 
-	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
+	runmodel "github.com/josemiguelmelo/orkest/internal/agentctl/run/model"
 	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
 	coreruntime "github.com/josemiguelmelo/orkest/internal/contracts/runtimecatalog"
 )
@@ -47,7 +48,8 @@ func (p *controlledRuntimeSession) Cancel(ctx context.Context) error {
 type conversationRuntimeHost struct{ process agentruntime.RuntimeSession }
 
 func (p conversationRuntimeHost) Runtime() coreruntime.Runtime { return coreruntime.OpenCode }
-func (p conversationRuntimeHost) Launch(context.Context, runconfig.RuntimeConfig) (agentruntime.RuntimeSession, error) {
+
+func (p conversationRuntimeHost) Launch(context.Context, configmodel.RuntimeConfig) (agentruntime.RuntimeSession, error) {
 	return p.process, nil
 }
 
@@ -109,11 +111,11 @@ func TestCancellationAllowsStatusAndUpdates(t *testing.T) {
 			t.Fatal("missing terminal event")
 		}
 	}
-	if status := service.Status(); status.State != StateInterrupted || !status.ProcessAlive {
+	if status := service.Status(); status.State != runmodel.StateInterrupted || !status.ProcessAlive {
 		t.Fatalf("completion erased uncertain cancellation: %+v", status)
 	}
 	_ = p.Close()
-	if status := service.Status(); status.State != StateInterrupted || status.ProcessAlive {
+	if status := service.Status(); status.State != runmodel.StateInterrupted || status.ProcessAlive {
 		t.Fatalf("exit erased interruption: %+v", status)
 	}
 	if err := service.Prompt("second", "hello"); !errors.Is(err, interaction.ErrConversation) {
@@ -154,6 +156,7 @@ func TestPromptLimitsPreserveDeduplication(t *testing.T) {
 }
 
 func (p conversationRuntimeHost) Version() string { return "fixture-v1" }
-func (p conversationRuntimeHost) Restore(ctx context.Context, c runconfig.RuntimeConfig) (agentruntime.RuntimeSession, error) {
+
+func (p conversationRuntimeHost) Restore(ctx context.Context, c configmodel.RuntimeConfig) (agentruntime.RuntimeSession, error) {
 	return p.Launch(ctx, c)
 }

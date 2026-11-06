@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
 	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
 )
 
@@ -19,7 +19,7 @@ type GitHubCLIAuthAdapter struct{}
 
 func (GitHubCLIAuthAdapter) ProviderNames() []string { return []string{"github"} }
 
-func (GitHubCLIAuthAdapter) ConfigureCLI(runtimeRoot string, environment []string, credentials []runconfig.GitCredential) ([]string, error) {
+func (GitHubCLIAuthAdapter) ConfigureCLI(runtimeRoot string, environment []string, credentials []configmodel.GitCredential) ([]string, error) {
 	ghPath, err := exec.LookPath("gh")
 	if err != nil {
 		return nil, &agentruntime.LaunchError{Message: "GitHub CLI is unavailable", Cause: err}

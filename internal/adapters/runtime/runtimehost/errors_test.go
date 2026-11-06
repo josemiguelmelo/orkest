@@ -12,7 +12,7 @@ import (
 
 	"github.com/josemiguelmelo/orkest/internal/adapters/runtime/profiles/opencode/opencodetest"
 	"github.com/josemiguelmelo/orkest/internal/adapters/runtime/runtimehost"
-	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
 	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
 )
@@ -20,7 +20,7 @@ import (
 func TestLaunchRetainsCauseWithoutExposingPaths(t *testing.T) {
 	binary := filepath.Join(t.TempDir(), "SECRET")
 	environment := runtimehost.Environment{WorkDir: t.TempDir(), StateDir: t.TempDir()}
-	config := runconfig.RunConfig{RuntimeConfig: runconfig.RuntimeConfig{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", RunID: "run", Runtime: "opencode", Model: runconfig.ModelSelection{Provider: "provider", ID: "model"}, Agent: runconfig.AgentDefinition{Name: "Work", Description: "Work", Instructions: "Work"}}}
+	config := configmodel.RunConfig{RuntimeConfig: configmodel.RuntimeConfig{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", RunID: "run", Runtime: "opencode", Model: configmodel.ModelSelection{Provider: "provider", ID: "model"}, Agent: configmodel.AgentDefinition{Name: "Work", Description: "Work", Instructions: "Work"}}}
 	_, err := opencodetest.NewHost(binary, environment).Launch(context.Background(), config.ForRuntime())
 	var launch *agentruntime.LaunchError
 	if !errors.As(err, &launch) || !errors.Is(err, os.ErrNotExist) {
@@ -39,7 +39,7 @@ func TestVersionMismatchDoesNotExposeRuntimeOutput(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	environment := runtimehost.Environment{WorkDir: t.TempDir(), StateDir: t.TempDir(), GrantedEnv: []string{"ORKEST_ACP_FIXTURE=1", "ORKEST_ACP_WRONG_VERSION=1"}}
-	config := runconfig.RuntimeConfig{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", RunID: "run", Runtime: "opencode", Model: runconfig.ModelSelection{Provider: "provider", ID: "model"}, Agent: runconfig.AgentDefinition{Name: "Work", Description: "Work", Instructions: "Work"}}
+	config := configmodel.RuntimeConfig{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", RunID: "run", Runtime: "opencode", Model: configmodel.ModelSelection{Provider: "provider", ID: "model"}, Agent: configmodel.AgentDefinition{Name: "Work", Description: "Work", Instructions: "Work"}}
 	_, err = opencodetest.NewHost(binary, environment).Launch(ctx, config)
 	if err == nil || strings.Contains(err.Error(), "SECRET") {
 		t.Fatalf("unsafe version error: %v", err)
@@ -52,7 +52,7 @@ func TestProcessRetainsExitStatus(t *testing.T) {
 		t.Fatal(err)
 	}
 	environment := runtimehost.Environment{WorkDir: t.TempDir(), StateDir: t.TempDir(), GrantedEnv: []string{"ORKEST_ACP_FIXTURE=1"}}
-	config := runconfig.RunConfig{RuntimeConfig: runconfig.RuntimeConfig{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", RunID: "run", Runtime: "opencode", Model: runconfig.ModelSelection{Provider: "provider", ID: "model"}, Agent: runconfig.AgentDefinition{Name: "Work", Description: "Work", Instructions: "Work"}}}
+	config := configmodel.RunConfig{RuntimeConfig: configmodel.RuntimeConfig{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", RunID: "run", Runtime: "opencode", Model: configmodel.ModelSelection{Provider: "provider", ID: "model"}, Agent: configmodel.AgentDefinition{Name: "Work", Description: "Work", Instructions: "Work"}}}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	process, err := opencodetest.NewHost(binary, environment).Launch(ctx, config.ForRuntime())

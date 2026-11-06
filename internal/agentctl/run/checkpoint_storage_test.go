@@ -6,19 +6,19 @@ import (
 	"path/filepath"
 	"testing"
 
-	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
 	coreruntime "github.com/josemiguelmelo/orkest/internal/contracts/runtimecatalog"
 )
 
 func TestCheckpointStoragePreservesV1ShapeAndRunMatch(t *testing.T) {
 	stateDir := t.TempDir()
 	store := checkpointStore{StateDir: stateDir}
-	config := runconfig.RunConfig{
-		RuntimeConfig: runconfig.RuntimeConfig{
+	config := configmodel.RunConfig{
+		RuntimeConfig: configmodel.RuntimeConfig{
 			OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", TaskSessionID: "conversation",
 			RunID: "run", Runtime: coreruntime.OpenCode,
-			Agent: runconfig.AgentDefinition{Name: "Work", Description: "Work", Instructions: "Complete the task."},
-			Model: runconfig.ModelSelection{Provider: "provider", ID: "model"},
+			Agent: configmodel.AgentDefinition{Name: "Work", Description: "Work", Instructions: "Complete the task."},
+			Model: configmodel.ModelSelection{Provider: "provider", ID: "model"},
 		},
 	}
 	if err := store.Save(config); err != nil {

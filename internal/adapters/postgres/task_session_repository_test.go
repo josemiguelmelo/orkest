@@ -10,6 +10,7 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/platform/ids"
 	"github.com/josemiguelmelo/orkest/internal/platform/secretbox"
 	"github.com/josemiguelmelo/orkest/internal/server/orchestration"
+	orchestrationmodel "github.com/josemiguelmelo/orkest/internal/server/orchestration/model"
 )
 
 func testTaskSessions(t *testing.T, database *PostgresDatabase, orgID, workspaceID, taskID string) {
@@ -27,11 +28,11 @@ func testTaskSessions(t *testing.T, database *PostgresDatabase, orgID, workspace
 		}
 		return id
 	}
-	configs := []orchestration.RunConfig{
-		{RuntimeConfig: orchestration.RuntimeConfig{
+	configs := []orchestrationmodel.RunConfig{
+		{RuntimeConfig: orchestrationmodel.RuntimeConfig{
 			OrganizationID: orgID, WorkspaceID: workspaceID, TaskID: taskID, TaskSessionID: newID(), RunID: newID(), Runtime: "opencode",
-			Agent: orchestration.AgentDefinition{Name: "original", Instructions: "original"}, Model: orchestration.ModelSelection{Provider: "test", ID: "model"},
-			MCPServers:  []orchestration.MCPServer{{ID: "mcp", Name: "mcp", URL: "https://example.test/mcp", Headers: map[string]string{"Authorization": "private"}}},
+			Agent: orchestrationmodel.AgentDefinition{Name: "original", Instructions: "original"}, Model: orchestrationmodel.ModelSelection{Provider: "test", ID: "model"},
+			MCPServers:  []orchestrationmodel.MCPServer{{ID: "mcp", Name: "mcp", URL: "https://example.test/mcp", Headers: map[string]string{"Authorization": "private"}}},
 			Environment: map[string]string{"TOKEN": "environment-secret"},
 		}, InitialCommandID: "initial", InitialPrompt: "hello"},
 	}
@@ -80,7 +81,7 @@ func testTaskSessions(t *testing.T, database *PostgresDatabase, orgID, workspace
 	if _, exists, err := repo.CurrentSession(ctx, "other-org", workspaceID, taskID); err != nil || exists {
 		t.Fatal("session crossed organization boundary", err)
 	}
-	if _, err := repo.RecordPrompt(ctx, config.RunID, "initial", "changed"); !errors.Is(err, orchestration.ErrCommand) {
+	if _, err := repo.RecordPrompt(ctx, config.RunID, "initial", "changed"); !errors.Is(err, orchestrationmodel.ErrCommand) {
 		t.Fatal("outbox accepted changed command", err)
 	}
 	pending, err := repo.PendingPrompts(ctx, config.RunID)
@@ -94,7 +95,7 @@ func testTaskSessions(t *testing.T, database *PostgresDatabase, orgID, workspace
 	if err != nil || !delivered {
 		t.Fatal("delivery acknowledgement lost", err)
 	}
-	if err := repo.SetLaunchStatus(ctx, orchestration.PlanLaunchStatus(config.RunID, orchestration.LaunchFailed)); err != nil {
+	if err := repo.SetLaunchStatus(ctx, orchestration.PlanLaunchStatus(config.RunID, orchestrationmodel.LaunchFailed)); err != nil {
 		t.Fatal(err)
 	}
 	next := config
@@ -112,7 +113,7 @@ func testTaskSessions(t *testing.T, database *PostgresDatabase, orgID, workspace
 	if err != nil || len(launches) != 2 || launches[0].TaskSessionID != config.TaskSessionID {
 		t.Fatal("run/session linkage lost", err)
 	}
-	if err := repo.SetLaunchStatus(ctx, orchestration.PlanLaunchStatus(next.RunID, orchestration.LaunchFailed)); err != nil {
+	if err := repo.SetLaunchStatus(ctx, orchestration.PlanLaunchStatus(next.RunID, orchestrationmodel.LaunchFailed)); err != nil {
 		t.Fatal(err)
 	}
 }

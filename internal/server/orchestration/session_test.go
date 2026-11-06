@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"testing"
+
+	orchestrationmodel "github.com/josemiguelmelo/orkest/internal/server/orchestration/model"
 )
 
 type sessionProcessController struct{ closed int }
@@ -29,13 +31,14 @@ func (c *sessionProcessController) TerminateAgentctlByRunID(context.Context, str
 func TestSessionCompletionWaitsForQueueDrain(t *testing.T) {
 	repo := &launchRepoFake{}
 	controller := &sessionProcessController{}
-	service, err := NewLaunchCompletionService(repo, controller)
+	service, err := NewLaunchCompletionService(context.Background(), repo, controller)
 	if err != nil {
 		t.Fatal(err)
 	}
-	launch := Launch{RunID: "run", TaskSessionID: "conversation", ProcessID: "container"}
-	for _, kind := range []EventType{EventPromptCompleted, EventPromptFailed, EventQueuePaused} {
-		event := Event{RunID: "run", Payload: AgentActivityEvent{Type: kind, TaskSessionID: "conversation"}}
+	defer service.Close()
+	launch := orchestrationmodel.Launch{RunID: "run", TaskSessionID: "conversation", ProcessID: "container"}
+	for _, kind := range []orchestrationmodel.EventType{orchestrationmodel.EventPromptCompleted, orchestrationmodel.EventPromptFailed, orchestrationmodel.EventQueuePaused} {
+		event := orchestrationmodel.Event{RunID: "run", Payload: orchestrationmodel.AgentActivityEvent{Type: kind, TaskSessionID: "conversation"}}
 		if err := service.HandleEvent(context.Background(), launch, event); err != nil {
 			t.Fatal(err)
 		}
@@ -43,7 +46,7 @@ func TestSessionCompletionWaitsForQueueDrain(t *testing.T) {
 	if controller.closed != 0 {
 		t.Fatal("prompt completion or pause stopped the session")
 	}
-	event := Event{RunID: "run", Payload: AgentActivityEvent{Type: EventRunCompleted, TaskSessionID: "conversation"}}
+	event := orchestrationmodel.Event{RunID: "run", Payload: orchestrationmodel.AgentActivityEvent{Type: orchestrationmodel.EventRunCompleted, TaskSessionID: "conversation"}}
 	if err := service.HandleEvent(context.Background(), launch, event); !errors.Is(err, ErrAgentRunClosed) {
 		t.Fatal(err)
 	}

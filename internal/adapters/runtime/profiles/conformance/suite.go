@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
 	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
 	"github.com/josemiguelmelo/orkest/internal/platform/ids"
@@ -24,7 +24,7 @@ type Probe struct{ Prompt, Expected string }
 // Profile contains protocol-independent prompts. A live profile must provoke a
 // real permission and a long-running response; completing early fails the suite.
 type Profile struct {
-	Config                            runconfig.RuntimeConfig
+	Config                            configmodel.RuntimeConfig
 	Remember                          func(string) string
 	Recall, Permission, Wait, Suspend string
 	Configuration                     map[string]Probe

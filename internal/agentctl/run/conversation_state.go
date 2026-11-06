@@ -123,3 +123,36 @@ func (c *conversationState) setCommandState(id string, state interaction.Command
 	record.state = state
 	c.commands[id] = record
 }
+
+// validate checks lifecycle consistency without tying old journals to transient
+// runtime availability. Legacy single-turn journals omit PromptStarted.
+func (c *conversationState) validate(event interaction.Event) error {
+	switch event.Type {
+	case interaction.EventPromptAccepted:
+		if event.CommandID == "" || c.runEnded {
+			return ErrJournal
+		}
+		if _, exists := c.commands[event.CommandID]; exists {
+			return ErrJournal
+		}
+	case interaction.EventPromptStarted:
+		record, exists := c.commands[event.CommandID]
+		if !exists || record.state != interaction.CommandQueued || c.activeCommandID != "" || c.runEnded {
+			return ErrJournal
+		}
+	case interaction.EventPromptContinued:
+		if _, exists := c.commands[event.CommandID]; !exists || c.runEnded {
+			return ErrJournal
+		}
+	case interaction.EventPromptCompleted, interaction.EventPromptFailed, interaction.EventPromptInterrupted:
+		record, exists := c.commands[event.CommandID]
+		if !exists || (record.state != interaction.CommandQueued && record.state != interaction.CommandRunning) {
+			return ErrJournal
+		}
+	case interaction.EventRunCompleted, interaction.EventRunFailed:
+		if c.activeCommandID != "" || len(c.queue) != 0 {
+			return ErrJournal
+		}
+	}
+	return nil
+}

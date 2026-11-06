@@ -3,11 +3,13 @@ package task
 import (
 	"fmt"
 
+	taskmodel "github.com/josemiguelmelo/orkest/internal/server/task/model"
 	"github.com/josemiguelmelo/orkest/internal/server/workflow"
+	workflowmodel "github.com/josemiguelmelo/orkest/internal/server/workflow/model"
 )
 
 type ImportedTaskSnapshot struct {
-	Workflow                 workflow.Definition
+	Workflow                 workflowmodel.Definition
 	TaskID                   string
 	StageVersion             int64
 	SourceID, Title          string
@@ -19,7 +21,7 @@ type ImportedTaskSnapshot struct {
 type ImportedTaskEffects struct {
 	StageID, AssigneeAgentID string
 	EmitStageEntry           bool
-	WorkState                WorkState
+	WorkState                taskmodel.WorkState
 	Event                    *workflow.EventIntent
 	StageVersion             int64
 }
@@ -42,7 +44,7 @@ func (s *TaskService) PlanImportedTask(snapshot ImportedTaskSnapshot) (ImportedT
 	}
 	stage, ok := snapshot.Workflow.Stage(stageID)
 	if !ok {
-		effects.WorkState = WorkStateFailed
+		effects.WorkState = taskmodel.WorkStateFailed
 		return effects, nil
 	}
 	if stage.ResponsibleAgentID != "" {
@@ -56,7 +58,7 @@ func (s *TaskService) PlanImportedTask(snapshot ImportedTaskSnapshot) (ImportedT
 		version++
 	}
 	effects.StageVersion = version
-	event := workflow.StageEvent(snapshot.TaskID, version, workflow.StageEntered, "", "", "")
+	event := workflow.StageEvent(snapshot.TaskID, version, workflowmodel.StageEntered, "", "", "")
 	effects.Event = &event
 
 	return effects, nil

@@ -8,6 +8,7 @@ import (
 
 	modelerrors "github.com/josemiguelmelo/orkest/internal/contracts/problem"
 	"github.com/josemiguelmelo/orkest/internal/platform/ids"
+	workspacemodel "github.com/josemiguelmelo/orkest/internal/server/workspace/model"
 )
 
 type WorkspaceService struct {
@@ -24,40 +25,40 @@ func normalizeName(name string) (string, bool) {
 	return name, name != "" && len(name) <= 200
 }
 
-func (s *WorkspaceService) ListWorkspaces(ctx context.Context, userID, orgID string) ([]Workspace, error) {
+func (s *WorkspaceService) ListWorkspaces(ctx context.Context, userID, orgID string) ([]workspacemodel.Workspace, error) {
 	return s.repository.Workspaces(ctx, orgID, userID)
 }
 
-func (s *WorkspaceService) GetWorkspace(ctx context.Context, userID, orgID, workspaceID string) (Workspace, error) {
+func (s *WorkspaceService) GetWorkspace(ctx context.Context, userID, orgID, workspaceID string) (workspacemodel.Workspace, error) {
 	return s.repository.Workspace(ctx, orgID, workspaceID, userID)
 }
 
-func (s *WorkspaceService) CreateWorkspace(ctx context.Context, userID, orgID, name string) (Workspace, error) {
+func (s *WorkspaceService) CreateWorkspace(ctx context.Context, userID, orgID, name string) (workspacemodel.Workspace, error) {
 	var valid bool
 	if name, valid = normalizeName(name); !valid {
-		return Workspace{}, modelerrors.ErrInvalid
+		return workspacemodel.Workspace{}, modelerrors.ErrInvalid
 	}
 	role, err := s.organizations.RoleForUser(ctx, userID, orgID)
 	if err != nil {
-		return Workspace{}, err
+		return workspacemodel.Workspace{}, err
 	}
 	if role != "owner" && role != "admin" {
-		return Workspace{}, modelerrors.ErrForbidden
+		return workspacemodel.Workspace{}, modelerrors.ErrForbidden
 	}
 	id, err := ids.NewUUID()
 	if err != nil {
-		return Workspace{}, fmt.Errorf("generate workspace ID: %w", err)
+		return workspacemodel.Workspace{}, fmt.Errorf("generate workspace ID: %w", err)
 	}
 	return s.repository.CreateWorkspace(ctx, id, orgID, name)
 }
 
-func (s *WorkspaceService) UpdateWorkspace(ctx context.Context, userID, orgID, workspaceID, name string) (Workspace, error) {
+func (s *WorkspaceService) UpdateWorkspace(ctx context.Context, userID, orgID, workspaceID, name string) (workspacemodel.Workspace, error) {
 	var valid bool
 	if name, valid = normalizeName(name); !valid {
-		return Workspace{}, modelerrors.ErrInvalid
+		return workspacemodel.Workspace{}, modelerrors.ErrInvalid
 	}
 	if err := s.requireWorkspaceAdmin(ctx, userID, orgID, workspaceID); err != nil {
-		return Workspace{}, err
+		return workspacemodel.Workspace{}, err
 	}
 	return s.repository.UpdateWorkspace(ctx, orgID, workspaceID, name)
 }
@@ -69,7 +70,7 @@ func (s *WorkspaceService) DeleteWorkspace(ctx context.Context, userID, orgID, w
 	return s.repository.DeleteWorkspace(ctx, orgID, workspaceID)
 }
 
-func (s *WorkspaceService) ListWorkspaceMembers(ctx context.Context, userID, orgID, workspaceID string) ([]Membership, error) {
+func (s *WorkspaceService) ListWorkspaceMembers(ctx context.Context, userID, orgID, workspaceID string) ([]workspacemodel.Membership, error) {
 	if _, err := s.repository.Workspace(ctx, orgID, workspaceID, userID); err != nil {
 		return nil, err
 	}

@@ -5,6 +5,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/josemiguelmelo/orkest/internal/server/workflow"
+	workflowmodel "github.com/josemiguelmelo/orkest/internal/server/workflow/model"
 )
 
 type workflowAPI struct {
@@ -45,7 +46,7 @@ func (a workflowAPI) get(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a workflowAPI) save(w http.ResponseWriter, r *http.Request) {
-	var d workflow.Definition
+	var d workflowmodel.Definition
 	if !decodeBody(w, r, &d) {
 		return
 	}

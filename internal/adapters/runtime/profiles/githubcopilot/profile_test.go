@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
 	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
 	coreruntime "github.com/josemiguelmelo/orkest/internal/contracts/runtimecatalog"
 )
@@ -21,10 +21,10 @@ func TestDescriptorUsesPinnedCopilotACPAndKeepsReplayUnqualified(t *testing.T) {
 
 func TestProvisioningCarriesInstructionsSkillsModelAndMCP(t *testing.T) {
 	settings := agentruntime.ResolvedRuntimeSettings{
-		Agent:      runconfig.AgentDefinition{Instructions: "Do the task"},
-		Model:      runconfig.ModelSelection{Provider: "github-copilot", ID: "gpt-4.1"},
-		Skills:     []runconfig.Skill{{ID: "review", SkillMD: "Review carefully"}},
-		MCPServers: []runconfig.MCPServer{{ID: "tools", Name: "Tools", URL: "https://mcp.example.test", Headers: map[string]string{"Authorization": "secret"}}},
+		Agent:      configmodel.AgentDefinition{Instructions: "Do the task"},
+		Model:      configmodel.ModelSelection{Provider: "github-copilot", ID: "gpt-4.1"},
+		Skills:     []configmodel.Skill{{ID: "review", SkillMD: "Review carefully"}},
+		MCPServers: []configmodel.MCPServer{{ID: "tools", Name: "Tools", URL: "https://mcp.example.test", Headers: map[string]string{"Authorization": "secret"}}},
 	}
 	paths := agentruntime.ProvisioningPaths{RuntimeRoot: "/state", WorkDir: "/work", ConfigSubdir: "run-config"}
 	plan, err := (Profile{}).BuildProvisioningPlan(settings, paths)
@@ -50,7 +50,7 @@ func TestProvisioningCarriesInstructionsSkillsModelAndMCP(t *testing.T) {
 }
 
 func TestAutonomousPermissionPolicyEnablesCopilotTools(t *testing.T) {
-	settings := agentruntime.ResolvedRuntimeSettings{Agent: runconfig.AgentDefinition{PermissionPolicy: runconfig.PermissionPolicyAutonomous}, Model: runconfig.ModelSelection{ID: "gpt-4.1"}}
+	settings := agentruntime.ResolvedRuntimeSettings{Agent: configmodel.AgentDefinition{PermissionPolicy: configmodel.PermissionPolicyAutonomous}, Model: configmodel.ModelSelection{ID: "gpt-4.1"}}
 	plan, err := (Profile{}).BuildProvisioningPlan(settings, agentruntime.ProvisioningPaths{RuntimeRoot: "/state", WorkDir: "/work", ConfigSubdir: "run-config"})
 	if err != nil {
 		t.Fatal(err)

@@ -5,8 +5,9 @@ import (
 	"errors"
 	"testing"
 
-	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
+	runmodel "github.com/josemiguelmelo/orkest/internal/agentctl/run/model"
 	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
 	coreruntime "github.com/josemiguelmelo/orkest/internal/contracts/runtimecatalog"
 )
@@ -14,13 +15,15 @@ import (
 type countingRuntimeHost struct{ launchCalls, restoreCalls int }
 
 func (h *countingRuntimeHost) Runtime() coreruntime.Runtime { return coreruntime.OpenCode }
-func (h *countingRuntimeHost) Version() string              { return "fixture-v1" }
-func (h *countingRuntimeHost) Launch(context.Context, runconfig.RuntimeConfig) (agentruntime.RuntimeSession, error) {
+
+func (h *countingRuntimeHost) Version() string { return "fixture-v1" }
+
+func (h *countingRuntimeHost) Launch(context.Context, configmodel.RuntimeConfig) (agentruntime.RuntimeSession, error) {
 	h.launchCalls++
 	return nil, errors.New("unexpected launch")
 }
 
-func (h *countingRuntimeHost) Restore(context.Context, runconfig.RuntimeConfig) (agentruntime.RuntimeSession, error) {
+func (h *countingRuntimeHost) Restore(context.Context, configmodel.RuntimeConfig) (agentruntime.RuntimeSession, error) {
 	h.restoreCalls++
 	return nil, errors.New("unexpected restore")
 }
@@ -85,7 +88,7 @@ func TestRecoverDoesNotRestoreFinishedRun(t *testing.T) {
 		t.Fatalf("finished run contacted host: launch=%d restore=%d", host.launchCalls, host.restoreCalls)
 	}
 	status := controller.Status()
-	if !status.RunEnded || status.State != StateExited {
+	if !status.RunEnded || status.State != runmodel.StateExited {
 		t.Fatalf("finished run status: %+v", status)
 	}
 	if err := controller.RestoreSession(); !errors.Is(err, ErrLaunchConflict) {

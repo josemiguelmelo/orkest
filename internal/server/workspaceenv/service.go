@@ -10,6 +10,7 @@ import (
 
 	modelerrors "github.com/josemiguelmelo/orkest/internal/contracts/problem"
 	"github.com/josemiguelmelo/orkest/internal/platform/secretbox"
+	workspaceenvmodel "github.com/josemiguelmelo/orkest/internal/server/workspaceenv/model"
 )
 
 var namePattern = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
@@ -24,7 +25,7 @@ func NewWorkspaceEnvironmentService(repository WorkspaceEnvironmentRepository, w
 	return &WorkspaceEnvironmentService{repository: repository, workspaces: workspaces, box: box}
 }
 
-func (s *WorkspaceEnvironmentService) List(ctx context.Context, userID, orgID, workspaceID string) ([]Value, error) {
+func (s *WorkspaceEnvironmentService) List(ctx context.Context, userID, orgID, workspaceID string) ([]workspaceenvmodel.Value, error) {
 	if _, err := s.workspaces.GetWorkspace(ctx, userID, orgID, workspaceID); err != nil {
 		return nil, err
 	}
@@ -32,9 +33,9 @@ func (s *WorkspaceEnvironmentService) List(ctx context.Context, userID, orgID, w
 	if err != nil {
 		return nil, err
 	}
-	values := make([]Value, 0, len(stored))
+	values := make([]workspaceenvmodel.Value, 0, len(stored))
 	for _, item := range stored {
-		value := Value{Name: item.Name, Secret: item.Encrypted}
+		value := workspaceenvmodel.Value{Name: item.Name, Secret: item.Encrypted}
 		if !item.Encrypted {
 			value.Value = item.Value
 		}
@@ -43,7 +44,7 @@ func (s *WorkspaceEnvironmentService) List(ctx context.Context, userID, orgID, w
 	return values, nil
 }
 
-func (s *WorkspaceEnvironmentService) Put(ctx context.Context, userID, orgID, workspaceID, name string, input Input) error {
+func (s *WorkspaceEnvironmentService) Put(ctx context.Context, userID, orgID, workspaceID, name string, input workspaceenvmodel.Input) error {
 	if err := s.authorize(ctx, userID, orgID, workspaceID); err != nil {
 		return err
 	}
@@ -74,12 +75,12 @@ func (s *WorkspaceEnvironmentService) Delete(ctx context.Context, userID, orgID,
 	return s.repository.Delete(ctx, workspaceID, name)
 }
 
-func (s *WorkspaceEnvironmentService) Resolve(ctx context.Context, workspaceID string) (RuntimeValues, error) {
+func (s *WorkspaceEnvironmentService) Resolve(ctx context.Context, workspaceID string) (workspaceenvmodel.RuntimeValues, error) {
 	stored, err := s.repository.Resolve(ctx, workspaceID)
 	if err != nil {
 		return nil, err
 	}
-	values := make(RuntimeValues, len(stored))
+	values := make(workspaceenvmodel.RuntimeValues, len(stored))
 	for _, item := range stored {
 		value := item.Value
 		if item.Encrypted {
@@ -96,7 +97,7 @@ func (s *WorkspaceEnvironmentService) Resolve(ctx context.Context, workspaceID s
 	return values, nil
 }
 
-func (s *WorkspaceEnvironmentService) SealSnapshot(values RuntimeValues) (string, error) {
+func (s *WorkspaceEnvironmentService) SealSnapshot(values workspaceenvmodel.RuntimeValues) (string, error) {
 	if len(values) == 0 {
 		return "", nil
 	}
@@ -114,7 +115,7 @@ func (s *WorkspaceEnvironmentService) SealSnapshot(values RuntimeValues) (string
 	return string(sealed), nil
 }
 
-func (s *WorkspaceEnvironmentService) OpenSnapshot(encrypted string) (RuntimeValues, error) {
+func (s *WorkspaceEnvironmentService) OpenSnapshot(encrypted string) (workspaceenvmodel.RuntimeValues, error) {
 	if encrypted == "" {
 		return nil, nil
 	}
@@ -125,7 +126,7 @@ func (s *WorkspaceEnvironmentService) OpenSnapshot(encrypted string) (RuntimeVal
 	if err != nil {
 		return nil, errors.New("decrypt workspace environment snapshot")
 	}
-	var values RuntimeValues
+	var values workspaceenvmodel.RuntimeValues
 	if err := json.Unmarshal([]byte(plain), &values); err != nil {
 		return nil, errors.New("decode workspace environment snapshot")
 	}

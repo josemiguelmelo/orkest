@@ -7,14 +7,14 @@ import (
 	"strings"
 	"testing"
 
-	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
 )
 
-func mutableRunConfig() runconfig.RunConfig {
+func mutableRunConfig() configmodel.RunConfig {
 	config := runConfig()
-	config.MCPServers = []runconfig.MCPServer{{ID: "mcp", Name: "MCP", URL: "https://example.com/mcp", Headers: map[string]string{"Authorization": "private-header"}}}
-	config.Skills = []runconfig.Skill{{ID: "work", SkillMD: "Work instructions"}}
-	config.Repositories = []runconfig.WorkspaceRepository{{ID: "repo", ProviderName: "github", URL: "https://example.com/repo"}}
+	config.MCPServers = []configmodel.MCPServer{{ID: "mcp", Name: "MCP", URL: "https://example.com/mcp", Headers: map[string]string{"Authorization": "private-header"}}}
+	config.Skills = []configmodel.Skill{{ID: "work", SkillMD: "Work instructions"}}
+	config.Repositories = []configmodel.WorkspaceRepository{{ID: "repo", ProviderName: "github", URL: "https://example.com/repo"}}
 	return config
 }
 
@@ -63,7 +63,7 @@ func TestConfigurationJSONKeepsFlatRuntimeFields(t *testing.T) {
 	if string(fields["organizationId"]) != `"org"` || string(fields["restoreSession"]) != "true" || fields["RuntimeConfig"] != nil || fields["repositories"] != nil {
 		t.Fatalf("configuration wire format changed: %s", data)
 	}
-	var decoded runconfig.RunConfig
+	var decoded configmodel.RunConfig
 	if err := json.Unmarshal(data, &decoded); err != nil {
 		t.Fatal(err)
 	}
@@ -75,20 +75,20 @@ func TestConfigurationJSONKeepsFlatRuntimeFields(t *testing.T) {
 func TestValidationExplainsInvalidSettingsWithoutValues(t *testing.T) {
 	for _, test := range []struct {
 		name, field, reason string
-		change              func(*runconfig.RunConfig)
+		change              func(*configmodel.RunConfig)
 	}{
-		{"required", "model.id", "is required", func(c *runconfig.RunConfig) { c.Model.ID = "" }},
-		{"runtime", "runtime", "is unsupported", func(c *runconfig.RunConfig) { c.Runtime = "private-runtime" }},
-		{"URL", "mcpServers", "must use HTTP or HTTPS URLs without user information", func(c *runconfig.RunConfig) { c.MCPServers[0].URL = "https://secret:password@example.com" }},
-		{"headers", "mcpServers.headers", "must have nonempty names and no line breaks", func(c *runconfig.RunConfig) { c.MCPServers[0].Headers["Authorization"] = "secret\r\nvalue" }},
-		{"skill ID", "skills", "must use lowercase alphanumeric IDs separated by single hyphens", func(c *runconfig.RunConfig) { c.Skills[0].ID = "INVALID" }},
-		{"duplicate skills", "skills", "must have unique IDs", func(c *runconfig.RunConfig) { c.Skills = append(c.Skills, c.Skills[0]) }},
+		{"required", "model.id", "is required", func(c *configmodel.RunConfig) { c.Model.ID = "" }},
+		{"runtime", "runtime", "is unsupported", func(c *configmodel.RunConfig) { c.Runtime = "private-runtime" }},
+		{"URL", "mcpServers", "must use HTTP or HTTPS URLs without user information", func(c *configmodel.RunConfig) { c.MCPServers[0].URL = "https://secret:password@example.com" }},
+		{"headers", "mcpServers.headers", "must have nonempty names and no line breaks", func(c *configmodel.RunConfig) { c.MCPServers[0].Headers["Authorization"] = "secret\r\nvalue" }},
+		{"skill ID", "skills", "must use lowercase alphanumeric IDs separated by single hyphens", func(c *configmodel.RunConfig) { c.Skills[0].ID = "INVALID" }},
+		{"duplicate skills", "skills", "must have unique IDs", func(c *configmodel.RunConfig) { c.Skills = append(c.Skills, c.Skills[0]) }},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			config := mutableRunConfig()
 			test.change(&config)
 			for _, err := range []error{config.Validate(), config.ForRuntime().Validate()} {
-				var validation *runconfig.ValidationError
+				var validation *configmodel.ValidationError
 				if !errors.As(err, &validation) || validation.Field != test.field || validation.Error() != test.field+" "+test.reason {
 					t.Fatalf("unexpected validation: %v", err)
 				}

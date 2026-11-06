@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
 	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
 	coreruntime "github.com/josemiguelmelo/orkest/internal/contracts/runtimecatalog"
 )
@@ -55,7 +55,7 @@ func (Profile) BuildProvisioningPlan(settings agentruntime.ResolvedRuntimeSettin
 		return agentruntime.ProvisioningPlan{}, errors.New("invalid agentctl configuration path")
 	}
 	for _, skill := range settings.Skills {
-		if !runconfig.ValidSkillID(skill.ID) {
+		if !configmodel.ValidSkillID(skill.ID) {
 			return agentruntime.ProvisioningPlan{}, errors.New("invalid skill ID")
 		}
 	}
@@ -67,7 +67,7 @@ func (Profile) BuildProvisioningPlan(settings agentruntime.ResolvedRuntimeSettin
 		prompt += "\n\n## Skill: " + skill.ID + "\n\n" + strings.TrimSpace(skill.SkillMD)
 	}
 	profile := agentConfig{Name: "orkest", Description: "Orkest task agent", Prompt: prompt, Model: settings.Model.ID, Tools: []string{"*"}}
-	if settings.Agent.PermissionPolicy == runconfig.PermissionPolicyAutonomous {
+	if settings.Agent.PermissionPolicy == configmodel.PermissionPolicyAutonomous {
 		profile.Permissions.Rules = []permissionRule{{Capability: "all", Effect: "allow"}}
 	}
 	contents, err := json.Marshal(profile)

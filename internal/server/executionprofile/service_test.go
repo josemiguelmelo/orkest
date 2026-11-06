@@ -11,41 +11,45 @@ import (
 
 	modelerrors "github.com/josemiguelmelo/orkest/internal/contracts/problem"
 	coreruntime "github.com/josemiguelmelo/orkest/internal/contracts/runtimecatalog"
-	"github.com/josemiguelmelo/orkest/internal/server/workspace"
+	executionprofilemodel "github.com/josemiguelmelo/orkest/internal/server/executionprofile/model"
+	workspacemodel "github.com/josemiguelmelo/orkest/internal/server/workspace/model"
 )
 
 type memoryRepo struct {
 	ExecutionProfileRepository
-	profile  Profile
-	build    Build
+	profile  executionprofilemodel.Profile
+	build    executionprofilemodel.Build
 	claimed  bool
 	finishes int
 }
 
-func (r *memoryRepo) Get(_ context.Context, ws, id string) (Profile, error) {
+func (r *memoryRepo) Get(_ context.Context, ws, id string) (executionprofilemodel.Profile, error) {
 	if ws != r.profile.WorkspaceID || id != r.profile.ID {
-		return Profile{}, modelerrors.ErrNotFound
+		return executionprofilemodel.Profile{}, modelerrors.ErrNotFound
 	}
 	return r.profile, nil
 }
 
-func (r *memoryRepo) Save(_ context.Context, p Profile, b Build, _ bool) (Profile, error) {
+func (r *memoryRepo) Save(_ context.Context, p executionprofilemodel.Profile, b executionprofilemodel.Build, _ bool) (executionprofilemodel.Profile, error) {
 	r.profile = p
 	r.build = b
 	return p, nil
 }
 
-func (r *memoryRepo) Claim(_ context.Context, owner string) (Build, bool, error) {
+func (r *memoryRepo) Claim(_ context.Context, owner string) (executionprofilemodel.Build, bool, error) {
 	if r.claimed {
-		return Build{}, false, nil
+		return executionprofilemodel.Build{}, false, nil
 	}
 	r.claimed = true
 	r.build.Owner = owner
 	return r.build, true, nil
 }
+
 func (*memoryRepo) Heartbeat(context.Context, string, string) error { return nil }
-func (*memoryRepo) PinInputs(context.Context, Build) error          { return nil }
-func (r *memoryRepo) Finish(_ context.Context, b Build, status, image, diagnostic string) error {
+
+func (*memoryRepo) PinInputs(context.Context, executionprofilemodel.Build) error { return nil }
+
+func (r *memoryRepo) Finish(_ context.Context, b executionprofilemodel.Build, status, image, diagnostic string) error {
 	if b.ID != r.build.ID || b.Owner != r.build.Owner {
 		return errors.New("lost identity")
 	}
@@ -58,8 +62,8 @@ func (r *memoryRepo) Finish(_ context.Context, b Build, status, image, diagnosti
 
 type workspaceAccess struct{ role string }
 
-func (a workspaceAccess) GetWorkspace(context.Context, string, string, string) (workspace.Workspace, error) {
-	return workspace.Workspace{Role: a.role}, nil
+func (a workspaceAccess) GetWorkspace(context.Context, string, string, string) (workspacemodel.Workspace, error) {
+	return workspacemodel.Workspace{Role: a.role}, nil
 }
 
 type builderFake struct {
@@ -67,8 +71,11 @@ type builderFake struct {
 	fail               bool
 }
 
-func (*builderFake) ResolveInputs(_ context.Context, b Build) (Build, error) { return b, nil }
-func (b *builderFake) BuildAndPush(context.Context, Build) (string, error) {
+func (*builderFake) ResolveInputs(_ context.Context, b executionprofilemodel.Build) (executionprofilemodel.Build, error) {
+	return b, nil
+}
+
+func (b *builderFake) BuildAndPush(context.Context, executionprofilemodel.Build) (string, error) {
 	b.builds++
 	if b.fail {
 		return "", errors.New("sensitive registry error")
@@ -76,15 +83,15 @@ func (b *builderFake) BuildAndPush(context.Context, Build) (string, error) {
 	return "registry/image@sha256:123", nil
 }
 
-func (b *builderFake) Reconcile(context.Context, Build) (string, error) {
+func (b *builderFake) Reconcile(context.Context, executionprofilemodel.Build) (string, error) {
 	b.reconciles++
 	return "registry/image@sha256:123", nil
 }
 
 func TestProfileAuthorizationAndScope(t *testing.T) {
 	ctx := context.Background()
-	r := &memoryRepo{profile: Profile{ID: "p", WorkspaceID: "w", Input: Input{Runtime: coreruntime.OpenCode}}}
-	input := Input{Name: "Java", Runtime: coreruntime.OpenCode, ToolchainImage: "example.com/team/java:21"}
+	r := &memoryRepo{profile: executionprofilemodel.Profile{ID: "p", WorkspaceID: "w", Input: executionprofilemodel.Input{Runtime: coreruntime.OpenCode}}}
+	input := executionprofilemodel.Input{Name: "Java", Runtime: coreruntime.OpenCode, ToolchainImage: "example.com/team/java:21"}
 	for _, role := range []string{"viewer", "member"} {
 		s := NewExecutionProfileService(r, workspaceAccess{role}, "example.com/outputs", nil)
 		if _, err := s.Save(ctx, "u", "o", "w", "", 0, input); !errors.Is(err, modelerrors.ErrForbidden) {
@@ -107,7 +114,7 @@ func TestProfileAuthorizationAndScope(t *testing.T) {
 }
 
 func TestWorkerReconcilesExpiredAttemptWithoutRebuilding(t *testing.T) {
-	r := &memoryRepo{build: Build{ID: "b", Status: "reconciling"}}
+	r := &memoryRepo{build: executionprofilemodel.Build{ID: "b", Status: "reconciling"}}
 	builder := &builderFake{}
 	w := NewExecutionProfileWorker(r, builder, slog.New(slog.NewTextHandler(io.Discard, nil)), 1)
 	if err := w.process(context.Background()); err != nil {
@@ -119,7 +126,7 @@ func TestWorkerReconcilesExpiredAttemptWithoutRebuilding(t *testing.T) {
 }
 
 func TestWorkerFailureIsSanitizedAndNotRetried(t *testing.T) {
-	r := &memoryRepo{build: Build{ID: "b", Status: "building"}}
+	r := &memoryRepo{build: executionprofilemodel.Build{ID: "b", Status: "building"}}
 	builder := &builderFake{fail: true}
 	w := NewExecutionProfileWorker(r, builder, slog.New(slog.NewTextHandler(io.Discard, nil)), 1)
 	if err := w.process(context.Background()); err != nil {
@@ -136,15 +143,15 @@ func TestWorkerFailureIsSanitizedAndNotRetried(t *testing.T) {
 type concurrentWorkerRepo struct {
 	ExecutionProfileRepository
 	mu       sync.Mutex
-	builds   []Build
+	builds   []executionprofilemodel.Build
 	finished int
 }
 
-func (r *concurrentWorkerRepo) Claim(_ context.Context, owner string) (Build, bool, error) {
+func (r *concurrentWorkerRepo) Claim(_ context.Context, owner string) (executionprofilemodel.Build, bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if len(r.builds) == 0 {
-		return Build{}, false, nil
+		return executionprofilemodel.Build{}, false, nil
 	}
 	b := r.builds[0]
 	r.builds = r.builds[1:]
@@ -154,8 +161,12 @@ func (r *concurrentWorkerRepo) Claim(_ context.Context, owner string) (Build, bo
 }
 
 func (*concurrentWorkerRepo) Heartbeat(context.Context, string, string) error { return nil }
-func (*concurrentWorkerRepo) PinInputs(context.Context, Build) error          { return nil }
-func (r *concurrentWorkerRepo) Finish(context.Context, Build, string, string, string) error {
+
+func (*concurrentWorkerRepo) PinInputs(context.Context, executionprofilemodel.Build) error {
+	return nil
+}
+
+func (r *concurrentWorkerRepo) Finish(context.Context, executionprofilemodel.Build, string, string, string) error {
 	r.mu.Lock()
 	r.finished++
 	r.mu.Unlock()
@@ -167,16 +178,22 @@ type concurrentBuilder struct {
 	release chan struct{}
 }
 
-func (*concurrentBuilder) ResolveInputs(_ context.Context, b Build) (Build, error) { return b, nil }
-func (b *concurrentBuilder) BuildAndPush(context.Context, Build) (string, error) {
+func (*concurrentBuilder) ResolveInputs(_ context.Context, b executionprofilemodel.Build) (executionprofilemodel.Build, error) {
+	return b, nil
+}
+
+func (b *concurrentBuilder) BuildAndPush(context.Context, executionprofilemodel.Build) (string, error) {
 	b.started <- struct{}{}
 	<-b.release
 	return "registry/image@sha256:123", nil
 }
-func (*concurrentBuilder) Reconcile(context.Context, Build) (string, error) { return "", nil }
+
+func (*concurrentBuilder) Reconcile(context.Context, executionprofilemodel.Build) (string, error) {
+	return "", nil
+}
 
 func TestWorkerRunsConfiguredBuildsConcurrently(t *testing.T) {
-	r := &concurrentWorkerRepo{builds: []Build{{ID: "one"}, {ID: "two"}}}
+	r := &concurrentWorkerRepo{builds: []executionprofilemodel.Build{{ID: "one"}, {ID: "two"}}}
 	builder := &concurrentBuilder{started: make(chan struct{}, 2), release: make(chan struct{})}
 	w := NewExecutionProfileWorker(r, builder, slog.New(slog.NewTextHandler(io.Discard, nil)), 2)
 	ctx, cancel := context.WithCancel(context.Background())

@@ -11,7 +11,7 @@ import (
 	"sync"
 
 	sdk "github.com/coder/acp-go-sdk"
-	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
 	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
 )
@@ -63,7 +63,7 @@ func (c *client) LoadSession(ctx context.Context, id string, workDir string, opt
 	return nil
 }
 
-func mcpServers(servers []runconfig.MCPServer) []sdk.McpServer {
+func mcpServers(servers []configmodel.MCPServer) []sdk.McpServer {
 	result := make([]sdk.McpServer, 0, len(servers))
 	for _, server := range servers {
 		headers := make([]sdk.HttpHeader, 0, len(server.Headers))
@@ -112,6 +112,7 @@ func (c *client) Cancel(ctx context.Context, id string) error {
 }
 
 func (c *client) Done() <-chan struct{} { return c.connection.Done() }
+
 func (c *client) Err() error {
 	select {
 	case <-c.Done():

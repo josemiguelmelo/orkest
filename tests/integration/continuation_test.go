@@ -1,5 +1,3 @@
-//go:build integration
-
 package integration
 
 import (
@@ -8,18 +6,19 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	sharedacp "github.com/josemiguelmelo/orkest/internal/adapters/runtime/acp"
-	"github.com/josemiguelmelo/orkest/internal/adapters/runtime/profiles/opencode"
-	"github.com/josemiguelmelo/orkest/internal/adapters/runtime/runtimehost"
-	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
-	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
-	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
-	"github.com/josemiguelmelo/orkest/internal/platform/ids"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	sharedacp "github.com/josemiguelmelo/orkest/internal/adapters/runtime/acp"
+	"github.com/josemiguelmelo/orkest/internal/adapters/runtime/profiles/opencode"
+	"github.com/josemiguelmelo/orkest/internal/adapters/runtime/runtimehost"
+	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
+	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
+	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
+	"github.com/josemiguelmelo/orkest/internal/platform/ids"
 )
 
 func TestOpenCodeContinuation(t *testing.T) {
@@ -49,7 +48,7 @@ func testOpenCodeContinuation(t *testing.T, legacy bool) {
 	}
 	workDir, stateDir := t.TempDir(), t.TempDir()
 	host := runtimehost.New(opencode.Profile{Binary: binary}, sharedacp.Factory{}, runtimehost.Environment{WorkDir: workDir, StateDir: stateDir, GrantedEnv: env})
-	config := runconfig.RunConfig{RuntimeConfig: runconfig.RuntimeConfig{OrganizationID: "test-org", WorkspaceID: "test-workspace", TaskID: "test-task", TaskSessionID: "test-session", RunID: "first", Runtime: "opencode", Agent: runconfig.AgentDefinition{Name: "Integration", Instructions: "Follow the user's instructions. Do not use tools for these memory tests."}, Model: runconfig.ModelSelection{Provider: modelProvider, ID: model}}}
+	config := configmodel.RunConfig{RuntimeConfig: configmodel.RuntimeConfig{OrganizationID: "test-org", WorkspaceID: "test-workspace", TaskID: "test-task", TaskSessionID: "test-session", RunID: "first", Runtime: "opencode", Agent: configmodel.AgentDefinition{Name: "Integration", Instructions: "Follow the user's instructions. Do not use tools for these memory tests."}, Model: configmodel.ModelSelection{Provider: modelProvider, ID: model}}}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	first, err := host.Launch(ctx, config.ForRuntime())
@@ -98,7 +97,7 @@ func testOpenCodeContinuation(t *testing.T, legacy bool) {
 
 // Pair the historical v1 envelope with a real pinned runtime's durable history.
 // Restoring a fixture without a successful next model response is insufficient.
-func installV1Manifest(t *testing.T, stateDir, workDir, nativeID string, config runconfig.RuntimeConfig) {
+func installV1Manifest(t *testing.T, stateDir, workDir, nativeID string, config configmodel.RuntimeConfig) {
 	t.Helper()
 	fixture, err := os.ReadFile("../../internal/adapters/runtime/runtimehost/testdata/session-v1.json")
 	if err != nil {

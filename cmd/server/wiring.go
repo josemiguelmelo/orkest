@@ -49,7 +49,10 @@ import (
 
 // Run owns the platform HTTP lifecycle; it does not own agent processes.
 func runServer(ctx context.Context, logger *slog.Logger) error {
-	dataRoot := strings.TrimSpace(os.Getenv("ORKEST_DATA_DIR"))
+	config := loadServerConfiguration()
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	dataRoot := strings.TrimSpace(config.DataDir)
 	if dataRoot == "" {
 		dataRoot = "data"
 	}
@@ -61,7 +64,7 @@ func runServer(ctx context.Context, logger *slog.Logger) error {
 		return fmt.Errorf("create platform data directory: %w", err)
 	}
 
-	addr := os.Getenv("HTTP_ADDR")
+	addr := config.HTTPAddr
 	if addr == "" {
 		addr = "127.0.0.1:8080"
 	}
@@ -76,7 +79,7 @@ func runServer(ctx context.Context, logger *slog.Logger) error {
 	workspaces := workspace.NewWorkspaceService(postgres.NewWorkspacePostgresRepository(database), organizations)
 	skillCatalog := skill.NewCatalogService(postgres.NewSkillCatalogPostgresRepository(database), organizations, workspaces, users)
 	var secretBox *secretbox.Box
-	if key := os.Getenv("ORKEST_INTEGRATION_ENCRYPTION_KEY"); key != "" {
+	if key := config.IntegrationEncryptionKey; key != "" {
 		secretBox, err = secretbox.New(key)
 		if err != nil {
 			return err
@@ -85,8 +88,8 @@ func runServer(ctx context.Context, logger *slog.Logger) error {
 	mcpServerService := mcpserver.NewMCPServerService(postgres.NewMCPServerPostgresRepository(database), secretBox, workspaces)
 	workspaceEnvironment := workspaceenv.NewWorkspaceEnvironmentService(postgres.NewWorkspaceEnvironmentPostgresRepository(database), workspaces, secretBox)
 	executionProfileRepository := postgres.NewExecutionProfileRepository(database)
-	profileImages := map[coreruntime.Runtime]string{coreruntime.OpenCode: os.Getenv("AGENTCTL_OPENCODE_IMAGE"), coreruntime.ClaudeCode: os.Getenv("AGENTCTL_CLAUDE_CODE_IMAGE"), coreruntime.Codex: os.Getenv("AGENTCTL_CODEX_IMAGE"), coreruntime.GitHubCopilot: os.Getenv("AGENTCTL_GITHUB_COPILOT_IMAGE"), coreruntime.Kiro: os.Getenv("AGENTCTL_KIRO_IMAGE")}
-	executionProfileService := executionprofile.NewExecutionProfileService(executionProfileRepository, workspaces, os.Getenv("ORKEST_EXECUTION_IMAGE_REPOSITORY"), profileImages)
+	profileImages := map[coreruntime.Runtime]string{coreruntime.OpenCode: config.AgentctlOpencodeImage, coreruntime.ClaudeCode: config.AgentctlClaudeCodeImage, coreruntime.Codex: config.AgentctlCodexImage, coreruntime.GitHubCopilot: config.AgentctlGitHubCopilotImage, coreruntime.Kiro: config.AgentctlKiroImage}
+	executionProfileService := executionprofile.NewExecutionProfileService(executionProfileRepository, workspaces, config.ExecutionImageRepository, profileImages)
 	agentRepository := postgres.NewAgentPostgresRepository(database, secretBox)
 	agentRuntimeProfileRepository := postgres.NewAgentRuntimeProfilePostgresRepository(database, secretBox)
 	agentRuntimeProfiles := agentruntimeprofile.NewAgentRuntimeProfileService(agentRuntimeProfileRepository, workspaces)
@@ -96,19 +99,13 @@ func runServer(ctx context.Context, logger *slog.Logger) error {
 	client := agentctlhttp.NewHTTPAgentctlClient(httplog.PropagatingHTTPClient(&http.Client{Timeout: 10 * time.Second}))
 	providers := []coderepository.CodingProvider{githubprovider.NewGitHubProvider(), gitlabprovider.NewGitLabCloudProvider(), gitlabprovider.NewGitLabServerProvider()}
 	executorSelection, executorErr := executors.New(ctx, executors.Config{
-		Kind:           os.Getenv("ORKEST_EXECUTOR"),
-		DataRoot:       filepath.Join(dataRoot, "agent-executions"),
-		DockerNetwork:  os.Getenv("ORKEST_AGENTCTL_NETWORK"),
-		CodexAuthFile:  os.Getenv("ORKEST_CODEX_AUTH_FILE"),
-		AgentctlBinary: os.Getenv("ORKEST_AGENTCTL_BINARY"),
-		DockerImages: map[coreruntime.Runtime]string{
-			coreruntime.OpenCode:      os.Getenv("AGENTCTL_OPENCODE_IMAGE"),
-			coreruntime.ClaudeCode:    os.Getenv("AGENTCTL_CLAUDE_CODE_IMAGE"),
-			coreruntime.Codex:         os.Getenv("AGENTCTL_CODEX_IMAGE"),
-			coreruntime.GitHubCopilot: os.Getenv("AGENTCTL_GITHUB_COPILOT_IMAGE"),
-			coreruntime.Kiro:          os.Getenv("AGENTCTL_KIRO_IMAGE"),
-		},
-		ProviderEnv:              splitEnvironmentNames(os.Getenv("ORKEST_AGENT_PROVIDER_ENV")),
+		Kind:                     config.Executor,
+		DataRoot:                 filepath.Join(dataRoot, "agent-executions"),
+		DockerNetwork:            config.AgentctlNetwork,
+		CodexAuthFile:            config.CodexAuthFile,
+		AgentctlBinary:           config.AgentctlBinary,
+		DockerImages:             profileImages,
+		ProviderEnv:              splitEnvironmentNames(config.AgentProviderEnv),
 		CodingProviders:          providers,
 		CodingCredentialResolver: codeRepositories,
 	})
@@ -118,10 +115,11 @@ func runServer(ctx context.Context, logger *slog.Logger) error {
 	executor := executorSelection.Executor
 	executorKind := executorSelection.Kind
 	defer func() { _ = executor.Close() }()
-	completion, completionErr := orchestration.NewLaunchCompletionService(launchRepo, executor)
+	completion, completionErr := orchestration.NewLaunchCompletionService(ctx, launchRepo, executor)
 	if completionErr != nil {
 		return completionErr
 	}
+	defer completion.Close()
 	if err = completion.RecoverPending(ctx); err != nil {
 		return err
 	}
@@ -129,14 +127,12 @@ func runServer(ctx context.Context, logger *slog.Logger) error {
 	if communicationErr != nil {
 		return communicationErr
 	}
+	defer communication.Close()
+	defer cancel()
 	if err = communication.ReconnectRecorded(); err != nil {
 		return err
 	}
-	launcher, err := orchestration.NewAgentLauncher(executor)
-	if err != nil {
-		return err
-	}
-	launchService, err := orchestration.NewLaunchService(launchRepo, launcher, client, communication, completion)
+	launchService, err := orchestration.NewLaunchService(launchRepo, executor, client, communication, completion)
 	if err != nil {
 		return err
 	}
@@ -145,11 +141,11 @@ func runServer(ctx context.Context, logger *slog.Logger) error {
 	taskWorkflows := workflowautomation.NewWorkflowAutomationService(postgres.NewTaskTransitionPostgresRepository(database), postgres.NewAutomationEventPostgresRepository(database), workspaces, workflowautomation.WorkflowRuleEvaluator{})
 	tasks := task.NewTaskService(taskRepository, postgres.NewTaskCreationPostgresRepository(database), postgres.NewTaskUpdatePostgresRepository(database), taskWorkflows, workspaces)
 	artifacts := artifact.NewArtifactService(postgres.NewArtifactPostgresRepository(database), tasks)
-	mcpEndpoint := strings.TrimSpace(os.Getenv("ORKEST_AGENT_MCP_URL"))
+	mcpEndpoint := strings.TrimSpace(config.AgentMCPURL)
 	if mcpEndpoint == "" {
 		mcpEndpoint = "http://127.0.0.1:8080"
 	}
-	mcpKey, err := appmcp.AgentToolsTokenKey(dataRoot, os.Getenv("ORKEST_AGENT_MCP_TOKEN_KEY"))
+	mcpKey, err := appmcp.AgentToolsTokenKey(dataRoot, config.AgentMCPTokenKey)
 	if err != nil {
 		return fmt.Errorf("load agent MCP token key: %w", err)
 	}
@@ -161,7 +157,20 @@ func runServer(ctx context.Context, logger *slog.Logger) error {
 	if executorKind == executors.Local {
 		profileResolver = localExecutionProfileResolver{}
 	}
-	dispatcher, err := orchestration.NewTaskDispatcher(agents, launchService, mcpServerService, profileResolver, skillCatalog, workspaceEnvironment, codeRepositories, codeRepositories, agentTools, artifacts, workflows)
+	dispatcher, err := orchestration.NewTaskDispatcher(orchestration.TaskDispatcherDependencies{
+		Agents:       agents,
+		Launches:     launchService,
+		Sessions:     launchRepo,
+		MCPServers:   mcpServerService,
+		Profiles:     profileResolver,
+		Skills:       skillCatalog,
+		Environment:  workspaceEnvironment,
+		Repositories: codeRepositories,
+		Credentials:  codeRepositories,
+		Tools:        agentTools,
+		Artifacts:    artifacts,
+		Workflows:    workflows,
+	})
 	if err != nil {
 		return err
 	}
@@ -172,33 +181,33 @@ func runServer(ctx context.Context, logger *slog.Logger) error {
 	integrations := taskintegration.NewTaskIntegrationService(postgres.NewPostgresTaskIntegrationRepository(database), secretBox, workspaces, organizations, postgres.NewPostgresImportedTaskRepository(database), tasks, githubcloud.NewGitHubCloudProvider(), jiraserver.NewJiraServerProvider())
 	runnerCtx, stopRunner := context.WithCancel(ctx)
 	var runnerWG sync.WaitGroup
-	if os.Getenv("ORKEST_EXECUTION_IMAGE_REPOSITORY") != "" {
+	if config.ExecutionImageRepository != "" {
 		registry := imagebuild.RegistryMapping{
-			DockerHost:   os.Getenv("ORKEST_DOCKER_REGISTRY_HOST"),
-			BuildKitHost: os.Getenv("ORKEST_BUILDKIT_REGISTRY_HOST"),
+			DockerHost:   config.DockerRegistryHost,
+			BuildKitHost: config.BuildKitRegistryHost,
 		}
 		imageStore, buildErr := dockerimage.NewImageStore(registry)
 		if buildErr != nil {
 			stopRunner()
 			return buildErr
 		}
-		builder, buildErr := newImageBuilder(os.Getenv("ORKEST_IMAGE_BUILDER"), imageStore, buildkit.Config{
-			Binary:     os.Getenv("ORKEST_BUILDCTL_BINARY"),
-			Address:    os.Getenv("ORKEST_BUILDKIT_ADDR"),
+		builder, buildErr := newImageBuilder(config.ImageBuilder, imageStore, buildkit.Config{
+			Binary:     config.BuildctlBinary,
+			Address:    config.BuildKitAddr,
 			Registry:   registry,
-			TLSCA:      os.Getenv("ORKEST_BUILDKIT_TLS_CA"),
-			TLSCert:    os.Getenv("ORKEST_BUILDKIT_TLS_CERT"),
-			TLSKey:     os.Getenv("ORKEST_BUILDKIT_TLS_KEY"),
-			Daemonless: strings.EqualFold(os.Getenv("ORKEST_BUILDKIT_DAEMONLESS"), "true"),
+			TLSCA:      config.BuildKitTLSCA,
+			TLSCert:    config.BuildKitTLSCert,
+			TLSKey:     config.BuildKitTLSKey,
+			Daemonless: strings.EqualFold(config.BuildKitDaemonless, "true"),
 		})
 		if buildErr != nil {
 			stopRunner()
 			return buildErr
 		}
 		workerCount := 1
-		if configured, parseErr := strconv.Atoi(os.Getenv("ORKEST_EXECUTION_PROFILE_BUILD_WORKERS")); parseErr == nil && configured > 0 {
+		if configured, parseErr := strconv.Atoi(config.ExecutionProfileBuildWorkers); parseErr == nil && configured > 0 {
 			workerCount = configured
-		} else if os.Getenv("ORKEST_EXECUTION_PROFILE_BUILD_WORKERS") != "" {
+		} else if config.ExecutionProfileBuildWorkers != "" {
 			logger.Warn("invalid execution profile build worker count; using default", "setting", "ORKEST_EXECUTION_PROFILE_BUILD_WORKERS", "default", workerCount)
 		}
 		worker := executionprofile.NewExecutionProfileWorker(executionProfileRepository, builder, logger, workerCount)
@@ -211,7 +220,26 @@ func runServer(ctx context.Context, logger *slog.Logger) error {
 	worker := workflowautomation.NewWorkflowAutomationWorker(taskWorkflows, execution, logger)
 	runnerWG.Add(1)
 	go func() { defer runnerWG.Done(); worker.Run(runnerCtx) }()
-	router, err := httpapi.NewRouter(users, organizations, workspaces, agents, codeRepositories, tasks, integrations, mcpServerService, skillCatalog, launchService, executionProfileService, agentRuntimeProfiles, directChats, workflows, taskWorkflows, workspaceEnvironment, artifacts, agentTools)
+	router, err := httpapi.NewRouter(ctx, httpapi.RouterDependencies{
+		Users:            users,
+		Organizations:    organizations,
+		Workspaces:       workspaces,
+		Agents:           agents,
+		CodeRepositories: codeRepositories,
+		Tasks:            tasks,
+		Integrations:     integrations,
+		MCPServers:       mcpServerService,
+		SkillCatalog:     skillCatalog,
+		Launches:         launchService,
+		Profiles:         executionProfileService,
+		RuntimeProfiles:  agentRuntimeProfiles,
+		DirectChats:      directChats,
+		Workflows:        workflows,
+		Automation:       taskWorkflows,
+		Environment:      workspaceEnvironment,
+		Artifacts:        artifacts,
+		AgentTools:       agentTools,
+	})
 	if err != nil {
 		stopRunner()
 		runnerWG.Wait()

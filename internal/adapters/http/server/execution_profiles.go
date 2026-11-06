@@ -5,6 +5,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/josemiguelmelo/orkest/internal/server/executionprofile"
+	executionprofilemodel "github.com/josemiguelmelo/orkest/internal/server/executionprofile/model"
 )
 
 type executionProfileAPI struct {
@@ -28,7 +29,7 @@ func (a executionProfileAPI) list(w http.ResponseWriter, r *http.Request) {
 
 func (a executionProfileAPI) save(w http.ResponseWriter, r *http.Request) {
 	var body struct {
-		executionprofile.Input
+		executionprofilemodel.Input
 		Generation int64 `json:"generation"`
 	}
 	if !decodeBody(w, r, &body) {

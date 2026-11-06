@@ -8,6 +8,7 @@ import (
 	modelerrors "github.com/josemiguelmelo/orkest/internal/contracts/problem"
 	coreruntime "github.com/josemiguelmelo/orkest/internal/contracts/runtimecatalog"
 	"github.com/josemiguelmelo/orkest/internal/platform/ids"
+	agentmodel "github.com/josemiguelmelo/orkest/internal/server/agent/model"
 )
 
 type AgentDefinitionUseCase struct {
@@ -18,12 +19,13 @@ type AgentDefinitionUseCase struct {
 	profiles        ExecutionProfileValidator
 	runtimeProfiles RuntimeProfileResolver
 }
+
 type (
 	ExecutionProfileValidator interface {
-		ValidateProfile(context.Context, string, string, Runtime) error
+		ValidateProfile(context.Context, string, string, agentmodel.Runtime) error
 	}
 	RuntimeProfileResolver interface {
-		ResolveAgentProfile(context.Context, string, string) (Runtime, string, string, map[string]string, error)
+		ResolveAgentProfile(context.Context, string, string) (agentmodel.Runtime, string, string, map[string]string, error)
 	}
 )
 
@@ -31,7 +33,7 @@ func NewAgentDefinitionUseCase(repository AgentDefinitionRepository, workspaces 
 	return &AgentDefinitionUseCase{repository: repository, workspaces: workspaces, mcpServers: mcpServers, skills: skills, profiles: profiles, runtimeProfiles: runtimeProfiles}
 }
 
-func (s *AgentDefinitionUseCase) applyRuntimeProfile(ctx context.Context, workspaceID string, d *AgentDefinition) error {
+func (s *AgentDefinitionUseCase) applyRuntimeProfile(ctx context.Context, workspaceID string, d *agentmodel.AgentDefinition) error {
 	if d.RuntimeProfileID == "" {
 		return nil
 	}
@@ -53,7 +55,7 @@ func (s *AgentDefinitionUseCase) applyRuntimeProfile(ctx context.Context, worksp
 	return nil
 }
 
-func (s *AgentDefinitionUseCase) validateProfile(ctx context.Context, workspaceID string, d AgentDefinition) error {
+func (s *AgentDefinitionUseCase) validateProfile(ctx context.Context, workspaceID string, d agentmodel.AgentDefinition) error {
 	if d.ExecutionProfileID == "" {
 		return nil
 	}
@@ -63,65 +65,65 @@ func (s *AgentDefinitionUseCase) validateProfile(ctx context.Context, workspaceI
 	return s.profiles.ValidateProfile(ctx, workspaceID, d.ExecutionProfileID, d.Runtime)
 }
 
-func (s *AgentDefinitionUseCase) List(ctx context.Context, userID, orgID, workspaceID string) ([]Agent, error) {
+func (s *AgentDefinitionUseCase) List(ctx context.Context, userID, orgID, workspaceID string) ([]agentmodel.Agent, error) {
 	if _, err := s.workspaces.GetWorkspace(ctx, userID, orgID, workspaceID); err != nil {
 		return nil, err
 	}
 	return s.repository.Agents(ctx, orgID, workspaceID)
 }
 
-func (s *AgentDefinitionUseCase) Get(ctx context.Context, userID, orgID, workspaceID, agentID string) (Agent, error) {
+func (s *AgentDefinitionUseCase) Get(ctx context.Context, userID, orgID, workspaceID, agentID string) (agentmodel.Agent, error) {
 	if _, err := s.workspaces.GetWorkspace(ctx, userID, orgID, workspaceID); err != nil {
-		return Agent{}, err
+		return agentmodel.Agent{}, err
 	}
 	return s.repository.Agent(ctx, orgID, workspaceID, agentID)
 }
 
-func (s *AgentDefinitionUseCase) Create(ctx context.Context, userID, orgID, workspaceID string, definition AgentDefinition) (Agent, error) {
+func (s *AgentDefinitionUseCase) Create(ctx context.Context, userID, orgID, workspaceID string, definition agentmodel.AgentDefinition) (agentmodel.Agent, error) {
 	if err := s.authorize(ctx, userID, orgID, workspaceID); err != nil {
-		return Agent{}, err
+		return agentmodel.Agent{}, err
 	}
 	if err := s.applyRuntimeProfile(ctx, workspaceID, &definition); err != nil {
-		return Agent{}, err
+		return agentmodel.Agent{}, err
 	}
 	definition.Configuration = coreruntime.NormalizeConfiguration(definition.Configuration)
 	if err := s.validateProfile(ctx, workspaceID, definition); err != nil {
-		return Agent{}, err
+		return agentmodel.Agent{}, err
 	}
 	if err := s.validateDefinition(&definition); err != nil {
-		return Agent{}, err
+		return agentmodel.Agent{}, err
 	}
 	if err := coreruntime.ValidateConfiguration(definition.Runtime, definition.Configuration); err != nil {
-		return Agent{}, modelerrors.ErrInvalid
+		return agentmodel.Agent{}, modelerrors.ErrInvalid
 	}
 	definition.HasConfiguration = len(definition.Configuration) > 0
 	if err := s.validateMCPServers(ctx, orgID, workspaceID, definition.MCPServerIDs); err != nil {
-		return Agent{}, err
+		return agentmodel.Agent{}, err
 	}
 	if err := s.validateSkills(ctx, orgID, workspaceID, definition.SkillIDs); err != nil {
-		return Agent{}, err
+		return agentmodel.Agent{}, err
 	}
 	id, err := ids.NewUUID()
 	if err != nil {
-		return Agent{}, fmt.Errorf("generate agent ID: %w", err)
+		return agentmodel.Agent{}, fmt.Errorf("generate agent ID: %w", err)
 	}
 	return s.repository.CreateAgent(ctx, id, workspaceID, definition)
 }
 
-func (s *AgentDefinitionUseCase) Update(ctx context.Context, userID, orgID, workspaceID, agentID string, definition AgentDefinition) (Agent, error) {
+func (s *AgentDefinitionUseCase) Update(ctx context.Context, userID, orgID, workspaceID, agentID string, definition agentmodel.AgentDefinition) (agentmodel.Agent, error) {
 	if err := s.authorize(ctx, userID, orgID, workspaceID); err != nil {
-		return Agent{}, err
+		return agentmodel.Agent{}, err
 	}
 	if definition.SkillIDs == nil {
 		current, err := s.repository.Agent(ctx, orgID, workspaceID, agentID)
 		if err != nil {
-			return Agent{}, err
+			return agentmodel.Agent{}, err
 		}
 		definition.SkillIDs = current.SkillIDs
 	}
 	current, currentErr := s.repository.Agent(ctx, orgID, workspaceID, agentID)
 	if currentErr != nil {
-		return Agent{}, currentErr
+		return agentmodel.Agent{}, currentErr
 	}
 	requestedConfiguration := coreruntime.NormalizeConfiguration(definition.Configuration)
 	if definition.RuntimeProfileID != "" {
@@ -150,33 +152,33 @@ func (s *AgentDefinitionUseCase) Update(ctx context.Context, userID, orgID, work
 	if definition.MCPServerIDs == nil {
 		current, err := s.repository.Agent(ctx, orgID, workspaceID, agentID)
 		if err != nil {
-			return Agent{}, err
+			return agentmodel.Agent{}, err
 		}
 		definition.MCPServerIDs = current.MCPServerIDs
 	}
 	if err := s.applyRuntimeProfile(ctx, workspaceID, &definition); err != nil {
-		return Agent{}, err
+		return agentmodel.Agent{}, err
 	}
 	if err := s.validateProfile(ctx, workspaceID, definition); err != nil {
-		return Agent{}, err
+		return agentmodel.Agent{}, err
 	}
 	if err := s.validateDefinition(&definition); err != nil {
-		return Agent{}, err
+		return agentmodel.Agent{}, err
 	}
 	if err := coreruntime.ValidateConfiguration(definition.Runtime, definition.Configuration); err != nil {
-		return Agent{}, modelerrors.ErrInvalid
+		return agentmodel.Agent{}, modelerrors.ErrInvalid
 	}
 	definition.HasConfiguration = len(definition.Configuration) > 0
 	if err := s.validateMCPServers(ctx, orgID, workspaceID, definition.MCPServerIDs); err != nil {
-		return Agent{}, err
+		return agentmodel.Agent{}, err
 	}
 	if err := s.validateSkills(ctx, orgID, workspaceID, definition.SkillIDs); err != nil {
-		return Agent{}, err
+		return agentmodel.Agent{}, err
 	}
 	return s.repository.UpdateAgent(ctx, orgID, workspaceID, agentID, definition)
 }
 
-func (s *AgentDefinitionUseCase) validateDefinition(definition *AgentDefinition) error {
+func (s *AgentDefinitionUseCase) validateDefinition(definition *agentmodel.AgentDefinition) error {
 	if err := validate(definition); err != nil {
 		return err
 	}
@@ -234,44 +236,6 @@ func (s *AgentDefinitionUseCase) authorize(ctx context.Context, userID, orgID, w
 	}
 	if w.Role == "viewer" {
 		return modelerrors.ErrForbidden
-	}
-	return nil
-}
-
-func validate(definition *AgentDefinition) error {
-	if definition.PermissionPolicy == "" {
-		definition.PermissionPolicy = PermissionPolicyAsk
-	}
-	if definition.MCPServerIDs == nil {
-		definition.MCPServerIDs = []string{}
-	}
-	if definition.SkillIDs == nil {
-		definition.SkillIDs = []string{}
-	}
-	definition.Name = strings.TrimSpace(definition.Name)
-	definition.Provider = strings.TrimSpace(definition.Provider)
-	definition.Model = strings.TrimSpace(definition.Model)
-	definition.Description = strings.TrimSpace(definition.Description)
-	seen := make(map[string]bool, len(definition.MCPServerIDs))
-	for i, id := range definition.MCPServerIDs {
-		id = strings.TrimSpace(id)
-		if id == "" || seen[id] {
-			return modelerrors.ErrInvalid
-		}
-		seen[id] = true
-		definition.MCPServerIDs[i] = id
-	}
-	seenSkills := make(map[string]bool, len(definition.SkillIDs))
-	for i, id := range definition.SkillIDs {
-		id = strings.TrimSpace(id)
-		if id == "" || seenSkills[id] {
-			return modelerrors.ErrInvalid
-		}
-		seenSkills[id] = true
-		definition.SkillIDs[i] = id
-	}
-	if definition.Name == "" || len(definition.Name) > 200 || definition.Provider == "" || len(definition.Provider) > 200 || len(definition.Model) > 200 || len(definition.Description) > 2000 || len(definition.SystemPrompt) > 100000 || !definition.Runtime.Available() || (definition.PermissionPolicy != PermissionPolicyAsk && definition.PermissionPolicy != PermissionPolicyAutonomous) {
-		return modelerrors.ErrInvalid
 	}
 	return nil
 }

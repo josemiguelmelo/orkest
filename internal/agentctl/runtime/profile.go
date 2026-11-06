@@ -1,7 +1,7 @@
 package runtime
 
 import (
-	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
 	coreruntime "github.com/josemiguelmelo/orkest/internal/contracts/runtimecatalog"
 )
 
@@ -12,10 +12,10 @@ const DefaultRuntimePath = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/s
 // ResolvedRuntimeSettings intentionally excludes organization, workspace, task,
 // run, process, and persistence state from native runtime profiles.
 type ResolvedRuntimeSettings struct {
-	Agent      runconfig.AgentDefinition
-	Model      runconfig.ModelSelection
-	MCPServers []runconfig.MCPServer
-	Skills     []runconfig.Skill
+	Agent      configmodel.AgentDefinition
+	Model      configmodel.ModelSelection
+	MCPServers []configmodel.MCPServer
+	Skills     []configmodel.Skill
 }
 
 type ProvisioningPaths struct {
@@ -50,7 +50,7 @@ type ProtocolSessionOptions struct {
 	// confirms it after session creation/loading and before any prompt.
 	Model      string
 	Metadata   map[string]any
-	MCPServers []runconfig.MCPServer
+	MCPServers []configmodel.MCPServer
 }
 
 type RuntimeProfile interface {

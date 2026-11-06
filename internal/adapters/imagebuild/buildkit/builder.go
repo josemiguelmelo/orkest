@@ -14,14 +14,15 @@ import (
 	"github.com/distribution/reference"
 	"github.com/josemiguelmelo/orkest/internal/adapters/imagebuild"
 	"github.com/josemiguelmelo/orkest/internal/server/executionprofile"
+	executionprofilemodel "github.com/josemiguelmelo/orkest/internal/server/executionprofile/model"
 	digest "github.com/opencontainers/go-digest"
 )
 
 // ImageStore resolves registry inputs and verifies/loads the published artifact for execution.
 // The implementation is shared with Docker-based image composition.
 type ImageStore interface {
-	ResolveInputs(context.Context, executionprofile.Build) (executionprofile.Build, error)
-	Verify(context.Context, executionprofile.Build, string) (string, error)
+	ResolveInputs(context.Context, executionprofilemodel.Build) (executionprofilemodel.Build, error)
+	Verify(context.Context, executionprofilemodel.Build, string) (string, error)
 }
 
 type Config struct {
@@ -59,11 +60,11 @@ func New(config Config, store ImageStore) (*Builder, error) {
 	return &Builder{config: config, store: store}, nil
 }
 
-func (b *Builder) ResolveInputs(ctx context.Context, build executionprofile.Build) (executionprofile.Build, error) {
+func (b *Builder) ResolveInputs(ctx context.Context, build executionprofilemodel.Build) (executionprofilemodel.Build, error) {
 	return b.store.ResolveInputs(ctx, build)
 }
 
-func (b *Builder) BuildAndPush(ctx context.Context, build executionprofile.Build) (string, error) {
+func (b *Builder) BuildAndPush(ctx context.Context, build executionprofilemodel.Build) (string, error) {
 	prepared, err := imagebuild.Prepare(build)
 	if err != nil {
 		return "", executionprofile.Failure("prepare_context", "Could not prepare the image build context; verify the runtime and pinned image inputs.", err)
@@ -133,7 +134,7 @@ func (b *Builder) connectionArgs() []string {
 	return args
 }
 
-func (b *Builder) Reconcile(ctx context.Context, build executionprofile.Build) (string, error) {
+func (b *Builder) Reconcile(ctx context.Context, build executionprofilemodel.Build) (string, error) {
 	return b.store.Verify(ctx, build, build.Destination)
 }
 

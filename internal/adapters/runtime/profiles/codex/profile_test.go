@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
 	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
 	coreruntime "github.com/josemiguelmelo/orkest/internal/contracts/runtimecatalog"
 )
@@ -22,9 +22,9 @@ func TestDescriptorPinsACPAdapterAndIsolatesCodexState(t *testing.T) {
 
 func TestProvisioningUsesModelAndWorkspaceInstructions(t *testing.T) {
 	settings := agentruntime.ResolvedRuntimeSettings{
-		Agent:  runconfig.AgentDefinition{Name: "Work", Instructions: "Do the task", PermissionPolicy: runconfig.PermissionPolicyAutonomous},
-		Model:  runconfig.ModelSelection{Provider: "openai", ID: "gpt-codex"},
-		Skills: []runconfig.Skill{{ID: "review", SkillMD: "Review carefully"}},
+		Agent:  configmodel.AgentDefinition{Name: "Work", Instructions: "Do the task", PermissionPolicy: configmodel.PermissionPolicyAutonomous},
+		Model:  configmodel.ModelSelection{Provider: "openai", ID: "gpt-codex"},
+		Skills: []configmodel.Skill{{ID: "review", SkillMD: "Review carefully"}},
 	}
 	plan, err := (Profile{}).BuildProvisioningPlan(settings, agentruntime.ProvisioningPaths{RuntimeRoot: "/state", WorkDir: "/work", ConfigSubdir: "run-config"})
 	if err != nil {
@@ -67,7 +67,7 @@ func TestAskPolicyStartsCodexInWorkspaceWriteMode(t *testing.T) {
 }
 
 func TestProvisioningRejectsInvalidSkill(t *testing.T) {
-	settings := agentruntime.ResolvedRuntimeSettings{Skills: []runconfig.Skill{{ID: "../escape", SkillMD: "bad"}}}
+	settings := agentruntime.ResolvedRuntimeSettings{Skills: []configmodel.Skill{{ID: "../escape", SkillMD: "bad"}}}
 	paths := agentruntime.ProvisioningPaths{RuntimeRoot: "/state", WorkDir: "/work", ConfigSubdir: "run-config"}
 	if _, err := (Profile{}).BuildProvisioningPlan(settings, paths); err == nil {
 		t.Fatal("invalid skill ID was accepted")

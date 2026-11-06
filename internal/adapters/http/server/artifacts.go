@@ -5,6 +5,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/josemiguelmelo/orkest/internal/server/artifact"
+	artifactmodel "github.com/josemiguelmelo/orkest/internal/server/artifact/model"
 )
 
 type artifactAPI struct{ service *artifact.ArtifactService }
@@ -15,8 +16,8 @@ func (a artifactAPI) routes(r chi.Router) {
 	r.Get(prefix+"/{artifactID}/revisions", a.revisions)
 }
 
-func artifactScope(r *http.Request) artifact.Scope {
-	return artifact.Scope{UserID: currentUserID(r), OrganizationID: chi.URLParam(r, "orgID"), WorkspaceID: chi.URLParam(r, "workspaceID"), TaskID: chi.URLParam(r, "taskID")}
+func artifactScope(r *http.Request) artifactmodel.Scope {
+	return artifactmodel.Scope{UserID: currentUserID(r), OrganizationID: chi.URLParam(r, "orgID"), WorkspaceID: chi.URLParam(r, "workspaceID"), TaskID: chi.URLParam(r, "taskID")}
 }
 
 func (a artifactAPI) list(w http.ResponseWriter, r *http.Request) {

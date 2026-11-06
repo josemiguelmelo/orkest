@@ -7,11 +7,11 @@ import (
 	"sync"
 	"testing"
 
-	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
 )
 
-func runConfig() runconfig.RunConfig {
-	return runconfig.RunConfig{RuntimeConfig: runconfig.RuntimeConfig{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", RunID: "run", Runtime: "opencode", Model: runconfig.ModelSelection{Provider: "provider", ID: "model"}, Agent: runconfig.AgentDefinition{Name: "Work", Description: "Work", Instructions: "Work on this task"}}}
+func runConfig() configmodel.RunConfig {
+	return configmodel.RunConfig{RuntimeConfig: configmodel.RuntimeConfig{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", RunID: "run", Runtime: "opencode", Model: configmodel.ModelSelection{Provider: "provider", ID: "model"}, Agent: configmodel.AgentDefinition{Name: "Work", Description: "Work", Instructions: "Work on this task"}}}
 }
 
 func TestConfigurationValidation(t *testing.T) {
@@ -37,7 +37,7 @@ func TestConfigurationValidation(t *testing.T) {
 				config.Runtime = ""
 			}
 			service := NewRunController(context.Background(), nil, "", nil)
-			var validation *runconfig.ValidationError
+			var validation *configmodel.ValidationError
 			if err := service.Configure(config); !errors.As(err, &validation) {
 				t.Fatalf("expected field validation error, got %v", err)
 			}

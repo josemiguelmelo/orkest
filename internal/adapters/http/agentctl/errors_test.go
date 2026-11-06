@@ -9,22 +9,27 @@ import (
 	"strings"
 	"testing"
 
-	wire "github.com/josemiguelmelo/orkest/internal/contracts/agentctl/v1"
-
-	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
 	agentrun "github.com/josemiguelmelo/orkest/internal/agentctl/run"
+	runmodel "github.com/josemiguelmelo/orkest/internal/agentctl/run/model"
 	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
+	wire "github.com/josemiguelmelo/orkest/internal/contracts/agentctl/v1"
 )
 
 // commandController proves the REST transport can be tested without execution services.
 type commandController struct{ err error }
 
-func (c commandController) Status() agentrun.RunStatus                             { return agentrun.RunStatus{} }
-func (c commandController) Configure(runconfig.RunConfig) error                    { return c.err }
-func (c commandController) Launch() error                                          { return c.err }
-func (c commandController) Prompt(string, string) error                            { return c.err }
-func (c commandController) CancelPrompt(string) error                              { return c.err }
+func (c commandController) Status() runmodel.RunStatus { return runmodel.RunStatus{} }
+
+func (c commandController) Configure(configmodel.RunConfig) error { return c.err }
+
+func (c commandController) Launch() error { return c.err }
+
+func (c commandController) Prompt(string, string) error { return c.err }
+
+func (c commandController) CancelPrompt(string) error { return c.err }
+
 func (c commandController) RespondPermission(interaction.PermissionResponse) error { return c.err }
 
 func TestServiceErrorsThroughREST(t *testing.T) {
@@ -33,7 +38,7 @@ func TestServiceErrorsThroughREST(t *testing.T) {
 		err                     error
 		status                  int
 	}{
-		{"validation", "/agent/configure", "invalid_configuration", "model.id", &runconfig.ValidationError{Field: "model.id"}, 400},
+		{"validation", "/agent/configure", "invalid_configuration", "model.id", &configmodel.ValidationError{Field: "model.id"}, 400},
 		{"binding", "/agent/configure", "configuration_conflict", "", agentrun.ErrConfigurationConflict, 409},
 		{"runtime", "/agent/configure", "provider_unavailable", "", agentruntime.ErrRuntimeHostUnavailable, 503},
 		{"not configured", "/agent/launch", "not_configured", "", agentrun.ErrNotConfigured, 409},
@@ -68,9 +73,11 @@ func TestServiceErrorsThroughREST(t *testing.T) {
 }
 
 func (c commandController) RestoreSession() error { return c.err }
+
 func (c commandController) CommandStatus(string) (interaction.CommandStatus, error) {
 	return interaction.CommandStatus{}, c.err
 }
+
 func (c commandController) ResumeQueue() error { return c.err }
 
 func (c commandController) DiscardQueue() error { return c.err }

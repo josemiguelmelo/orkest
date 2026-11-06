@@ -1,12 +1,16 @@
 package workflow
 
-import "testing"
+import (
+	"testing"
+
+	workflowmodel "github.com/josemiguelmelo/orkest/internal/server/workflow/model"
+)
 
 func TestArtifactBindingValidation(t *testing.T) {
-	definition := DefaultDefinition("Artifacts")
+	definition := workflowmodel.DefaultDefinition("Artifacts")
 	definition.ID = "workflow"
-	definition.Stages[0].ArtifactOutputs = []ArtifactOutput{{Name: "implementation_plan", Kind: "plan"}}
-	definition.Stages[1].ArtifactInputs = []ArtifactInput{{Name: "plan", SourceStageID: "todo", OutputName: "implementation_plan", Required: true}}
+	definition.Stages[0].ArtifactOutputs = []workflowmodel.ArtifactOutput{{Name: "implementation_plan", Kind: "plan"}}
+	definition.Stages[1].ArtifactInputs = []workflowmodel.ArtifactInput{{Name: "plan", SourceStageID: "todo", OutputName: "implementation_plan", Required: true}}
 	if err := definition.Validate(); err != nil {
 		t.Fatal(err)
 	}

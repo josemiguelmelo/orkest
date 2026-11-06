@@ -10,7 +10,7 @@ records dated results; skipped, unavailable or failed checks are not passing res
 | --- | --- | --- |
 | `make check` | Go lint/tests, boundaries, frontend generated API/lint/tests/types, both binaries and frontend builds | Go, Node/npm, Python 3 and installed project dependencies |
 | `make lint` / `make fmt` | Pinned Go lint and formatting | Go tooling; first install may need network access |
-| `make check-runtime-boundaries` | Parsed layer imports, generic exported names, concrete runtime restrictions and layer-rule tests | Go, Python 3 |
+| `make check-runtime-boundaries` | Parsed layer imports, leaf model dependencies, generic exported names, concrete runtime restrictions and layer-rule tests | Go, Python 3 |
 | `make test-postgres` | Real repositories, reservations, outboxes, delivery claims and migrations | Exported connection settings for an isolated PostgreSQL database |
 | `make test-runtime-conformance` | Deterministic provider/recovery contracts and runtime-rule tests, with race detection | Go, Python 3 |
 | `make test-recovery-unit` | Deterministic restore, queue, session and delivery contracts, with race detection | Go |

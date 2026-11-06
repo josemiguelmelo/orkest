@@ -1,5 +1,3 @@
-// These tests exercise OpenCode profile + ACP + host wiring. They are fixture
-// tests, not qualification against the real OpenCode executable.
 package runtime_test
 
 import (
@@ -14,7 +12,7 @@ import (
 
 	"github.com/josemiguelmelo/orkest/internal/adapters/runtime/profiles/opencode/opencodetest"
 	"github.com/josemiguelmelo/orkest/internal/adapters/runtime/runtimehost"
-	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
 )
 
 func TestLaunchACPAndFenceDuplicate(t *testing.T) {
@@ -23,7 +21,7 @@ func TestLaunchACPAndFenceDuplicate(t *testing.T) {
 		t.Fatal(err)
 	}
 	environment := runtimehost.Environment{WorkDir: t.TempDir(), StateDir: t.TempDir(), GrantedEnv: []string{"ORKEST_ACP_FIXTURE=1"}}
-	config := runconfig.RunConfig{RuntimeConfig: runconfig.RuntimeConfig{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", RunID: "run", Runtime: "opencode", Model: runconfig.ModelSelection{Provider: "provider", ID: "model"}, Agent: runconfig.AgentDefinition{Name: "Work", Description: "Work", Instructions: "Work"}}}
+	config := configmodel.RunConfig{RuntimeConfig: configmodel.RuntimeConfig{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", RunID: "run", Runtime: "opencode", Model: configmodel.ModelSelection{Provider: "provider", ID: "model"}, Agent: configmodel.AgentDefinition{Name: "Work", Description: "Work", Instructions: "Work"}}}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	process, err := opencodetest.NewHost(binary, environment).Launch(ctx, config.ForRuntime())

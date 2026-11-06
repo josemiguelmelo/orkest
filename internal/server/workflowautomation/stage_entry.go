@@ -1,8 +1,10 @@
 package workflowautomation
 
-import "github.com/josemiguelmelo/orkest/internal/server/workflow"
+import (
+	workflowmodel "github.com/josemiguelmelo/orkest/internal/server/workflow/model"
+)
 
 // PlanTaskEntry resolves the assignment for entering a stage without starting work.
-func PlanTaskEntry(definition workflow.Definition, stageID, assigneeID string) (StageTransitionPlan, error) {
+func PlanTaskEntry(definition workflowmodel.Definition, stageID, assigneeID string) (StageTransitionPlan, error) {
 	return PlanStageTransition(definition, stageID, stageID, assigneeID, Enter)
 }

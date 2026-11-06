@@ -1,7 +1,7 @@
 package httpapi
 
 import (
-	"github.com/josemiguelmelo/orkest/internal/server/task"
+	taskmodel "github.com/josemiguelmelo/orkest/internal/server/task/model"
 	"github.com/josemiguelmelo/orkest/internal/server/workflowautomation"
 )
 
@@ -22,8 +22,8 @@ type taskMutationRequest struct {
 	RepositoryIDs   []string `json:"repositoryIds"`
 }
 
-func (r taskMutationRequest) domain() task.TaskInput {
-	return task.TaskInput{StageVersion: r.StageVersion, WorkflowID: r.WorkflowID, CompleteStage: r.CompleteStage, ActorID: r.ActorID, StartWork: r.StartWork, SessionMode: r.SessionMode, PromptText: r.PromptText, CommandID: r.CommandID, Title: r.Title, Description: r.Description, Status: r.Status, AssigneeAgentID: r.AssigneeAgentID, Labels: r.Labels, RepositoryIDs: r.RepositoryIDs}
+func (r taskMutationRequest) domain() taskmodel.TaskInput {
+	return taskmodel.TaskInput{StageVersion: r.StageVersion, WorkflowID: r.WorkflowID, CompleteStage: r.CompleteStage, ActorID: r.ActorID, StartWork: r.StartWork, SessionMode: r.SessionMode, PromptText: r.PromptText, CommandID: r.CommandID, Title: r.Title, Description: r.Description, Status: r.Status, AssigneeAgentID: r.AssigneeAgentID, Labels: r.Labels, RepositoryIDs: r.RepositoryIDs}
 }
 
 type workflowTransitionRequest struct {

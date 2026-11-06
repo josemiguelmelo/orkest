@@ -2,7 +2,7 @@ package workflowautomation
 
 import (
 	modelerrors "github.com/josemiguelmelo/orkest/internal/contracts/problem"
-	"github.com/josemiguelmelo/orkest/internal/server/workflow"
+	workflowmodel "github.com/josemiguelmelo/orkest/internal/server/workflow/model"
 )
 
 type Trigger string
@@ -23,16 +23,16 @@ type StageTransitionPlan struct {
 }
 
 // PlanStageTransition has no effects; callers persist its result atomically.
-func PlanStageTransition(d workflow.Definition, currentID, targetID, assignee string, trigger Trigger) (StageTransitionPlan, error) {
+func PlanStageTransition(d workflowmodel.Definition, currentID, targetID, assignee string, trigger Trigger) (StageTransitionPlan, error) {
 	if _, ok := d.Stage(currentID); !ok {
 		return StageTransitionPlan{}, modelerrors.ErrInvalid
 	}
 	plan := StageTransitionPlan{StageID: currentID, AssigneeAgentID: assignee}
 	switch trigger {
 	case Succeeded, Complete:
-		event := workflow.RunSucceeded
+		event := workflowmodel.RunSucceeded
 		if trigger == Complete {
-			event = workflow.StageCompleted
+			event = workflowmodel.StageCompleted
 		}
 		return (WorkflowRuleEvaluator{}).Evaluate(d, plan, Event{Type: event})
 	case Start:

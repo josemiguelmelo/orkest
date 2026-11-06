@@ -2,7 +2,7 @@
   "cmd/agentctl": "cmd/agentctl",
   "cmd/orkest": "cmd/server",
   "internal/agent": "internal/server/agent",
-  "internal/agentctl/config": "internal/agentctl/config",
+  "internal/agentctl/config": "internal/agentctl/config/model",
   "internal/agentctl/daemon": "cmd/agentctl",
   "internal/agentctl/gitprovider": "internal/adapters/gitprovider",
   "internal/agentctl/httpapi": "internal/adapters/http/agentctl",

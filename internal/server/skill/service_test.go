@@ -6,30 +6,35 @@ import (
 	"testing"
 
 	modelerrors "github.com/josemiguelmelo/orkest/internal/contracts/problem"
-	"github.com/josemiguelmelo/orkest/internal/server/workspace"
+	skillmodel "github.com/josemiguelmelo/orkest/internal/server/skill/model"
+	workspacemodel "github.com/josemiguelmelo/orkest/internal/server/workspace/model"
 )
 
 type repositoryStub struct {
-	created Scope
+	created skillmodel.Scope
 	skillMD string
 }
 
-func (r *repositoryStub) Skills(context.Context, string, string) ([]Skill, error) { return nil, nil }
-
-func (r *repositoryStub) Skill(context.Context, string, string, string) (Skill, error) {
-	return Skill{}, modelerrors.ErrNotFound
+func (r *repositoryStub) Skills(context.Context, string, string) ([]skillmodel.Skill, error) {
+	return nil, nil
 }
 
-func (r *repositoryStub) CreateSkill(_ context.Context, _ string, scope Scope, _, _, skillMD string) (Skill, error) {
+func (r *repositoryStub) Skill(context.Context, string, string, string) (skillmodel.Skill, error) {
+	return skillmodel.Skill{}, modelerrors.ErrNotFound
+}
+
+func (r *repositoryStub) CreateSkill(_ context.Context, _ string, scope skillmodel.Scope, _, _, skillMD string) (skillmodel.Skill, error) {
 	r.created, r.skillMD = scope, skillMD
-	return Skill{}, nil
+	return skillmodel.Skill{}, nil
 }
 
-func (r *repositoryStub) UpdateSkill(context.Context, string, string) (Skill, error) {
-	return Skill{}, nil
+func (r *repositoryStub) UpdateSkill(context.Context, string, string) (skillmodel.Skill, error) {
+	return skillmodel.Skill{}, nil
 }
+
 func (r *repositoryStub) DeleteSkill(context.Context, string) error { return nil }
-func (r *repositoryStub) VisibleSkills(context.Context, string, string, []string) ([]Skill, error) {
+
+func (r *repositoryStub) VisibleSkills(context.Context, string, string, []string) ([]skillmodel.Skill, error) {
 	return nil, nil
 }
 
@@ -47,8 +52,8 @@ type workspaceStub struct {
 	err  error
 }
 
-func (s workspaceStub) GetWorkspace(context.Context, string, string, string) (workspace.Workspace, error) {
-	return workspace.Workspace{Role: s.role}, s.err
+func (s workspaceStub) GetWorkspace(context.Context, string, string, string) (workspacemodel.Workspace, error) {
+	return workspacemodel.Workspace{Role: s.role}, s.err
 }
 
 type platformAdminStub bool
@@ -74,25 +79,25 @@ func TestValidateContent(t *testing.T) {
 func TestCreateRequiresScopeAdministrator(t *testing.T) {
 	repository := &repositoryStub{}
 	service := NewCatalogService(repository, organizationStub{role: "admin"}, workspaceStub{role: "admin"}, platformAdminStub(false))
-	if _, err := service.Create(context.Background(), "user", ScopeOrganization, "org", "", validSkill); err != nil {
+	if _, err := service.Create(context.Background(), "user", skillmodel.ScopeOrganization, "org", "", validSkill); err != nil {
 		t.Fatalf("organization admin create: %v", err)
 	}
-	if repository.created != ScopeOrganization || repository.skillMD != validSkill {
+	if repository.created != skillmodel.ScopeOrganization || repository.skillMD != validSkill {
 		t.Fatalf("unexpected create: %#v", repository)
 	}
 
 	service = NewCatalogService(repository, organizationStub{role: "member"}, workspaceStub{role: "member"}, platformAdminStub(false))
-	if _, err := service.Create(context.Background(), "user", ScopeOrganization, "org", "", validSkill); !errors.Is(err, modelerrors.ErrForbidden) {
+	if _, err := service.Create(context.Background(), "user", skillmodel.ScopeOrganization, "org", "", validSkill); !errors.Is(err, modelerrors.ErrForbidden) {
 		t.Fatalf("organization member create error = %v", err)
 	}
-	if _, err := service.Create(context.Background(), "user", ScopeGlobal, "", "", validSkill); !errors.Is(err, modelerrors.ErrForbidden) {
+	if _, err := service.Create(context.Background(), "user", skillmodel.ScopeGlobal, "", "", validSkill); !errors.Is(err, modelerrors.ErrForbidden) {
 		t.Fatalf("non-platform-admin global create error = %v", err)
 	}
 }
 
 func TestCreateGlobalRequiresPlatformAdmin(t *testing.T) {
 	service := NewCatalogService(&repositoryStub{}, organizationStub{}, workspaceStub{}, platformAdminStub(true))
-	if _, err := service.Create(context.Background(), "user", ScopeGlobal, "", "", validSkill); err != nil {
+	if _, err := service.Create(context.Background(), "user", skillmodel.ScopeGlobal, "", "", validSkill); err != nil {
 		t.Fatalf("platform admin create: %v", err)
 	}
 }

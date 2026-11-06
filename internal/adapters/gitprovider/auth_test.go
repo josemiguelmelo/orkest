@@ -6,23 +6,23 @@ import (
 	"strings"
 	"testing"
 
-	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
 )
 
 type recordingCLIAuthAdapter struct {
 	providers []string
-	seen      []runconfig.GitCredential
+	seen      []configmodel.GitCredential
 }
 
 func (a *recordingCLIAuthAdapter) ProviderNames() []string { return a.providers }
 
-func (a *recordingCLIAuthAdapter) ConfigureCLI(_ string, environment []string, credentials []runconfig.GitCredential) ([]string, error) {
+func (a *recordingCLIAuthAdapter) ConfigureCLI(_ string, environment []string, credentials []configmodel.GitCredential) ([]string, error) {
 	a.seen = credentials
 	return append(environment, "CLI_ADAPTER="+a.providers[0]), nil
 }
 
 func TestConfigureProviderCLIsSelectsCredentialsByProvider(t *testing.T) {
-	credentials := []runconfig.GitCredential{
+	credentials := []configmodel.GitCredential{
 		{ProviderName: "github", RepositoryURL: "https://github.com/group/project.git", Token: "github-secret"},
 		{ProviderName: "gitlab_server", RepositoryURL: "https://gitlab.example/group/project.git", Token: "gitlab-secret"},
 	}
@@ -52,7 +52,7 @@ func TestProviderCLIAdaptersScopeSecretsToMatchingCheckout(t *testing.T) {
 	}
 	t.Setenv("PATH", binDir)
 	runtimeRoot := t.TempDir()
-	credentials := []runconfig.GitCredential{
+	credentials := []configmodel.GitCredential{
 		{ProviderName: "github", RepositoryURL: "https://github.com/acme/project.git", Token: "github-secret"},
 		{ProviderName: "gitlab_server", ProviderConfig: []byte(`{"baseUrl":"https://gitlab.example/gitlab"}`), RepositoryURL: "https://gitlab.example/gitlab/group/project.git", Token: "gitlab-secret"},
 	}

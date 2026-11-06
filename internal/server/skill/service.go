@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	modelerrors "github.com/josemiguelmelo/orkest/internal/contracts/problem"
+	skillmodel "github.com/josemiguelmelo/orkest/internal/server/skill/model"
 	"go.yaml.in/yaml/v4"
 )
 
@@ -23,51 +24,51 @@ func NewCatalogService(repository CatalogRepository, organizations OrganizationA
 	return &CatalogService{repository: repository, organizations: organizations, workspaces: workspaces, platformAdmins: platformAdmins}
 }
 
-func (s *CatalogService) List(ctx context.Context, userID string, scope Scope, orgID, workspaceID string) ([]Skill, error) {
+func (s *CatalogService) List(ctx context.Context, userID string, scope skillmodel.Scope, orgID, workspaceID string) ([]skillmodel.Skill, error) {
 	if err := s.authorizeRead(ctx, userID, scope, orgID, workspaceID); err != nil {
 		return nil, err
 	}
 	return s.repository.Skills(ctx, orgID, workspaceID)
 }
 
-func (s *CatalogService) Get(ctx context.Context, userID, orgID, workspaceID, id string) (Skill, error) {
+func (s *CatalogService) Get(ctx context.Context, userID, orgID, workspaceID, id string) (skillmodel.Skill, error) {
 	if workspaceID != "" {
 		if _, err := s.workspaces.GetWorkspace(ctx, userID, orgID, workspaceID); err != nil {
-			return Skill{}, err
+			return skillmodel.Skill{}, err
 		}
 	} else if orgID != "" {
 		if _, err := s.organizations.RoleForUser(ctx, userID, orgID); err != nil {
-			return Skill{}, err
+			return skillmodel.Skill{}, err
 		}
 	}
 	return s.repository.Skill(ctx, orgID, workspaceID, id)
 }
 
-func (s *CatalogService) Create(ctx context.Context, userID string, scope Scope, orgID, workspaceID, skillMD string) (Skill, error) {
+func (s *CatalogService) Create(ctx context.Context, userID string, scope skillmodel.Scope, orgID, workspaceID, skillMD string) (skillmodel.Skill, error) {
 	id, err := validateContent(skillMD)
 	if err != nil {
-		return Skill{}, err
+		return skillmodel.Skill{}, err
 	}
 	if err = s.authorizeWrite(ctx, userID, scope, orgID, workspaceID); err != nil {
-		return Skill{}, err
+		return skillmodel.Skill{}, err
 	}
 	return s.repository.CreateSkill(ctx, id, scope, orgID, workspaceID, skillMD)
 }
 
-func (s *CatalogService) Update(ctx context.Context, userID, orgID, workspaceID, id, skillMD string) (Skill, error) {
+func (s *CatalogService) Update(ctx context.Context, userID, orgID, workspaceID, id, skillMD string) (skillmodel.Skill, error) {
 	contentID, err := validateContent(skillMD)
 	if err != nil {
-		return Skill{}, err
+		return skillmodel.Skill{}, err
 	}
 	if contentID != id {
-		return Skill{}, modelerrors.ErrInvalid
+		return skillmodel.Skill{}, modelerrors.ErrInvalid
 	}
 	current, err := s.Get(ctx, userID, orgID, workspaceID, id)
 	if err != nil {
-		return Skill{}, err
+		return skillmodel.Skill{}, err
 	}
 	if err = s.authorizeWrite(ctx, userID, current.Scope, current.OrganizationID, current.WorkspaceID); err != nil {
-		return Skill{}, err
+		return skillmodel.Skill{}, err
 	}
 	return s.repository.UpdateSkill(ctx, id, skillMD)
 }
@@ -97,18 +98,18 @@ func (s *CatalogService) ValidateAgentSkills(ctx context.Context, orgID, workspa
 	return nil
 }
 
-func (s *CatalogService) ResolveForAgent(ctx context.Context, orgID, workspaceID string, ids []string) ([]Skill, error) {
+func (s *CatalogService) ResolveForAgent(ctx context.Context, orgID, workspaceID string, ids []string) ([]skillmodel.Skill, error) {
 	return s.repository.VisibleSkills(ctx, orgID, workspaceID, ids)
 }
 
-func (s *CatalogService) authorizeRead(ctx context.Context, userID string, scope Scope, orgID, workspaceID string) error {
+func (s *CatalogService) authorizeRead(ctx context.Context, userID string, scope skillmodel.Scope, orgID, workspaceID string) error {
 	switch scope {
-	case ScopeGlobal:
+	case skillmodel.ScopeGlobal:
 		return nil
-	case ScopeOrganization:
+	case skillmodel.ScopeOrganization:
 		_, err := s.organizations.RoleForUser(ctx, userID, orgID)
 		return err
-	case ScopeWorkspace:
+	case skillmodel.ScopeWorkspace:
 		_, err := s.workspaces.GetWorkspace(ctx, userID, orgID, workspaceID)
 		return err
 	default:
@@ -116,9 +117,9 @@ func (s *CatalogService) authorizeRead(ctx context.Context, userID string, scope
 	}
 }
 
-func (s *CatalogService) authorizeWrite(ctx context.Context, userID string, scope Scope, orgID, workspaceID string) error {
+func (s *CatalogService) authorizeWrite(ctx context.Context, userID string, scope skillmodel.Scope, orgID, workspaceID string) error {
 	switch scope {
-	case ScopeGlobal:
+	case skillmodel.ScopeGlobal:
 		allowed, err := s.platformAdmins.IsPlatformAdmin(ctx, userID)
 		if err != nil {
 			return err
@@ -126,7 +127,7 @@ func (s *CatalogService) authorizeWrite(ctx context.Context, userID string, scop
 		if !allowed {
 			return modelerrors.ErrForbidden
 		}
-	case ScopeOrganization:
+	case skillmodel.ScopeOrganization:
 		role, err := s.organizations.RoleForUser(ctx, userID, orgID)
 		if err != nil {
 			return err
@@ -134,7 +135,7 @@ func (s *CatalogService) authorizeWrite(ctx context.Context, userID string, scop
 		if role != "owner" && role != "admin" {
 			return modelerrors.ErrForbidden
 		}
-	case ScopeWorkspace:
+	case skillmodel.ScopeWorkspace:
 		w, err := s.workspaces.GetWorkspace(ctx, userID, orgID, workspaceID)
 		if err != nil {
 			return err

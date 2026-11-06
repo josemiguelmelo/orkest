@@ -35,6 +35,13 @@ launch. Worker lease expiry never releases any existing run/process ownership.
 
 ## Upgrade and rollback
 
+The lifecycle/concurrency improvement also guards launch-state writes against late
+startup callbacks and terminal replay. It changes queries rather than schema or
+worker formats. Stop old platform instances before deploying these guards and the
+independent event/delivery workers: old binaries can still issue unguarded writes.
+Independent agentctl workers continue. Reconcile outstanding launches before any
+rollback to code without these guards.
+
 Migration 0038 adds nullable/defaulted claim metadata; it rewrites no command JSON,
 run/session identities or worker formats. Stop all old platform workflow workers
 before upgrading: mixed old/new delivery implementations are unsupported because

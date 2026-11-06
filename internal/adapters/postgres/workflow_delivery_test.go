@@ -13,8 +13,9 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/adapters/postgres/sqlc"
 	modelerrors "github.com/josemiguelmelo/orkest/internal/contracts/problem"
 	"github.com/josemiguelmelo/orkest/internal/platform/ids"
-	"github.com/josemiguelmelo/orkest/internal/server/orchestration"
+	orchestrationmodel "github.com/josemiguelmelo/orkest/internal/server/orchestration/model"
 	"github.com/josemiguelmelo/orkest/internal/server/task"
+	taskmodel "github.com/josemiguelmelo/orkest/internal/server/task/model"
 	"github.com/josemiguelmelo/orkest/internal/server/workflowautomation"
 )
 
@@ -38,7 +39,7 @@ func (d *deliveryTestDispatcher) TaskCommandAccepted(ctx context.Context, orgID,
 	return d.launches.TaskCommand(ctx, orgID, workspaceID, taskID, commandID, "")
 }
 
-func (d *deliveryTestDispatcher) StartTask(ctx context.Context, _, _ string, command task.StartCommand) error {
+func (d *deliveryTestDispatcher) StartTask(ctx context.Context, _, _ string, command taskmodel.StartCommand) error {
 	d.calls.Add(1)
 	// External dispatch must hold neither a pool connection nor a transaction.
 	if d.db.pool.Stat().AcquiredConns() != 0 {
@@ -55,7 +56,7 @@ func (d *deliveryTestDispatcher) StartTask(ctx context.Context, _, _ string, com
 	if err != nil {
 		return err
 	}
-	config := orchestration.RunConfig{RuntimeConfig: orchestration.RuntimeConfig{OrganizationID: d.orgID, WorkspaceID: command.Task.WorkspaceID, TaskID: command.Task.ID, TaskSessionID: sessionID, RunID: runID, Runtime: "opencode", Agent: orchestration.AgentDefinition{Name: "fixture", Instructions: "fixture"}, Model: orchestration.ModelSelection{Provider: "test", ID: "model"}}, InitialCommandID: command.CommandID, InitialPrompt: "fixture prompt", DeliveryToken: command.DeliveryToken}
+	config := orchestrationmodel.RunConfig{RuntimeConfig: orchestrationmodel.RuntimeConfig{OrganizationID: d.orgID, WorkspaceID: command.Task.WorkspaceID, TaskID: command.Task.ID, TaskSessionID: sessionID, RunID: runID, Runtime: "opencode", Agent: orchestrationmodel.AgentDefinition{Name: "fixture", Instructions: "fixture"}, Model: orchestrationmodel.ModelSelection{Provider: "test", ID: "model"}}, InitialCommandID: command.CommandID, InitialPrompt: "fixture prompt", DeliveryToken: command.DeliveryToken}
 	if err = d.launches.ReserveSessionRun(ctx, config, command.Task.StageVersion); err != nil {
 		return err
 	}
@@ -93,7 +94,7 @@ func testWorkflowDeliveryClaims(t *testing.T, db *PostgresDatabase, orgID, works
 		return id
 	}
 	enqueue := func() workflowautomation.ExecutionCommand {
-		value, err := taskService.Create(ctx, actorID, orgID, workspaceID, task.TaskInput{WorkflowID: workspaceID, Title: "Delivery claim", AssigneeAgentID: agentID})
+		value, err := taskService.Create(ctx, actorID, orgID, workspaceID, taskmodel.TaskInput{WorkflowID: workspaceID, Title: "Delivery claim", AssigneeAgentID: agentID})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -165,7 +166,7 @@ func testWorkflowDeliveryClaims(t *testing.T, db *PostgresDatabase, orgID, works
 		called := false
 		err := coordinator.CompleteExecutionCommand(ctx, first, func(bool) workflowautomation.ExecutionDeliveryEffects {
 			called = true
-			return workflowautomation.ExecutionDeliveryEffects{CommandState: "delivered", WorkState: task.WorkStateRunning}
+			return workflowautomation.ExecutionDeliveryEffects{CommandState: "delivered", WorkState: taskmodel.WorkStateRunning}
 		})
 		if !errors.Is(err, workflowautomation.ErrStaleDeliveryClaim) || called {
 			t.Fatalf("stale ack: %v callback=%v", err, called)
@@ -175,12 +176,12 @@ func testWorkflowDeliveryClaims(t *testing.T, db *PostgresDatabase, orgID, works
 			t.Fatal(err)
 		}
 		dispatcher := &deliveryTestDispatcher{db: db, launches: launches, orgID: orgID}
-		err = dispatcher.StartTask(ctx, actorID, orgID, task.StartCommand{Task: value, CommandID: command.ID, DeliveryToken: first.Token})
+		err = dispatcher.StartTask(ctx, actorID, orgID, taskmodel.StartCommand{Task: value, CommandID: command.ID, DeliveryToken: first.Token})
 		if !errors.Is(err, modelerrors.ErrConflict) {
 			t.Fatalf("stale claimant reserved: %v", err)
 		}
 		if err = coordinator.CompleteExecutionCommand(ctx, second, func(bool) workflowautomation.ExecutionDeliveryEffects {
-			return workflowautomation.ExecutionDeliveryEffects{CommandState: "failed", WorkState: task.WorkStateFailed, FailureReason: "delivery_uncertain"}
+			return workflowautomation.ExecutionDeliveryEffects{CommandState: "failed", WorkState: taskmodel.WorkStateFailed, FailureReason: "delivery_uncertain"}
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -207,7 +208,7 @@ func testWorkflowDeliveryClaims(t *testing.T, db *PostgresDatabase, orgID, works
 			t.Fatal(err)
 		}
 		dispatcher := &deliveryTestDispatcher{db: db, launches: launches, orgID: orgID}
-		if err = dispatcher.StartTask(ctx, actorID, orgID, task.StartCommand{Task: value, CommandID: command.ID, DeliveryToken: first.Token}); err != nil {
+		if err = dispatcher.StartTask(ctx, actorID, orgID, taskmodel.StartCommand{Task: value, CommandID: command.ID, DeliveryToken: first.Token}); err != nil {
 			t.Fatal(err)
 		}
 		expire(command.ID)
@@ -245,7 +246,7 @@ func testWorkflowDeliveryClaims(t *testing.T, db *PostgresDatabase, orgID, works
 			t.Fatalf("unavailable worker command repeated: %v %v", found, err)
 		}
 		runs, err := launches.ListTaskLaunches(ctx, orgID, workspaceID, command.TaskID)
-		if err != nil || len(runs) != 1 || runs[0].Status != orchestration.LaunchStarting {
+		if err != nil || len(runs) != 1 || runs[0].Status != orchestrationmodel.LaunchStarting {
 			t.Fatalf("uncertain owner released or duplicated: %+v %v", runs, err)
 		}
 		var accepted int

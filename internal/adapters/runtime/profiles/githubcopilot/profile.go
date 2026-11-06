@@ -6,7 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
 	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
 	coreruntime "github.com/josemiguelmelo/orkest/internal/contracts/runtimecatalog"
 )
@@ -36,7 +36,7 @@ func (Profile) BuildProvisioningPlan(settings agentruntime.ResolvedRuntimeSettin
 		return agentruntime.ProvisioningPlan{}, errors.New("invalid agentctl configuration path")
 	}
 	for _, skill := range settings.Skills {
-		if !config.ValidSkillID(skill.ID) {
+		if !configmodel.ValidSkillID(skill.ID) {
 			return agentruntime.ProvisioningPlan{}, errors.New("invalid skill ID")
 		}
 	}
@@ -57,7 +57,7 @@ func (Profile) BuildProvisioningPlan(settings agentruntime.ResolvedRuntimeSettin
 		"COPILOT_MODEL=" + settings.Model.ID,
 		"COPILOT_AUTO_UPDATE=false",
 	}
-	if settings.Agent.PermissionPolicy == config.PermissionPolicyAutonomous {
+	if settings.Agent.PermissionPolicy == configmodel.PermissionPolicyAutonomous {
 		environment = append(environment, "COPILOT_ALLOW_ALL=true")
 	}
 	return agentruntime.ProvisioningPlan{

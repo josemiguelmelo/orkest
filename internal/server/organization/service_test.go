@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	modelerrors "github.com/josemiguelmelo/orkest/internal/contracts/problem"
+	organizationmodel "github.com/josemiguelmelo/orkest/internal/server/organization/model"
 )
 
 type organizationRepositoryStub struct {
@@ -13,21 +14,21 @@ type organizationRepositoryStub struct {
 	setMemberCalls int
 }
 
-func (r *organizationRepositoryStub) Organizations(context.Context, string) ([]Organization, error) {
+func (r *organizationRepositoryStub) Organizations(context.Context, string) ([]organizationmodel.Organization, error) {
 	return nil, nil
 }
 
-func (r *organizationRepositoryStub) Organization(_ context.Context, userID, organizationID string) (Organization, error) {
+func (r *organizationRepositoryStub) Organization(_ context.Context, userID, organizationID string) (organizationmodel.Organization, error) {
 	role, err := r.OrganizationRole(context.Background(), userID, organizationID)
-	return Organization{ID: organizationID, Role: role}, err
+	return organizationmodel.Organization{ID: organizationID, Role: role}, err
 }
 
-func (r *organizationRepositoryStub) CreateOrganization(context.Context, string, string, string) (Organization, error) {
-	return Organization{}, nil
+func (r *organizationRepositoryStub) CreateOrganization(context.Context, string, string, string) (organizationmodel.Organization, error) {
+	return organizationmodel.Organization{}, nil
 }
 
-func (r *organizationRepositoryStub) UpdateOrganization(context.Context, string, string, string) (Organization, error) {
-	return Organization{}, nil
+func (r *organizationRepositoryStub) UpdateOrganization(context.Context, string, string, string) (organizationmodel.Organization, error) {
+	return organizationmodel.Organization{}, nil
 }
 
 func (r *organizationRepositoryStub) DeleteOrganization(context.Context, string) error { return nil }
@@ -40,7 +41,7 @@ func (r *organizationRepositoryStub) OrganizationRole(_ context.Context, userID,
 	return role, nil
 }
 
-func (r *organizationRepositoryStub) OrganizationMembers(context.Context, string) ([]Membership, error) {
+func (r *organizationRepositoryStub) OrganizationMembers(context.Context, string) ([]organizationmodel.Membership, error) {
 	return nil, nil
 }
 

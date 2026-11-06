@@ -4,7 +4,7 @@ package runtime
 import (
 	"context"
 
-	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
 	coreruntime "github.com/josemiguelmelo/orkest/internal/contracts/runtimecatalog"
 )
@@ -16,8 +16,8 @@ import (
 type RuntimeHost interface {
 	Runtime() coreruntime.Runtime
 	Version() string
-	Launch(context.Context, runconfig.RuntimeConfig) (RuntimeSession, error)
-	Restore(context.Context, runconfig.RuntimeConfig) (RuntimeSession, error)
+	Launch(context.Context, configmodel.RuntimeConfig) (RuntimeSession, error)
+	Restore(context.Context, configmodel.RuntimeConfig) (RuntimeSession, error)
 }
 
 type RuntimeSession interface {

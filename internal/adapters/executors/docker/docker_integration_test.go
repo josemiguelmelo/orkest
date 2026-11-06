@@ -11,9 +11,8 @@ import (
 	"time"
 
 	"github.com/josemiguelmelo/orkest/internal/adapters/runnerclient/agentctlhttp"
-
 	coreruntime "github.com/josemiguelmelo/orkest/internal/contracts/runtimecatalog"
-	"github.com/josemiguelmelo/orkest/internal/server/orchestration"
+	orchestrationmodel "github.com/josemiguelmelo/orkest/internal/server/orchestration/model"
 	"github.com/moby/moby/client"
 )
 
@@ -44,7 +43,7 @@ func TestDockerAgentctlLaunchSmoke(t *testing.T) {
 	}
 	defer func() { _ = executor.Close() }()
 
-	run := orchestration.RunConfig{RuntimeConfig: orchestration.RuntimeConfig{OrganizationID: "docker-test-org", WorkspaceID: "docker-test-workspace", TaskID: "docker-test-task", RunID: "docker-test-run", Runtime: "opencode", Model: orchestration.ModelSelection{Provider: "provider", ID: "model"}, Agent: orchestration.AgentDefinition{Name: "Test", Description: "Test", Instructions: "test"}}}
+	run := orchestrationmodel.RunConfig{RuntimeConfig: orchestrationmodel.RuntimeConfig{OrganizationID: "docker-test-org", WorkspaceID: "docker-test-workspace", TaskID: "docker-test-task", RunID: "docker-test-run", Runtime: "opencode", Model: orchestrationmodel.ModelSelection{Provider: "provider", ID: "model"}, Agent: orchestrationmodel.AgentDefinition{Name: "Test", Description: "Test", Instructions: "test"}}}
 	process, launchErr := executor.StartAgentctl(ctx, run)
 	if process.ID != "" {
 		t.Cleanup(func() {

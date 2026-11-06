@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
 )
 
 func TestOwnershipSurvivesParentExit(t *testing.T) {
@@ -22,7 +22,7 @@ func TestOwnershipSurvivesParentExit(t *testing.T) {
 		return
 	case "parent":
 		store := sessionStorage{StateDir: os.Getenv("ORKEST_LEASE_DIR")}
-		owner, err := store.acquire(runconfig.RuntimeConfig{})
+		owner, err := store.acquire(configmodel.RuntimeConfig{})
 		if err != nil {
 			os.Exit(2)
 		}
@@ -53,7 +53,7 @@ func TestOwnershipSurvivesParentExit(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = syscall.Kill(pid, syscall.SIGKILL) }()
-	owner, err := (sessionStorage{StateDir: dir}).acquire(runconfig.RuntimeConfig{})
+	owner, err := (sessionStorage{StateDir: dir}).acquire(configmodel.RuntimeConfig{})
 	if err == nil {
 		_ = owner.Close()
 		t.Fatal("parent exit released a live child's ownership lease")

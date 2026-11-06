@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
+	runmodel "github.com/josemiguelmelo/orkest/internal/agentctl/run/model"
 	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
 )
 
@@ -64,7 +65,7 @@ func (c *conversation) Prompt(commandID, text string) error {
 func (c *conversation) checkPromptAdmission(command interaction.Command) (bool, error) {
 	c.mu.RLock()
 	defer c.mu.RUnlock()
-	if c.closed || c.session == nil || c.executionState == StateFailed {
+	if c.closed || c.session == nil || c.executionState == runmodel.StateFailed {
 		return false, interaction.ErrConversation
 	}
 	if previous, exists := c.state.commands[command.ID]; exists {
@@ -73,7 +74,7 @@ func (c *conversation) checkPromptAdmission(command interaction.Command) (bool, 
 		}
 		return false, interaction.ErrCommand
 	}
-	if c.executionState == StateInterrupted {
+	if c.executionState == runmodel.StateInterrupted {
 		return false, interaction.ErrConversationInterrupted
 	}
 	select {
@@ -102,7 +103,7 @@ func (c *conversation) commandObserver(commandID string) agentruntime.PromptObse
 			c.eventMu.Lock()
 			defer c.eventMu.Unlock()
 			c.mu.RLock()
-			accepts := !c.closed && c.executionState != StateInterrupted && c.state.activeCommandID == commandID
+			accepts := !c.closed && c.executionState != runmodel.StateInterrupted && c.state.activeCommandID == commandID
 			c.mu.RUnlock()
 			if !accepts {
 				return interaction.ErrConversation
@@ -142,7 +143,7 @@ func (c *conversation) finishPrompt(commandID string, reason agentruntime.StopRe
 	c.mu.Lock()
 	interrupted := c.isInfrastructureInterruptionUnderStateLock(promptErr)
 	if interrupted {
-		c.executionState = StateInterrupted
+		c.executionState = runmodel.StateInterrupted
 	}
 	for id, permission := range c.pending {
 		if permission.commandID == commandID {
@@ -158,7 +159,7 @@ func (c *conversation) finishPrompt(commandID string, reason agentruntime.StopRe
 	}
 	if promptErr != nil {
 		if usesTaskSession {
-			c.setExecutionState(StateInterrupted)
+			c.setExecutionState(runmodel.StateInterrupted)
 		} else {
 			c.interrupt()
 		}
@@ -167,19 +168,10 @@ func (c *conversation) finishPrompt(commandID string, reason agentruntime.StopRe
 		return false
 	}
 	c.mu.RLock()
-	paused := promptErr != nil || c.state.cancelled || reason == "cancelled" || c.executionState == StateInterrupted
+	paused := promptErr != nil || c.state.cancelled || reason == "cancelled" || c.executionState == runmodel.StateInterrupted
 	c.mu.RUnlock()
-	if usesTaskSession {
-		if paused {
-			c.setExecutionState(StateInterrupted)
-			_ = c.commitEventUnderEventLock(interaction.Event{Type: interaction.EventQueuePaused})
-		} else {
-			c.setExecutionState(StateReady)
-			_ = c.startNextUnderTurnAndEventLocks()
-		}
-	} else if c.Snapshot().State != StateInterrupted {
-		c.setExecutionState(StateReady)
-	}
+	c.scheduleAfterPrompt(usesTaskSession, paused)
+
 	return true
 }
 
@@ -236,4 +228,22 @@ func runtimeStopped(session agentruntime.RuntimeSession, err error) bool {
 func (c *conversation) isInfrastructureInterruptionUnderStateLock(err error) bool {
 	return err != nil && c.state.usesTaskSession && !c.state.cancelled &&
 		(c.closed || c.ctx.Err() != nil || runtimeStopped(c.session, err))
+}
+
+// scheduleAfterPrompt runs while turnMu and eventMu are held, after result persistence.
+func (c *conversation) scheduleAfterPrompt(usesTaskSession, paused bool) {
+	if !usesTaskSession {
+		if c.Snapshot().State == runmodel.StateInterrupted {
+			return
+		}
+		c.setExecutionState(runmodel.StateReady)
+		return
+	}
+	if paused {
+		c.setExecutionState(runmodel.StateInterrupted)
+		_ = c.commitEventUnderEventLock(interaction.Event{Type: interaction.EventQueuePaused})
+		return
+	}
+	c.setExecutionState(runmodel.StateReady)
+	_ = c.startNextUnderTurnAndEventLocks()
 }

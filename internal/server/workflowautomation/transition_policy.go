@@ -3,7 +3,8 @@ package workflowautomation
 import (
 	modelerrors "github.com/josemiguelmelo/orkest/internal/contracts/problem"
 	"github.com/josemiguelmelo/orkest/internal/server/task"
-	definition "github.com/josemiguelmelo/orkest/internal/server/workflow"
+	taskmodel "github.com/josemiguelmelo/orkest/internal/server/task/model"
+	workflowmodel "github.com/josemiguelmelo/orkest/internal/server/workflow/model"
 )
 
 // TransitionCommand describes stage changes and optional reassignment only.
@@ -15,8 +16,8 @@ type TransitionCommand struct {
 // TransitionSnapshot contains facts read under the workflow and task locks.
 // RecordedCommand lets persistence reconcile a replay before validating new effects.
 type TransitionSnapshot struct {
-	Workflow           definition.Definition
-	Task               task.Task
+	Workflow           workflowmodel.Definition
+	Task               taskmodel.Task
 	ActiveLaunch       bool
 	RecordedCommand    bool
 	RecordedInput      *task.WorkflowCommand
@@ -75,7 +76,7 @@ func PlanTaskTransition(snapshot TransitionSnapshot, command TransitionCommand) 
 	}
 	decision.Moved = target != current.Status
 	if decision.Moved || in.Action != "move" || assignee != current.AssigneeAgentID {
-		if current.StageWorkState == task.WorkStateQueued || current.StageWorkState == task.WorkStateRunning || snapshot.ActiveLaunch {
+		if current.StageWorkState == taskmodel.WorkStateQueued || current.StageWorkState == taskmodel.WorkStateRunning || snapshot.ActiveLaunch {
 			return TransitionEffects{}, modelerrors.ErrConflict
 		}
 	}

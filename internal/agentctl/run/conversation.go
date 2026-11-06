@@ -5,12 +5,13 @@ import (
 	"log/slog"
 	"sync"
 
-	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
+	runmodel "github.com/josemiguelmelo/orkest/internal/agentctl/run/model"
 	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
 )
 
 type conversationSnapshot struct {
-	State           ExecutionState
+	State           runmodel.ExecutionState
 	ActiveCommandID string
 	QueueDepth      int
 	QueuePaused     bool
@@ -37,9 +38,9 @@ type conversation struct {
 	// These values belong to the bound runtime and are never replayed. Runtime
 	// callbacks update progress; journal events update state. Persistence errors
 	// fence execution even when no interruption event could be written.
-	config         *runconfig.RunConfig
+	config         *configmodel.RunConfig
 	session        agentruntime.RuntimeSession
-	executionState ExecutionState
+	executionState runmodel.ExecutionState
 	pending        map[string]*pendingPermission
 
 	// Shutdown cancels accepted workers and prevents further work admission.
@@ -67,11 +68,11 @@ func newConversation(ctx context.Context, stateDir string, logger *slog.Logger) 
 // bind attaches the single successful launch before the controller exposes it.
 // RunController serializes binding with launch and shutdown; no reverse dependency
 // on the controller is needed by conversation operations.
-func (c *conversation) bind(config runconfig.RunConfig, session agentruntime.RuntimeSession) {
+func (c *conversation) bind(config configmodel.RunConfig, session agentruntime.RuntimeSession) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	config = config.Clone()
-	c.config, c.session, c.executionState = &config, session, StateReady
+	c.config, c.session, c.executionState = &config, session, runmodel.StateReady
 	c.state.usesTaskSession = config.TaskSessionID != ""
 }
 
@@ -94,7 +95,7 @@ func (c *conversation) Snapshot() conversationSnapshot {
 func (c *conversation) markRecoveredRunEnded() {
 	c.mu.Lock()
 	c.state.runEnded = true
-	c.executionState = StateExited
+	c.executionState = runmodel.StateExited
 	c.mu.Unlock()
 }
 
@@ -127,11 +128,11 @@ func (c *conversation) close() error {
 func (c *conversation) interrupt() {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.executionState = StateInterrupted
+	c.executionState = runmodel.StateInterrupted
 	c.cancel()
 }
 
-func (c *conversation) setExecutionState(state ExecutionState) {
+func (c *conversation) setExecutionState(state runmodel.ExecutionState) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.executionState = state

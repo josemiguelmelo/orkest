@@ -9,8 +9,9 @@ import (
 	"testing"
 	"time"
 
-	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
+	runmodel "github.com/josemiguelmelo/orkest/internal/agentctl/run/model"
 	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
 	coreruntime "github.com/josemiguelmelo/orkest/internal/contracts/runtimecatalog"
 )
@@ -19,11 +20,11 @@ type recoveryRuntimeHost struct{ process *recoveryRuntimeSession }
 
 func (p recoveryRuntimeHost) Runtime() coreruntime.Runtime { return "opencode" }
 
-func (p recoveryRuntimeHost) Launch(context.Context, runconfig.RuntimeConfig) (agentruntime.RuntimeSession, error) {
+func (p recoveryRuntimeHost) Launch(context.Context, configmodel.RuntimeConfig) (agentruntime.RuntimeSession, error) {
 	return p.process, nil
 }
 
-func (p recoveryRuntimeHost) Restore(context.Context, runconfig.RuntimeConfig) (agentruntime.RuntimeSession, error) {
+func (p recoveryRuntimeHost) Restore(context.Context, configmodel.RuntimeConfig) (agentruntime.RuntimeSession, error) {
 	return p.process, nil
 }
 
@@ -49,6 +50,7 @@ func (p *recoveryRuntimeSession) Prompt(ctx context.Context, command interaction
 }
 
 func (p *recoveryRuntimeSession) Cancel(context.Context) error { return nil }
+
 func (p *recoveryRuntimeSession) Reconcile(context.Context, interaction.Command) (agentruntime.RecoveryDecision, error) {
 	if p.safe {
 		return agentruntime.RecoveryDecision{Action: agentruntime.RecoveryContinue}, nil
@@ -60,7 +62,7 @@ func newRecoverySession() *recoveryRuntimeSession {
 	return &recoveryRuntimeSession{fakeRuntimeSession: fakeRuntimeSession{done: make(chan struct{})}, calls: make(chan string, 10), release: make(chan struct{}, 10)}
 }
 
-func recoveryConfig() runconfig.RunConfig {
+func recoveryConfig() configmodel.RunConfig {
 	config := runConfig()
 	config.TaskSessionID = "task-session"
 	return config
@@ -361,7 +363,7 @@ func TestRestoreReconciliationAllowsStatusAndShutdown(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("reconciliation did not start")
 	}
-	status := make(chan RunStatus, 1)
+	status := make(chan runmodel.RunStatus, 1)
 	go func() { status <- controller.Status() }()
 	select {
 	case <-status:

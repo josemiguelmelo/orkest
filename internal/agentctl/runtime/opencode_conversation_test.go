@@ -9,7 +9,7 @@ import (
 
 	"github.com/josemiguelmelo/orkest/internal/adapters/runtime/profiles/opencode/opencodetest"
 	"github.com/josemiguelmelo/orkest/internal/adapters/runtime/runtimehost"
-	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
 	agentrun "github.com/josemiguelmelo/orkest/internal/agentctl/run"
 )
@@ -24,7 +24,7 @@ func newOpenCodeController(t *testing.T) *agentrun.RunController {
 	environment := runtimehost.Environment{WorkDir: t.TempDir(), StateDir: state, GrantedEnv: []string{"ORKEST_ACP_FIXTURE=1"}}
 	service := agentrun.NewRunController(context.Background(), opencodetest.NewHost(binary, environment), state, nil)
 	t.Cleanup(func() { _ = service.Close() })
-	config := runconfig.RunConfig{RuntimeConfig: runconfig.RuntimeConfig{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", RunID: "run", Runtime: "opencode", Model: runconfig.ModelSelection{Provider: "provider", ID: "model"}, Agent: runconfig.AgentDefinition{Name: "Work", Description: "Work", Instructions: "Work"}}}
+	config := configmodel.RunConfig{RuntimeConfig: configmodel.RuntimeConfig{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", RunID: "run", Runtime: "opencode", Model: configmodel.ModelSelection{Provider: "provider", ID: "model"}, Agent: configmodel.AgentDefinition{Name: "Work", Description: "Work", Instructions: "Work"}}}
 	if err := service.Configure(config); err != nil {
 		t.Fatal(err)
 	}

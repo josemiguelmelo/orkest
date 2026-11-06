@@ -7,16 +7,15 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/josemiguelmelo/orkest/internal/platform/ids"
-
 	modelerrors "github.com/josemiguelmelo/orkest/internal/contracts/problem"
-	"github.com/josemiguelmelo/orkest/internal/server/task"
+	"github.com/josemiguelmelo/orkest/internal/platform/ids"
+	taskmodel "github.com/josemiguelmelo/orkest/internal/server/task/model"
 )
 
 type ExecutionDeliveryEffects struct {
 	CommandState  string
 	FailureReason string
-	WorkState     task.WorkState
+	WorkState     taskmodel.WorkState
 }
 
 // ExecutionDeliveryCoordinator persists claims and short, fenced acknowledgements.
@@ -25,6 +24,7 @@ type ExecutionDeliveryCoordinator interface {
 	ClaimExecutionCommand(context.Context, string, time.Duration) (ExecutionClaim, bool, error)
 	CompleteExecutionCommand(context.Context, ExecutionClaim, func(bool) ExecutionDeliveryEffects) error
 }
+
 type ExecutionClaim struct {
 	Command ExecutionCommand
 	Token   string
@@ -69,12 +69,12 @@ func (s *WorkflowExecutionService) ProcessNextCommand(ctx context.Context) (bool
 		return true, err
 	}
 	err = s.commands.CompleteExecutionCommand(ctx, claim, func(failed bool) ExecutionDeliveryEffects {
-		effects := ExecutionDeliveryEffects{CommandState: "failed", WorkState: task.WorkStateFailed, FailureReason: reason}
+		effects := ExecutionDeliveryEffects{CommandState: "failed", WorkState: taskmodel.WorkStateFailed, FailureReason: reason}
 		if delivered {
 			effects.CommandState = "delivered"
-			effects.WorkState = task.WorkStateRunning
+			effects.WorkState = taskmodel.WorkStateRunning
 			if failed {
-				effects.WorkState = task.WorkStateFailed
+				effects.WorkState = taskmodel.WorkStateFailed
 			}
 		}
 		return effects
@@ -106,7 +106,7 @@ func (w *WorkflowExecutionService) dispatchCommand(ctx context.Context, c Execut
 	if value.StageVersion != c.StageVersion {
 		return false, nil
 	}
-	request := task.StartCommand{Task: value, CommandID: c.ID, DeliveryToken: claimToken, SessionMode: c.Options.SessionMode, PromptText: c.Options.PromptText}
+	request := taskmodel.StartCommand{Task: value, CommandID: c.ID, DeliveryToken: claimToken, SessionMode: c.Options.SessionMode, PromptText: c.Options.PromptText}
 	if err = w.dispatcher.StartTask(ctx, c.ActorID, c.OrganizationID, request); err != nil {
 		if ctx.Err() != nil {
 			return false, ctx.Err()
@@ -117,7 +117,7 @@ func (w *WorkflowExecutionService) dispatchCommand(ctx context.Context, c Execut
 		if checkErr != nil {
 			return false, checkErr
 		}
-		w.logger.Warn("workflow start requires attention", "workspace_id", c.WorkspaceID, "task_id", c.TaskID, "command_id", c.ID, "reason", err)
+		w.logger.Warn("workflow start requires attention", "workspace_id", c.WorkspaceID, "task_id", c.TaskID, "command_id", c.ID, "reason", "dispatch_failed")
 		return accepted, nil
 	}
 	return true, nil
@@ -125,11 +125,11 @@ func (w *WorkflowExecutionService) dispatchCommand(ctx context.Context, c Execut
 
 // TaskAccess supplies current task state and checks execution authorization.
 type TaskAccess interface {
-	Get(context.Context, string, string, string, string) (task.Task, error)
+	Get(context.Context, string, string, string, string) (taskmodel.Task, error)
 	AuthorizeExecution(context.Context, string, string, string, string, bool) error
 }
 
 type AgentDispatcher interface {
-	StartTask(context.Context, string, string, task.StartCommand) error
+	StartTask(context.Context, string, string, taskmodel.StartCommand) error
 	TaskCommandAccepted(context.Context, string, string, string, string, string) (bool, error)
 }

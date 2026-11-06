@@ -469,7 +469,9 @@ components:
         queueDepth: { type: integer, minimum: 0 }
         queuePaused: { type: boolean }
         runEnded: { type: boolean }
-        recoveryBlocked: { type: boolean }
+        recoveryBlocked:
+          type: boolean
+          description: Saved state or runtime restoration requires reconciliation. Can be true before configuration is available; execution is unavailable and conflicting configuration or launch returns recovery_blocked. Process liveness remains independent.
 
     PromptRequest:
       type: object

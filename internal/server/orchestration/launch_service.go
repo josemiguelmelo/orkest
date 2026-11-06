@@ -8,11 +8,13 @@ import (
 	"net/url"
 	"strings"
 	"time"
+
+	orchestrationmodel "github.com/josemiguelmelo/orkest/internal/server/orchestration/model"
 )
 
 type LaunchService struct {
 	repo          TaskExecutionRepository
-	launcher      AgentLauncher
+	executor      AgentctlStarter
 	client        AgentctlClient
 	communication AgentCommunication
 	completion    *LaunchCompletionService
@@ -20,29 +22,29 @@ type LaunchService struct {
 
 var ErrTaskRunNotFound = errors.New("task run not found")
 
-func NewLaunchService(repo TaskExecutionRepository, launcher AgentLauncher, client AgentctlClient, communication AgentCommunication, completion *LaunchCompletionService) (*LaunchService, error) {
-	if repo == nil || launcher == nil || client == nil || communication == nil {
+func NewLaunchService(repo TaskExecutionRepository, executor AgentctlStarter, client AgentctlClient, communication AgentCommunication, completion *LaunchCompletionService) (*LaunchService, error) {
+	if repo == nil || executor == nil || client == nil || communication == nil {
 		return nil, errors.New("launch dependencies are required")
 	}
-	service := &LaunchService{repo: repo, launcher: launcher, client: client, communication: communication}
+	service := &LaunchService{repo: repo, executor: executor, client: client, communication: communication}
 	service.completion = completion
 	return service, nil
 }
 
 // Start persists each lifecycle transition. The communication context should be the
 // platform lifecycle context; canceling it disconnects without stopping agentctl.
-func (s *LaunchService) Start(ctx context.Context, config RunConfig) (Launch, error) {
+func (s *LaunchService) Start(ctx context.Context, config orchestrationmodel.RunConfig) (orchestrationmodel.Launch, error) {
 	if err := config.Validate(); err != nil {
-		return Launch{}, err
+		return orchestrationmodel.Launch{}, err
 	}
-	launch := Launch{ExecutionImage: config.ExecutionImage, RunID: config.RunID, TaskSessionID: config.TaskSessionID, OrganizationID: config.OrganizationID, WorkspaceID: config.WorkspaceID, TaskID: config.TaskID, Status: LaunchStarting}
+	launch := orchestrationmodel.Launch{ExecutionImage: config.ExecutionImage, RunID: config.RunID, TaskSessionID: config.TaskSessionID, OrganizationID: config.OrganizationID, WorkspaceID: config.WorkspaceID, TaskID: config.TaskID, Status: orchestrationmodel.LaunchStarting}
 	if !config.ReservedRun {
 		if err := s.repo.CreateLaunch(ctx, launch); err != nil {
-			return Launch{}, fmt.Errorf("create launch record: %w", err)
+			return orchestrationmodel.Launch{}, fmt.Errorf("create launch record: %w", err)
 		}
 	}
-	fail := func(stage string, cause error) (Launch, error) {
-		launch.Status, launch.FailureStage, launch.FailureReason, launch.UpdatedAt = LaunchFailed, stage, sanitizedFailure(stage, cause), time.Now().UTC()
+	fail := func(stage string, cause error) (orchestrationmodel.Launch, error) {
+		launch.Status, launch.FailureStage, launch.FailureReason, launch.UpdatedAt = orchestrationmodel.LaunchFailed, stage, sanitizedFailure(stage, cause), time.Now().UTC()
 		logAttrs := []any{
 			"organization_id", launch.OrganizationID,
 			"workspace_id", launch.WorkspaceID,
@@ -61,7 +63,7 @@ func (s *LaunchService) Start(ctx context.Context, config RunConfig) (Launch, er
 		}
 		slog.Default().Error("agent launch step failed", logAttrs...)
 		if config.TaskSessionID != "" {
-			launch.Status = LaunchFailedPendingClose
+			launch.Status = orchestrationmodel.LaunchFailedPendingClose
 		}
 		persistCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 3*time.Second)
 		defer cancel()
@@ -69,13 +71,13 @@ func (s *LaunchService) Start(ctx context.Context, config RunConfig) (Launch, er
 		if persistErr != nil {
 			return launch, fmt.Errorf("%s failed; persist launch failure: %w", stage, persistErr)
 		}
-		if s.completion != nil && launch.Status == LaunchFailedPendingClose {
+		if s.completion != nil && launch.Status == orchestrationmodel.LaunchFailedPendingClose {
 			// Persisted pending cleanup retains task ownership until termination is confirmed.
 			_ = s.completion.ClosePending(context.WithoutCancel(ctx), launch)
 		}
 		return launch, fmt.Errorf("%s failed: %w", stage, cause)
 	}
-	process, err := s.launcher.LaunchAgentctl(ctx, config)
+	process, err := s.executor.StartAgentctl(ctx, config)
 	launch.ProcessID, launch.Endpoint = strings.TrimSpace(process.ID), strings.TrimSpace(process.Endpoint)
 	if err != nil {
 		return fail("process_start", err)
@@ -86,14 +88,14 @@ func (s *LaunchService) Start(ctx context.Context, config RunConfig) (Launch, er
 	if err = s.client.WaitHealthy(ctx, launch.Endpoint); err != nil {
 		return fail("health_check", err)
 	}
-	launch.Status, launch.UpdatedAt = LaunchProcessStarted, time.Now().UTC()
+	launch.Status, launch.UpdatedAt = orchestrationmodel.LaunchProcessStarted, time.Now().UTC()
 	if err = s.repo.UpdateLaunch(ctx, launch); err != nil {
 		return launch, fmt.Errorf("persist process started: %w", err)
 	}
 	if err = s.client.Configure(ctx, launch.Endpoint, config); err != nil {
 		return fail("configure", err)
 	}
-	if err = s.communication.Start(launch); err != nil {
+	if err = s.communication.Start(ctx, launch); err != nil {
 		return fail("connect", err)
 	}
 	if config.RestoreSession {
@@ -104,7 +106,7 @@ func (s *LaunchService) Start(ctx context.Context, config RunConfig) (Launch, er
 	if err != nil {
 		return fail("agent_start", err)
 	}
-	launch.Status, launch.UpdatedAt = LaunchReady, time.Now().UTC()
+	launch.Status, launch.UpdatedAt = orchestrationmodel.LaunchReady, time.Now().UTC()
 	if err = s.repo.UpdateLaunch(ctx, launch); err != nil {
 		return launch, fmt.Errorf("persist ready launch: %w", err)
 	}
@@ -112,9 +114,9 @@ func (s *LaunchService) Start(ctx context.Context, config RunConfig) (Launch, er
 }
 
 // StartWithPrompt creates or restores the configured session and submits the initial prompt.
-func (s *LaunchService) StartWithPrompt(ctx context.Context, config RunConfig, commandID, prompt string) (Launch, error) {
+func (s *LaunchService) StartWithPrompt(ctx context.Context, config orchestrationmodel.RunConfig, commandID, prompt string) (orchestrationmodel.Launch, error) {
 	if strings.TrimSpace(commandID) == "" || strings.TrimSpace(prompt) == "" {
-		return Launch{}, errors.New("command ID and prompt are required")
+		return orchestrationmodel.Launch{}, errors.New("command ID and prompt are required")
 	}
 	launch, err := s.Start(ctx, config)
 	if err != nil {
@@ -126,14 +128,14 @@ func (s *LaunchService) StartWithPrompt(ctx context.Context, config RunConfig, c
 	return launch, nil
 }
 
-func (s *LaunchService) TaskLaunches(ctx context.Context, orgID, workspaceID, taskID string) ([]Launch, error) {
+func (s *LaunchService) TaskLaunches(ctx context.Context, orgID, workspaceID, taskID string) ([]orchestrationmodel.Launch, error) {
 	reader := s.repo
 	launches, err := reader.ListTaskLaunches(ctx, orgID, workspaceID, taskID)
 	if err != nil {
 		return nil, err
 	}
 	for i := range launches {
-		if launches[i].Status == LaunchReady {
+		if launches[i].Status == orchestrationmodel.LaunchReady {
 			status, err := s.client.Status(ctx, launches[i].Endpoint)
 			if err == nil && (launches[i].TaskSessionID == "" || matchesExecution(launches[i], status)) {
 				launches[i].ExecutionState, launches[i].QueuePaused, launches[i].QueueDepth, launches[i].RecoveryBlocked = status.State, status.QueuePaused, status.QueueDepth, status.RecoveryBlocked
@@ -143,22 +145,16 @@ func (s *LaunchService) TaskLaunches(ctx context.Context, orgID, workspaceID, ta
 	return launches, nil
 }
 
-func (s *LaunchService) TaskEvents(ctx context.Context, orgID, workspaceID, taskID, runID string, after uint64) ([]Event, error) {
+func (s *LaunchService) TaskEvents(ctx context.Context, orgID, workspaceID, taskID, runID string, after uint64) ([]orchestrationmodel.Event, error) {
 	reader := s.repo
 	launches, err := reader.ListTaskLaunches(ctx, orgID, workspaceID, taskID)
 	if err != nil {
 		return nil, err
 	}
-	found := false
-	for _, launch := range launches {
-		if launch.RunID == runID {
-			found = true
-			break
-		}
-	}
-	if !found {
+	if _, found := findLaunch(launches, runID); !found {
 		return nil, ErrTaskRunNotFound
 	}
+
 	return reader.ListTaskLaunchEvents(ctx, runID, after)
 }
 
@@ -167,7 +163,7 @@ func (s *LaunchService) SendTaskPrompt(ctx context.Context, orgID, workspaceID, 
 	if err != nil {
 		return err
 	}
-	if launch.Status != LaunchReady {
+	if launch.Status != orchestrationmodel.LaunchReady {
 		return errors.New("task run is not active")
 	}
 	return s.deliverPrompt(ctx, launch, commandID, prompt)
@@ -182,7 +178,7 @@ func (s *LaunchService) CancelTaskPrompt(ctx context.Context, orgID, workspaceID
 	return client.CancelPrompt(ctx, launch.Endpoint, commandID)
 }
 
-func (s *LaunchService) RespondTaskPermission(ctx context.Context, orgID, workspaceID, taskID, runID string, response PermissionResponse) error {
+func (s *LaunchService) RespondTaskPermission(ctx context.Context, orgID, workspaceID, taskID, runID string, response orchestrationmodel.PermissionResponse) error {
 	launch, err := s.taskLaunch(ctx, orgID, workspaceID, taskID, runID)
 	if err != nil {
 		return err
@@ -193,7 +189,7 @@ func (s *LaunchService) RespondTaskPermission(ctx context.Context, orgID, worksp
 	}
 	valid := false
 	for _, event := range events {
-		if event.Payload.Type == EventPermissionRequested && event.Payload.RequestID == response.RequestID && event.Payload.SessionID == response.SessionID {
+		if event.Payload.Type == orchestrationmodel.EventPermissionRequested && event.Payload.RequestID == response.RequestID && event.Payload.SessionID == response.SessionID {
 			if event.Payload.Permission != nil {
 				for _, option := range event.Payload.Permission.Options {
 					if option.ID == response.OptionID {
@@ -202,7 +198,7 @@ func (s *LaunchService) RespondTaskPermission(ctx context.Context, orgID, worksp
 				}
 			}
 		}
-		if event.Payload.Type == EventPermissionResponse && event.Payload.RequestID == response.RequestID {
+		if event.Payload.Type == orchestrationmodel.EventPermissionResponse && event.Payload.RequestID == response.RequestID {
 			valid = false
 		}
 	}
@@ -213,27 +209,27 @@ func (s *LaunchService) RespondTaskPermission(ctx context.Context, orgID, worksp
 	return client.RespondPermission(ctx, launch.Endpoint, response)
 }
 
-func (s *LaunchService) taskLaunch(ctx context.Context, orgID, workspaceID, taskID, runID string) (Launch, error) {
+func (s *LaunchService) taskLaunch(ctx context.Context, orgID, workspaceID, taskID, runID string) (orchestrationmodel.Launch, error) {
 	reader := s.repo
 	launches, err := reader.ListTaskLaunches(ctx, orgID, workspaceID, taskID)
 	if err != nil {
-		return Launch{}, err
+		return orchestrationmodel.Launch{}, err
 	}
 	for _, launch := range launches {
 		if launch.RunID == runID {
 			if launch.TaskSessionID != "" {
 				status, err := s.client.Status(ctx, launch.Endpoint)
 				if err != nil {
-					return Launch{}, err
+					return orchestrationmodel.Launch{}, err
 				}
 				if !matchesExecution(launch, status) {
-					return Launch{}, errors.New("agent execution identity mismatch")
+					return orchestrationmodel.Launch{}, errors.New("agent execution identity mismatch")
 				}
 			}
 			return launch, nil
 		}
 	}
-	return Launch{}, errors.New("task run not found")
+	return orchestrationmodel.Launch{}, errors.New("task run not found")
 }
 
 func validEndpoint(endpoint string) bool {
@@ -254,7 +250,7 @@ func sanitizedFailure(stage string, cause error) string {
 	return reason
 }
 
-func (s *LaunchService) deliverPrompt(ctx context.Context, launch Launch, commandID, prompt string) error {
+func (s *LaunchService) deliverPrompt(ctx context.Context, launch orchestrationmodel.Launch, commandID, prompt string) error {
 	outbox := s.repo
 	delivered, err := outbox.RecordPrompt(ctx, launch.RunID, commandID, prompt)
 	if err != nil {
@@ -288,7 +284,7 @@ func (s *LaunchService) TaskQueue(ctx context.Context, orgID, workspaceID, taskI
 		if statusErr == nil && status.RecoveryBlocked {
 			// Explicit discard may abandon failed restoration, but ownership is released
 			// only after the executor confirms the entire environment has stopped.
-			launch.Status = LaunchFailedPendingClose
+			launch.Status = orchestrationmodel.LaunchFailedPendingClose
 			if err := s.repo.SetLaunchStatus(ctx, PlanLaunchStatus(launch.RunID, launch.Status)); err != nil {
 				return err
 			}
@@ -299,6 +295,15 @@ func (s *LaunchService) TaskQueue(ctx context.Context, orgID, workspaceID, taskI
 	return client.Queue(ctx, launch.Endpoint, discard)
 }
 
-func matchesExecution(launch Launch, status RunStatus) bool {
+func matchesExecution(launch orchestrationmodel.Launch, status orchestrationmodel.RunStatus) bool {
 	return status.OrganizationID == launch.OrganizationID && status.WorkspaceID == launch.WorkspaceID && status.TaskID == launch.TaskID && status.RunID == launch.RunID && status.TaskSessionID == launch.TaskSessionID
+}
+
+func findLaunch(launches []orchestrationmodel.Launch, runID string) (orchestrationmodel.Launch, bool) {
+	for _, launch := range launches {
+		if launch.RunID == runID {
+			return launch, true
+		}
+	}
+	return orchestrationmodel.Launch{}, false
 }

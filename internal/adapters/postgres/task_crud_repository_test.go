@@ -6,7 +6,9 @@ import (
 
 	"github.com/josemiguelmelo/orkest/internal/platform/ids"
 	"github.com/josemiguelmelo/orkest/internal/server/task"
+	taskmodel "github.com/josemiguelmelo/orkest/internal/server/task/model"
 	"github.com/josemiguelmelo/orkest/internal/server/workflow"
+	workflowmodel "github.com/josemiguelmelo/orkest/internal/server/workflow/model"
 )
 
 func testTaskCRUDTransaction(t *testing.T, db *PostgresDatabase, orgID, workspaceID, actorID, agentID string) {
@@ -19,7 +21,7 @@ func testTaskCRUDTransaction(t *testing.T, db *PostgresDatabase, orgID, workspac
 		}
 		return id
 	}
-	definition := workflow.DefaultDefinition("Task CRUD")
+	definition := workflowmodel.DefaultDefinition("Task CRUD")
 	definition.ID, definition.ConfiguredBy = newID(), actorID
 	definition.InitialStageID = "in_review"
 	definition.Stages[2].ResponsibleAgentID = agentID
@@ -28,11 +30,11 @@ func testTaskCRUDTransaction(t *testing.T, db *PostgresDatabase, orgID, workspac
 	}
 	tasks := NewTaskPostgresRepository(db)
 	service := task.NewTaskService(tasks, NewTaskCreationPostgresRepository(db), NewTaskUpdatePostgresRepository(db), newTaskWorkflowService(tasks), workflowTestAccess{})
-	created, err := service.Create(ctx, actorID, orgID, workspaceID, task.TaskInput{WorkflowID: definition.ID, Title: "  Original  ", Labels: []string{" keep ", "keep"}})
+	created, err := service.Create(ctx, actorID, orgID, workspaceID, taskmodel.TaskInput{WorkflowID: definition.ID, Title: "  Original  ", Labels: []string{" keep ", "keep"}})
 	if err != nil || created.Status != "in_review" || created.AssigneeAgentID != agentID || created.StageVersion != 1 || created.Title != "Original" || len(created.Labels) != 1 || !created.AutomationPending {
 		t.Fatalf("creation: %+v, %v", created, err)
 	}
-	edit := task.TaskInput{Title: "Edited", Description: "Updated", Status: created.Status, AssigneeAgentID: agentID, StageVersion: created.StageVersion, CommandID: newID()}
+	edit := taskmodel.TaskInput{Title: "Edited", Description: "Updated", Status: created.Status, AssigneeAgentID: agentID, StageVersion: created.StageVersion, CommandID: newID()}
 	updated, err := service.Update(ctx, actorID, orgID, workspaceID, created.ID, edit)
 	if err != nil || updated.Title != "Edited" || updated.StageVersion != 1 {
 		t.Fatalf("content update: %+v, %v", updated, err)
@@ -68,12 +70,12 @@ func testTaskCRUDTransaction(t *testing.T, db *PostgresDatabase, orgID, workspac
 		t.Fatalf("unexpected atomic effects: events=%d, starts=%d, rejected=%d", events, starts, rejected)
 	}
 	t.Run("start without caller ID receives one preplanned identity", func(t *testing.T) {
-		value, err := service.Create(ctx, actorID, orgID, workspaceID, task.TaskInput{WorkflowID: definition.ID, Title: "Start identity", AssigneeAgentID: agentID})
+		value, err := service.Create(ctx, actorID, orgID, workspaceID, taskmodel.TaskInput{WorkflowID: definition.ID, Title: "Start identity", AssigneeAgentID: agentID})
 		if err != nil {
 			t.Fatal(err)
 		}
-		updated, err := service.Update(ctx, actorID, orgID, workspaceID, value.ID, task.TaskInput{Title: value.Title, Status: value.Status, AssigneeAgentID: agentID, StageVersion: value.StageVersion, StartWork: true})
-		if err != nil || updated.StageWorkState != task.WorkStateQueued {
+		updated, err := service.Update(ctx, actorID, orgID, workspaceID, value.ID, taskmodel.TaskInput{Title: value.Title, Status: value.Status, AssigneeAgentID: agentID, StageVersion: value.StageVersion, StartWork: true})
+		if err != nil || updated.StageWorkState != taskmodel.WorkStateQueued {
 			t.Fatalf("start without caller identity: %+v %v", updated, err)
 		}
 		var id, optionID string

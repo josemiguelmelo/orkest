@@ -2,6 +2,7 @@ package run
 
 import (
 	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
+	runmodel "github.com/josemiguelmelo/orkest/internal/agentctl/run/model"
 )
 
 // startNextUnderTurnAndEventLocks requires turnMu and eventMu. It persists delivery before launching
@@ -43,7 +44,7 @@ func (c *conversation) startNextUnderTurnAndEventLocks() error {
 	if !usesTaskSession {
 		c.state.beginCommand(next.ID)
 	}
-	c.executionState = StateRunning
+	c.executionState = runmodel.StateRunning
 	c.work.Add(1)
 	go c.runPrompt(c.session, next)
 	return nil
@@ -68,6 +69,6 @@ func (c *conversation) changeQueue(eventType interaction.EventType) error {
 	if err := c.commitEventUnderEventLock(interaction.Event{Type: eventType}); err != nil {
 		return err
 	}
-	c.setExecutionState(StateReady)
+	c.setExecutionState(runmodel.StateReady)
 	return c.startNextUnderTurnAndEventLocks()
 }

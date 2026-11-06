@@ -8,7 +8,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/josemiguelmelo/orkest/internal/adapters/postgres/sqlc"
 	"github.com/josemiguelmelo/orkest/internal/platform/ids"
-	"github.com/josemiguelmelo/orkest/internal/server/task"
+	taskmodel "github.com/josemiguelmelo/orkest/internal/server/task/model"
 )
 
 type taskQueryCounter struct {
@@ -59,7 +59,7 @@ func testTaskListingUsesBoundedScopedQueries(t *testing.T, db *PostgresDatabase,
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err = createWorkflowTask(ctx, repository, id, workspaceID, task.TaskInput{WorkflowID: workspaceID, Title: "Additional listing task"}); err != nil {
+		if _, err = createWorkflowTask(ctx, repository, id, workspaceID, taskmodel.TaskInput{WorkflowID: workspaceID, Title: "Additional listing task"}); err != nil {
 			t.Fatal(err)
 		}
 	}

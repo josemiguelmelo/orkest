@@ -12,12 +12,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/josemiguelmelo/orkest/internal/server/orchestration"
-
-	wire "github.com/josemiguelmelo/orkest/internal/contracts/agentctl/v1"
-
 	"github.com/coder/websocket"
 	"github.com/coder/websocket/wsjson"
+	wire "github.com/josemiguelmelo/orkest/internal/contracts/agentctl/v1"
+	"github.com/josemiguelmelo/orkest/internal/server/orchestration"
+	orchestrationmodel "github.com/josemiguelmelo/orkest/internal/server/orchestration/model"
 )
 
 // HTTPAgentctlClient implements the agentctl REST and activity WebSocket APIs.
@@ -77,32 +76,32 @@ func (c *HTTPAgentctlClient) WaitHealthy(ctx context.Context, endpoint string) e
 	}
 }
 
-func (c *HTTPAgentctlClient) Status(ctx context.Context, endpoint string) (orchestration.RunStatus, error) {
+func (c *HTTPAgentctlClient) Status(ctx context.Context, endpoint string) (orchestrationmodel.RunStatus, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(endpoint, "/")+"/info", nil)
 	if err != nil {
-		return orchestration.RunStatus{}, fmt.Errorf("create agentctl status request: %w", err)
+		return orchestrationmodel.RunStatus{}, fmt.Errorf("create agentctl status request: %w", err)
 	}
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return orchestration.RunStatus{}, fmt.Errorf("read agentctl status: %w", err)
+		return orchestrationmodel.RunStatus{}, fmt.Errorf("read agentctl status: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return orchestration.RunStatus{}, fmt.Errorf("agentctl status endpoint returned HTTP %d", resp.StatusCode)
+		return orchestrationmodel.RunStatus{}, fmt.Errorf("agentctl status endpoint returned HTTP %d", resp.StatusCode)
 	}
 	var status wire.Info
 	if err = json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&status); err != nil {
-		return orchestration.RunStatus{}, fmt.Errorf("decode agentctl status: %w", err)
+		return orchestrationmodel.RunStatus{}, fmt.Errorf("decode agentctl status: %w", err)
 	}
-	return orchestration.RunStatus{
+	return orchestrationmodel.RunStatus{
 		OrganizationID: status.OrganizationID, WorkspaceID: status.WorkspaceID, TaskID: status.TaskID, RunID: status.RunID,
 		RecoveryBlocked: status.RecoveryBlocked, Configured: status.Configured, ExecutionAvailable: status.ExecutionAvailable,
-		ProcessAlive: status.ProcessAlive, State: orchestration.ExecutionState(status.State), SessionID: status.SessionID,
+		ProcessAlive: status.ProcessAlive, State: orchestrationmodel.ExecutionState(status.State), SessionID: status.SessionID,
 		TaskSessionID: status.TaskSessionID, ActiveCommandID: status.ActiveCommandID, QueuePaused: status.QueuePaused, QueueDepth: status.QueueDepth, RunEnded: status.RunEnded,
 	}, nil
 }
 
-func (c *HTTPAgentctlClient) Configure(ctx context.Context, endpoint string, config orchestration.RunConfig) error {
+func (c *HTTPAgentctlClient) Configure(ctx context.Context, endpoint string, config orchestrationmodel.RunConfig) error {
 	return c.post(ctx, endpoint, "/agent/configure", toWireRunConfig(config))
 }
 
@@ -118,7 +117,7 @@ func (c *HTTPAgentctlClient) CancelPrompt(ctx context.Context, endpoint, command
 	return c.post(ctx, endpoint, "/agent/cancel", wire.CancelRequest{CommandID: commandID})
 }
 
-func (c *HTTPAgentctlClient) RespondPermission(ctx context.Context, endpoint string, response orchestration.PermissionResponse) error {
+func (c *HTTPAgentctlClient) RespondPermission(ctx context.Context, endpoint string, response orchestrationmodel.PermissionResponse) error {
 	return c.post(ctx, endpoint, "/agent/permissions/respond", toWirePermissionResponse(response))
 }
 
@@ -152,7 +151,7 @@ func (c *HTTPAgentctlClient) post(ctx context.Context, endpoint, path string, pa
 	return nil
 }
 
-func (c *HTTPAgentctlClient) Connect(ctx context.Context, endpoint string, cursor uint64, onConnected func(), onEvent func(orchestration.AgentActivityEvent) error) error {
+func (c *HTTPAgentctlClient) Connect(ctx context.Context, endpoint string, cursor uint64, onConnected func(), onEvent func(orchestrationmodel.AgentActivityEvent) error) error {
 	u, err := url.Parse(endpoint)
 	if err != nil {
 		return fmt.Errorf("parse agentctl endpoint: %w", err)

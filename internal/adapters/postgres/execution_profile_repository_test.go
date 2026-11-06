@@ -7,15 +7,15 @@ import (
 	"testing"
 
 	modelerrors "github.com/josemiguelmelo/orkest/internal/contracts/problem"
-	"github.com/josemiguelmelo/orkest/internal/server/executionprofile"
+	executionprofilemodel "github.com/josemiguelmelo/orkest/internal/server/executionprofile/model"
 )
 
 func testExecutionProfiles(t *testing.T, db *PostgresDatabase, ws string) {
 	t.Helper()
 	ctx := context.Background()
 	r := NewExecutionProfileRepository(db)
-	p := executionprofile.Profile{ID: ws + "-profile", WorkspaceID: ws, Input: executionprofile.Input{Name: "Java", Runtime: "opencode", ToolchainImage: "example.com/java:21"}}
-	b := executionprofile.Build{ID: ws + "-build-1", Runtime: "opencode", RuntimeVersion: "opencode v2.1.4", ToolchainImage: p.ToolchainImage, BaseImage: "example.com/agentctl:1", Destination: "example.com/output:build-1"}
+	p := executionprofilemodel.Profile{ID: ws + "-profile", WorkspaceID: ws, Input: executionprofilemodel.Input{Name: "Java", Runtime: "opencode", ToolchainImage: "example.com/java:21"}}
+	b := executionprofilemodel.Build{ID: ws + "-build-1", Runtime: "opencode", RuntimeVersion: "opencode v2.1.4", ToolchainImage: p.ToolchainImage, BaseImage: "example.com/agentctl:1", Destination: "example.com/output:build-1"}
 	saved, err := r.Save(ctx, p, b, true)
 	if err != nil {
 		t.Fatal(err)
@@ -25,7 +25,7 @@ func testExecutionProfiles(t *testing.T, db *PostgresDatabase, ws string) {
 	}
 	var wg sync.WaitGroup
 	var mu sync.Mutex
-	claims := []executionprofile.Build{}
+	claims := []executionprofilemodel.Build{}
 	for range 8 {
 		wg.Go(func() {
 			build, ok, err := r.Claim(ctx, "worker")

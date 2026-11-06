@@ -11,38 +11,39 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/adapters/postgres/sqlc"
 	modelerrors "github.com/josemiguelmelo/orkest/internal/contracts/problem"
 	"github.com/josemiguelmelo/orkest/internal/server/orchestration"
+	orchestrationmodel "github.com/josemiguelmelo/orkest/internal/server/orchestration/model"
 )
 
 var _ orchestration.DirectConversationStore = (*AgentLaunchPostgresRepository)(nil)
 
-func (r *AgentLaunchPostgresRepository) CreateDirectConversation(ctx context.Context, id, orgID, workspaceID, agentID string) (orchestration.DirectConversation, error) {
+func (r *AgentLaunchPostgresRepository) CreateDirectConversation(ctx context.Context, id, orgID, workspaceID, agentID string) (orchestrationmodel.DirectConversation, error) {
 	row, err := r.queries.CreateDirectConversation(ctx, sqlc.CreateDirectConversationParams{ID: id, OrganizationID: orgID, WorkspaceID: workspaceID, AgentID: agentID})
 	if err != nil {
-		return orchestration.DirectConversation{}, fmt.Errorf("create direct conversation: %w", err)
+		return orchestrationmodel.DirectConversation{}, fmt.Errorf("create direct conversation: %w", err)
 	}
-	return orchestration.DirectConversation{ID: row.ID, AgentID: row.AgentID, CreatedAt: row.CreatedAt.Time.UTC().Format(time.RFC3339Nano)}, nil
+	return orchestrationmodel.DirectConversation{ID: row.ID, AgentID: row.AgentID, CreatedAt: row.CreatedAt.Time.UTC().Format(time.RFC3339Nano)}, nil
 }
 
-func (r *AgentLaunchPostgresRepository) GetDirectConversation(ctx context.Context, orgID, workspaceID, id string) (orchestration.DirectConversation, error) {
+func (r *AgentLaunchPostgresRepository) GetDirectConversation(ctx context.Context, orgID, workspaceID, id string) (orchestrationmodel.DirectConversation, error) {
 	row, err := r.queries.GetDirectConversation(ctx, sqlc.GetDirectConversationParams{OrganizationID: orgID, WorkspaceID: workspaceID, ID: id})
 	if errors.Is(err, pgx.ErrNoRows) {
-		return orchestration.DirectConversation{}, modelerrors.ErrNotFound
+		return orchestrationmodel.DirectConversation{}, modelerrors.ErrNotFound
 	}
 	if err != nil {
-		return orchestration.DirectConversation{}, fmt.Errorf("get direct conversation: %w", err)
+		return orchestrationmodel.DirectConversation{}, fmt.Errorf("get direct conversation: %w", err)
 	}
-	item := orchestration.DirectConversation{ID: row.ID, AgentID: row.AgentID, CreatedAt: row.CreatedAt.Time.UTC().Format(time.RFC3339Nano)}
+	item := orchestrationmodel.DirectConversation{ID: row.ID, AgentID: row.AgentID, CreatedAt: row.CreatedAt.Time.UTC().Format(time.RFC3339Nano)}
 	return item, nil
 }
 
-func (r *AgentLaunchPostgresRepository) ListDirectConversations(ctx context.Context, orgID, workspaceID string) ([]orchestration.DirectConversation, error) {
+func (r *AgentLaunchPostgresRepository) ListDirectConversations(ctx context.Context, orgID, workspaceID string) ([]orchestrationmodel.DirectConversation, error) {
 	rows, err := r.queries.ListDirectConversations(ctx, sqlc.ListDirectConversationsParams{OrganizationID: orgID, WorkspaceID: workspaceID})
 	if err != nil {
 		return nil, err
 	}
-	items := []orchestration.DirectConversation{}
+	items := []orchestrationmodel.DirectConversation{}
 	for _, row := range rows {
-		items = append(items, orchestration.DirectConversation{ID: row.ID, AgentID: row.AgentID, CreatedAt: row.CreatedAt.Time.UTC().Format(time.RFC3339Nano)})
+		items = append(items, orchestrationmodel.DirectConversation{ID: row.ID, AgentID: row.AgentID, CreatedAt: row.CreatedAt.Time.UTC().Format(time.RFC3339Nano)})
 	}
 	return items, nil
 }
@@ -79,11 +80,11 @@ func (r *AgentLaunchPostgresRepository) DeleteDirectConversation(ctx context.Con
 	return nil
 }
 
-func (r *AgentLaunchPostgresRepository) CurrentDirectSession(ctx context.Context, orgID, workspaceID, conversationID string) (orchestration.RunConfig, bool, error) {
+func (r *AgentLaunchPostgresRepository) CurrentDirectSession(ctx context.Context, orgID, workspaceID, conversationID string) (orchestrationmodel.RunConfig, bool, error) {
 	return r.CurrentSession(ctx, orgID, workspaceID, conversationID)
 }
 
-func (r *AgentLaunchPostgresRepository) ReserveDirectSessionRun(ctx context.Context, config orchestration.RunConfig) error {
+func (r *AgentLaunchPostgresRepository) ReserveDirectSessionRun(ctx context.Context, config orchestrationmodel.RunConfig) error {
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return err

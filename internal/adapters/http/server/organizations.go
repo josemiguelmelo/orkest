@@ -1,21 +1,10 @@
 package httpapi
 
 import (
-	"encoding/json"
-	"errors"
-	"io"
-	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
-	modelerrors "github.com/josemiguelmelo/orkest/internal/contracts/problem"
-	"github.com/josemiguelmelo/orkest/internal/platform/httplog"
-	"github.com/josemiguelmelo/orkest/internal/platform/secretbox"
-	"github.com/josemiguelmelo/orkest/internal/server/coderepository"
-	"github.com/josemiguelmelo/orkest/internal/server/executionprofile"
 	"github.com/josemiguelmelo/orkest/internal/server/organization"
-	"github.com/josemiguelmelo/orkest/internal/server/task"
-	"github.com/josemiguelmelo/orkest/internal/server/taskintegration"
 	"github.com/josemiguelmelo/orkest/internal/server/workspace"
 )
 
@@ -50,6 +39,7 @@ func (a organizationAPI) routes(r chi.Router) {
 type resourceNameRequest struct {
 	Name string `json:"name"`
 }
+
 type roleRequest struct {
 	Role string `json:"role"`
 }
@@ -152,82 +142,4 @@ func (a organizationAPI) setWorkspaceMember(w http.ResponseWriter, r *http.Reque
 
 func (a organizationAPI) removeWorkspaceMember(w http.ResponseWriter, r *http.Request) {
 	respond(w, nil, a.workspaces.RemoveWorkspaceMember(r.Context(), currentUserID(r), chi.URLParam(r, "orgID"), chi.URLParam(r, "workspaceID"), chi.URLParam(r, "userID")), http.StatusNoContent)
-}
-
-func decodeBody(w http.ResponseWriter, r *http.Request, dst any) bool {
-	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
-	dec := json.NewDecoder(r.Body)
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(dst); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_request")
-		return false
-	}
-	if err := dec.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
-		writeError(w, http.StatusBadRequest, "invalid_request")
-		return false
-	}
-	return true
-}
-
-func respond(w http.ResponseWriter, value any, err error, success int) {
-	if err != nil {
-		status, code := http.StatusInternalServerError, "internal_error"
-		var dispatchError *task.DispatchError
-		var integrationValidationError *taskintegration.ValidationError
-		var integrationConfigurationError *taskintegration.ConfigurationError
-		var codingProviderError *coderepository.ProviderError
-		switch {
-		case errors.Is(err, executionprofile.ErrNotConfigured):
-			status, code = http.StatusServiceUnavailable, "execution_images_not_configured"
-		case errors.Is(err, secretbox.ErrKeyUnavailable):
-			status, code = http.StatusServiceUnavailable, "integration_encryption_not_configured"
-		case errors.As(err, &integrationValidationError):
-			status, code = http.StatusBadGateway, integrationValidationError.Code
-			if code == "" {
-				code = "integration_validation_failed"
-			}
-		case errors.As(err, &integrationConfigurationError):
-			status, code = http.StatusBadRequest, integrationConfigurationError.Code
-		case errors.As(err, &codingProviderError):
-			status, code = codingProviderError.Status, codingProviderError.Code
-			if status == 0 {
-				status = http.StatusBadGateway
-			}
-			if code == "" {
-				code = "coding_provider_request_failed"
-			}
-		case errors.As(err, &dispatchError):
-			status, code = http.StatusBadGateway, "agent_dispatch_failed"
-		case errors.Is(err, modelerrors.ErrInvalid):
-			status, code = http.StatusBadRequest, "invalid_request"
-		case errors.Is(err, modelerrors.ErrForbidden):
-			status, code = http.StatusForbidden, "forbidden"
-		case errors.Is(err, modelerrors.ErrNotFound):
-			status, code = http.StatusNotFound, "not_found"
-		case errors.Is(err, modelerrors.ErrConflict):
-			status, code = http.StatusConflict, "conflict"
-		}
-		if status >= http.StatusInternalServerError {
-			logger := httplog.LoggerFromWriter(w)
-			if logger == nil {
-				logger = slog.Default()
-			}
-			logger.Error("http handler failed", "error", err, "error_code", code)
-		}
-		writeError(w, status, code)
-		return
-	}
-	if success == http.StatusNoContent {
-		w.WriteHeader(success)
-		return
-	}
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(success)
-	_ = json.NewEncoder(w).Encode(value)
-}
-
-func writeError(w http.ResponseWriter, status int, code string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(map[string]string{"error": code})
 }
