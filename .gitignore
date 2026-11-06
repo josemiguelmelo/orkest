@@ -14,4 +14,4 @@
 /web/playwright-report/
 /web/coverage/
 
-/tools/runtime/__pycache__/
+__pycache__/
