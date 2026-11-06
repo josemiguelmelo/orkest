@@ -26,7 +26,7 @@ func (q *Queries) DeleteTaskRepositories(ctx context.Context, arg DeleteTaskRepo
 }
 
 const getTask = `-- name: GetTask :one
-SELECT t.id, t.workspace_id, t.workflow_id, t.title, t.description, t.source_provider, COALESCE(t.source_id, '') AS source_id, COALESCE(t.source_url, '') AS source_url, t.status, COALESCE(t.assignee_agent_id, '') AS assignee_agent_id, t.labels, t.created_at, t.updated_at, t.stage_version, t.stage_work_state, COALESCE(t.status = workflow_final_stage(t.workspace_id,t.workflow_id),false)::boolean AS closed, COALESCE((SELECT s.name FROM workflow_stages s WHERE s.workspace_id=t.workspace_id AND s.workflow_id=t.workflow_id AND s.id=t.status),'')::text AS stage_name, COALESCE((SELECT s.description FROM workflow_stages s WHERE s.workspace_id=t.workspace_id AND s.workflow_id=t.workflow_id AND s.id=t.status),'')::text AS stage_description, EXISTS(SELECT 1 FROM workflow_events e WHERE e.workspace_id=t.workspace_id AND e.task_id=t.id AND e.stage_version=t.stage_version AND e.processed_at IS NULL) AS automation_pending
+SELECT t.id, t.workspace_id, t.workflow_id, t.title, t.description, t.source_provider, COALESCE(t.source_id, '') AS source_id, COALESCE(t.source_url, '') AS source_url, t.status, COALESCE(t.assignee_agent_id, '') AS assignee_agent_id, t.labels, t.created_at, t.updated_at, t.stage_version, t.stage_work_state, COALESCE(t.status = workflow_final_stage(t.workspace_id,t.workflow_id),false)::boolean AS closed, COALESCE((SELECT s.name FROM workflow_stages s WHERE s.workspace_id=t.workspace_id AND s.workflow_id=t.workflow_id AND s.id=t.status),'')::text AS stage_name, COALESCE((SELECT s.description FROM workflow_stages s WHERE s.workspace_id=t.workspace_id AND s.workflow_id=t.workflow_id AND s.id=t.status),'')::text AS stage_description, COALESCE((SELECT s.custom_prompt FROM workflow_stages s WHERE s.workspace_id=t.workspace_id AND s.workflow_id=t.workflow_id AND s.id=t.status),'')::text AS stage_custom_prompt, EXISTS(SELECT 1 FROM workflow_events e WHERE e.workspace_id=t.workspace_id AND e.task_id=t.id AND e.stage_version=t.stage_version AND e.processed_at IS NULL) AS automation_pending
 FROM tasks t JOIN workspaces w ON w.id = t.workspace_id
 WHERE w.organization_id = $1 AND t.workspace_id = $2 AND t.id = $3
 `
@@ -56,6 +56,7 @@ type GetTaskRow struct {
 	Closed            bool               `json:"closed"`
 	StageName         string             `json:"stage_name"`
 	StageDescription  string             `json:"stage_description"`
+	StageCustomPrompt string             `json:"stage_custom_prompt"`
 	AutomationPending bool               `json:"automation_pending"`
 }
 
@@ -81,6 +82,7 @@ func (q *Queries) GetTask(ctx context.Context, arg GetTaskParams) (GetTaskRow, e
 		&i.Closed,
 		&i.StageName,
 		&i.StageDescription,
+		&i.StageCustomPrompt,
 		&i.AutomationPending,
 	)
 	return i, err
@@ -100,7 +102,7 @@ func (q *Queries) GetWorkspaceOrganization(ctx context.Context, id string) (stri
 const insertTask = `-- name: InsertTask :one
 INSERT INTO tasks AS t (id, workspace_id, workflow_id, title, description, status, assignee_agent_id, labels)
 SELECT $1, w.id, $3, $4, $5, $6, NULLIF($7, ''), $8 FROM workspaces w WHERE w.id = $2
-RETURNING id, workspace_id, workflow_id, title, description, source_provider, COALESCE(source_id, '') AS source_id, COALESCE(source_url, '') AS source_url, status, COALESCE(assignee_agent_id, '') AS assignee_agent_id, labels, created_at, updated_at, stage_version, stage_work_state, COALESCE(status = workflow_final_stage(workspace_id,workflow_id),false)::boolean AS closed, COALESCE((SELECT s.name FROM workflow_stages s WHERE s.workspace_id=t.workspace_id AND s.workflow_id=t.workflow_id AND s.id=t.status),'')::text AS stage_name, COALESCE((SELECT s.description FROM workflow_stages s WHERE s.workspace_id=t.workspace_id AND s.workflow_id=t.workflow_id AND s.id=t.status),'')::text AS stage_description, EXISTS(SELECT 1 FROM workflow_events e WHERE e.workspace_id=t.workspace_id AND e.task_id=t.id AND e.stage_version=t.stage_version AND e.processed_at IS NULL) AS automation_pending
+RETURNING id, workspace_id, workflow_id, title, description, source_provider, COALESCE(source_id, '') AS source_id, COALESCE(source_url, '') AS source_url, status, COALESCE(assignee_agent_id, '') AS assignee_agent_id, labels, created_at, updated_at, stage_version, stage_work_state, COALESCE(status = workflow_final_stage(workspace_id,workflow_id),false)::boolean AS closed, COALESCE((SELECT s.name FROM workflow_stages s WHERE s.workspace_id=t.workspace_id AND s.workflow_id=t.workflow_id AND s.id=t.status),'')::text AS stage_name, COALESCE((SELECT s.description FROM workflow_stages s WHERE s.workspace_id=t.workspace_id AND s.workflow_id=t.workflow_id AND s.id=t.status),'')::text AS stage_description, COALESCE((SELECT s.custom_prompt FROM workflow_stages s WHERE s.workspace_id=t.workspace_id AND s.workflow_id=t.workflow_id AND s.id=t.status),'')::text AS stage_custom_prompt, EXISTS(SELECT 1 FROM workflow_events e WHERE e.workspace_id=t.workspace_id AND e.task_id=t.id AND e.stage_version=t.stage_version AND e.processed_at IS NULL) AS automation_pending
 `
 
 type InsertTaskParams struct {
@@ -133,6 +135,7 @@ type InsertTaskRow struct {
 	Closed            bool               `json:"closed"`
 	StageName         string             `json:"stage_name"`
 	StageDescription  string             `json:"stage_description"`
+	StageCustomPrompt string             `json:"stage_custom_prompt"`
 	AutomationPending bool               `json:"automation_pending"`
 }
 
@@ -167,6 +170,7 @@ func (q *Queries) InsertTask(ctx context.Context, arg InsertTaskParams) (InsertT
 		&i.Closed,
 		&i.StageName,
 		&i.StageDescription,
+		&i.StageCustomPrompt,
 		&i.AutomationPending,
 	)
 	return i, err
@@ -309,7 +313,7 @@ func (q *Queries) ListTaskRepositories(ctx context.Context, arg ListTaskReposito
 }
 
 const listTasks = `-- name: ListTasks :many
-SELECT t.id, t.workspace_id, t.workflow_id, t.title, t.description, t.source_provider, COALESCE(t.source_id, '') AS source_id, COALESCE(t.source_url, '') AS source_url, t.status, COALESCE(t.assignee_agent_id, '') AS assignee_agent_id, t.labels, t.created_at, t.updated_at, t.stage_version, t.stage_work_state, COALESCE(t.status = workflow_final_stage(t.workspace_id,t.workflow_id),false)::boolean AS closed, COALESCE((SELECT s.name FROM workflow_stages s WHERE s.workspace_id=t.workspace_id AND s.workflow_id=t.workflow_id AND s.id=t.status),'')::text AS stage_name, COALESCE((SELECT s.description FROM workflow_stages s WHERE s.workspace_id=t.workspace_id AND s.workflow_id=t.workflow_id AND s.id=t.status),'')::text AS stage_description, EXISTS(SELECT 1 FROM workflow_events e WHERE e.workspace_id=t.workspace_id AND e.task_id=t.id AND e.stage_version=t.stage_version AND e.processed_at IS NULL) AS automation_pending
+SELECT t.id, t.workspace_id, t.workflow_id, t.title, t.description, t.source_provider, COALESCE(t.source_id, '') AS source_id, COALESCE(t.source_url, '') AS source_url, t.status, COALESCE(t.assignee_agent_id, '') AS assignee_agent_id, t.labels, t.created_at, t.updated_at, t.stage_version, t.stage_work_state, COALESCE(t.status = workflow_final_stage(t.workspace_id,t.workflow_id),false)::boolean AS closed, COALESCE((SELECT s.name FROM workflow_stages s WHERE s.workspace_id=t.workspace_id AND s.workflow_id=t.workflow_id AND s.id=t.status),'')::text AS stage_name, COALESCE((SELECT s.description FROM workflow_stages s WHERE s.workspace_id=t.workspace_id AND s.workflow_id=t.workflow_id AND s.id=t.status),'')::text AS stage_description, COALESCE((SELECT s.custom_prompt FROM workflow_stages s WHERE s.workspace_id=t.workspace_id AND s.workflow_id=t.workflow_id AND s.id=t.status),'')::text AS stage_custom_prompt, EXISTS(SELECT 1 FROM workflow_events e WHERE e.workspace_id=t.workspace_id AND e.task_id=t.id AND e.stage_version=t.stage_version AND e.processed_at IS NULL) AS automation_pending
 FROM tasks t JOIN workspaces w ON w.id = t.workspace_id
 WHERE w.organization_id = $1 AND t.workspace_id = $2
 ORDER BY t.created_at DESC, t.id
@@ -339,6 +343,7 @@ type ListTasksRow struct {
 	Closed            bool               `json:"closed"`
 	StageName         string             `json:"stage_name"`
 	StageDescription  string             `json:"stage_description"`
+	StageCustomPrompt string             `json:"stage_custom_prompt"`
 	AutomationPending bool               `json:"automation_pending"`
 }
 
@@ -370,6 +375,7 @@ func (q *Queries) ListTasks(ctx context.Context, arg ListTasksParams) ([]ListTas
 			&i.Closed,
 			&i.StageName,
 			&i.StageDescription,
+			&i.StageCustomPrompt,
 			&i.AutomationPending,
 		); err != nil {
 			return nil, err
@@ -435,7 +441,7 @@ const updateTask = `-- name: UpdateTask :one
 UPDATE tasks t SET title = $4, description = $5, status = $6, assignee_agent_id = NULLIF($7, ''), labels = $8, updated_at = now()
 FROM workspaces w
 WHERE w.organization_id = $1 AND t.workspace_id = w.id AND t.workspace_id = $2 AND t.id = $3
-RETURNING t.id, t.workspace_id, t.workflow_id, t.title, t.description, t.source_provider, COALESCE(t.source_id, '') AS source_id, COALESCE(t.source_url, '') AS source_url, t.status, COALESCE(t.assignee_agent_id, '') AS assignee_agent_id, t.labels, t.created_at, t.updated_at, t.stage_version, t.stage_work_state, COALESCE(t.status = workflow_final_stage(t.workspace_id,t.workflow_id),false)::boolean AS closed, COALESCE((SELECT s.name FROM workflow_stages s WHERE s.workspace_id=t.workspace_id AND s.workflow_id=t.workflow_id AND s.id=t.status),'')::text AS stage_name, COALESCE((SELECT s.description FROM workflow_stages s WHERE s.workspace_id=t.workspace_id AND s.workflow_id=t.workflow_id AND s.id=t.status),'')::text AS stage_description, EXISTS(SELECT 1 FROM workflow_events e WHERE e.workspace_id=t.workspace_id AND e.task_id=t.id AND e.stage_version=t.stage_version AND e.processed_at IS NULL) AS automation_pending
+RETURNING t.id, t.workspace_id, t.workflow_id, t.title, t.description, t.source_provider, COALESCE(t.source_id, '') AS source_id, COALESCE(t.source_url, '') AS source_url, t.status, COALESCE(t.assignee_agent_id, '') AS assignee_agent_id, t.labels, t.created_at, t.updated_at, t.stage_version, t.stage_work_state, COALESCE(t.status = workflow_final_stage(t.workspace_id,t.workflow_id),false)::boolean AS closed, COALESCE((SELECT s.name FROM workflow_stages s WHERE s.workspace_id=t.workspace_id AND s.workflow_id=t.workflow_id AND s.id=t.status),'')::text AS stage_name, COALESCE((SELECT s.description FROM workflow_stages s WHERE s.workspace_id=t.workspace_id AND s.workflow_id=t.workflow_id AND s.id=t.status),'')::text AS stage_description, COALESCE((SELECT s.custom_prompt FROM workflow_stages s WHERE s.workspace_id=t.workspace_id AND s.workflow_id=t.workflow_id AND s.id=t.status),'')::text AS stage_custom_prompt, EXISTS(SELECT 1 FROM workflow_events e WHERE e.workspace_id=t.workspace_id AND e.task_id=t.id AND e.stage_version=t.stage_version AND e.processed_at IS NULL) AS automation_pending
 `
 
 type UpdateTaskParams struct {
@@ -468,6 +474,7 @@ type UpdateTaskRow struct {
 	Closed            bool               `json:"closed"`
 	StageName         string             `json:"stage_name"`
 	StageDescription  string             `json:"stage_description"`
+	StageCustomPrompt string             `json:"stage_custom_prompt"`
 	AutomationPending bool               `json:"automation_pending"`
 }
 
@@ -502,6 +509,7 @@ func (q *Queries) UpdateTask(ctx context.Context, arg UpdateTaskParams) (UpdateT
 		&i.Closed,
 		&i.StageName,
 		&i.StageDescription,
+		&i.StageCustomPrompt,
 		&i.AutomationPending,
 	)
 	return i, err

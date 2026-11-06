@@ -28,7 +28,7 @@ func workflowDefinition(ctx context.Context, q *sqlc.Queries, row sqlc.Workspace
 	}
 	d := workflowmodel.Definition{ID: row.ID, Name: row.Name, Version: row.Version, ConfiguredBy: row.ConfiguredBy, InitialStageID: row.InitialStageID, ClosedStageID: row.ClosedStageID, Rules: []workflowmodel.AutomationRule{}, Stages: make([]workflowmodel.Stage, 0, len(stages))}
 	for _, s := range stages {
-		stage := workflowmodel.Stage{ID: s.ID, Name: s.Name, Description: s.Description, ResponsibleAgentID: s.ResponsibleAgentID.String}
+		stage := workflowmodel.Stage{ID: s.ID, Name: s.Name, Description: s.Description, CustomPrompt: s.CustomPrompt, ResponsibleAgentID: s.ResponsibleAgentID.String}
 		if err := json.Unmarshal(s.ArtifactInputs, &stage.ArtifactInputs); err != nil {
 			return workflowmodel.Definition{}, err
 		}
@@ -171,7 +171,7 @@ func (r *WorkflowDefinitionPostgresRepository) saveStages(ctx context.Context, q
 		if err != nil {
 			return err
 		}
-		if err := q.PutWorkflowStage(ctx, sqlc.PutWorkflowStageParams{WorkspaceID: workspaceID, WorkflowID: d.ID, ID: s.ID, AgentID: s.ResponsibleAgentID, Position: int32(i), Name: s.Name, Description: s.Description, ArtifactInputs: inputs, ArtifactOutputs: outputs}); err != nil {
+		if err := q.PutWorkflowStage(ctx, sqlc.PutWorkflowStageParams{WorkspaceID: workspaceID, WorkflowID: d.ID, ID: s.ID, AgentID: s.ResponsibleAgentID, Position: int32(i), Name: s.Name, Description: s.Description, CustomPrompt: s.CustomPrompt, ArtifactInputs: inputs, ArtifactOutputs: outputs}); err != nil {
 			return err
 		}
 	}

@@ -147,8 +147,11 @@ func (d *TaskDispatcher) StartTask(ctx context.Context, userID, organizationID s
 	if err != nil {
 		return err
 	}
+	if value.StageCustomPrompt != "" {
+		prompt += "\n\nStage instructions:\n" + value.StageCustomPrompt
+	}
 	if command.PromptText != "" {
-		prompt = command.PromptText
+		prompt += "\n\nUser startup message:\n" + command.PromptText
 	}
 	if err = d.refreshOrkestMCPServer(userID, organizationID, value.WorkspaceID, value.ID, &config); err != nil {
 		return err

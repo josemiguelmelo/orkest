@@ -54,3 +54,18 @@ execution or releases an existing owner. See [delivery ownership](../development
 PR webhook rules, output completion gates, and scripts remain deferred.
 See [implementation](../development/workflows.md), [artifacts](artifacts.md),
 [migrations](../operations/migrations.md), and [testing](../development/testing.md).
+
+## Stage custom prompts
+
+Workspace administrators can save an optional custom prompt on each stage (up to
+32,768 UTF-8 bytes). Internal Markdown and line breaks are preserved; surrounding
+whitespace is trimmed. Empty prompts disable stage-specific instructions.
+
+Every work start includes task details, selected repository paths, stage instructions
+when configured, and any user startup message. Startup messages now supplement
+task context rather than replacing it. This applies to new conversations, continued
+conversations, and review revisions. Ordinary chat does not repeat these instructions.
+
+Changes apply to subsequent starts. Reserved runs retain their composed prompt in
+the durable outbox; recovery reconciles that original command without injecting
+updated instructions or changing the session's pinned runtime/model configuration.

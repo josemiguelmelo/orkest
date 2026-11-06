@@ -3,6 +3,7 @@ package orchestration
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	agentmodel "github.com/josemiguelmelo/orkest/internal/server/agent/model"
@@ -77,5 +78,43 @@ func TestNextRunAdoptsUpdatedProfileAndRetainsSession(t *testing.T) {
 	}
 	if repo.current.ExecutionImage != "registry/image@sha256:a" {
 		t.Fatal("existing run configuration mutated")
+	}
+}
+
+func TestStageInstructionsComposeAtEachWorkStart(t *testing.T) {
+	repo := &profileSessionRepo{launchRepoFake: &launchRepoFake{}}
+	getter := &profileAgentGetter{}
+	dispatcher, err := NewTaskDispatcher(TaskDispatcherDependencies{Agents: getter, Launches: &LaunchService{repo: repo}, Sessions: repo})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dispatcher.profiles = &profileImageResolver{image: "registry/image@sha256:a"}
+	value := taskmodel.Task{ID: "task", WorkspaceID: "workspace", AssigneeAgentID: "agent", Title: "Task details", StageCustomPrompt: "Create a detailed plan"}
+	for _, instruction := range []string{"Create a detailed plan", "Implement the plan"} {
+		value.StageCustomPrompt = instruction
+		err = dispatcher.StartTask(context.Background(), "user", "org", taskmodel.StartCommand{Task: value, PromptText: "Focus on correctness"})
+		if !errors.Is(err, errReservedForTest) {
+			t.Fatal(err)
+		}
+		config := repo.reserved[len(repo.reserved)-1]
+		for _, want := range []string{"Task details", "Stage instructions:\n" + instruction, "User startup message:\nFocus on correctness"} {
+			if !strings.Contains(config.InitialPrompt, want) {
+				t.Fatalf("missing %q in startup prompt", want)
+			}
+		}
+		repo.current, repo.exists = config, true
+	}
+	if !repo.reserved[1].RestoreSession || getter.calls != 1 {
+		t.Fatal("continuation did not retain configuration")
+	}
+	if !strings.Contains(repo.reserved[0].InitialPrompt, "Create a detailed plan") {
+		t.Fatal("saved prompt changed")
+	}
+	value.StageCustomPrompt = strings.Repeat("x", orchestrationmodel.MaxPromptBytes)
+	if err = dispatcher.StartTask(context.Background(), "user", "org", taskmodel.StartCommand{Task: value}); !errors.Is(err, orchestrationmodel.ErrCommand) {
+		t.Fatal("oversized composed prompt accepted", err)
+	}
+	if len(repo.reserved) != 2 {
+		t.Fatal("oversized prompt reserved a run")
 	}
 }

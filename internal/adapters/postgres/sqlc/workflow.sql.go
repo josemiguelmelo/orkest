@@ -381,7 +381,7 @@ func (q *Queries) ListWorkflowRules(ctx context.Context, arg ListWorkflowRulesPa
 }
 
 const listWorkflowStages = `-- name: ListWorkflowStages :many
-SELECT workspace_id, id, responsible_agent_id, workflow_id, position, name, description, artifact_inputs, artifact_outputs FROM workflow_stages WHERE workspace_id=$1 AND workflow_id=$2 ORDER BY position
+SELECT workspace_id, id, responsible_agent_id, workflow_id, position, name, description, artifact_inputs, artifact_outputs, custom_prompt FROM workflow_stages WHERE workspace_id=$1 AND workflow_id=$2 ORDER BY position
 `
 
 type ListWorkflowStagesParams struct {
@@ -408,6 +408,7 @@ func (q *Queries) ListWorkflowStages(ctx context.Context, arg ListWorkflowStages
 			&i.Description,
 			&i.ArtifactInputs,
 			&i.ArtifactOutputs,
+			&i.CustomPrompt,
 		); err != nil {
 			return nil, err
 		}
@@ -629,10 +630,10 @@ func (q *Queries) PendingWorkflowEvent(ctx context.Context) (WorkflowEvent, erro
 }
 
 const putWorkflowStage = `-- name: PutWorkflowStage :exec
-INSERT INTO workflow_stages(workspace_id,workflow_id,id,responsible_agent_id,position,name,description,artifact_inputs,artifact_outputs)
-VALUES($1,$2,$3,NULLIF($4::text,''),$5,$6,$7,$8,$9)
+INSERT INTO workflow_stages(workspace_id,workflow_id,id,responsible_agent_id,position,name,description,custom_prompt,artifact_inputs,artifact_outputs)
+VALUES($1,$2,$3,NULLIF($4::text,''),$5,$6,$7,$8,$9,$10)
 ON CONFLICT(workspace_id,workflow_id,id) DO UPDATE SET responsible_agent_id=EXCLUDED.responsible_agent_id,
-position=EXCLUDED.position,name=EXCLUDED.name,description=EXCLUDED.description,artifact_inputs=EXCLUDED.artifact_inputs,artifact_outputs=EXCLUDED.artifact_outputs
+position=EXCLUDED.position,name=EXCLUDED.name,description=EXCLUDED.description,custom_prompt=EXCLUDED.custom_prompt,artifact_inputs=EXCLUDED.artifact_inputs,artifact_outputs=EXCLUDED.artifact_outputs
 `
 
 type PutWorkflowStageParams struct {
@@ -643,6 +644,7 @@ type PutWorkflowStageParams struct {
 	Position        int32  `json:"position"`
 	Name            string `json:"name"`
 	Description     string `json:"description"`
+	CustomPrompt    string `json:"custom_prompt"`
 	ArtifactInputs  []byte `json:"artifact_inputs"`
 	ArtifactOutputs []byte `json:"artifact_outputs"`
 }
@@ -656,6 +658,7 @@ func (q *Queries) PutWorkflowStage(ctx context.Context, arg PutWorkflowStagePara
 		arg.Position,
 		arg.Name,
 		arg.Description,
+		arg.CustomPrompt,
 		arg.ArtifactInputs,
 		arg.ArtifactOutputs,
 	)

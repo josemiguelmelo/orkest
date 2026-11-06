@@ -151,7 +151,13 @@ function WorkflowEditor({
               />
             )}
             <Button
-              disabled={action.pending || !dirty}
+              disabled={
+                action.pending ||
+                !dirty ||
+                draft.stages.some(
+                  (s) => new TextEncoder().encode((s.customPrompt ?? '').trim()).length > 32768,
+                )
+              }
               onClick={() => {
                 void action.run(async () => {
                   const saved = await data(
@@ -326,6 +332,22 @@ function WorkflowEditor({
                 maxLength={2000}
                 rows={2}
                 onChange={(e) => patch(stage.id, { description: e.target.value })}
+              />
+            </Field>
+            <Field
+              label="Custom prompt"
+              hint="Sent with task details at every work start, including continued sessions."
+              error={
+                new TextEncoder().encode((stage.customPrompt ?? '').trim()).length > 32768
+                  ? 'Custom prompt must be at most 32,768 UTF-8 bytes.'
+                  : undefined
+              }
+            >
+              <textarea
+                disabled={disabled}
+                value={stage.customPrompt ?? ''}
+                rows={5}
+                onChange={(e) => patch(stage.id, { customPrompt: e.target.value })}
               />
             </Field>
             <Field label="Responsible agent">

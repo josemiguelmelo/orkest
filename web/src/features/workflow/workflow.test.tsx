@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AppContext } from '../../app/context';
@@ -82,6 +82,7 @@ it('renders workflow settings read-only for viewers', async () => {
   setup('viewer');
   await screen.findAllByDisplayValue('Ready');
   expect(screen.getAllByLabelText('Name')[0]).toBeDisabled();
+  expect(screen.getAllByLabelText('Custom prompt')[0]).toBeDisabled();
   expect(screen.queryByRole('button', { name: 'Save workflow' })).not.toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Add stage' })).not.toBeInTheDocument();
 });
@@ -107,4 +108,30 @@ it('keeps explicit automation destinations and endpoints when columns move', asy
     action: 'move_task',
     targetStageId: 'closed',
   });
+});
+
+it('saves multiline custom stage prompts and clears them', async () => {
+  setup('admin');
+  const user = userEvent.setup();
+  const prompts = await screen.findAllByLabelText('Custom prompt');
+  await user.type(prompts[0]!, 'Analyse the task{enter}Create a plan');
+  await user.click(screen.getByRole('button', { name: 'Save workflow' }));
+  await waitFor(() => expect(api.saveWorkspaceWorkflow).toHaveBeenCalled());
+  const call = api.saveWorkspaceWorkflow.mock.calls[0]?.[0] as { body: WorkspaceWorkflow };
+  expect(call.body.stages[0]?.customPrompt).toBe('Analyse the task\nCreate a plan');
+  await user.clear(screen.getAllByLabelText('Custom prompt')[0]!);
+  await user.type(screen.getAllByLabelText('Custom prompt')[0]!, 'Temporary');
+  await user.clear(screen.getAllByLabelText('Custom prompt')[0]!);
+  await user.click(screen.getByRole('button', { name: 'Save workflow' }));
+  await waitFor(() => expect(api.saveWorkspaceWorkflow).toHaveBeenCalledTimes(2));
+  const cleared = api.saveWorkspaceWorkflow.mock.calls[1]?.[0] as { body: WorkspaceWorkflow };
+  expect(cleared.body.stages[0]?.customPrompt).toBe('');
+});
+
+it('rejects custom prompts exceeding the UTF-8 byte limit', async () => {
+  setup('admin');
+  const prompts = await screen.findAllByLabelText('Custom prompt');
+  fireEvent.change(prompts[0]!, { target: { value: 'é'.repeat(16385) } });
+  expect(screen.getByRole('alert')).toHaveTextContent('32,768 UTF-8 bytes');
+  expect(screen.getByRole('button', { name: 'Save workflow' })).toBeDisabled();
 });

@@ -347,6 +347,7 @@ type WorkflowStage struct {
 	Description        string      `json:"description"`
 	ArtifactInputs     []byte      `json:"artifact_inputs"`
 	ArtifactOutputs    []byte      `json:"artifact_outputs"`
+	CustomPrompt       string      `json:"custom_prompt"`
 }
 
 type Workspace struct {

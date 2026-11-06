@@ -19,7 +19,10 @@ type ArtifactInput struct {
 	Required      bool   `json:"required"`
 }
 
+const MaxCustomPromptBytes = 32 * 1024
+
 type Stage struct {
+	CustomPrompt       string           `json:"customPrompt"`
 	ArtifactInputs     []ArtifactInput  `json:"artifactInputs,omitempty"`
 	ArtifactOutputs    []ArtifactOutput `json:"artifactOutputs,omitempty"`
 	ID                 string           `json:"id"`
@@ -63,6 +66,10 @@ func (d *Definition) Validate() error {
 		s := &d.Stages[i]
 		s.Name = strings.TrimSpace(s.Name)
 		s.Description = strings.TrimSpace(s.Description)
+		s.CustomPrompt = strings.TrimSpace(s.CustomPrompt)
+		if len(s.CustomPrompt) > MaxCustomPromptBytes {
+			return modelerrors.ErrInvalid
+		}
 		if s.ID == "" || len(s.ID) > 100 || strings.TrimSpace(s.ID) != s.ID || seen[s.ID] || s.Name == "" || len(s.Name) > 200 || len(s.Description) > 2000 {
 			return modelerrors.ErrInvalid
 		}
