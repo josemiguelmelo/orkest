@@ -19,10 +19,13 @@ Start with [local setup](../README.md).
 
 ## Developer references
 
+- [Architecture and package boundaries](architecture.md)
+- [Verification record and remaining limits](status.md#verification-record)
 - [Agentctl ownership and compatibility](development/agentctl.md)
 - [Session persistence and continuation](development/sessions.md)
 - [Artifact publication and input snapshots](development/artifacts.md)
 - [Workflow transactions and event delivery](development/workflows.md)
+- [Delivery claims, fencing, and recovery](development/workflow-delivery.md)
 - [Image build adapters](development/image-builds.md)
 - [Webapp architecture](development/webapp.md)
 

@@ -51,10 +51,16 @@ flowchart TD
 - Platform shutdown leaves workers running. Restore compatible state/known queues where safe.
 - Missing replay evidence, tool activity, pending approvals, or uncertain effects
   pause interrupted work for reconciliation. Cancellation stays paused; failed restore is interrupted/blocked.
+- Workflow delivery claims can expire without ending a reserved run. Accepted
+  commands reconcile against their existing identities. An uncertain unaccepted
+  delivery becomes failed work requiring explicit user retry; it does not
+  automatically start again. [Delivery details](../development/workflow-delivery.md).
+- Worker restart may require fresh Git credentials before restore; reconnect
+  alone does not establish continuation. [Recovery requirements](../development/sessions.md#restore-and-ownership).
 - Loading alone proves no interrupted-work continuation. Retain files/state; never
   delete locks/creation markers to force replacement.
 
 References: [storage/recovery](../operations/storage-and-secrets.md), [runtime limits](../reference/runtimes/README.md),
 [status](../status.md), [worker API](../reference/agentctl-api.md),
-[platform API](../../internal/app/httpapi/openapi.yaml), [session internals](../development/sessions.md),
+[platform API](../../internal/adapters/http/server/openapi.yaml), [session internals](../development/sessions.md),
 [testing](../development/testing.md).

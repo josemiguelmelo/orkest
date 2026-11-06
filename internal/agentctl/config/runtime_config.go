@@ -10,7 +10,7 @@ import (
 	"slices"
 	"strings"
 
-	coreruntime "github.com/josemiguelmelo/orkest/internal/core/runtime"
+	coreruntime "github.com/josemiguelmelo/orkest/internal/contracts/runtimecatalog"
 )
 
 // AgentDefinition is the portable Markdown instruction set selected for a run.

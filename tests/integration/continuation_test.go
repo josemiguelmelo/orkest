@@ -3,23 +3,36 @@
 package integration
 
 import (
-"context"
-"errors"
-"github.com/josemiguelmelo/orkest/internal/agentctl/runtime/opencode"
-"github.com/josemiguelmelo/orkest/internal/agentctl/runtimehost"
-"github.com/josemiguelmelo/orkest/internal/core/ids"
-"os"
-"path/filepath"
-"strings"
-"testing"
-"time"
-agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
-"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
-runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
-sharedacp "github.com/josemiguelmelo/orkest/internal/agentctl/runtime/acp"
+	"context"
+	"crypto/sha256"
+	"encoding/json"
+	"errors"
+	"fmt"
+	sharedacp "github.com/josemiguelmelo/orkest/internal/adapters/runtime/acp"
+	"github.com/josemiguelmelo/orkest/internal/adapters/runtime/profiles/opencode"
+	"github.com/josemiguelmelo/orkest/internal/adapters/runtime/runtimehost"
+	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
+	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
+	"github.com/josemiguelmelo/orkest/internal/platform/ids"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
 )
 
 func TestOpenCodeContinuation(t *testing.T) {
+	for _, legacy := range []bool{false, true} {
+		name := "current manifest"
+		if legacy {
+			name = "v1 manifest fixture"
+		}
+		t.Run(name, func(t *testing.T) { testOpenCodeContinuation(t, legacy) })
+	}
+}
+
+func testOpenCodeContinuation(t *testing.T, legacy bool) {
 	binary, modelProvider, model := os.Getenv("ORKEST_OPENCODE_BINARY"), os.Getenv("ORKEST_TEST_MODEL_PROVIDER"), os.Getenv("ORKEST_TEST_MODEL_ID")
 	if binary == "" || modelProvider == "" || model == "" {
 		t.Skip("set ORKEST_OPENCODE_BINARY, ORKEST_TEST_MODEL_PROVIDER, and ORKEST_TEST_MODEL_ID for real model continuation")
@@ -58,7 +71,12 @@ func TestOpenCodeContinuation(t *testing.T) {
 	if err := os.WriteFile(path, []byte("preserved"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	_ = first.Close()
+	if err := first.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if legacy {
+		installV1Manifest(t, stateDir, workDir, first.SessionID(), config.ForRuntime())
+	}
 	config.RunID = "second"
 	restored, err := host.Restore(ctx, config.ForRuntime())
 	if err != nil {
@@ -75,5 +93,40 @@ func TestOpenCodeContinuation(t *testing.T) {
 	}
 	if data, err := os.ReadFile(path); err != nil || string(data) != "preserved" {
 		t.Fatal("working files were not preserved", err)
+	}
+}
+
+// Pair the historical v1 envelope with a real pinned runtime's durable history.
+// Restoring a fixture without a successful next model response is insufficient.
+func installV1Manifest(t *testing.T, stateDir, workDir, nativeID string, config runconfig.RuntimeConfig) {
+	t.Helper()
+	fixture, err := os.ReadFile("../../internal/adapters/runtime/runtimehost/testdata/session-v1.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var manifest map[string]any
+	if err = json.Unmarshal(fixture, &manifest); err != nil {
+		t.Fatal(err)
+	}
+	scope, err := json.Marshal([]string{config.OrganizationID, config.WorkspaceID, config.TaskID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Join(stateDir, fmt.Sprintf("%x", sha256.Sum256(scope)), "sessions", fmt.Sprintf("%x", sha256.Sum256([]byte(config.TaskSessionID))))
+	config.RunID = ""
+	encoded, err := json.Marshal(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest["runtimeVersion"] = opencode.Version
+	manifest["workDir"] = workDir
+	manifest["sessionId"] = nativeID
+	manifest["configuration"] = fmt.Sprintf("%x", sha256.Sum256(encoded))
+	fixture, err = json.Marshal(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(filepath.Join(root, "session.json"), fixture, 0o600); err != nil {
+		t.Fatal(err)
 	}
 }

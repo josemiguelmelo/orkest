@@ -1,7 +1,8 @@
 # Deployment configuration
 
 - Defaults: [.env.example](../../.env.example).
-- Both binaries load optional `.env` from the current directory.
+- Both binaries load optional `.env` from the current directory. Test targets do
+  not load it automatically; export their settings explicitly.
 - Precedence: worker CLI flags → shell environment → `.env` → defaults.
 
 ## Connections and serving
@@ -16,6 +17,11 @@
 | `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_REDIRECT_URL`, `OIDC_COOKIE_SECURE` | Client, callback, and cookie configuration |
 | `KEYCLOAK_PORT` | Compose's Keycloak host port (8082 by default) |
 
+Compose uses only the environment/interpolation entries declared in
+[compose.yaml](../../compose.yaml). Container addresses, networking and builder
+settings can differ from host defaults; additional settings require an explicit
+Compose environment/override.
+
 The frontend callback must match the browser origin; see [Vite setup](../development/webapp.md#development).
 
 ## Execution and credentials
@@ -29,7 +35,7 @@ The frontend callback must match the browser origin; see [Vite setup](../develop
 | `ORKEST_AGENT_MCP_URL`, `ORKEST_AGENT_MCP_TOKEN_KEY` | Reachable built-in tools endpoint and optional signing-key override; [key storage](storage-and-secrets.md#protect-credentials) |
 | `AGENTCTL_*_IMAGE` | [Per-runtime Docker images](../reference/executors/docker.md#build-and-configure-images) |
 | `ORKEST_CODEX_AUTH_FILE` | Optional source auth file; [Local](../reference/executors/local.md#credentials) defaults to the host login; [Docker](../reference/executors/docker.md#durable-files-and-credentials) requires a daemon-visible path |
-| `AGENTCTL_LISTEN`, `AGENTCTL_WORK_DIR`, `AGENTCTL_STATE_DIR` | [Standalone worker](../guides/agentctl.md#run) address, work directory, and state directory |
+| `AGENTCTL_LISTEN`, `AGENTCTL_WORK_DIR`, `AGENTCTL_STATE_DIR`, `AGENTCTL_RUN_ID` | [Standalone worker](../guides/agentctl.md#run) address, work/state directories, and optional expected run for checkpoint recovery |
 | `ORKEST_EXECUTION_IMAGE_REPOSITORY`, `ORKEST_IMAGE_BUILDER`, `ORKEST_BUILDCTL_BINARY`, `ORKEST_BUILDKIT_*` | [Image build configuration](image-builds.md#configuration); unset repository disables builds |
 
 Workspace values, provider overrides, and continued-session resolution follow

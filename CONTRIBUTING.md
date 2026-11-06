@@ -43,7 +43,13 @@ See the [README](README.md) for prerequisites, environment variables, containeri
 
 - Keep changes within the relevant package or documentation area.
 - Preserve confirmed, proposed, and open distinctions in product and architecture documentation.
-- Use explicit constructors and existing repository conventions for Go changes.
+- Use explicit constructors and consumer-owned ports. Server domains live in
+  `internal/server`, worker domains in `internal/agentctl`, concrete implementations
+  in `internal/adapters`, and technical utilities in `internal/platform`. Server
+  and worker domains communicate through adapters and transport DTOs.
+- Keep both [platform](internal/adapters/http/server/openapi.yaml) and
+  [worker](internal/adapters/http/agentctl/openapi.yaml) contracts synchronized with
+  their APIs. Regenerate SQL from `db/queries` with `make sqlc`.
 - Regenerate API artifacts with `npm --prefix web run generate:api` when the platform OpenAPI contract changes; do not edit generated artifacts manually.
 - Add or update tests for observable behavior when changing application code.
 - Update documentation when commands, configuration, behavior, or limitations change.
@@ -66,7 +72,14 @@ make test-recovery-unit           # Deterministic recovery tests with the race d
 npm --prefix web run test:e2e     # Playwright browser journeys
 ```
 
-`make test-integration` requires the pinned OpenCode executable through `ORKEST_OPENCODE_BINARY`. `make test-recovery` additionally requires an explicit model, credentials, and provider environment. Report checks that could not run and the reason; do not describe them as passing.
+`make test-integration` requires the pinned OpenCode executable through
+`ORKEST_OPENCODE_BINARY`; model continuation is skipped without explicit provider/model
+settings. `make test-recovery` requires those settings and credentials when the
+selected provider needs them. `make test-postgres` requires exported connection
+settings for an isolated database; test targets do not load `.env` automatically.
+See [exact prerequisites](docs/development/testing.md). Report unavailable or skipped
+checks accurately. Migration 0038 requires stopping old platform workflow workers
+before upgrading; see [delivery upgrade rules](docs/operations/migrations.md#workflow-delivery-claims).
 
 ## Pull requests
 

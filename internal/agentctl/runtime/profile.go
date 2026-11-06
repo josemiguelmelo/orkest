@@ -2,7 +2,7 @@ package runtime
 
 import (
 	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
-	coreruntime "github.com/josemiguelmelo/orkest/internal/core/runtime"
+	coreruntime "github.com/josemiguelmelo/orkest/internal/contracts/runtimecatalog"
 )
 
 // DefaultRuntimePath gives child runtime processes access to standard image
@@ -46,7 +46,8 @@ type ProvisioningPlan struct {
 // ProtocolSessionOptions carries native session values through ACP without
 // coupling runtime profiles to the ACP SDK types.
 type ProtocolSessionOptions struct {
-	// Model requests an explicit ACP model selection, checked after session creation or loading.
+	// Model is the required, runtime-specific configured model identity. The host
+	// confirms it after session creation/loading and before any prompt.
 	Model      string
 	Metadata   map[string]any
 	MCPServers []runconfig.MCPServer

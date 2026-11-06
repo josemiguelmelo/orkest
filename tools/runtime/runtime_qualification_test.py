@@ -10,14 +10,16 @@ SCRIPT = Path(__file__).with_name("runtime-qualification.py").resolve()
 
 
 class QualificationTest(unittest.TestCase):
-    def decision(self, previous, current):
+    def decision(self, previous, current, previous_path=None):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             subprocess.run(["git", "init", "-q", directory], check=True)
-            inventory = root / "internal/core/runtime/versions.json"
+            inventory = root / "internal/contracts/runtimecatalog/versions.json"
             inventory.parent.mkdir(parents=True)
             if previous is not None:
-                inventory.write_text(json.dumps(previous), encoding="utf-8")
+                historical = root / previous_path if previous_path else inventory
+                historical.parent.mkdir(parents=True, exist_ok=True)
+                historical.write_text(json.dumps(previous), encoding="utf-8")
                 subprocess.run(["git", "-C", directory, "add", "."], check=True)
             subprocess.run(["git", "-C", directory, "-c", "user.name=Test", "-c", "user.email=test@example.test", "commit", "--allow-empty", "-qm", "base"], check=True)
             inventory.write_text(json.dumps(current), encoding="utf-8")
@@ -41,3 +43,7 @@ class QualificationTest(unittest.TestCase):
     def test_unchanged_qualified_inventory_needs_no_requalification(self):
         versions = {"opencode": "opencode v2.1.5"}
         self.assertIn("required=false", self.decision(versions, versions))
+
+    def test_pre_migration_inventory_remains_comparable(self):
+        versions = {"opencode": "opencode v2.1.4", "kiro": "2.37.0"}
+        self.assertIn("required=false", self.decision(versions, versions, "internal/core/runtime/versions.json"))

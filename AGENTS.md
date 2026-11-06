@@ -4,9 +4,9 @@
 
 Orkest orchestrates SDLC agents with isolated environments, human-directed workflows, task chat, approvals, and durable recovery.
 
-Before implementation, read [requirements](docs/requirements.md) (behavior, scope, recovery, open decisions) and [tech stack](docs/tech-stack.md) (proposed baseline, validation milestones). Follow explicit task instructions; otherwise default to the proposed stack. Preserve confirmed/proposed/open distinctions; never silently promote proposals to requirements. Record significant architecture decisions in the relevant product or technical documentation.
+Before implementation, read [requirements](docs/requirements.md) (behavior, scope, recovery, open decisions) and [tech stack](docs/tech-stack.md) (current implementation and tooling). Follow explicit task instructions; otherwise default to the proposed stack. Preserve confirmed/proposed/open distinctions; never silently promote proposals to requirements. Record significant architecture decisions in the relevant product or technical documentation.
 
-Minimal Go and React/Vite scaffolding exists with PostgreSQL-only Compose and Makefile commands. The standalone `agentctl` OpenCode/ACP launch, REST, WebSocket, and event-journaling prototype exists; platform product services and restart recovery/session continuation remain unimplemented. Create packages as needed, without empty layers.
+Go platform services, React/Vite frontend, and the independent `agentctl` worker exist. Current implementation and live qualification limits are recorded in `docs/status.md`; deterministic recovery fixtures do not establish credentialed runtime continuation. Create packages as needed, without empty layers.
 
 ## Execution
 
@@ -20,11 +20,11 @@ Minimal Go and React/Vite scaffolding exists with PostgreSQL-only Compose and Ma
 ## Stack and boundaries
 
 - Go; Chi/`net/http`; PostgreSQL/`pgx`/`sqlc`; manual constructor injection; `log/slog`. React/TypeScript/Vite frontend. Keycloak/OIDC authenticates; Orkest authorizes.
-- One root Go module; entry points `cmd/orkest`, `cmd/agentctl`; frontend `web/`. Small `main.go`; wiring/lifecycle in `internal/app`.
-- Feature packages under `internal/`: identity, workspace, task, team, orchestration, integrations, executors, agent runtimes.
-- `internal/app/httpapi` and `internal/agentctl/httpapi`: thin handlers and routing for their respective APIs. Services own business rules; consumers own interfaces (e.g. task owns repository interface).
-- `internal/postgres`: persistence adapters; `db/queries`: SQL inputs; `db/migrations`: migrations; `internal/postgres/sqlc`: generated code. Keep generated types out of business interfaces.
-- Keep `internal/app/httpapi/openapi.yaml` synchronized with the platform/orchestrator API and `internal/agentctl/httpapi/openapi.yaml` synchronized with the standalone agentctl API. Shared OpenAPI serving and validation belongs in `internal/core/openapi`.
+- One root Go module; entry points `cmd/server`, `cmd/agentctl`; frontend `web/`. Small `main.go`; composition and executable lifecycle in their respective command directories.
+- Server domains live under `internal/server`; worker domains under `internal/agentctl`; concrete HTTP/PostgreSQL/executor/runtime/provider implementations under `internal/adapters`; technical utilities under `internal/platform`. Server and worker domains never import each other. Shared wire DTOs live under `internal/contracts/agentctl/v1`.
+- `internal/adapters/http/server` and `internal/adapters/http/agentctl`: thin handlers and routing for their respective APIs. Services own business rules; consumers own interfaces (e.g. task owns repository interface).
+- `internal/adapters/postgres`: persistence adapters; `db/queries`: SQL inputs; `db/migrations`: migrations; `internal/adapters/postgres/sqlc`: generated code. Keep generated types out of business interfaces.
+- Keep `internal/adapters/http/server/openapi.yaml` synchronized with the platform/orchestrator API and `internal/adapters/http/agentctl/openapi.yaml` synchronized with the standalone agentctl API. Shared OpenAPI serving and validation belongs in `internal/platform/openapi`.
 - Hide Docker/OpenCode/GitHub behind contracts; separate shared platform–agentctl messages from platform services.
 - Avoid service registries, DI containers, speculative abstractions, or extra infrastructure without concrete need.
 
@@ -63,8 +63,8 @@ Minimal Go and React/Vite scaffolding exists with PostgreSQL-only Compose and Ma
   - `make fmt`: apply gofumpt formatting, including blank lines between multiline functions.
   - `make check`: lint, unit tests, frontend type checks, builds.
   - `make test-integration`: integrations with documented prerequisites.
-  - `make test-recovery`: restart, replay, approvals, duplicate prevention.
-- `make check` exists. Integration and recovery targets currently fail explicitly because their suites are not implemented. Never mark unavailable/skipped checks as passed.
+  - `make test-recovery`: deterministic recovery/race tests plus real pinned OpenCode restore and follow-up; broader live approval/MCP qualification uses `make qualify-runtime`.
+- Integration, PostgreSQL and recovery targets exist with explicit infrastructure/model prerequisites. Never mark unavailable/skipped checks as passed. Delivery claims never imply execution ownership; follow `docs/development/workflow-delivery.md` and its mixed-version upgrade restrictions.
 
 ## Done
 

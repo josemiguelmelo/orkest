@@ -7,48 +7,53 @@ import sys
 
 
 PROFILE_FORBIDDEN_IMPORTS = (
-    "os", "os/exec", "syscall", "net/http", "internal/postgres",
-    "internal/orchestration", "internal/app", "internal/core/durablefile",
-    "internal/agentctl/runtime/acp", "internal/agentctl/runtimehost",
-    "internal/agentctl/run", "internal/agentctl/httpapi",
-    "internal/agentctl/runtime/opencode", "internal/agentctl/runtime/claudecode",
-    "internal/agentctl/runtime/codex",
-    "internal/agentctl/runtime/githubcopilot",
+    "os", "os/exec", "syscall", "net/http", "internal/adapters/postgres",
+    "internal/server/orchestration", "cmd/server", "internal/platform/durablefile",
+    "internal/adapters/runtime/acp", "internal/adapters/runtime/runtimehost",
+    "internal/agentctl/run", "internal/adapters/http/agentctl",
+    "internal/adapters/runtime/profiles/opencode", "internal/adapters/runtime/profiles/claudecode",
+    "internal/adapters/runtime/profiles/codex",
+    "internal/adapters/runtime/profiles/githubcopilot",
+    "internal/adapters/runtime/profiles/kiro",
 )
 COMMUNICATION_FORBIDDEN_IMPORTS = (
     "os", "os/exec", "syscall", "path/filepath", "net/http",
-    "internal/postgres", "internal/orchestration", "internal/app",
-    "internal/core/durablefile", "internal/agentctl/runtime/opencode",
-    "internal/agentctl/runtime/claudecode",
-    "internal/agentctl/runtime/codex",
-    "internal/agentctl/runtime/githubcopilot",
-    "internal/agentctl/runtimehost",
-    "internal/agentctl/run", "internal/agentctl/httpapi",
+    "internal/adapters/postgres", "internal/server/orchestration", "cmd/server",
+    "internal/platform/durablefile", "internal/adapters/runtime/profiles/opencode",
+    "internal/adapters/runtime/profiles/claudecode",
+    "internal/adapters/runtime/profiles/codex",
+    "internal/adapters/runtime/profiles/githubcopilot",
+    "internal/adapters/runtime/profiles/kiro",
+    "internal/adapters/runtime/runtimehost",
+    "internal/agentctl/run", "internal/adapters/http/agentctl",
 )
 HOST_FORBIDDEN_IMPORTS = (
-    "internal/postgres", "internal/orchestration", "internal/app",
-    "internal/agentctl/httpapi", "internal/agentctl/runtime/acp",
-    "internal/agentctl/runtime/opencode",
-    "internal/agentctl/runtime/claudecode",
-    "internal/agentctl/runtime/codex",
-    "internal/agentctl/runtime/githubcopilot",
+    "internal/adapters/postgres", "internal/server/orchestration", "cmd/server",
+    "internal/adapters/http/agentctl", "internal/adapters/runtime/acp",
+    "internal/adapters/runtime/profiles/opencode",
+    "internal/adapters/runtime/profiles/claudecode",
+    "internal/adapters/runtime/profiles/codex",
+    "internal/adapters/runtime/profiles/githubcopilot",
+    "internal/adapters/runtime/profiles/kiro",
     "internal/agentctl/run",
 )
 APPLICATION_FORBIDDEN_IMPORTS = (
-    "internal/agentctl/runtimehost", "internal/agentctl/runtime/acp",
-    "internal/agentctl/runtime/opencode",
-    "internal/agentctl/runtime/claudecode",
-    "internal/agentctl/runtime/codex",
-    "internal/agentctl/runtime/githubcopilot",
+    "internal/adapters/runtime/runtimehost", "internal/adapters/runtime/acp",
+    "internal/adapters/runtime/profiles/opencode",
+    "internal/adapters/runtime/profiles/claudecode",
+    "internal/adapters/runtime/profiles/codex",
+    "internal/adapters/runtime/profiles/githubcopilot",
+    "internal/adapters/runtime/profiles/kiro",
 )
 DEFINITION_FORBIDDEN_IMPORTS = (
-    "os", "os/exec", "syscall", "net/http", "internal/postgres",
-    "internal/orchestration", "internal/app", "internal/core/durablefile",
-    "internal/agentctl/run", "internal/agentctl/httpapi",
-    "internal/agentctl/runtimehost", "internal/agentctl/runtime/acp",
-    "internal/agentctl/runtime/opencode", "internal/agentctl/runtime/claudecode",
-    "internal/agentctl/runtime/codex",
-    "internal/agentctl/runtime/githubcopilot",
+    "os", "os/exec", "syscall", "net/http", "internal/adapters/postgres",
+    "internal/server/orchestration", "cmd/server", "internal/platform/durablefile",
+    "internal/agentctl/run", "internal/adapters/http/agentctl",
+    "internal/adapters/runtime/runtimehost", "internal/adapters/runtime/acp",
+    "internal/adapters/runtime/profiles/opencode", "internal/adapters/runtime/profiles/claudecode",
+    "internal/adapters/runtime/profiles/codex",
+    "internal/adapters/runtime/profiles/githubcopilot",
+    "internal/adapters/runtime/profiles/kiro",
 )
 MODULE_PREFIX = "github.com/josemiguelmelo/orkest/"
 OPERATIONAL_CALLS = re.compile(
@@ -72,6 +77,7 @@ def check_file(path: Path, kind: str) -> list[str]:
         "definition": DEFINITION_FORBIDDEN_IMPORTS,
     }[kind]
     failures = []
+    forbidden = forbidden + ("internal/server",)
     for name in imports(source):
         local_name = name.removeprefix(MODULE_PREFIX)
         if any(local_name == item or local_name.startswith(item + "/") for item in forbidden):
@@ -85,12 +91,13 @@ def check_file(path: Path, kind: str) -> list[str]:
 
 def violations(root: Path) -> list[str]:
     targets = (
-        (root / "internal/agentctl/runtime/opencode", "profile"),
-        (root / "internal/agentctl/runtime/claudecode", "profile"),
-        (root / "internal/agentctl/runtime/codex", "profile"),
-        (root / "internal/agentctl/runtime/githubcopilot", "profile"),
-        (root / "internal/agentctl/runtime/acp", "communication"),
-        (root / "internal/agentctl/runtimehost", "host"),
+        (root / "internal/adapters/runtime/profiles/opencode", "profile"),
+        (root / "internal/adapters/runtime/profiles/claudecode", "profile"),
+        (root / "internal/adapters/runtime/profiles/codex", "profile"),
+        (root / "internal/adapters/runtime/profiles/githubcopilot", "profile"),
+        (root / "internal/adapters/runtime/profiles/kiro", "profile"),
+        (root / "internal/adapters/runtime/acp", "communication"),
+        (root / "internal/adapters/runtime/runtimehost", "host"),
         (root / "internal/agentctl/run", "application"),
         (root / "internal/agentctl/config", "definition"),
         (root / "internal/agentctl/interaction", "definition"),

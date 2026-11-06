@@ -48,12 +48,7 @@ UPDATE tasks SET stage_work_state=$4 WHERE workspace_id=$1 AND id=$2 AND stage_v
 INSERT INTO workflow_commands(id,workspace_id,task_id,stage_version,actor_id,options) VALUES($1,$2,$3,$4,$5,$6)
 ;
 
--- name: PendingWorkflowCommand :one
-SELECT c.*,w.organization_id FROM workflow_commands c JOIN workspaces w ON w.id=c.workspace_id
-WHERE state='pending' ORDER BY c.created_at,c.id LIMIT 1 FOR UPDATE OF c SKIP LOCKED;
 
--- name: SetWorkflowCommandState :exec
-UPDATE workflow_commands SET state=$2 WHERE id=$1;
 
 -- name: RunWorkflowEntry :one
 SELECT l.workspace_id,l.task_id,l.stage_version,c.actor_id,t.workflow_id
@@ -117,3 +112,24 @@ SELECT DISTINCT status FROM tasks WHERE workspace_id=$1 AND workflow_id=$2;
 -- name: WorkflowHasReferences :one
 SELECT EXISTS(SELECT 1 FROM tasks t WHERE t.workspace_id=sqlc.arg(workspace_id)::text AND t.workflow_id=sqlc.arg(workflow_id)::text)
  OR EXISTS(SELECT 1 FROM task_integrations i WHERE i.workspace_id=sqlc.arg(workspace_id)::text AND i.workflow_id=sqlc.arg(workflow_id)::text);
+
+-- name: ClaimWorkflowCommand :one
+WITH candidate AS (
+ SELECT id FROM workflow_commands
+ WHERE state='pending' AND (claim_until IS NULL OR claim_until<=now())
+ ORDER BY created_at,id LIMIT 1 FOR UPDATE SKIP LOCKED
+), claimed AS (
+ UPDATE workflow_commands c SET claim_token=sqlc.arg(claim_token),
+ claim_until=now()+sqlc.arg(lease_seconds)::double precision*interval '1 second',claim_attempt=c.claim_attempt+1
+ FROM candidate WHERE c.id=candidate.id RETURNING c.*
+)
+SELECT claimed.*,w.organization_id FROM claimed JOIN workspaces w ON w.id=claimed.workspace_id;
+
+-- name: LockWorkflowDeliveryClaim :one
+SELECT id FROM workflow_commands
+WHERE id=sqlc.arg(id) AND claim_token=sqlc.arg(claim_token) AND state='pending'
+FOR UPDATE;
+
+-- name: AcknowledgeWorkflowDeliveryClaim :execrows
+UPDATE workflow_commands SET state=sqlc.arg(state),delivery_error=sqlc.arg(delivery_error),claim_until=NULL
+WHERE id=sqlc.arg(id) AND claim_token=sqlc.arg(claim_token) AND state='pending';

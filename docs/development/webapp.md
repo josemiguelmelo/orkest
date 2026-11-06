@@ -12,8 +12,8 @@ are separate. User guides: [sessions](../guides/sessions.md), [workflows](../gui
 | Directory | Owns |
 | --- | --- |
 | `web/src/app` | Shell, permissions, context, routing |
-| `features` | Domain behavior, forms, query usage |
-| `shared` | Generated API library, query factories, reusable UI |
+| `web/src/features` | Domain behavior, forms, query usage |
+| `web/src/shared` | Generated API library, query factories, reusable UI |
 
 - Add feature modules/routes, not generic CRUD/plugin frameworks.
 - Owned shadcn-style Button/Dialog: Radix, class-variance-authority, Tailwind;

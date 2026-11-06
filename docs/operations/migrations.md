@@ -1,6 +1,7 @@
 # Database migrations
 
-- Startup applies pending Goose migrations from [SQL](../../db/migrations/).
+- Platform startup applies pending Goose migrations from [SQL](../../db/migrations/);
+  independent agentctl workers do not migrate the platform database.
 - Before rollback: back up database/configuration, stop affected workers, reconcile executions.
 - Rollback neither stops independent agents nor restores deleted files/external images.
 
@@ -17,6 +18,7 @@ Documented hazards below; SQL is the complete inventory.
 | [Numbering repair](#migration-numbering-repair) | 0026 |
 | [Workflows](#workflows) | 0035, 0036 |
 | [Artifacts](#artifacts) | 0037 |
+| [Workflow delivery claims](#workflow-delivery-claims) | 0038 |
 
 ## Earlier schemas and repository links
 
@@ -71,3 +73,16 @@ Documented hazards below; SQL is the complete inventory.
 
 - **0037:** artifact tables, run input links, stage-binding JSON; preserves tasks/runs/workflows.
 - Rollback permanently deletes content, revisions, input links, bindings. Export needed outputs first.
+
+## Workflow delivery claims
+
+- **0038:** adds `claim_token`, `claim_until`, `claim_attempt` and `delivery_error`;
+  preserves command JSON, task/run/session identity, events and working files.
+- Stop all old platform workers before upgrading; mixed old/new delivery binaries
+  are unsupported. Independent agentctl processes continue during platform downtime.
+- An expired claim grants reconciliation only, never replacement execution.
+  `delivery_uncertain` requires an explicit user retry after reviewing run state.
+- Rollback refuses to drop metadata while pending claimed commands exist. Stop
+  workers and reconcile claims/runs first; dropping claim metadata removes delivery
+  diagnostics. Neither upgrade nor rollback terminates agentctl or releases its ownership.
+- Protocol and crash cases: [delivery ownership](../development/workflow-delivery.md).

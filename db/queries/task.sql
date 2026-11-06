@@ -46,3 +46,11 @@ INSERT INTO task_comments (id, workspace_id, task_id, author_user_id, body)
 SELECT $1, t.workspace_id, t.id, $4, $5 FROM tasks t JOIN workspaces w ON w.id = t.workspace_id
 WHERE w.organization_id = $2 AND t.workspace_id = $3 AND t.id = $6
 RETURNING id, workspace_id, task_id, author_user_id, body, created_at;
+
+-- name: ListWorkspaceTaskRepositories :many
+SELECT tr.task_id,r.id,r.provider_name,COALESCE(NULLIF(r.display_name,''),r.url) AS name,r.url
+FROM task_repositories tr
+JOIN code_repositories r ON r.workspace_id=tr.workspace_id AND r.id=tr.repository_id
+JOIN workspaces w ON w.id=tr.workspace_id
+WHERE w.organization_id=$1 AND tr.workspace_id=$2 AND tr.task_id=ANY(sqlc.arg(task_ids)::text[])
+ORDER BY tr.task_id,r.provider_name,name,r.id;

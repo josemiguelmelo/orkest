@@ -1,7 +1,8 @@
 # Image build adapters
 
-- `executionprofile.Builder`: job policy/composition boundary; app selects BuildKit/Docker.
-- Both use `internal/imagebuild.Prepare` for validated Dockerfiles/runtime resources.
+- `executionprofile.Builder`: the consumer-owned port in `internal/server/executionprofile`;
+  `cmd/server` selects BuildKit or Docker implementations.
+- Both use `Prepare` in `internal/adapters/imagebuild` for validated Dockerfiles/runtime resources.
 - Docker storage resolves inputs/validates outputs; metadata stays outside context;
   check exporter digests before promotion.
 

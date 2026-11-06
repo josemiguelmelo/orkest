@@ -6,15 +6,18 @@ Recovery requires surviving database/task storage; complete host/disk loss is ou
 
 | Data | Location or setting | Why it matters |
 | --- | --- | --- |
-| Product state, run identities, prompt outbox | PostgreSQL | Reconciles commands and prevents duplicate work |
+| Product state, run identities, prompt/event outboxes, delivery claims and acknowledgements | PostgreSQL | Reconciles commands and prevents duplicate work |
 | Workspace files and management checkouts | `ORKEST_DATA_DIR/<organizationID>/<workspaceID>/` | Retains workspace-managed files |
-| Docker task work and runtime state | `ORKEST_DATA_DIR/tasks/<scope-hash>/` | Mounted as `/workspace` and `/agentctl-state` |
-| Local task work and state | `ORKEST_DATA_DIR/agent-executions/` | Retains host execution state |
+| Task work and runtime state, Docker and Local | `ORKEST_DATA_DIR/agent-executions/tasks/<scope-hash>/{work,agentctl-state}` | Docker mounts them as `/workspace` and `/agentctl-state`; Local uses host paths |
+| Local process identity records | `ORKEST_DATA_DIR/agent-executions/runs/` | Reconciles PID/start-time identity across platform restart |
 | Integration encryption key | `ORKEST_INTEGRATION_ENCRYPTION_KEY` | Decrypts credentials and environment/session snapshots |
 | Agent MCP signing key | Override or `ORKEST_DATA_DIR/agent-mcp-token.key` | Verifies run-scoped tool credentials |
 | Built profile images | Configured registry | Later runs need their recorded image digests |
 
-- Default root: `./data`. Bind paths must be daemon-visible, including under Compose.
+- Default root: `./data`. These executor paths are supplied by `cmd/server`;
+  directly constructed adapters use their configured `DataRoot`. Correcting the
+  documented path does not relocate existing storage. Bind paths must be
+  daemon-visible, including under Compose.
 - Retain working trees, untracked files, branches, runtime homes, manifests,
   checkpoints, journals. Restore at the same paths with compatible pinned runtimes.
 
@@ -28,8 +31,9 @@ Recovery requires surviving database/task storage; complete host/disk loss is ou
 - Separate MCP signing key: `ORKEST_AGENT_MCP_TOKEN_KEY` overrides persisted key.
   Tool tokens expire after 24 hours, binding user/organization/workspace/task and applicable run.
 - `ORKEST_AGENT_MCP_URL` must be execution-reachable; Compose: `http://orkest:8080`.
-- Treat runtime state as secret: checkpoints may contain MCP headers despite excluding
-  Git PATs. Never commit/export as artifacts.
+- Treat runtime state as secret: new checkpoints omit structured Git credentials
+  but can contain environment secrets and MCP headers; legacy files can retain
+  earlier credential content. Never commit or export runtime state as artifacts.
 - Codex auth copies refresh independently without updating the host source.
 
 ## Restart and diagnose
@@ -51,6 +55,11 @@ flowchart TD
 - Check saved identity, endpoint, version, paths, sanitized compatibility diagnostics.
   Reconcile uncertain external results before retry; cancellation stays paused;
   approvals are never automatic.
+- If a recovered worker requires Git credentials absent from its checkpoint,
+  reconcile its existing run and supply the missing credentials through matching
+  configuration before restore. Do not create a replacement to bypass this gate.
+- Migration 0038 changes delivery coordination: stop old platform workers before
+  upgrade, and reconcile pending claims before rollback. See [operations](migrations.md#workflow-delivery-claims).
 - Back up database, keys, files, runtime state, and retained images together.
   Verify restore with a follow-up message, not loading alone.
 - Backup schedules/recovery objectives remain open.

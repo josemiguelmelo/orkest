@@ -14,11 +14,14 @@ Mechanics behind the [session guide](../guides/sessions.md).
 
 | Manifest | Configuration fingerprints | Behavior |
 | --- | --- | --- |
-| v1 | Whole configuration only | No field-level diagnostics |
-| v2+ | Whole configuration plus each section | Environment-only differences may restore |
+| v1 | Legacy whole-configuration fingerprint | Retains legacy matching; no field-level diagnostics or environment-only exception |
+| v2 | Legacy whole fingerprint plus sections | An environment-only section difference may restore |
+| v3 (current) | Whole and section fingerprints exclude environment | Environment refresh does not invalidate session identity |
 
-Environment is excluded from compatibility and re-resolved per run. Where available,
-failure diagnostics name differing sections, never values.
+Current fingerprints also exclude the run ID, resolved MCP headers, and structured
+Git credentials. Runtime version, working path, provider/model, instructions,
+skills, permissions, and MCP endpoints remain compatible-session requirements.
+Where available, failure diagnostics name differing sections, never values.
 
 ## Queue and run completion
 
@@ -43,8 +46,14 @@ failure diagnostics name differing sections, never values.
   It may contain MCP credentials: exclude from logs, artifacts, and commits.
 - Docker passes `-run-id` to avoid recovering a preceding step. Session containers use
   `unless-stopped`; intentional cleanup stops/removes them.
-- agentctl attempts restore after runtime exit; failure becomes interrupted/blocked,
-  not an indefinite retry.
+- agentctl attempts eligible restore after runtime exit; failure becomes
+  interrupted/blocked, not an indefinite retry.
+- Newly written worker checkpoints omit structured `gitCredentials`. If
+  `gitCredentialsRequired` is set, a restarted worker retains its binding but
+  cannot restore until the missing credentials are supplied. It accepts matching
+  configuration with that missing list replenished; other binding changes still
+  conflict. Platform reconnect alone does not establish automatic credential
+  reinjection or successful continuation.
 - Journal recovery checks committed records, sequence/scope; drops incomplete trailing
   writes; restores command/queue state. Committed corruption blocks recovery.
   Platform history serves chat; see [replay limits](../reference/agentctl-api.md#activity-stream).
@@ -62,3 +71,12 @@ Continuation:
 
 See [agentctl locks/reducers](agentctl.md), [storage and keys](../operations/storage-and-secrets.md),
 and [testing](testing.md).
+
+## Platform delivery fencing
+
+Workflow starts carry a transient delivery token to the reservation transaction.
+The token is neither a worker wire field nor part of persisted session
+configuration/fingerprints. Claim reassignment fences new reservations from the
+old claimant; any already reserved run retains its original execution ownership.
+Acknowledgement failure reconciles that reservation/outbox rather than starting a
+replacement. See [workflow delivery](workflow-delivery.md).

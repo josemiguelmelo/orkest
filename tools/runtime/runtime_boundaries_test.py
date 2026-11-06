@@ -34,7 +34,7 @@ class RuntimeBoundaryTests(unittest.TestCase):
             with self.subTest(kind=kind), tempfile.TemporaryDirectory() as directory:
                 path = Path(directory) / "example.go"
                 path.write_text(
-                    'package example\nimport "github.com/josemiguelmelo/orkest/internal/agentctl/runtimehost"\n',
+                    'package example\nimport "github.com/josemiguelmelo/orkest/internal/adapters/runtime/runtimehost"\n',
                     encoding="utf-8",
                 )
                 self.assertTrue(BOUNDARIES.check_file(path, kind))
@@ -48,7 +48,7 @@ class RuntimeBoundaryTests(unittest.TestCase):
             )
             self.assertEqual(BOUNDARIES.check_file(path, "host"), [])
             path.write_text(
-                'package host\nimport "github.com/josemiguelmelo/orkest/internal/agentctl/runtime/opencode"\n',
+                'package host\nimport "github.com/josemiguelmelo/orkest/internal/adapters/runtime/profiles/opencode"\n',
                 encoding="utf-8",
             )
             self.assertTrue(BOUNDARIES.check_file(path, "host"))
@@ -61,7 +61,7 @@ class RuntimeBoundaryTests(unittest.TestCase):
                 package.mkdir(parents=True)
                 source = package / "example.go"
                 source.write_text(
-                    f'package {domain}\nimport "github.com/josemiguelmelo/orkest/internal/agentctl/runtimehost"\n',
+                    f'package {domain}\nimport "github.com/josemiguelmelo/orkest/internal/adapters/runtime/runtimehost"\n',
                     encoding="utf-8",
                 )
                 self.assertTrue(BOUNDARIES.violations(root))
@@ -75,6 +75,18 @@ class RuntimeBoundaryTests(unittest.TestCase):
                     encoding="utf-8",
                 )
                 self.assertTrue(BOUNDARIES.check_file(path, kind))
+
+    def test_all_profiles_including_kiro_are_scanned(self):
+        for runtime in ("opencode", "claudecode", "codex", "githubcopilot", "kiro"):
+            with self.subTest(runtime=runtime), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                package = root / "internal/adapters/runtime/profiles" / runtime
+                package.mkdir(parents=True)
+                (package / "profile.go").write_text(
+                    'package profile\nimport "github.com/josemiguelmelo/orkest/internal/server/task"\n',
+                    encoding="utf-8",
+                )
+                self.assertTrue(BOUNDARIES.violations(root))
 
     def test_flat_root_package_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:

@@ -6,6 +6,7 @@ import * as sdk from '../../shared/api/generated/sdk.gen';
 import type { ArtifactRevision } from '../../shared/api/generated/types.gen';
 import { path } from '../../shared/api/queries';
 import { ErrorState, Loading } from '../../shared/ui/common';
+import { Button } from '../../shared/ui/button';
 import { Markdown } from '../../shared/ui/markdown';
 
 export function TaskArtifacts({ taskID }: { taskID: string }) {

@@ -3,14 +3,14 @@
 package integration
 
 import (
-"context"
-"github.com/josemiguelmelo/orkest/internal/agentctl/runtime/opencode"
-"github.com/josemiguelmelo/orkest/internal/agentctl/runtimehost"
-"os"
-"testing"
-"time"
-runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
-sharedacp "github.com/josemiguelmelo/orkest/internal/agentctl/runtime/acp"
+	"context"
+	sharedacp "github.com/josemiguelmelo/orkest/internal/adapters/runtime/acp"
+	"github.com/josemiguelmelo/orkest/internal/adapters/runtime/profiles/opencode"
+	"github.com/josemiguelmelo/orkest/internal/adapters/runtime/runtimehost"
+	runconfig "github.com/josemiguelmelo/orkest/internal/agentctl/config"
+	"os"
+	"testing"
+	"time"
 )
 
 // TestOpenCodeHandshake needs the pinned executable but makes no model request.

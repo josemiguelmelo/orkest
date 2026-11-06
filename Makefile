@@ -12,11 +12,11 @@ AGENTCTL_REGISTRY_NAMESPACE ?= orkest
 AGENTCTL_RUNTIME ?= opencode
 AGENTCTL_ARGS ?=
 QUALIFY_RUNTIME ?= .+
-OPENCODE_VERSION = $(shell python3 -c 'import json; print(json.load(open("internal/core/runtime/versions.json"))["opencode"].removeprefix("opencode v"))')
-CLAUDE_AGENT_ACP_VERSION = $(shell python3 -c 'import json; print(json.load(open("internal/core/runtime/versions.json"))["claude-code"])')
-CODEX_ACP_VERSION = $(shell python3 -c 'import json; print(json.load(open("internal/core/runtime/versions.json"))["codex"])')
-GITHUB_COPILOT_VERSION = $(shell python3 -c 'import json; print(json.load(open("internal/core/runtime/versions.json"))["github-copilot"])')
-KIRO_VERSION = $(shell python3 -c 'import json; print(json.load(open("internal/core/runtime/versions.json"))["kiro"])')
+OPENCODE_VERSION = $(shell python3 -c 'import json; print(json.load(open("internal/contracts/runtimecatalog/versions.json"))["opencode"].removeprefix("opencode v"))')
+CLAUDE_AGENT_ACP_VERSION = $(shell python3 -c 'import json; print(json.load(open("internal/contracts/runtimecatalog/versions.json"))["claude-code"])')
+CODEX_ACP_VERSION = $(shell python3 -c 'import json; print(json.load(open("internal/contracts/runtimecatalog/versions.json"))["codex"])')
+GITHUB_COPILOT_VERSION = $(shell python3 -c 'import json; print(json.load(open("internal/contracts/runtimecatalog/versions.json"))["github-copilot"])')
+KIRO_VERSION = $(shell python3 -c 'import json; print(json.load(open("internal/contracts/runtimecatalog/versions.json"))["kiro"])')
 AGENTCTL_BASE_IMAGE ?= orkest/agentctl-base:dev
 AGENTCTL_OPENCODE_IMAGE ?= orkest/agentctl-opencode:$(OPENCODE_VERSION)
 AGENTCTL_CLAUDE_CODE_IMAGE ?= orkest/agentctl-claude-code:$(CLAUDE_AGENT_ACP_VERSION)
@@ -56,7 +56,7 @@ dev:
 	go tool air -c .air.toml
 
 dev-once:
-	go run ./cmd/orkest
+	go run ./cmd/server
 
 dev-agentctl:
 	go run ./cmd/agentctl -runtime $(AGENTCTL_RUNTIME) $(AGENTCTL_ARGS)
@@ -93,7 +93,7 @@ sqlc:
 	go run github.com/sqlc-dev/sqlc/cmd/sqlc@$(SQLC_VERSION) generate
 
 check: check-runtime-boundaries lint
-	go test ./cmd/... ./internal/... ./db/...
+	go test ./cmd/... ./internal/... ./db/... -timeout=3m
 	npm --prefix web run check:generated
 	npm --prefix web run lint
 	npm --prefix web run test
@@ -101,19 +101,21 @@ check: check-runtime-boundaries lint
 	$(MAKE) build
 
 build:
-	go build -o bin/orkest ./cmd/orkest
+	go build -o bin/orkest ./cmd/server
 	go build -o bin/agentctl ./cmd/agentctl
 	npm --prefix web run build
 
 check-runtime-boundaries:
 	python3 tools/runtime/check_runtime_boundaries.py
+	python3 -m unittest discover -s tools/architecture -p '*_test.py'
+	python3 tools/architecture/check_dependencies.py
 
 test-integration:
-	go test -tags=integration ./tests/integration -count=1
+	go test -tags=integration ./tests/integration -count=1 -timeout=5m
 
 test-postgres:
 	@{ test -n "$$DATABASE_URL" || { test -n "$$POSTGRES_HOST" && test -n "$$POSTGRES_PORT" && test -n "$$POSTGRES_USERNAME" && test -n "$$POSTGRES_PASSWORD" && test -n "$$POSTGRES_DB"; }; } || (echo "Set DATABASE_URL or all POSTGRES_HOST, POSTGRES_PORT, POSTGRES_USERNAME, POSTGRES_PASSWORD, and POSTGRES_DB values; start PostgreSQL with make db-up"; exit 1)
-	go test ./internal/postgres -run 'TestPostgresRepositories|TestSessionMigrations|TestExecutionProfileMigration' -count=1
+	go test ./internal/adapters/postgres -run 'TestPostgresRepositories|TestSessionMigrations|TestExecutionProfileMigration' -count=1 -timeout=3m
 
 docker-agentctl-base:
 	$(DOCKER) build -f build/docker/agentctl-base.Dockerfile -t $(AGENTCTL_BASE_IMAGE) .
@@ -154,20 +156,20 @@ docker-agentctl-push-local: docker-agentctl-images
 	$(DOCKER) tag $(AGENTCTL_KIRO_IMAGE) $(CONTAINER_REGISTRY)/$(AGENTCTL_REGISTRY_NAMESPACE)/agentctl-kiro:$(KIRO_VERSION)
 
 test-docker: docker-agentctl-images
-	AGENTCTL_OPENCODE_IMAGE=$(AGENTCTL_OPENCODE_IMAGE) AGENTCTL_CLAUDE_CODE_IMAGE=$(AGENTCTL_CLAUDE_CODE_IMAGE) AGENTCTL_CODEX_IMAGE=$(AGENTCTL_CODEX_IMAGE) AGENTCTL_GITHUB_COPILOT_IMAGE=$(AGENTCTL_GITHUB_COPILOT_IMAGE) AGENTCTL_KIRO_IMAGE=$(AGENTCTL_KIRO_IMAGE) go test -tags=docker ./internal/executors/docker -run 'TestDockerAgentctlLaunchSmoke|TestDockerSessionRestore' -count=1
+	AGENTCTL_OPENCODE_IMAGE=$(AGENTCTL_OPENCODE_IMAGE) AGENTCTL_CLAUDE_CODE_IMAGE=$(AGENTCTL_CLAUDE_CODE_IMAGE) AGENTCTL_CODEX_IMAGE=$(AGENTCTL_CODEX_IMAGE) AGENTCTL_GITHUB_COPILOT_IMAGE=$(AGENTCTL_GITHUB_COPILOT_IMAGE) AGENTCTL_KIRO_IMAGE=$(AGENTCTL_KIRO_IMAGE) go test -tags=docker ./internal/adapters/executors/docker -run 'TestDockerAgentctlLaunchSmoke|TestDockerSessionRestore' -count=1 -timeout=3m
 
 test-recovery-unit:
-	go test -race ./internal/agentctl/... ./internal/orchestration -run 'Restore|Recovery|Queue|Session' -count=1
+	go test -race ./cmd/agentctl ./internal/agentctl/... ./internal/adapters/runtime/... ./internal/adapters/http/agentctl/... ./internal/adapters/runnerclient/... ./internal/server/orchestration -run 'Restore|Recovery|Queue|Session|Delivery|Claim' -count=1 -timeout=3m
 
 test-recovery: test-recovery-unit
 	@{ test -n "$$ORKEST_OPENCODE_BINARY" && test -n "$$ORKEST_TEST_MODEL_PROVIDER" && test -n "$$ORKEST_TEST_MODEL_ID"; } || (echo "Set ORKEST_OPENCODE_BINARY, ORKEST_TEST_MODEL_PROVIDER, ORKEST_TEST_MODEL_ID and grant credentials with ORKEST_TEST_PROVIDER_ENV; real continuation is unverified without them"; exit 1)
-	go test -tags=integration ./tests/integration -run 'TestOpenCodeHandshake|TestOpenCodeContinuation' -count=1 -v
+	go test -tags=integration ./tests/integration -run 'TestOpenCodeHandshake|TestOpenCodeContinuation' -count=1 -timeout=5m -v
 
 .PHONY: test-runtime-conformance qualify-runtime
 test-runtime-conformance:
 	python3 -m unittest discover -s tools/runtime -p '*_test.py'
 	$(MAKE) check-runtime-boundaries
-	go test -race ./internal/agentctl/... ./internal/orchestration ./internal/core/runtime -count=1 -timeout=3m
+	go test -race ./cmd/agentctl ./internal/agentctl/... ./internal/adapters/runtime/... ./internal/adapters/http/agentctl/... ./internal/adapters/runnerclient/... ./internal/server/orchestration ./internal/contracts/runtimecatalog -count=1 -timeout=3m
 
 # Intentionally strict: credentials, test prompts, and external MCP evidence are
 # prerequisites; this target never substitutes fixture tests or skips a runtime.
@@ -177,4 +179,4 @@ qualify-runtime:
 .PHONY: test-image-composition
 # Requires buildctl, built agentctl-base, registry:3, and moby/buildkit:v0.34.1.
 test-image-composition:
-	go test -tags=docker ./internal/imagebuild/docker -run '^TestDockerImageComposition$$' -count=1 -v
+	go test -tags=docker ./internal/adapters/imagebuild/docker -run '^TestDockerImageComposition$$' -count=1 -v

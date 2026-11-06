@@ -47,6 +47,10 @@
 
 ## Limits and references
 
+Delivery failure does not undo stage movement. An uncertain delivery requires an
+explicit retry after reviewing run state; claim expiry alone never starts another
+execution or releases an existing owner. See [delivery ownership](../development/workflow-delivery.md).
+
 PR webhook rules, output completion gates, and scripts remain deferred.
 See [implementation](../development/workflows.md), [artifacts](artifacts.md),
 [migrations](../operations/migrations.md), and [testing](../development/testing.md).
