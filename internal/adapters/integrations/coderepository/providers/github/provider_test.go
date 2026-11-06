@@ -10,6 +10,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	coderepositorymodel "github.com/josemiguelmelo/orkest/internal/server/coderepository/model"
@@ -59,6 +60,83 @@ func TestAuthenticatedRepositoryDiscoveryPaginatesAndSanitizesFailures(t *testin
 	_, err = provider.DiscoverRepositories(context.Background(), json.RawMessage(`{}`), coderepositorymodel.Credentials{Token: "secret-token"}, 4, 10)
 	if !errors.As(err, &providerErr) || providerErr.Code != "github_permission_denied_or_rate_limited" || strings.Contains(err.Error(), "secret-token") {
 		t.Fatalf("sanitized rate-limit error=%v", err)
+	}
+}
+
+func TestSDKDiscoveryUsesPaginationLinksAndRequestOptions(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/user/repos" || r.Header.Get("Authorization") != "Bearer secret-token" ||
+			r.URL.Query().Get("affiliation") != "owner,collaborator,organization_member" || r.URL.Query().Get("sort") != "full_name" ||
+			r.URL.Query().Get("page") != "1" || r.URL.Query().Get("per_page") != "50" {
+			t.Errorf("unexpected discovery request: %s", r.URL)
+		}
+		w.Header().Set("Link", `<https://api.github.com/user/repos?page=7>; rel="next"`)
+		_, _ = w.Write([]byte(`[{"id":42,"full_name":"acme/repo","clone_url":"https://github.com/acme/repo.git","private":false,"default_branch":"main"}]`))
+	}))
+	defer server.Close()
+	provider := GitHubProvider{Client: server.Client(), APIBaseURL: server.URL}
+	page, err := provider.DiscoverRepositories(context.Background(), json.RawMessage(`{}`), coderepositorymodel.Credentials{Token: "secret-token"}, 0, 101)
+	if err != nil || page.NextPage != 7 || len(page.Repositories) != 1 {
+		t.Fatalf("page=%+v err=%v", page, err)
+	}
+}
+
+func TestSDKAuthenticationAndDiscoveryFailuresAreSanitized(t *testing.T) {
+	for _, tc := range []struct {
+		name     string
+		status   int
+		body     string
+		authCode string
+		listCode string
+	}{
+		{"unauthorized", http.StatusUnauthorized, `{"message":"secret-token"}`, "github_authentication_failed", "github_token_invalid_or_revoked"},
+		{"forbidden", http.StatusForbidden, `{"message":"secret-token"}`, "github_authentication_failed", "github_permission_denied_or_rate_limited"},
+		{"unavailable", http.StatusServiceUnavailable, `{"message":"secret-token"}`, "github_connection_failed", "github_repository_request_failed"},
+		{"invalid_response", http.StatusOK, `{"secret-token":`, "github_connection_failed", "github_repository_response_invalid"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.WriteHeader(tc.status)
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			defer server.Close()
+			provider := GitHubProvider{Client: server.Client(), APIBaseURL: server.URL}
+			credential := coderepositorymodel.Credentials{Token: "secret-token"}
+			errs := []error{provider.ValidateAuthentication(context.Background(), json.RawMessage(`{}`), credential)}
+			_, err := provider.DiscoverRepositories(context.Background(), json.RawMessage(`{}`), credential, 1, 50)
+			errs = append(errs, err)
+			for i, code := range []string{tc.authCode, tc.listCode} {
+				var providerErr *coderepositorymodel.ProviderError
+				if !errors.As(errs[i], &providerErr) || providerErr.Code != code || providerErr.Status != http.StatusBadGateway || strings.Contains(errs[i].Error(), "secret-token") {
+					t.Fatalf("expected sanitized %s, got %v", code, errs[i])
+				}
+			}
+		})
+	}
+}
+
+func TestSDKAuthenticationAndCancellation(t *testing.T) {
+	var requests atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests.Add(1)
+		if r.URL.Path != "/user" || r.Header.Get("Authorization") != "Bearer secret-token" {
+			t.Errorf("unexpected authentication request: %s", r.URL)
+		}
+		_, _ = w.Write([]byte(`{"id":1}`))
+	}))
+	defer server.Close()
+	provider := GitHubProvider{Client: server.Client(), APIBaseURL: server.URL}
+	credential := coderepositorymodel.Credentials{Token: "secret-token"}
+	if err := provider.ValidateAuthentication(context.Background(), json.RawMessage(`{}`), credential); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if _, err := provider.DiscoverRepositories(ctx, json.RawMessage(`{}`), credential, 1, 50); err == nil {
+		t.Fatal("cancelled discovery succeeded")
+	}
+	if requests.Load() != 1 {
+		t.Fatalf("cancelled discovery reached provider: %d requests", requests.Load())
 	}
 }
 

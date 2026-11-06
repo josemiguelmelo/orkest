@@ -15,6 +15,7 @@ The platform and agentctl share one Go module. The UI is a React application.
 | UI state and forms | TanStack Router/Query, React Hook Form, Zod | Navigation, scoped caches, validation |
 | UI primitives | Tailwind, Radix | Owned components and accessible interactions |
 | API contracts | OpenAPI, Hey API | Served contracts and generated frontend client |
+| Coding provider APIs | go-github, GitLab client-go | Typed REST authentication and repository discovery behind provider adapters |
 | Execution | Docker Engine; Local processes | Independent agentctl workers |
 | Agent protocol | ACP over stdio | Runtime commands and callbacks |
 | Worker transport | REST, receive-only WebSocket | Commands, status, ordered activity |
@@ -38,6 +39,10 @@ The platform and agentctl share one Go module. The UI is a React application.
 | Worker API | [OpenAPI](../internal/adapters/http/agentctl/openapi.yaml) |
 
 - Pin dependencies; regenerate SQL/API artifacts from inputs.
+- Coding provider SDKs stay inside adapters; domain contracts retain Orkest types
+  and sanitized errors. GitLab SDK retries are disabled to preserve request
+  behavior. Git checkouts use the existing credential-safe Git CLI path; GitHub
+  Projects imports retain their separate GraphQL client.
 - Keep generated rows/SDK types in adapters; static queries in `db/queries`.
 - PostgreSQL adapters own locks, transactions, consistency enforcement and row→domain mapping.
   Domain planners supply business effects. Workflow dispatch uses short claim and

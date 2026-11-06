@@ -14,6 +14,8 @@ import (
 	"strings"
 	"time"
 
+	gitlabsdk "gitlab.com/gitlab-org/api/client-go/v3"
+
 	"github.com/josemiguelmelo/orkest/internal/server/coderepository"
 	coderepositorymodel "github.com/josemiguelmelo/orkest/internal/server/coderepository/model"
 )
@@ -94,20 +96,15 @@ func (p Provider) ValidateAuthentication(ctx context.Context, cfg json.RawMessag
 	if strings.TrimSpace(credential.Token) == "" {
 		return &coderepositorymodel.ProviderError{Code: "gitlab_token_required", Status: http.StatusBadRequest}
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, base+"/api/v4/user", nil)
+	client, err := p.sdkClient(base, credential.Token)
 	if err != nil {
 		return providerError("gitlab_connection_failed", http.StatusBadGateway)
 	}
-	req.Header.Set("PRIVATE-TOKEN", credential.Token)
-	resp, err := p.client().Do(req)
+	_, response, err := client.Users.CurrentUser(gitlabsdk.WithContext(ctx))
 	if err != nil {
-		return providerError("gitlab_connection_failed", http.StatusBadGateway)
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
-		return providerError("gitlab_authentication_failed", http.StatusBadGateway)
-	}
-	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		if response != nil && (response.StatusCode == http.StatusUnauthorized || response.StatusCode == http.StatusForbidden) {
+			return providerError("gitlab_authentication_failed", http.StatusBadGateway)
+		}
 		return providerError("gitlab_connection_failed", http.StatusBadGateway)
 	}
 	return nil
@@ -127,44 +124,45 @@ func (p Provider) DiscoverRepositories(ctx context.Context, cfg json.RawMessage,
 	if perPage < 1 || perPage > 100 {
 		perPage = 50
 	}
-	endpoint := base + "/api/v4/projects?membership=true&simple=true&order_by=name&sort=asc&page=" + strconv.Itoa(page) + "&per_page=" + strconv.Itoa(perPage)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	client, err := p.sdkClient(base, credential.Token)
 	if err != nil {
 		return coderepositorymodel.RepositoryPage{}, providerError("gitlab_repository_request_failed", http.StatusBadGateway)
 	}
-	req.Header.Set("PRIVATE-TOKEN", credential.Token)
-	resp, err := p.client().Do(req)
+	entries, response, err := client.Projects.ListProjects(&gitlabsdk.ListProjectsOptions{
+		Membership:  new(true),
+		Simple:      new(true),
+		OrderBy:     new("name"),
+		Sort:        new("asc"),
+		ListOptions: gitlabsdk.ListOptions{Page: int64(page), PerPage: int64(perPage)},
+	}, gitlabsdk.WithContext(ctx))
 	if err != nil {
-		return coderepositorymodel.RepositoryPage{}, providerError("gitlab_repository_request_failed", http.StatusBadGateway)
+		code := "gitlab_repository_request_failed"
+		if response != nil {
+			switch response.StatusCode {
+			case http.StatusUnauthorized:
+				code = "gitlab_token_invalid_or_revoked"
+			case http.StatusForbidden:
+				code = "gitlab_permission_denied"
+			case http.StatusOK:
+				code = "gitlab_repository_response_invalid"
+			}
+		}
+		// Never return SDK errors containing provider response bodies or request details.
+		return coderepositorymodel.RepositoryPage{}, providerError(code, http.StatusBadGateway)
 	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode == http.StatusUnauthorized {
-		return coderepositorymodel.RepositoryPage{}, providerError("gitlab_token_invalid_or_revoked", http.StatusBadGateway)
-	}
-	if resp.StatusCode == http.StatusForbidden {
-		return coderepositorymodel.RepositoryPage{}, providerError("gitlab_permission_denied", http.StatusBadGateway)
-	}
-	if resp.StatusCode < 200 || resp.StatusCode > 299 {
-		return coderepositorymodel.RepositoryPage{}, providerError("gitlab_repository_request_failed", http.StatusBadGateway)
-	}
-	var entries []struct {
-		ID            int64  `json:"id"`
-		Name          string `json:"path_with_namespace"`
-		CloneURL      string `json:"http_url_to_repo"`
-		Visibility    string `json:"visibility"`
-		DefaultBranch string `json:"default_branch"`
-	}
-	if json.NewDecoder(resp.Body).Decode(&entries) != nil {
-		return coderepositorymodel.RepositoryPage{}, providerError("gitlab_repository_response_invalid", http.StatusBadGateway)
-	}
-	result := coderepositorymodel.RepositoryPage{Repositories: make([]coderepositorymodel.RepositoryMetadata, 0, len(entries))}
+	result := coderepositorymodel.RepositoryPage{Repositories: make([]coderepositorymodel.RepositoryMetadata, 0, len(entries)), NextPage: int(response.NextPage)}
 	for _, item := range entries {
-		if err := p.validateCloneURL(base, item.CloneURL); err != nil {
+		if item == nil {
 			return coderepositorymodel.RepositoryPage{}, providerError("gitlab_repository_response_invalid", http.StatusBadGateway)
 		}
-		result.Repositories = append(result.Repositories, coderepositorymodel.RepositoryMetadata{ID: strconv.FormatInt(item.ID, 10), Name: item.Name, CloneURL: item.CloneURL, Private: item.Visibility != "public", DefaultBranch: item.DefaultBranch})
+		if err := p.validateCloneURL(base, item.HTTPURLToRepo); err != nil {
+			return coderepositorymodel.RepositoryPage{}, providerError("gitlab_repository_response_invalid", http.StatusBadGateway)
+		}
+		result.Repositories = append(result.Repositories, coderepositorymodel.RepositoryMetadata{ID: strconv.FormatInt(item.ID, 10), Name: item.PathWithNamespace, CloneURL: item.HTTPURLToRepo, Private: item.Visibility != gitlabsdk.PublicVisibility, DefaultBranch: item.DefaultBranch})
 	}
-	if len(entries) == perPage {
+	// Some self-hosted endpoints omit pagination headers; retain the previous fallback.
+	_, hasNextPage := response.Header["X-Next-Page"]
+	if !hasNextPage && response.Header.Get("X-Page") == "" && response.Header.Get("Link") == "" && len(entries) == perPage {
 		result.NextPage = page + 1
 	}
 	return result, nil
@@ -341,6 +339,10 @@ func (p Provider) client() *http.Client {
 		return p.Client
 	}
 	return &http.Client{Timeout: 20 * time.Second}
+}
+
+func (p Provider) sdkClient(base, token string) (*gitlabsdk.Client, error) {
+	return gitlabsdk.NewClient(token, gitlabsdk.WithBaseURL(base), gitlabsdk.WithHTTPClient(p.client()), gitlabsdk.WithoutRetries())
 }
 
 func providerError(code string, status int) error {

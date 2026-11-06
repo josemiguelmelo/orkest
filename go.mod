@@ -11,6 +11,7 @@ require (
 require (
 	github.com/containerd/errdefs v1.0.0
 	github.com/coreos/go-oidc/v3 v3.16.0
+	github.com/google/go-github/v93 v93.0.0
 	github.com/invopop/jsonschema v0.14.0
 	github.com/jackc/pgx/v5 v5.11.0
 	github.com/joho/godotenv v1.5.1
@@ -18,8 +19,16 @@ require (
 	github.com/moby/moby/client v0.6.2
 	github.com/pressly/goose/v3 v3.29.0
 	github.com/swaggest/swgui v1.8.9
+	gitlab.com/gitlab-org/api/client-go/v3 v3.44.0
 	go.yaml.in/yaml/v4 v4.0.0-rc.2
-	golang.org/x/oauth2 v0.36.0
+	golang.org/x/oauth2 v0.37.0
+)
+
+require (
+	github.com/google/go-querystring v1.2.0 // indirect
+	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
+	github.com/hashicorp/go-retryablehttp v0.7.8 // indirect
+	golang.org/x/time v0.16.0 // indirect
 )
 
 require (

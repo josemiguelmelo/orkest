@@ -14,6 +14,8 @@ import (
 	"strings"
 	"time"
 
+	githubsdk "github.com/google/go-github/v93/github"
+
 	"github.com/josemiguelmelo/orkest/internal/server/coderepository"
 	coderepositorymodel "github.com/josemiguelmelo/orkest/internal/server/coderepository/model"
 )
@@ -58,21 +60,15 @@ func (p GitHubProvider) ValidateAuthentication(ctx context.Context, cfg json.Raw
 	if strings.TrimSpace(credential.Token) == "" {
 		return &coderepositorymodel.ProviderError{Code: "github_token_required", Status: http.StatusBadRequest}
 	}
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, p.apiBase()+"/user", nil)
+	client, err := p.sdkClient(credential.Token)
 	if err != nil {
 		return &coderepositorymodel.ProviderError{Code: "github_connection_failed", Status: http.StatusBadGateway}
 	}
-	request.Header.Set("Authorization", "Bearer "+credential.Token)
-	request.Header.Set("Accept", "application/vnd.github+json")
-	response, err := p.client().Do(request)
+	_, response, err := client.Users.Get(ctx, "")
 	if err != nil {
-		return &coderepositorymodel.ProviderError{Code: "github_connection_failed", Status: http.StatusBadGateway}
-	}
-	defer func() { _ = response.Body.Close() }()
-	if response.StatusCode == http.StatusUnauthorized || response.StatusCode == http.StatusForbidden {
-		return &coderepositorymodel.ProviderError{Code: "github_authentication_failed", Status: http.StatusBadGateway}
-	}
-	if response.StatusCode < 200 || response.StatusCode > 299 {
+		if response != nil && (response.StatusCode == http.StatusUnauthorized || response.StatusCode == http.StatusForbidden) {
+			return &coderepositorymodel.ProviderError{Code: "github_authentication_failed", Status: http.StatusBadGateway}
+		}
 		return &coderepositorymodel.ProviderError{Code: "github_connection_failed", Status: http.StatusBadGateway}
 	}
 	return nil
@@ -91,42 +87,39 @@ func (p GitHubProvider) DiscoverRepositories(ctx context.Context, cfg json.RawMe
 	if perPage < 1 || perPage > 100 {
 		perPage = 50
 	}
-	endpoint := p.apiBase() + "/user/repos?page=" + strconv.Itoa(page) + "&per_page=" + strconv.Itoa(perPage) + "&sort=full_name&affiliation=owner,collaborator,organization_member"
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	client, err := p.sdkClient(credential.Token)
 	if err != nil {
 		return coderepositorymodel.RepositoryPage{}, &coderepositorymodel.ProviderError{Code: "github_repository_request_failed", Status: http.StatusBadGateway}
 	}
-	request.Header.Set("Authorization", "Bearer "+credential.Token)
-	request.Header.Set("Accept", "application/vnd.github+json")
-	response, err := p.client().Do(request)
+	entries, response, err := client.Repositories.ListByAuthenticatedUser(ctx, &githubsdk.RepositoryListByAuthenticatedUserOptions{
+		Affiliation: "owner,collaborator,organization_member",
+		Sort:        "full_name",
+		ListOptions: githubsdk.ListOptions{Page: page, PerPage: perPage},
+	})
 	if err != nil {
-		return coderepositorymodel.RepositoryPage{}, &coderepositorymodel.ProviderError{Code: "github_repository_request_failed", Status: http.StatusBadGateway}
+		code := "github_repository_request_failed"
+		if response != nil {
+			switch response.StatusCode {
+			case http.StatusUnauthorized:
+				code = "github_token_invalid_or_revoked"
+			case http.StatusForbidden:
+				code = "github_permission_denied_or_rate_limited"
+			case http.StatusOK:
+				code = "github_repository_response_invalid"
+			}
+		}
+		// SDK errors may contain response bodies and request details. Expose only our stable codes.
+		return coderepositorymodel.RepositoryPage{}, &coderepositorymodel.ProviderError{Code: code, Status: http.StatusBadGateway}
 	}
-	defer func() { _ = response.Body.Close() }()
-	if response.StatusCode == 401 {
-		return coderepositorymodel.RepositoryPage{}, &coderepositorymodel.ProviderError{Code: "github_token_invalid_or_revoked", Status: http.StatusBadGateway}
-	}
-	if response.StatusCode == 403 {
-		return coderepositorymodel.RepositoryPage{}, &coderepositorymodel.ProviderError{Code: "github_permission_denied_or_rate_limited", Status: http.StatusBadGateway}
-	}
-	if response.StatusCode < 200 || response.StatusCode > 299 {
-		return coderepositorymodel.RepositoryPage{}, &coderepositorymodel.ProviderError{Code: "github_repository_request_failed", Status: http.StatusBadGateway}
-	}
-	var entries []struct {
-		ID            int64  `json:"id"`
-		Name          string `json:"full_name"`
-		CloneURL      string `json:"clone_url"`
-		Private       bool   `json:"private"`
-		DefaultBranch string `json:"default_branch"`
-	}
-	if json.NewDecoder(response.Body).Decode(&entries) != nil {
-		return coderepositorymodel.RepositoryPage{}, &coderepositorymodel.ProviderError{Code: "github_repository_response_invalid", Status: http.StatusBadGateway}
-	}
-	result := coderepositorymodel.RepositoryPage{Repositories: make([]coderepositorymodel.RepositoryMetadata, 0, len(entries))}
+	result := coderepositorymodel.RepositoryPage{Repositories: make([]coderepositorymodel.RepositoryMetadata, 0, len(entries)), NextPage: response.NextPage}
 	for _, entry := range entries {
-		result.Repositories = append(result.Repositories, coderepositorymodel.RepositoryMetadata{ID: strconv.FormatInt(entry.ID, 10), Name: entry.Name, CloneURL: entry.CloneURL, Private: entry.Private, DefaultBranch: entry.DefaultBranch})
+		if entry == nil {
+			return coderepositorymodel.RepositoryPage{}, &coderepositorymodel.ProviderError{Code: "github_repository_response_invalid", Status: http.StatusBadGateway}
+		}
+		result.Repositories = append(result.Repositories, coderepositorymodel.RepositoryMetadata{ID: strconv.FormatInt(entry.GetID(), 10), Name: entry.GetFullName(), CloneURL: entry.GetCloneURL(), Private: entry.GetPrivate(), DefaultBranch: entry.GetDefaultBranch()})
 	}
-	if len(entries) == perPage {
+	// Preserve discovery for endpoints that omit pagination headers.
+	if response.Header.Get("Link") == "" && len(entries) == perPage {
 		result.NextPage = page + 1
 	}
 	return result, nil
@@ -181,11 +174,13 @@ func (p GitHubProvider) client() *http.Client {
 	return &http.Client{Timeout: 20 * time.Second}
 }
 
-func (p GitHubProvider) apiBase() string {
+func (p GitHubProvider) sdkClient(token string) (*githubsdk.Client, error) {
+	options := []githubsdk.ClientOptionsFunc{githubsdk.WithHTTPClient(p.client()), githubsdk.WithAuthToken(token)}
 	if strings.TrimSpace(p.APIBaseURL) != "" {
-		return strings.TrimRight(p.APIBaseURL, "/")
+		base := strings.TrimRight(p.APIBaseURL, "/") + "/"
+		options = append(options, githubsdk.WithURLs(&base, nil))
 	}
-	return "https://api.github.com"
+	return githubsdk.NewClient(options...)
 }
 
 func (p GitHubProvider) gitAuthenticated(ctx context.Context, repo coderepositorymodel.RepositoryMetadata, credential coderepositorymodel.Credentials, path, operation string, branch ...string) error {
