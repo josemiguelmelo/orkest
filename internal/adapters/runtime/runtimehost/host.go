@@ -75,7 +75,7 @@ func (h *Host) start(ctx context.Context, config configmodel.RuntimeConfig, rest
 	}
 	store := sessionStorage{StateDir: h.environment.StateDir, WorkDir: h.environment.WorkDir, RuntimeVersion: descriptor.Version}
 	if descriptor.UseQuestionTool {
-		store.QuestionToolVersion = 1
+		store.QuestionToolVersion = questionToolVersion
 	}
 	owner, err := store.acquire(config)
 	if err != nil {
@@ -91,7 +91,10 @@ func (h *Host) start(ctx context.Context, config configmodel.RuntimeConfig, rest
 
 	var nativeID string
 	if restoring {
-		nativeID, err = store.load(config)
+		var restored restoredSession
+		restored, err = store.load(config)
+		nativeID = restored.SessionID
+		store.QuestionToolVersion = restored.QuestionToolVersion
 	} else {
 		err = store.reserveCreation(config)
 	}
@@ -100,7 +103,7 @@ func (h *Host) start(ctx context.Context, config configmodel.RuntimeConfig, rest
 	}
 	settings := agentruntime.ResolvedRuntimeSettings{Agent: config.Agent, Model: config.Model, MCPServers: config.MCPServers, Skills: config.Skills}
 	paths := h.provisioningPaths(config, store)
-	questionTool, questionToken, err := prepareQuestionTool(paths, descriptor, restoring)
+	questionTool, questionToken, err := prepareQuestionTool(paths, descriptor.Version, restoring, store.QuestionToolVersion)
 	if err != nil {
 		return nil, &agentruntime.LaunchError{Message: "question tool configuration unavailable; saved session preserved", Cause: err}
 	}
@@ -111,11 +114,6 @@ func (h *Host) start(ctx context.Context, config configmodel.RuntimeConfig, rest
 	}()
 	if err := addQuestionTool(&settings, questionTool, questionToken); err != nil {
 		return nil, err
-	}
-	if questionTool != nil {
-		store.QuestionToolVersion = 1
-	} else {
-		store.QuestionToolVersion = 0
 	}
 	prepared, err := h.prepareRuntime(ctx, config, settings, store, descriptor, restoring)
 	if err != nil {

@@ -23,23 +23,15 @@ type questionToolState struct {
 
 // prepareQuestionTool preserves the endpoint and instructions of saved sessions.
 // Legacy manifests never receive an implicit MCP server or new instructions.
-func prepareQuestionTool(paths agentruntime.ProvisioningPaths, descriptor agentruntime.RuntimeDescriptor, restoring bool) (*questiontool.Server, string, error) {
-	if !descriptor.UseQuestionTool {
+func prepareQuestionTool(paths agentruntime.ProvisioningPaths, runtimeVersion string, restoring bool, toolVersion int) (*questiontool.Server, string, error) {
+	if toolVersion == 0 {
 		return nil, "", nil
 	}
 	path := filepath.Join(paths.RuntimeRoot, "question-tool.json")
-	state := questionToolState{Version: 1, RuntimeVersion: descriptor.Version, Address: "127.0.0.1:0", Token: questiontool.NewToken()}
+	state := questionToolState{Version: toolVersion, RuntimeVersion: runtimeVersion, Address: "127.0.0.1:0", Token: questiontool.NewToken()}
 	if restoring {
-		var manifest sessionManifest
-		raw, err := os.ReadFile(filepath.Join(paths.RuntimeRoot, "session.json"))
-		if err != nil || json.Unmarshal(raw, &manifest) != nil {
-			return nil, "", errors.New("question tool session manifest unavailable")
-		}
-		if manifest.Version < 4 {
-			return nil, "", nil
-		}
-		raw, err = os.ReadFile(path)
-		if err != nil || json.Unmarshal(raw, &state) != nil || state.Version != 1 || state.RuntimeVersion != descriptor.Version {
+		raw, err := os.ReadFile(path)
+		if err != nil || json.Unmarshal(raw, &state) != nil || state.Version != toolVersion || state.RuntimeVersion != runtimeVersion {
 			return nil, "", errors.New("saved question tool configuration unavailable or incompatible")
 		}
 		host, port, err := net.SplitHostPort(state.Address)

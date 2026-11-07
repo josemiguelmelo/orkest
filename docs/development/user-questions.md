@@ -89,6 +89,8 @@ Sessions using the fallback write native manifest v4 and private
 `question-tool.json` state (feature version 1). The saved endpoint, token, and
 versioned instruction behavior are preserved on restore. Address conflicts, missing
 state, or incompatible feature versions fail visibly while retaining the session.
+Session storage validates the native manifest once and supplies its effective
+question-tool version to tool preparation; legacy manifests supply version zero.
 Workers that do not understand v4 reject it.
 
 Existing v1/v2/v3 sessions retain their previous configuration and do not silently

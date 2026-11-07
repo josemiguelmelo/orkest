@@ -35,7 +35,10 @@ it('sends exact option values and custom text, retaining the submission ID acros
     .mockRejectedValueOnce(new Error('Connection lost'))
     .mockResolvedValue(undefined);
   render(<QuestionCard question={question} canAnswer respond={respond} />);
-  await user.selectOptions(screen.getByLabelText('Package manager *'), 'pnpm');
+  await user.selectOptions(
+    screen.getByLabelText('Package manager *'),
+    screen.getByRole('option', { name: 'PNPM' }),
+  );
   await user.type(screen.getByLabelText('Additional answer'), 'Use this workspace');
   await user.click(screen.getByRole('button', { name: 'Send answer' }));
   await screen.findByText('Connection lost');
@@ -62,4 +65,33 @@ it('shows viewers the pending question without answer controls', () => {
   expect(screen.getByText('Select a package manager')).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Send answer' })).not.toBeInTheDocument();
   expect(screen.getByText('Waiting for an answer')).toBeInTheDocument();
+});
+
+it.each(['enum', 'oneOf'] as const)('preserves an empty-string %s choice', async (kind) => {
+  const respond = vi.fn().mockResolvedValue(undefined);
+  const field =
+    kind === 'enum'
+      ? { type: 'string' as const, enum: ['', 'pnpm'], enumNames: ['None', 'PNPM'] }
+      : {
+          type: 'string' as const,
+          oneOf: [
+            { const: '', title: 'None' },
+            { const: 'pnpm', title: 'PNPM' },
+          ],
+        };
+  render(
+    <QuestionCard
+      question={{ ...question, schema: { properties: { manager: field }, required: ['manager'] } }}
+      canAnswer
+      respond={respond}
+    />,
+  );
+  await userEvent
+    .setup()
+    .selectOptions(
+      screen.getByLabelText('manager *'),
+      screen.getByRole('option', { name: 'None' }),
+    );
+  await userEvent.setup().click(screen.getByRole('button', { name: 'Send answer' }));
+  expect(respond.mock.calls[0]?.[0]).toEqual({ action: 'accept', content: { manager: '' } });
 });

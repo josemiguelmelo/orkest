@@ -1,6 +1,8 @@
 package runtimehost
 
 import (
+	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -29,8 +31,8 @@ func TestV1SessionCompatibility(t *testing.T) {
 		t.Fatal(err)
 	}
 	id, err := store.load(config)
-	if err != nil || id != "native-v1-session" {
-		t.Fatalf("load legacy snapshot: %q %v", id, err)
+	if err != nil || id.SessionID != "native-v1-session" || id.QuestionToolVersion != 0 {
+		t.Fatalf("load legacy snapshot: %+v %v", id, err)
 	}
 	if err = store.reserveCreation(config); err == nil {
 		t.Fatal("fresh launch replaced existing session")
@@ -55,5 +57,49 @@ func TestSessionIdentityIgnoresOnlyRunAndCredentials(t *testing.T) {
 	config.MCPServers[0].URL = "https://other.test"
 	if configurationFingerprint(config) == first {
 		t.Fatal("MCP destination excluded from compatibility")
+	}
+}
+
+func TestRestoredSessionQuestionToolCompatibility(t *testing.T) {
+	config := configmodel.RuntimeConfig{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task"}
+	for _, test := range []struct {
+		name                                                string
+		manifestVersion, savedTool, supportedTool, wantTool int
+		incompatible                                        bool
+	}{
+		{"legacy ignores feature metadata", 3, questionToolVersion, questionToolVersion, 0, false},
+		{"current tool", 4, questionToolVersion, questionToolVersion, questionToolVersion, false},
+		{"unsupported tool", 4, questionToolVersion + 1, questionToolVersion, 0, true},
+		{"profile without tool", 4, questionToolVersion, 0, 0, true},
+		{"missing tool version", 4, 0, questionToolVersion, 0, true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			store := sessionStorage{StateDir: t.TempDir(), WorkDir: t.TempDir(), RuntimeVersion: "pinned", QuestionToolVersion: test.supportedTool}
+			if err := store.reserveCreation(config); err != nil {
+				t.Fatal(err)
+			}
+			manifest := sessionManifest{Version: test.manifestVersion, QuestionToolVersion: test.savedTool, SessionID: "saved-native-session", RuntimeVersion: store.RuntimeVersion, WorkDir: store.WorkDir, Configuration: sessionConfigurationFingerprint(config)}
+			raw, err := json.Marshal(manifest)
+			if err != nil {
+				t.Fatal(err)
+			}
+			path := filepath.Join(store.Root(config), "session.json")
+			if err := os.WriteFile(path, raw, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			restored, err := store.load(config)
+			if test.incompatible {
+				var failure *sessionManifestCompatibilityError
+				if !errors.As(err, &failure) || restored != (restoredSession{}) {
+					t.Fatalf("incompatible manifest returned %+v, %v", restored, err)
+				}
+			} else if err != nil || restored.SessionID != manifest.SessionID || restored.QuestionToolVersion != test.wantTool {
+				t.Fatalf("restore returned %+v, %v", restored, err)
+			}
+			after, err := os.ReadFile(path)
+			if err != nil || string(after) != string(raw) {
+				t.Fatal("restore changed saved manifest", err)
+			}
+		})
 	}
 }

@@ -22,6 +22,8 @@ type LaunchService struct {
 
 var ErrTaskRunNotFound = errors.New("task run not found")
 
+var ErrQuestionUnavailable = errors.New("question is unavailable for this run")
+
 func NewLaunchService(repo TaskExecutionRepository, executor AgentctlStarter, client AgentctlClient, communication AgentCommunication, completion *LaunchCompletionService) (*LaunchService, error) {
 	if repo == nil || executor == nil || client == nil || communication == nil {
 		return nil, errors.New("launch dependencies are required")
@@ -229,7 +231,7 @@ func (s *LaunchService) taskLaunch(ctx context.Context, orgID, workspaceID, task
 			return launch, nil
 		}
 	}
-	return orchestrationmodel.Launch{}, errors.New("task run not found")
+	return orchestrationmodel.Launch{}, ErrTaskRunNotFound
 }
 
 func validEndpoint(endpoint string) bool {
@@ -314,7 +316,7 @@ func (s *LaunchService) RespondTaskQuestion(ctx context.Context, orgID, workspac
 		return err
 	}
 	if response.TaskID != taskID || response.RunID != runID || response.TaskSessionID != launch.TaskSessionID {
-		return errors.New("question scope does not match the run")
+		return ErrQuestionUnavailable
 	}
 	return s.client.RespondQuestion(ctx, launch.Endpoint, response)
 }

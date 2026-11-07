@@ -208,19 +208,13 @@ function QuestionInput({
   }
   if (options.length)
     return (
-      <select
+      <SingleChoiceInput
         name={name}
         required={required}
-        value={(value as string | undefined) ?? ''}
-        onChange={(event) => onChange(event.target.value === '' ? undefined : event.target.value)}
-      >
-        <option value="">Select…</option>
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
-      </select>
+        options={options}
+        value={value as string | undefined}
+        onChange={onChange}
+      />
     );
   const numeric = field.type === 'integer' || field.type === 'number';
   return (
@@ -244,5 +238,38 @@ function QuestionInput({
         )
       }
     />
+  );
+}
+
+function SingleChoiceInput({
+  name,
+  required,
+  options,
+  value,
+  onChange,
+}: {
+  name: string;
+  required: boolean;
+  options: { value: string; label: string }[];
+  value: string | undefined;
+  onChange: (value: string | undefined) => void;
+}) {
+  const selected = options.findIndex((option) => option.value === value);
+  return (
+    <select
+      name={name}
+      required={required}
+      value={selected < 0 ? '' : String(selected)}
+      onChange={(event) =>
+        onChange(event.target.value === '' ? undefined : options[Number(event.target.value)]?.value)
+      }
+    >
+      <option value="">Select…</option>
+      {options.map((option, index) => (
+        <option key={index} value={String(index)}>
+          {option.label}
+        </option>
+      ))}
+    </select>
   );
 }

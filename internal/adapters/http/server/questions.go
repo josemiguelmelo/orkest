@@ -70,5 +70,10 @@ func writeQuestionError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusBadRequest, "invalid_answer")
 		return
 	}
-	writeError(w, http.StatusConflict, "question_unavailable")
+	if errors.Is(err, orchestration.ErrQuestionUnavailable) || errors.Is(err, orchestration.ErrTaskRunNotFound) ||
+		(errors.As(err, &failure) && failure.Code == "invalid_question") {
+		writeError(w, http.StatusConflict, "question_unavailable")
+		return
+	}
+	respondError(w, err)
 }
