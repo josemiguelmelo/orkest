@@ -22,7 +22,8 @@ func (p Profile) Descriptor() agentruntime.RuntimeDescriptor {
 		binary = "kiro-cli"
 	}
 	return agentruntime.RuntimeDescriptor{
-		Runtime: coreruntime.Kiro, Version: Version, VersionOutputPrefix: "kiro-cli ", Executable: binary,
+		UseQuestionTool: true,
+		Runtime:         coreruntime.Kiro, Version: Version, VersionOutputPrefix: "kiro-cli ", Executable: binary,
 		Arguments: []string{"acp", "--agent-engine=v3", "--agent", "orkest"}, VersionArguments: []string{"--version"},
 		ReservedEnvNames: []string{"HOME", "KIRO_HOME", "KIRO_SKIP_BINARY_PINNING"},
 	}

@@ -320,6 +320,20 @@ export declare const zDirectAgentConversation: z.ZodObject<{
     agentId: z.ZodString;
     createdAt: z.ZodISODateTime;
 }, z.core.$strip>;
+export declare const zQuestionResponseRequest: z.ZodObject<{
+    taskSessionId: z.ZodString;
+    sessionId: z.ZodString;
+    commandId: z.ZodString;
+    submissionId: z.ZodString;
+    answer: z.ZodObject<{
+        action: z.ZodEnum<{
+            accept: "accept";
+            decline: "decline";
+            cancel: "cancel";
+        }>;
+        content: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnknown>>;
+    }, z.core.$strip>;
+}, z.core.$strip>;
 export declare const zTaskRunEvent: z.ZodObject<{
     runId: z.ZodString;
     sequence: z.ZodInt;
@@ -2931,4 +2945,46 @@ export declare const zDiscardTaskRunQueuePath: z.ZodObject<{
     workspaceID: z.ZodString;
     taskID: z.ZodString;
     runID: z.ZodString;
+}, z.core.$strip>;
+export declare const zRespondTaskRunQuestionBody: z.ZodObject<{
+    taskSessionId: z.ZodString;
+    sessionId: z.ZodString;
+    commandId: z.ZodString;
+    submissionId: z.ZodString;
+    answer: z.ZodObject<{
+        action: z.ZodEnum<{
+            accept: "accept";
+            decline: "decline";
+            cancel: "cancel";
+        }>;
+        content: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnknown>>;
+    }, z.core.$strip>;
+}, z.core.$strip>;
+export declare const zRespondTaskRunQuestionPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+    taskID: z.ZodString;
+    runID: z.ZodString;
+    questionID: z.ZodString;
+}, z.core.$strip>;
+export declare const zRespondDirectAgentConversationQuestionBody: z.ZodObject<{
+    taskSessionId: z.ZodString;
+    sessionId: z.ZodString;
+    commandId: z.ZodString;
+    submissionId: z.ZodString;
+    answer: z.ZodObject<{
+        action: z.ZodEnum<{
+            accept: "accept";
+            decline: "decline";
+            cancel: "cancel";
+        }>;
+        content: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnknown>>;
+    }, z.core.$strip>;
+}, z.core.$strip>;
+export declare const zRespondDirectAgentConversationQuestionPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+    conversationID: z.ZodString;
+    runID: z.ZodString;
+    questionID: z.ZodString;
 }, z.core.$strip>;

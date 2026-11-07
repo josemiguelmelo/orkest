@@ -85,3 +85,5 @@ func (c commandController) DiscardQueue() error { return c.err }
 func (c commandController) Subscribe(uint64) ([]interaction.Event, <-chan interaction.Event, func(), error) {
 	return nil, nil, nil, interaction.ErrConversation
 }
+
+func (c commandController) RespondQuestion(interaction.QuestionResponse) error { return c.err }

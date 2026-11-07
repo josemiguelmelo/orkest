@@ -24,6 +24,10 @@ const (
 	EventPromptCompleted     EventType = "prompt_completed"
 	EventPromptFailed        EventType = "prompt_failed"
 	EventUpdate              EventType = "update"
+	EventQuestionRequested   EventType = "question_requested"
+	EventQuestionAnswered    EventType = "question_answered"
+	EventQuestionCancelled   EventType = "question_cancelled"
+	EventQuestionUncertain   EventType = "question_delivery_uncertain"
 	EventPermissionRequested EventType = "permission_requested"
 	EventPermissionResponse  EventType = "permission_response"
 	EventCancelRequested     EventType = "cancel_requested"
@@ -58,20 +62,22 @@ type ToolContent struct {
 
 // Event is sensitive task activity, persisted before subscribers are notified.
 type Event struct {
-	At             time.Time   `json:"at"`
-	Sequence       uint64      `json:"sequence"`
-	Type           EventType   `json:"type"`
-	OrganizationID string      `json:"organizationId"`
-	WorkspaceID    string      `json:"workspaceId"`
-	TaskID         string      `json:"taskId"`
-	RunID          string      `json:"runId"`
-	TaskSessionID  string      `json:"taskSessionId,omitempty"`
-	SessionID      string      `json:"sessionId"`
-	CommandID      string      `json:"commandId,omitempty"`
-	RequestID      string      `json:"requestId,omitempty"`
-	Text           string      `json:"text,omitempty"`
-	Update         *Update     `json:"update,omitempty"`
-	Permission     *Permission `json:"permission,omitempty"`
-	StopReason     string      `json:"stopReason,omitempty"`
-	Error          string      `json:"error,omitempty"`
+	At               time.Time         `json:"at"`
+	Sequence         uint64            `json:"sequence"`
+	Type             EventType         `json:"type"`
+	OrganizationID   string            `json:"organizationId"`
+	WorkspaceID      string            `json:"workspaceId"`
+	TaskID           string            `json:"taskId"`
+	RunID            string            `json:"runId"`
+	TaskSessionID    string            `json:"taskSessionId,omitempty"`
+	SessionID        string            `json:"sessionId"`
+	CommandID        string            `json:"commandId,omitempty"`
+	RequestID        string            `json:"requestId,omitempty"`
+	Text             string            `json:"text,omitempty"`
+	Update           *Update           `json:"update,omitempty"`
+	Permission       *Permission       `json:"permission,omitempty"`
+	Question         *Question         `json:"question,omitempty"`
+	QuestionResponse *QuestionResponse `json:"questionResponse,omitempty"`
+	StopReason       string            `json:"stopReason,omitempty"`
+	Error            string            `json:"error,omitempty"`
 }

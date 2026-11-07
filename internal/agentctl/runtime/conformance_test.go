@@ -146,6 +146,7 @@ func TestRuntimeConformance(t *testing.T) {
 				modelProvider = "kiro"
 			}
 			profile := conformance.Profile{Config: configmodel.RuntimeConfig{OrganizationID: "test-org", WorkspaceID: "test-workspace", TaskID: "test-task", TaskSessionID: "test-session", RunID: "revision-1", Runtime: runtime, Agent: configmodel.AgentDefinition{Name: "Work", Instructions: "Follow user instructions."}, Model: configmodel.ModelSelection{Provider: modelProvider, ID: "fixture"}}, Remember: func(token string) string { return "remember:" + token }, Recall: "recall", Permission: "permission", Wait: "wait", Suspend: "wait"}
+			profile.Question = conformance.Probe{Prompt: "question", Expected: "Using pnpm"}
 			marker, err := ids.NewUUID()
 			if err != nil {
 				t.Fatal(err)
@@ -181,6 +182,7 @@ func TestRuntimeConformance(t *testing.T) {
 				profile.Permission = required(t, "ORKEST_TEST_APPROVAL_PROMPT")
 				profile.Wait = required(t, "ORKEST_TEST_CANCELLATION_PROMPT")
 				profile.Suspend = required(t, "ORKEST_TEST_RECOVERY_PROMPT")
+				profile.Question = conformance.Probe{Prompt: required(t, "ORKEST_TEST_QUESTION_PROMPT"), Expected: required(t, "ORKEST_TEST_QUESTION_EXPECTED")}
 			}
 			if factory(t, t.TempDir(), t.TempDir()).Version() != version {
 				t.Fatal("adapter version differs from inventory")

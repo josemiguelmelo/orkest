@@ -9,6 +9,7 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
 	agentrun "github.com/josemiguelmelo/orkest/internal/agentctl/run"
 	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
+	"github.com/josemiguelmelo/orkest/internal/platform/form"
 )
 
 // writeServiceError exposes known domain errors and sanitizes unexpected failures.
@@ -42,6 +43,8 @@ func writeServiceError(w http.ResponseWriter, err error, status int, code, messa
 		{agentrun.ErrLaunchConflict, http.StatusConflict, "launch_conflict"},
 		{agentruntime.ErrRuntimeHostUnavailable, http.StatusServiceUnavailable, "provider_unavailable"},
 		{interaction.ErrCommand, http.StatusBadRequest, "invalid_command"},
+		{interaction.ErrQuestion, http.StatusConflict, "invalid_question"},
+		{form.ErrInvalid, http.StatusBadRequest, "invalid_answer"},
 		{interaction.ErrPermission, http.StatusConflict, "invalid_permission"},
 		{interaction.ErrConversationBusy, http.StatusConflict, "conversation_busy"},
 		{interaction.ErrConversationInterrupted, http.StatusConflict, "conversation_interrupted"},

@@ -20,6 +20,11 @@ export class ApiError extends Error {
   }
 }
 const messages: Record<string, string> = {
+  question_unavailable:
+    'This question has closed or cannot receive an answer. Refresh the conversation before retrying.',
+  invalid_question: 'Check the question and your answer, then try again.',
+  invalid_answer: 'Your answer does not match the requested fields.',
+
   execution_images_not_configured:
     'Image building is not configured. Ask your administrator to set ORKEST_EXECUTION_IMAGE_REPOSITORY to a registry repository.',
   invalid_request: 'Some values are invalid. Check the form and try again.',

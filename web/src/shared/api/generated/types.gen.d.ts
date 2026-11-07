@@ -238,6 +238,21 @@ export type DirectAgentConversation = {
     agentId: string;
     createdAt: string;
 };
+export type QuestionResponseRequest = {
+    taskSessionId: string;
+    sessionId: string;
+    commandId: string;
+    submissionId: string;
+    answer: {
+        action: 'accept' | 'decline' | 'cancel';
+        /**
+         * Values matching the original question schema
+         */
+        content?: {
+            [key: string]: unknown;
+        };
+    };
+};
 export type TaskRunEvent = {
     runId: string;
     sequence: number;
@@ -4277,6 +4292,80 @@ export type DiscardTaskRunQueueError = DiscardTaskRunQueueErrors[keyof DiscardTa
 export type DiscardTaskRunQueueResponses = {
     /**
      * Queue updated
+     */
+    200: unknown;
+};
+export type RespondTaskRunQuestionData = {
+    body: QuestionResponseRequest;
+    path: {
+        orgID: string;
+        workspaceID: string;
+        taskID: string;
+        runID: string;
+        questionID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/tasks/{taskID}/runs/{runID}/questions/{questionID}/respond';
+};
+export type RespondTaskRunQuestionErrors = {
+    /**
+     * Request body or role is invalid
+     */
+    400: Error;
+    /**
+     * Missing or invalid credentials
+     */
+    401: Error;
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+    /**
+     * Operation conflicts with an existing resource or invariant
+     */
+    409: Error;
+};
+export type RespondTaskRunQuestionError = RespondTaskRunQuestionErrors[keyof RespondTaskRunQuestionErrors];
+export type RespondTaskRunQuestionResponses = {
+    /**
+     * Answer durably recorded; runtime consumption is not implied
+     */
+    200: unknown;
+};
+export type RespondDirectAgentConversationQuestionData = {
+    body: QuestionResponseRequest;
+    path: {
+        orgID: string;
+        workspaceID: string;
+        conversationID: string;
+        runID: string;
+        questionID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/agent-conversations/{conversationID}/runs/{runID}/questions/{questionID}/respond';
+};
+export type RespondDirectAgentConversationQuestionErrors = {
+    /**
+     * Request body or role is invalid
+     */
+    400: Error;
+    /**
+     * Missing or invalid credentials
+     */
+    401: Error;
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+    /**
+     * Operation conflicts with an existing resource or invariant
+     */
+    409: Error;
+};
+export type RespondDirectAgentConversationQuestionError = RespondDirectAgentConversationQuestionErrors[keyof RespondDirectAgentConversationQuestionErrors];
+export type RespondDirectAgentConversationQuestionResponses = {
+    /**
+     * Answer durably recorded; runtime consumption is not implied
      */
     200: unknown;
 };

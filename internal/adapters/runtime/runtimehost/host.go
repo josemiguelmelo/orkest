@@ -74,6 +74,9 @@ func (h *Host) start(ctx context.Context, config configmodel.RuntimeConfig, rest
 		return nil, err
 	}
 	store := sessionStorage{StateDir: h.environment.StateDir, WorkDir: h.environment.WorkDir, RuntimeVersion: descriptor.Version}
+	if descriptor.UseQuestionTool {
+		store.QuestionToolVersion = questionToolVersion
+	}
 	owner, err := store.acquire(config)
 	if err != nil {
 		slog.Default().Error("runtime task storage ownership failed", "organization_id", config.OrganizationID, "workspace_id", config.WorkspaceID, "task_id", config.TaskID, "run_id", config.RunID, "task_session_id", config.TaskSessionID, "state_dir", h.environment.StateDir, "error", err)
@@ -88,7 +91,10 @@ func (h *Host) start(ctx context.Context, config configmodel.RuntimeConfig, rest
 
 	var nativeID string
 	if restoring {
-		nativeID, err = store.load(config)
+		var restored restoredSession
+		restored, err = store.load(config)
+		nativeID = restored.SessionID
+		store.QuestionToolVersion = restored.QuestionToolVersion
 	} else {
 		err = store.reserveCreation(config)
 	}
@@ -97,6 +103,18 @@ func (h *Host) start(ctx context.Context, config configmodel.RuntimeConfig, rest
 	}
 	settings := agentruntime.ResolvedRuntimeSettings{Agent: config.Agent, Model: config.Model, MCPServers: config.MCPServers, Skills: config.Skills}
 	paths := h.provisioningPaths(config, store)
+	questionTool, questionToken, err := prepareQuestionTool(paths, descriptor.Version, restoring, store.QuestionToolVersion)
+	if err != nil {
+		return nil, &agentruntime.LaunchError{Message: "question tool configuration unavailable; saved session preserved", Cause: err}
+	}
+	defer func() {
+		if !transferred && questionTool != nil {
+			_ = questionTool.Close()
+		}
+	}()
+	if err := addQuestionTool(&settings, questionTool, questionToken); err != nil {
+		return nil, err
+	}
 	prepared, err := h.prepareRuntime(ctx, config, settings, store, descriptor, restoring)
 	if err != nil {
 		return nil, err
@@ -112,6 +130,10 @@ func (h *Host) start(ctx context.Context, config configmodel.RuntimeConfig, rest
 		}
 	}()
 	h.registerSessionSecrets(session, config, prepared)
+	session.questionTool = questionTool
+	if questionTool != nil {
+		session.callbacks.AddSecretValues(questionToken)
+	}
 
 	options := h.profile.ProtocolSessionOptions(settings, paths)
 	if err := h.initializeSession(ctx, session, settings, options, descriptor, nativeID, restoring); err != nil {

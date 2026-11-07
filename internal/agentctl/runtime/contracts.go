@@ -52,6 +52,7 @@ type RecoveryDecision struct {
 }
 
 type PromptObserver struct {
+	Question   func(context.Context, interaction.Question) (interaction.QuestionAnswer, error)
 	Update     func(interaction.Update) error
 	Permission func(context.Context, interaction.Permission) (string, error)
 }

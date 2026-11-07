@@ -289,3 +289,7 @@ func (c *RunController) initializeConversation(ctx context.Context, mode session
 	}
 	return nil
 }
+
+func (c *RunController) RespondQuestion(response interaction.QuestionResponse) error {
+	return c.currentConversation().RespondQuestion(response)
+}

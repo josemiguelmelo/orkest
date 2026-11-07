@@ -28,6 +28,7 @@ type Controller interface {
 	Prompt(string, string) error
 	CancelPrompt(string) error
 	RespondPermission(interaction.PermissionResponse) error
+	RespondQuestion(interaction.QuestionResponse) error
 	Subscribe(uint64) ([]interaction.Event, <-chan interaction.Event, func(), error)
 }
 
@@ -63,6 +64,7 @@ func (s *Server) Handler(logger *slog.Logger) http.Handler {
 	router.Post("/agent/prompt", s.prompt)
 	router.Post("/agent/cancel", s.cancelPrompt)
 	router.Post("/agent/permissions/respond", s.respondPermission)
+	router.Post("/agent/questions/respond", s.respondQuestion)
 	router.Get("/agent/stream", s.stream)
 	openapi.Enable(router, "Orkest agentctl API", OpenAPIContract)
 	return router

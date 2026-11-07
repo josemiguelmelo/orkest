@@ -46,6 +46,7 @@ func Run(version string) {
 				ID     any             `json:"id"`
 				Method string          `json:"method"`
 				Params json.RawMessage `json:"params"`
+				Result json.RawMessage `json:"result"`
 			}
 			if json.Unmarshal(scanner.Bytes(), &request) != nil {
 				os.Exit(2)
@@ -119,6 +120,9 @@ func Run(version string) {
 				if _, text, ok := strings.Cut(params.Prompt[0].Text, "]\n\n"); ok {
 					params.Prompt[0].Text = text
 				}
+				questionText, questionKey, _ := strings.Cut(params.Prompt[0].Text, "\n\n[Orkest question tool commandKey: ")
+				params.Prompt[0].Text = questionText
+				questionKey = strings.TrimSuffix(questionKey, "]")
 				if strings.HasPrefix(params.Prompt[0].Text, "probe:") {
 					var data []byte
 					var err error
@@ -174,6 +178,19 @@ func Run(version string) {
 				if params.Prompt[0].Text == "crash" {
 					os.Exit(23)
 				}
+				if params.Prompt[0].Text == "question" && (copilotFixture || kiroFixture) && questionKey != "" {
+					if err := fixtureAskUser(questionKey); err != nil {
+						os.Exit(24)
+					}
+					fixtureSend(map[string]any{"jsonrpc": "2.0", "method": "session/update", "params": map[string]any{"sessionId": "fixture-session", "update": map[string]any{"sessionUpdate": "agent_message_chunk", "content": map[string]any{"type": "text", "text": "Using pnpm"}}}})
+					result = map[string]any{"stopReason": "end_turn"}
+					break
+				}
+				if params.Prompt[0].Text == "question" {
+					activePrompt = request.ID
+					fixtureSend(map[string]any{"jsonrpc": "2.0", "id": "fixture-question", "method": "elicitation/create", "params": map[string]any{"sessionId": "fixture-session", "toolCallId": "question-tool", "mode": "form", "message": "Package manager?", "requestedSchema": map[string]any{"type": "object", "properties": map[string]any{"manager": map[string]any{"type": "string", "enum": []string{"npm", "pnpm"}}}, "required": []string{"manager"}}}})
+					continue
+				}
 				fixtureSend(map[string]any{"jsonrpc": "2.0", "method": "session/update", "params": map[string]any{"sessionId": "fixture-session", "update": map[string]any{"sessionUpdate": "agent_message_chunk", "content": map[string]any{"type": "text", "text": "Hello from fixture"}}}})
 				if params.Prompt[0].Text == "permission" {
 					activePrompt = request.ID
@@ -186,6 +203,18 @@ func Run(version string) {
 				}
 				result = map[string]any{"stopReason": "end_turn"}
 			case "":
+				if request.ID == "fixture-question" {
+					var answer struct {
+						Action  string         `json:"action"`
+						Content map[string]any `json:"content"`
+					}
+					if json.Unmarshal(request.Result, &answer) != nil || answer.Action != "accept" || answer.Content["manager"] != "pnpm" {
+						os.Exit(24)
+					}
+					fixtureSend(map[string]any{"jsonrpc": "2.0", "method": "session/update", "params": map[string]any{"sessionId": "fixture-session", "update": map[string]any{"sessionUpdate": "agent_message_chunk", "content": map[string]any{"type": "text", "text": "Using pnpm"}}}})
+					fixtureSend(map[string]any{"jsonrpc": "2.0", "id": activePrompt, "result": map[string]any{"stopReason": "end_turn"}})
+					continue
+				}
 				if request.ID != "fixture-permission" {
 					os.Exit(6)
 				}

@@ -237,6 +237,20 @@ paths:
           content:
             application/json:
               schema: { $ref: "#/components/schemas/Error" }
+  /agent/questions/respond:
+    post:
+      tags: [Agent]
+      operationId: respondQuestion
+      summary: Durably record an answer for the original pending question
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: "#/components/schemas/QuestionResponse"}
+      responses:
+        "200": {description: Answer recorded, content: {application/json: {schema: {$ref: "#/components/schemas/CommandResponse"}}}}
+        "400": {description: Answer fails the form schema}
+        "409": {description: "Stale, conflicting, closed, or mismatched question"}
   /agent/permissions/respond:
     post:
       operationId: respondAgentPermission
@@ -345,6 +359,8 @@ components:
               provider_unavailable,
               launch_failed,
               invalid_command,
+              invalid_question,
+              invalid_answer,
               invalid_permission,
               conversation_unavailable,
               conversation_busy,
@@ -454,6 +470,7 @@ components:
                 starting,
                 ready,
                 running,
+                waiting_for_input,
                 waiting_for_permission,
                 failed,
                 interrupted,
@@ -495,13 +512,39 @@ components:
       required: [status]
       properties:
         status:
-          { enum: [accepted, cancel_requested, permission_response_recorded] }
+          { enum: [accepted, cancel_requested, permission_response_recorded, question_answer_recorded] }
         commandId: { type: string }
         requestId:
           {
             type: string,
             description: Permission request identity for a recorded response,
           }
+    Question:
+      type: object
+      required: [message, schema]
+      properties:
+        toolCallId: {type: string}
+        message: {type: string}
+        schema: {type: object, additionalProperties: true}
+    QuestionAnswer:
+      type: object
+      required: [action]
+      properties:
+        action: {type: string, enum: [accept, decline, cancel]}
+        content: {type: object, additionalProperties: true}
+    QuestionResponse:
+      type: object
+      required: [taskId, taskSessionId, runId, sessionId, commandId, requestId, submissionId, answer]
+      properties:
+        taskId: {type: string}
+        taskSessionId: {type: string}
+        runId: {type: string}
+        sessionId: {type: string}
+        commandId: {type: string}
+        requestId: {type: string}
+        answeredBy: {type: string, description: Human actor recorded by the platform}
+        submissionId: {type: string, minLength: 1, maxLength: 200}
+        answer: {$ref: "#/components/schemas/QuestionAnswer"}
     PermissionResponse:
       type: object
       required: [taskId, runId, sessionId, requestId, optionId]
@@ -557,6 +600,10 @@ components:
               session_restored,
               runtime_stopped,
               update,
+              question_requested,
+              question_answered,
+              question_cancelled,
+              question_delivery_uncertain,
               permission_requested,
               permission_response,
               cancel_requested,
@@ -575,6 +622,8 @@ components:
         stopReason: { type: string }
         error: { type: string }
         permission: { $ref: "#/components/schemas/Permission" }
+        question: {$ref: "#/components/schemas/Question"}
+        questionResponse: {$ref: "#/components/schemas/QuestionResponse"}
         update:
           type: object
           required: [kind]

@@ -225,6 +225,20 @@ export const zDirectAgentConversation = z.object({
     agentId: z.string(),
     createdAt: z.iso.datetime()
 });
+export const zQuestionResponseRequest = z.object({
+    taskSessionId: z.string(),
+    sessionId: z.string().min(1),
+    commandId: z.string().min(1),
+    submissionId: z.string().min(1).max(200),
+    answer: z.object({
+        action: z.enum([
+            'accept',
+            'decline',
+            'cancel'
+        ]),
+        content: z.record(z.string(), z.unknown()).optional()
+    })
+});
 export const zTaskRunEvent = z.object({
     runId: z.string(),
     sequence: z.int().gte(1),
@@ -1429,4 +1443,20 @@ export const zDiscardTaskRunQueuePath = z.object({
     workspaceID: z.string(),
     taskID: z.string(),
     runID: z.string()
+});
+export const zRespondTaskRunQuestionBody = zQuestionResponseRequest;
+export const zRespondTaskRunQuestionPath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string(),
+    taskID: z.string(),
+    runID: z.string(),
+    questionID: z.string()
+});
+export const zRespondDirectAgentConversationQuestionBody = zQuestionResponseRequest;
+export const zRespondDirectAgentConversationQuestionPath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string(),
+    conversationID: z.string(),
+    runID: z.string(),
+    questionID: z.string()
 });

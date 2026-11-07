@@ -31,7 +31,11 @@ func (c *conversation) ReplayAndReconcile(ctx context.Context) error {
 		return err
 	}
 	for _, command := range c.unresolvedCommands(history) {
-		decision, err := c.session.Reconcile(ctx, command)
+		decision := agentruntime.RecoveryDecision{Action: agentruntime.RecoveryPause}
+		var err error
+		if !c.commandHasQuestions(command.ID) {
+			decision, err = c.session.Reconcile(ctx, command)
+		}
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}

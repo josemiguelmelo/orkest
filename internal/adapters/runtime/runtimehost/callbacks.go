@@ -2,7 +2,9 @@ package runtimehost
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"strings"
 	"sync"
 
 	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
@@ -35,12 +37,18 @@ func (c *sessionCallbacks) Update(update interaction.Update) error {
 	c.mu.Lock()
 	observer := c.observer
 	cancel := c.cancelObserver
+	secrets := append([]string(nil), c.secrets...)
 	c.mu.Unlock()
 	if observer == nil || observer.Update == nil {
 		return nil
 	}
+	for _, secret := range secrets {
+		if secret != "" {
+			update.Text = strings.ReplaceAll(update.Text, secret, "[redacted]")
+		}
+	}
 	if update.Kind == "tool_call" || update.Kind == "tool_call_update" {
-		update = interaction.BoundToolUpdate(interaction.RedactToolUpdate(update, c.secrets))
+		update = interaction.BoundToolUpdate(interaction.RedactToolUpdate(update, secrets))
 	}
 	err := observer.Update(update)
 	if err != nil && cancel != nil {
@@ -80,6 +88,51 @@ func (c *sessionCallbacks) Observation(observation agentruntime.HistoryObservati
 	if c.replay != nil {
 		c.replay.Add(observation)
 	}
+}
+
+func (c *sessionCallbacks) Question(ctx context.Context, question interaction.Question) (interaction.QuestionAnswer, error) {
+	c.mu.Lock()
+	observer, promptContext := c.observer, c.promptContext
+	secrets := append([]string(nil), c.secrets...)
+	c.mu.Unlock()
+	if observer == nil || observer.Question == nil || promptContext == nil {
+		return interaction.QuestionAnswer{}, errors.New("no active question handler")
+	}
+	var schema any
+	if json.Unmarshal(question.Schema, &schema) != nil {
+		return interaction.QuestionAnswer{}, errors.New("invalid input form")
+	}
+	if questionContainsSecret(question.Message, secrets) || questionContainsSecret(schema, secrets) {
+		return interaction.QuestionAnswer{}, errors.New("question contains protected runtime values")
+	}
+	questionCtx, stop := context.WithCancel(ctx)
+	detach := context.AfterFunc(promptContext, stop)
+	defer func() { detach(); stop() }()
+	return observer.Question(questionCtx, question)
+}
+
+func questionContainsSecret(value any, secrets []string) bool {
+	switch value := value.(type) {
+	case string:
+		for _, secret := range secrets {
+			if secret != "" && strings.Contains(value, secret) {
+				return true
+			}
+		}
+	case map[string]any:
+		for key, nested := range value {
+			if questionContainsSecret(key, secrets) || questionContainsSecret(nested, secrets) {
+				return true
+			}
+		}
+	case []any:
+		for _, nested := range value {
+			if questionContainsSecret(nested, secrets) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func (c *sessionCallbacks) beginReplay(sessionID string, coverageVerified bool) {

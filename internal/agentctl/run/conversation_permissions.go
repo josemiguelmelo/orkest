@@ -64,9 +64,7 @@ func (c *conversation) removePendingPermission(id string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	delete(c.pending, id)
-	if c.executionState == runmodel.StateWaitingPermission && len(c.pending) == 0 {
-		c.executionState = runmodel.StateRunning
-	}
+	c.refreshWaitingStateUnderLock()
 }
 
 func (c *conversation) RespondPermission(response interaction.PermissionResponse) error {

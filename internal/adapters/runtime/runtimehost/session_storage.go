@@ -17,9 +17,20 @@ import (
 )
 
 // sessionStorage owns the stable task-scoped layout independently of native protocols.
-type sessionStorage struct{ StateDir, WorkDir, RuntimeVersion string }
+type sessionStorage struct {
+	StateDir, WorkDir, RuntimeVersion string
+	QuestionToolVersion               int
+}
 
 var errSessionAlreadyExists = errors.New("session already exists; explicit restoration required")
+
+const questionToolVersion = 1
+
+// restoredSession contains only metadata from a successfully validated manifest.
+type restoredSession struct {
+	SessionID           string
+	QuestionToolVersion int
+}
 
 type sessionManifest struct {
 	Version                  int               `json:"version"`
@@ -28,6 +39,7 @@ type sessionManifest struct {
 	Configuration            string            `json:"configuration"`
 	ConfigurationFingerprint map[string]string `json:"configurationFingerprint,omitempty"`
 	SessionID                string            `json:"sessionId"`
+	QuestionToolVersion      int               `json:"questionToolVersion,omitempty"`
 }
 
 type sessionManifestCompatibilityError struct {
@@ -180,14 +192,14 @@ func (s sessionStorage) reserveCreation(config configmodel.RuntimeConfig) error 
 	return file.Close()
 }
 
-func (s sessionStorage) load(config configmodel.RuntimeConfig) (string, error) {
+func (s sessionStorage) load(config configmodel.RuntimeConfig) (restoredSession, error) {
 	data, err := os.ReadFile(filepath.Join(s.Root(config), "session.json"))
 	if err != nil {
-		return "", err
+		return restoredSession{}, err
 	}
 	var manifest sessionManifest
 	if err := json.Unmarshal(data, &manifest); err != nil {
-		return "", err
+		return restoredSession{}, err
 	}
 	compatibleConfiguration := false
 	if manifest.Version >= 3 {
@@ -214,8 +226,11 @@ func (s sessionStorage) load(config configmodel.RuntimeConfig) (string, error) {
 			)
 		}
 	}
-	if manifest.Version != 1 && manifest.Version != 2 && manifest.Version != 3 {
+	if manifest.Version != 1 && manifest.Version != 2 && manifest.Version != 3 && manifest.Version != 4 {
 		mismatches = append(mismatches, "manifest_version_mismatch")
+	}
+	if manifest.Version == 4 && (manifest.QuestionToolVersion != questionToolVersion || s.QuestionToolVersion != questionToolVersion) {
+		mismatches = append(mismatches, "question_tool_version_mismatch")
 	}
 	if manifest.RuntimeVersion != s.RuntimeVersion {
 		mismatches = append(mismatches, "runtime_version_mismatch")
@@ -233,14 +248,23 @@ func (s sessionStorage) load(config configmodel.RuntimeConfig) (string, error) {
 		mismatches = append(mismatches, "native_session_id_missing")
 	}
 	if len(mismatches) != 0 {
-		return "", &sessionManifestCompatibilityError{Mismatches: mismatches, Fields: configurationFields, Legacy: legacyConfiguration}
+		return restoredSession{}, &sessionManifestCompatibilityError{Mismatches: mismatches, Fields: configurationFields, Legacy: legacyConfiguration}
 	}
-	return manifest.SessionID, nil
+	toolVersion := 0
+	if manifest.Version == 4 {
+		toolVersion = manifest.QuestionToolVersion
+	}
+	return restoredSession{SessionID: manifest.SessionID, QuestionToolVersion: toolVersion}, nil
 }
 
 func (s sessionStorage) save(config configmodel.RuntimeConfig, id string) error {
+	version := 3
+	if s.QuestionToolVersion != 0 {
+		version = 4
+	}
 	data, err := json.Marshal(sessionManifest{
-		Version:                  3,
+		Version:                  version,
+		QuestionToolVersion:      s.QuestionToolVersion,
 		RuntimeVersion:           s.RuntimeVersion,
 		WorkDir:                  s.WorkDir,
 		Configuration:            sessionConfigurationFingerprint(config),

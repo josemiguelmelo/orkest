@@ -14,6 +14,9 @@
 ## Shared behavior
 
 - Instructions, selected skills, HTTP MCP; ACP v1 for all profiles.
+- Structured user questions: shared ACP form elicitation for OpenCode, Codex, and
+  Claude Code; private Orkest MCP fallback for new Copilot/Kiro sessions. See
+  [question behavior, compatibility, and qualification limits](../../development/user-questions.md).
 - `ask`: forward approvals; `autonomous`: native noninteractive permissions.
   Sandbox varies by runtime/executor; Local has no container isolation.
 - Standalone: `-runtime`, existing absolute work directory, absolute durable state

@@ -116,3 +116,10 @@ func (s *DirectChatService) Queue(ctx context.Context, orgID, workspaceID, conve
 	}
 	return s.launches.TaskQueue(ctx, orgID, workspaceID, conversationID, runID, discard)
 }
+
+func (s *DirectChatService) RespondQuestion(ctx context.Context, orgID, workspaceID, conversationID, runID string, response orchestrationmodel.QuestionResponse) error {
+	if _, err := s.Get(ctx, orgID, workspaceID, conversationID); err != nil {
+		return err
+	}
+	return s.launches.RespondTaskQuestion(ctx, orgID, workspaceID, conversationID, runID, response)
+}

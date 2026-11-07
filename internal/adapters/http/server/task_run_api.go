@@ -26,6 +26,7 @@ func (a taskRunAPI) routes(r chi.Router) {
 		r.Post("/{runID}/queue/resume", a.resumeQueue)
 		r.Post("/{runID}/queue/discard", a.discardQueue)
 		r.Post("/{runID}/permissions/respond", a.respondPermission)
+		r.Post("/{runID}/questions/{questionID}/respond", a.respondQuestion)
 	})
 }
 

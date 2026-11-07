@@ -1567,6 +1567,42 @@ paths:
         "403": {$ref: "#/components/responses/Forbidden"}
         "404": {$ref: "#/components/responses/NotFound"}
         "409": {description: Queue unavailable, content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/tasks/{taskID}/runs/{runID}/questions/{questionID}/respond:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+      - {name: taskID, in: path, required: true, schema: {type: string}}
+      - {name: runID, in: path, required: true, schema: {type: string}}
+      - {name: questionID, in: path, required: true, schema: {type: string}}
+    post:
+      tags: [Tasks]
+      operationId: respondTaskRunQuestion
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/QuestionResponseRequest"}}}}
+      responses:
+        "200": {description: Answer durably recorded; runtime consumption is not implied}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "409": {$ref: "#/components/responses/Conflict"}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/agent-conversations/{conversationID}/runs/{runID}/questions/{questionID}/respond:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+      - {name: conversationID, in: path, required: true, schema: {type: string}}
+      - {name: runID, in: path, required: true, schema: {type: string}}
+      - {name: questionID, in: path, required: true, schema: {type: string}}
+    post:
+      tags: [Agents]
+      operationId: respondDirectAgentConversationQuestion
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      requestBody: {required: true, content: {application/json: {schema: {$ref: "#/components/schemas/QuestionResponseRequest"}}}}
+      responses:
+        "200": {description: Answer durably recorded; runtime consumption is not implied}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "409": {$ref: "#/components/responses/Conflict"}
 components:
   requestBodies:
     NamedResource:
@@ -1908,6 +1944,20 @@ components:
         id: {type: string}
         agentId: {type: string}
         createdAt: {type: string, format: date-time}
+    QuestionResponseRequest:
+      type: object
+      required: [taskSessionId, sessionId, commandId, submissionId, answer]
+      properties:
+        taskSessionId: {type: string}
+        sessionId: {type: string, minLength: 1}
+        commandId: {type: string, minLength: 1}
+        submissionId: {type: string, minLength: 1, maxLength: 200}
+        answer:
+          type: object
+          required: [action]
+          properties:
+            action: {type: string, enum: [accept, decline, cancel]}
+            content: {type: object, additionalProperties: true, description: Values matching the original question schema}
     TaskRunEvent:
       type: object
       required: [runId, sequence, payload]
