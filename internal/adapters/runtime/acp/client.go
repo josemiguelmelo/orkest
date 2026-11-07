@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
+	"time"
 
 	sdk "github.com/coder/acp-go-sdk"
 	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
@@ -20,7 +21,7 @@ type Factory struct{}
 
 func (Factory) Connect(_ context.Context, input io.WriteCloser, output io.ReadCloser, callbacks agentruntime.ProtocolCallbacks) (agentruntime.ProtocolClient, error) {
 	client := &client{callbacks: callbacks}
-	connection := sdk.NewClientSideConnection(client, input, output)
+	connection := sdk.NewConnection(client.handleRequest, input, output)
 	connection.SetLogger(slog.New(slog.NewTextHandler(io.Discard, nil)))
 	client.connection = connection
 	return client, nil
@@ -29,12 +30,12 @@ func (Factory) Connect(_ context.Context, input io.WriteCloser, output io.ReadCl
 type client struct {
 	mu         sync.Mutex
 	callbacks  agentruntime.ProtocolCallbacks
-	connection *sdk.ClientSideConnection
+	connection *sdk.Connection
 	sessionID  string
 }
 
 func (c *client) Initialize(ctx context.Context) (agentruntime.NegotiatedCapabilities, error) {
-	response, err := c.connection.Initialize(ctx, sdk.InitializeRequest{ProtocolVersion: 1})
+	response, err := sdk.SendRequest[sdk.InitializeResponse](c.connection, ctx, "initialize", c.initializeRequest())
 	if err != nil {
 		return agentruntime.NegotiatedCapabilities{}, c.protocolError("initialize ACP connection failed", err)
 	}
@@ -42,7 +43,7 @@ func (c *client) Initialize(ctx context.Context) (agentruntime.NegotiatedCapabil
 }
 
 func (c *client) NewSession(ctx context.Context, workDir string, options agentruntime.ProtocolSessionOptions) (string, error) {
-	response, err := c.connection.NewSession(ctx, sdk.NewSessionRequest{Cwd: workDir, McpServers: mcpServers(options.MCPServers), Meta: options.Metadata})
+	response, err := sdk.SendRequest[sdk.NewSessionResponse](c.connection, ctx, "session/new", sdk.NewSessionRequest{Cwd: workDir, McpServers: mcpServers(options.MCPServers), Meta: options.Metadata})
 	if err != nil {
 		return "", c.protocolError("create ACP session failed", err)
 	}
@@ -56,7 +57,7 @@ func (c *client) LoadSession(ctx context.Context, id string, workDir string, opt
 	c.mu.Lock()
 	c.sessionID = id
 	c.mu.Unlock()
-	_, err := c.connection.LoadSession(ctx, sdk.LoadSessionRequest{SessionId: sdk.SessionId(id), Cwd: workDir, McpServers: mcpServers(options.MCPServers), Meta: options.Metadata})
+	_, err := sdk.SendRequest[sdk.LoadSessionResponse](c.connection, ctx, "session/load", sdk.LoadSessionRequest{SessionId: sdk.SessionId(id), Cwd: workDir, McpServers: mcpServers(options.MCPServers), Meta: options.Metadata})
 	if err != nil {
 		return c.protocolError("load ACP session failed", err)
 	}
@@ -80,7 +81,7 @@ func (c *client) SetSessionModel(ctx context.Context, id, model string) error {
 }
 
 func (c *client) SetSessionMode(ctx context.Context, id, mode string) error {
-	_, err := c.connection.SetSessionMode(ctx, sdk.SetSessionModeRequest{SessionId: sdk.SessionId(id), ModeId: sdk.SessionModeId(mode)})
+	_, err := sdk.SendRequest[sdk.SetSessionModeResponse](c.connection, ctx, "session/set_mode", sdk.SetSessionModeRequest{SessionId: sdk.SessionId(id), ModeId: sdk.SessionModeId(mode)})
 	if err != nil {
 		return c.protocolError("set ACP session mode failed", err)
 	}
@@ -91,8 +92,13 @@ func (c *client) Prompt(ctx context.Context, id, text string) (agentruntime.Stop
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
-	response, err := c.connection.Prompt(ctx, sdk.PromptRequest{SessionId: sdk.SessionId(id), Prompt: []sdk.ContentBlock{sdk.TextBlock(text)}})
+	response, err := sdk.SendRequest[sdk.PromptResponse](c.connection, ctx, "session/prompt", sdk.PromptRequest{SessionId: sdk.SessionId(id), Prompt: []sdk.ContentBlock{sdk.TextBlock(text)}})
 	if err != nil {
+		if ctx.Err() != nil {
+			cancelContext, stop := context.WithTimeout(context.Background(), 5*time.Second)
+			_ = c.Cancel(cancelContext, id)
+			stop()
+		}
 		kind := agentruntime.RuntimeFailure
 		select {
 		case <-c.connection.Done():
@@ -105,7 +111,7 @@ func (c *client) Prompt(ctx context.Context, id, text string) (agentruntime.Stop
 }
 
 func (c *client) Cancel(ctx context.Context, id string) error {
-	if err := c.connection.Cancel(ctx, sdk.CancelNotification{SessionId: sdk.SessionId(id)}); err != nil {
+	if err := c.connection.SendNotification(ctx, "session/cancel", sdk.CancelNotification{SessionId: sdk.SessionId(id)}); err != nil {
 		return c.protocolError("cancel ACP prompt failed", err)
 	}
 	return nil
@@ -303,7 +309,7 @@ func (c *client) selectModel(ctx context.Context, id, model string) error {
 	if model == "" {
 		return nil
 	}
-	response, err := c.connection.SetSessionConfigOption(ctx, sdk.SetSessionConfigOptionRequest{ValueId: &sdk.SetSessionConfigOptionValueId{SessionId: sdk.SessionId(id), ConfigId: "model", Value: sdk.SessionConfigValueId(model)}})
+	response, err := sdk.SendRequest[sdk.SetSessionConfigOptionResponse](c.connection, ctx, "session/set_config_option", sdk.SetSessionConfigOptionRequest{ValueId: &sdk.SetSessionConfigOptionValueId{SessionId: sdk.SessionId(id), ConfigId: "model", Value: sdk.SessionConfigValueId(model)}})
 	if err != nil {
 		return c.protocolError("select configured ACP model failed", err)
 	}

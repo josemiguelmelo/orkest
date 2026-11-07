@@ -53,3 +53,15 @@ func (s *Server) command(w http.ResponseWriter, r *http.Request) {
 	}
 	protocol.WriteJSON(w, http.StatusOK, wire.CommandStatus{CommandID: status.CommandID, Status: string(status.Status)})
 }
+
+func (s *Server) respondQuestion(w http.ResponseWriter, r *http.Request) {
+	var request wire.QuestionResponse
+	if !protocol.ReadJSON(w, r, &request) {
+		return
+	}
+	if err := s.controller.RespondQuestion(fromWireQuestionResponse(request)); err != nil {
+		writeServiceError(w, err, http.StatusInternalServerError, "internal_error", "internal service error")
+		return
+	}
+	protocol.WriteJSON(w, http.StatusOK, wire.CommandResponse{Status: "question_answer_recorded", RequestID: request.RequestID})
+}

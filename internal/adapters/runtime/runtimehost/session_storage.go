@@ -17,7 +17,10 @@ import (
 )
 
 // sessionStorage owns the stable task-scoped layout independently of native protocols.
-type sessionStorage struct{ StateDir, WorkDir, RuntimeVersion string }
+type sessionStorage struct {
+	StateDir, WorkDir, RuntimeVersion string
+	QuestionToolVersion               int
+}
 
 var errSessionAlreadyExists = errors.New("session already exists; explicit restoration required")
 
@@ -28,6 +31,7 @@ type sessionManifest struct {
 	Configuration            string            `json:"configuration"`
 	ConfigurationFingerprint map[string]string `json:"configurationFingerprint,omitempty"`
 	SessionID                string            `json:"sessionId"`
+	QuestionToolVersion      int               `json:"questionToolVersion,omitempty"`
 }
 
 type sessionManifestCompatibilityError struct {
@@ -214,8 +218,11 @@ func (s sessionStorage) load(config configmodel.RuntimeConfig) (string, error) {
 			)
 		}
 	}
-	if manifest.Version != 1 && manifest.Version != 2 && manifest.Version != 3 {
+	if manifest.Version != 1 && manifest.Version != 2 && manifest.Version != 3 && manifest.Version != 4 {
 		mismatches = append(mismatches, "manifest_version_mismatch")
+	}
+	if manifest.Version == 4 && (manifest.QuestionToolVersion != 1 || s.QuestionToolVersion != 1) {
+		mismatches = append(mismatches, "question_tool_version_mismatch")
 	}
 	if manifest.RuntimeVersion != s.RuntimeVersion {
 		mismatches = append(mismatches, "runtime_version_mismatch")
@@ -239,8 +246,13 @@ func (s sessionStorage) load(config configmodel.RuntimeConfig) (string, error) {
 }
 
 func (s sessionStorage) save(config configmodel.RuntimeConfig, id string) error {
+	version := 3
+	if s.QuestionToolVersion != 0 {
+		version = 4
+	}
 	data, err := json.Marshal(sessionManifest{
-		Version:                  3,
+		Version:                  version,
+		QuestionToolVersion:      s.QuestionToolVersion,
 		RuntimeVersion:           s.RuntimeVersion,
 		WorkDir:                  s.WorkDir,
 		Configuration:            sessionConfigurationFingerprint(config),

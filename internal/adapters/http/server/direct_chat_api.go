@@ -33,6 +33,7 @@ func (a directChatAPI) routes(r chi.Router) {
 			r.Post("/runs/{runID}/queue/resume", a.resumeQueue)
 			r.Post("/runs/{runID}/queue/discard", a.discardQueue)
 			r.Post("/runs/{runID}/permissions/respond", a.respondPermission)
+			r.Post("/runs/{runID}/questions/{questionID}/respond", a.respondQuestion)
 		})
 	})
 }

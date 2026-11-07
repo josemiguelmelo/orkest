@@ -209,3 +209,7 @@ func (c *HTTPAgentctlClient) Queue(ctx context.Context, endpoint string, discard
 	}
 	return c.post(ctx, endpoint, path, struct{}{})
 }
+
+func (c *HTTPAgentctlClient) RespondQuestion(ctx context.Context, endpoint string, response orchestrationmodel.QuestionResponse) error {
+	return c.post(ctx, endpoint, "/agent/questions/respond", toWireQuestionResponse(response))
+}

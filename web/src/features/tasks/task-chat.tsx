@@ -30,6 +30,8 @@ import {
   type ChatTurn,
 } from './chat-model';
 import { ToolCard } from './tool-card';
+import { QuestionList } from './question-list';
+import { conversationQuestions } from './question-model';
 import type { SessionMode } from './session-choice';
 
 export function TaskChat({ task, direct = false }: { task: Task; direct?: boolean }) {
@@ -68,6 +70,7 @@ export function TaskChat({ task, direct = false }: { task: Task; direct?: boolea
   });
   const events = history.flatMap((query) => query.data ?? []);
   const turns = conversationTurns(events);
+  const questions = conversationQuestions(events);
   const currentTurns = conversationTurns(latestEvents.data ?? []);
   const active = [...currentTurns].reverse().find((turn) => turn.status === 'running');
   const queued = currentTurns.filter((turn) => turn.status === 'queued').length;
@@ -186,15 +189,20 @@ export function TaskChat({ task, direct = false }: { task: Task; direct?: boolea
                     : nextMode === 'new'
                       ? 'Your next message starts a fresh session. Existing chat and files are kept.'
                       : 'Continue the conversation with the same task context.';
+  const waitingForInput = execution.live && !execution.paused && questions.some(
+    (question) => question.status === 'pending' && question.runId === latest?.runId,
+  );
   const status = archived
     ? 'Previous session'
     : approvals.length && execution.live
       ? 'Approval needed'
-      : active && execution.live
-        ? 'Working'
-        : !latest
-          ? 'No session yet'
-          : execution.label;
+      : waitingForInput
+        ? 'Waiting for your input'
+        : active && execution.live
+          ? 'Working'
+          : !latest
+            ? 'No session yet'
+            : execution.label;
 
   return (
     <section className="agent-chat" aria-label={direct ? 'Direct agent chat' : 'Task chat'}>
@@ -294,6 +302,13 @@ export function TaskChat({ task, direct = false }: { task: Task; direct?: boolea
           {turns.map((turn) => (
             <ConversationTurn key={turn.id} turn={turn} />
           ))}
+          <QuestionList
+            questions={questions}
+            taskId={task.id}
+            activeRunId={latest?.runId}
+            canAnswer={!archived && permissions.editWorkspace && execution.live && !execution.paused}
+            direct={direct}
+          />
           {!archived && execution.finishing && (
             <p className="agent-turn-notice">
               <LoaderCircle size={13} className="chat-spin" />

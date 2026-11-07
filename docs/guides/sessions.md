@@ -29,6 +29,13 @@ flowchart TD
   before status refresh; no start dialog. Composer can explicitly choose a fresh session.
 - Done tasks/Viewers are read-only.
 
+Agents can request structured input through a question card in task or direct chat.
+Choose/type an answer, decline, or cancel that question; cancelling the entire run
+remains a separate action. Questions retain the execution reservation. Chat messages
+do not answer pending forms. Recorded answers and closed questions remain in history;
+an interrupted delivery is shown as unresolved. Supported paths and live qualification
+limits are listed in [runtime setup](../reference/runtimes/README.md).
+
 | Choice | Configuration | Retained work |
 | --- | --- | --- |
 | Continue session | Original agent, runtime, provider/model, instructions, skills, permissions, and MCP endpoints | Saved conversation, working trees, untracked files, task branches |

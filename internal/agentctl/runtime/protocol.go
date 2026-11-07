@@ -19,6 +19,11 @@ type ProtocolCallbacks interface {
 	Observation(HistoryObservation)
 }
 
+// QuestionCallbacks is implemented by hosts that can durably handle input forms.
+type QuestionCallbacks interface {
+	Question(context.Context, interaction.Question) (interaction.QuestionAnswer, error)
+}
+
 type NegotiatedCapabilities struct {
 	ProtocolVersion int
 	LoadSession     bool

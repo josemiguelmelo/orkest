@@ -21,7 +21,8 @@ func (p Profile) Descriptor() agentruntime.RuntimeDescriptor {
 		binary = "copilot"
 	}
 	return agentruntime.RuntimeDescriptor{
-		Runtime: coreruntime.GitHubCopilot, Version: Version, VersionOutputPrefix: "GitHub Copilot CLI ", VersionOutputSuffix: ".", Executable: binary,
+		UseQuestionTool: true,
+		Runtime:         coreruntime.GitHubCopilot, Version: Version, VersionOutputPrefix: "GitHub Copilot CLI ", VersionOutputSuffix: ".", Executable: binary,
 		Arguments: []string{"--acp", "--stdio"}, VersionArguments: []string{"--version"},
 		ReservedEnvNames: []string{"HOME", "COPILOT_HOME", "COPILOT_MODEL", "COPILOT_AUTO_UPDATE", "COPILOT_ALLOW_ALL"},
 	}

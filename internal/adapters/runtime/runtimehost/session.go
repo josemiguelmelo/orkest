@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/josemiguelmelo/orkest/internal/adapters/runtime/questiontool"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
 	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
 )
@@ -13,13 +14,14 @@ import (
 // Session owns the child process, protocol connection, and task ownership lease.
 // Host creates sessions after validating and provisioning their runtime.
 type Session struct {
-	child       *childProcess
-	connection  agentruntime.ProtocolClient
-	callbacks   *sessionCallbacks
-	sessionID   string
-	promptMu    sync.Mutex
-	ownership   *os.File
-	releaseOnce sync.Once
+	questionTool *questiontool.Server
+	child        *childProcess
+	connection   agentruntime.ProtocolClient
+	callbacks    *sessionCallbacks
+	sessionID    string
+	promptMu     sync.Mutex
+	ownership    *os.File
+	releaseOnce  sync.Once
 }
 
 func (s *Session) SessionID() string { return s.sessionID }
@@ -41,7 +43,12 @@ func (s *Session) Close() error {
 }
 
 func (s *Session) releaseOwnership() {
-	s.releaseOnce.Do(func() { _ = s.ownership.Close() })
+	s.releaseOnce.Do(func() {
+		if s.questionTool != nil {
+			_ = s.questionTool.Close()
+		}
+		_ = s.ownership.Close()
+	})
 }
 
 func (s *Session) supervise() {
@@ -63,7 +70,14 @@ func (s *Session) Prompt(ctx context.Context, command interaction.Command, obser
 	defer cancel()
 	s.callbacks.attachObserver(promptContext, cancel, observer)
 	defer s.callbacks.detachObserver()
-	reason, err := s.connection.Prompt(promptContext, s.sessionID, interaction.EncodeCommandPrompt(command.ID, command.Text))
+	text := interaction.EncodeCommandPrompt(command.ID, command.Text)
+	if s.questionTool != nil {
+		key := s.questionTool.Begin(promptContext, s.callbacks.Question)
+		defer s.questionTool.End()
+		s.callbacks.AddSecretValues(key)
+		text += "\n\n[Orkest question tool commandKey: " + key + "]"
+	}
+	reason, err := s.connection.Prompt(promptContext, s.sessionID, text)
 	if err != nil {
 		observerFailed := s.callbacks.hasObserverFailure()
 		select {
@@ -80,6 +94,9 @@ func (s *Session) Prompt(ctx context.Context, command interaction.Command, obser
 }
 
 func (s *Session) Cancel(ctx context.Context) error {
+	if s.questionTool != nil {
+		s.questionTool.End()
+	}
 	return s.connection.Cancel(ctx, s.sessionID)
 }
 

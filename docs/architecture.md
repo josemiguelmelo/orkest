@@ -170,6 +170,13 @@ flowchart LR
   no operational I/O.
 - Contracts/locking: [agentctl development](development/agentctl.md).
 
+User-input forms are worker-owned interactions, alongside permission requests.
+Native ACP elicitation and a private per-session HTTP MCP fallback feed the same
+question callback, durable reducer, authorized response API, and chat UI. The
+platform projects question events; it does not own waiting runtime invocations.
+Saved answers and runtime consumption are distinct facts. See the
+[question design and compatibility rules](development/user-questions.md).
+
 ## Add an implementation
 
 | Change | Extension point | Keep outside core policy |

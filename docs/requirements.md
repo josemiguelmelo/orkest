@@ -194,6 +194,9 @@ Required user-facing capabilities:
 - View task execution state and agent activity.
 - Chat with the agent in the context of a task.
 - Inspect and answer approval requests.
+- Inspect and answer structured clarification questions in task and direct
+  conversations, bound to their original run/session/invocation. Question waits
+  retain execution ownership; permission policy never supplies an answer.
 - Cancel execution and explicitly resume eligible queued work; see §4.2.
 - Inspect failures and results without losing prior conversation or execution history.
 - Start workspace-scoped conversations directly with agent definitions: task-chat

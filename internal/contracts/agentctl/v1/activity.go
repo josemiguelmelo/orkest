@@ -33,22 +33,24 @@ type ToolContent struct {
 }
 
 type Event struct {
-	At             time.Time   `json:"at"`
-	Sequence       uint64      `json:"sequence"`
-	Type           string      `json:"type"`
-	OrganizationID string      `json:"organizationId"`
-	WorkspaceID    string      `json:"workspaceId"`
-	TaskID         string      `json:"taskId"`
-	RunID          string      `json:"runId"`
-	TaskSessionID  string      `json:"taskSessionId,omitempty"`
-	SessionID      string      `json:"sessionId"`
-	CommandID      string      `json:"commandId,omitempty"`
-	RequestID      string      `json:"requestId,omitempty"`
-	Text           string      `json:"text,omitempty"`
-	Update         *Update     `json:"update,omitempty"`
-	Permission     *Permission `json:"permission,omitempty"`
-	StopReason     string      `json:"stopReason,omitempty"`
-	Error          string      `json:"error,omitempty"`
+	At               time.Time         `json:"at"`
+	Sequence         uint64            `json:"sequence"`
+	Type             string            `json:"type"`
+	OrganizationID   string            `json:"organizationId"`
+	WorkspaceID      string            `json:"workspaceId"`
+	TaskID           string            `json:"taskId"`
+	RunID            string            `json:"runId"`
+	TaskSessionID    string            `json:"taskSessionId,omitempty"`
+	SessionID        string            `json:"sessionId"`
+	CommandID        string            `json:"commandId,omitempty"`
+	RequestID        string            `json:"requestId,omitempty"`
+	Text             string            `json:"text,omitempty"`
+	Update           *Update           `json:"update,omitempty"`
+	Permission       *Permission       `json:"permission,omitempty"`
+	Question         *Question         `json:"question,omitempty"`
+	QuestionResponse *QuestionResponse `json:"questionResponse,omitempty"`
+	StopReason       string            `json:"stopReason,omitempty"`
+	Error            string            `json:"error,omitempty"`
 }
 
 type StreamFrame struct {

@@ -10,6 +10,7 @@ defines intended scope.
 | Identity, memberships, workspace isolation | Implemented | Unit, PostgreSQL, and browser suites; backend remains authoritative |
 | Task CRUD, workflow rules, artifacts | Implemented | Deterministic and PostgreSQL suites; live multi-stage agents need credentials |
 | Direct conversations and durable sessions | Implemented | Queue, replay, reservation, outbox and ownership coverage; credential-dependent worker restart requires fresh Git credentials before restore |
+| Structured user questions | Shared ACP forms for OpenCode/Codex/Claude; private MCP fallback for new Copilot/Kiro sessions | Deterministic schema, journal, HTTP/MCP, UI, and restore/follow-up coverage; live question/timeout/container qualification remains unavailable without explicit binaries/models/credentials; [details](development/user-questions.md) |
 | Go architecture and delivery separation | Implemented | Parsed dependency boundaries, independent wire/domain models, legacy continuation fixtures, PostgreSQL claim/fencing/concurrency tests; dated results and live limits recorded below |
 | OpenCode | Pinned profile and shared host | Limited live current/v1-session memory continuation and Docker storage checks were reported; approvals/MCP/interrupted tool effects still need qualification |
 | Claude Code, Codex, Copilot, Kiro | Pinned profiles and shared host | Deterministic conformance; live calls, approvals, MCP, and continuation need qualification |
@@ -43,3 +44,23 @@ nor authorizes new behavior.
 Migration 0038 requires stopping old platform workflow workers before upgrading;
 mixed delivery versions are unsupported. See [delivery ownership](development/workflow-delivery.md)
 and [migration operations](operations/migrations.md#workflow-delivery-claims).
+
+## Verification record
+
+### 2026-11-07: structured user questions
+
+- `make check` passed: dependency boundaries, Go lint/unit tests, generated API
+  consistency, frontend lint, 58 Vitest tests, type checks, Go builds, and Vite build.
+- Focused race suites passed for the run controller, ACP adapter, private MCP tool,
+  runtime host, common runtime conformance, and worker/platform HTTP adapters.
+  The runtime-host race suite and Go lint passed again after the final protected
+  string/boolean-metadata guard adjustment.
+- Common deterministic runtime fixtures exercise question/answer consumption before
+  and after restore for all five profiles; Copilot/Kiro fixtures use actual HTTP MCP.
+  Legacy and v4 fallback session fixtures restore and accept follow-ups.
+- Live question qualification and Docker execution were not run. Explicit runtime
+  binary/model/provider-grant/question-prompt settings were absent; Claude/Kiro
+  executables were unavailable. Fixture results do not establish real CLI tool
+  discovery, human-duration waits, or interrupted invocation continuation.
+- Deploy matching platform/UI and worker builds; new fallback sessions use native
+  manifest v4. [Compatibility and rollout](development/user-questions.md#persistence-compatibility-and-deployment).

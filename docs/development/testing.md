@@ -95,7 +95,8 @@ Select one profile with `make qualify-runtime QUALIFY_RUNTIME=<runtime>`.
 For local qualification, set the shared `ORKEST_TEST_MODEL_PROVIDER` and
 `ORKEST_TEST_MODEL_ID`, plus the provider environment allow-list. The strict suite
 also requires `ORKEST_TEST_APPROVAL_PROMPT`, `ORKEST_TEST_RECOVERY_PROMPT`,
-`ORKEST_TEST_CANCELLATION_PROMPT`, `ORKEST_TEST_MCP_URL`, `ORKEST_TEST_MCP_PROMPT`
+`ORKEST_TEST_CANCELLATION_PROMPT`, `ORKEST_TEST_QUESTION_PROMPT`,
+`ORKEST_TEST_QUESTION_EXPECTED`, `ORKEST_TEST_MCP_URL`, `ORKEST_TEST_MCP_PROMPT`
 and `ORKEST_TEST_MCP_EXPECTED`. Missing prerequisites fail rather than substitute
 fixture evidence. Exact requirements are in the [conformance tests](../../internal/agentctl/runtime/conformance_test.go).
 
@@ -103,6 +104,10 @@ Verify the real response/model, instructions/skills, MCP headers, bound approval
 round trip, cancellation, restore and follow-up. Interrupted replay needs command
 identity and side-effect evidence. Ordinary memory continuation qualifies a
 narrower scenario than this suite.
+
+The question prompt must ask one structured string question accepting `pnpm`; the
+suite supplies that answer and checks the configured acknowledgement substring
+before and after restore. See [question verification](user-questions.md#verification).
 
 CI uses the `runtime-qualification` environment and
 `ORKEST_RUN_LIVE_QUALIFICATION=true`. See [credential/endpoint mappings](../../.github/workflows/runtime-conformance.yml).

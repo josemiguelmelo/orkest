@@ -12,7 +12,7 @@ Paths are relative to the repository root.
 | Package | Owns |
 | --- | --- |
 | `internal/agentctl/config/model` | Resolved configuration, domain validation errors, validation and cloning |
-| `internal/agentctl/interaction` | Commands, approvals, updates, durable events, command markers |
+| `internal/agentctl/interaction` | Commands, approvals, questions, updates, durable events, command markers |
 | `internal/agentctl/run` | Controller, private conversation engine/reducer, queues, journals, checkpoints and restoration policy |
 | `internal/agentctl/run/model` | Public execution states and run status |
 | `internal/agentctl/runtime` | Normalized host/session, provisioning, protocol and error contracts |
@@ -43,7 +43,7 @@ The command lifecycle schedules supervision; the controller decides eligibility.
 Keep the private conversation engine with `run`: admission, shutdown, journal
 commits and recovery share lifecycle and locks.
 
-- `conversation.state` is durable reducer state. Prompt contexts, permission
+- `conversation.state` is durable reducer state. Prompt contexts, permission/question
   channels, workers and observed progress are transient. Live commits/replay use
   the same reducer.
 - Commands retain their original prompt hash and typed state. Continuation
@@ -73,10 +73,10 @@ explicitly granted environment values through constructors. Startup:
 3. Initialize ACP v1 and verify mandatory session-loading support.
 4. Explicitly create/load the session, apply the native mode, and confirm the
    configured model through the required `ProtocolModelSelector` capability.
-5. Persist the current v3 manifest only after successful initialization. On
+5. Persist a v3 manifest (v4 for new MCP-question sessions) only after successful initialization. On
    failure, close partial resources before releasing process ownership.
 
-The host reads v1/v2/v3 manifests with their compatibility rules. Native manifests
+The host reads v1/v2/v3/v4 manifests with their compatibility rules. Native manifests
 and v1 worker checkpoints are different formats; see [session storage](sessions.md#reservation-and-compatibility).
 
 - `runtimehost.Session` owns the child, connection, callbacks and task lease.
@@ -90,11 +90,17 @@ and v1 worker checkpoints are different formats; see [session storage](sessions.
   overrides; creates private files/directories; and merges granted variables.
   `ProvisioningPaths.ConfigSubdir` is relative to its absolute runtime root.
 - ACP owns stream communication, without process/filesystem/persistence operations.
-  Callbacks carry `interaction.Update` and `interaction.Permission`. Create/load
+  Callbacks carry `interaction.Update`, `interaction.Permission`, and
+  `interaction.Question`. Create/load
   receives the working directory explicitly.
 - Native OpenCode configuration is rendered by
   `internal/adapters/runtime/profiles/opencode/profile.go`. Other profile packages
   render their own model, permission, instruction, skill and MCP configuration.
+
+Structured questions share one journal/reducer and UI. OpenCode/Codex/Claude use
+ACP form elicitation; new Copilot/Kiro sessions use an authenticated loopback MCP
+endpoint owned by the runtime host. Legacy sessions retain original provisioning.
+See [question ownership, compatibility, and qualification](user-questions.md).
 
 ## Replay evidence
 

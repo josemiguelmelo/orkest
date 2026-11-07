@@ -7,6 +7,7 @@ const (
 	StateStarting          ExecutionState = "starting"
 	StateReady             ExecutionState = "ready"
 	StateRunning           ExecutionState = "running"
+	StateWaitingInput      ExecutionState = "waiting_for_input"
 	StateWaitingPermission ExecutionState = "waiting_for_permission"
 	StateFailed            ExecutionState = "failed"
 	StateInterrupted       ExecutionState = "interrupted"

@@ -3,10 +3,12 @@ package conformance
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -28,6 +30,7 @@ type Profile struct {
 	Remember                          func(string) string
 	Recall, Permission, Wait, Suspend string
 	Configuration                     map[string]Probe
+	Question                          Probe
 }
 
 func Run(t *testing.T, factory Factory, profile Profile) {
@@ -72,6 +75,7 @@ func Run(t *testing.T, factory Factory, profile Profile) {
 	verifyStreaming(t, ctx, first, profile.Remember(token), observer, &output)
 	verifyConfiguration(t, ctx, first, profile.Configuration, observer, &output)
 	verifyPermission(t, ctx, first, profile.Permission, observer)
+	verifyQuestion(t, ctx, first, "question", profile.Question, observer, &output)
 	verifyCancellation(t, ctx, first, profile.Wait, observer)
 	id := first.SessionID()
 	path := filepath.Join(work, "untracked.txt")
@@ -102,6 +106,7 @@ func Run(t *testing.T, factory Factory, profile Profile) {
 	if !strings.Contains(output.String(), token) {
 		t.Fatal("restored session lost conversation context")
 	}
+	verifyQuestion(t, ctx, restored, "restored-question", profile.Question, observer, &output)
 	if data, err := os.ReadFile(path); err != nil || string(data) != "preserved" {
 		t.Fatal("working files were lost")
 	}
@@ -124,6 +129,38 @@ func Run(t *testing.T, factory Factory, profile Profile) {
 	config.TaskSessionID = "missing-session"
 	if _, err = host.Restore(ctx, config); err == nil {
 		t.Fatal("missing snapshot fell back to launch")
+	}
+}
+
+func verifyQuestion(t *testing.T, ctx context.Context, session agentruntime.RuntimeSession, commandID string, probe Probe, observer agentruntime.PromptObserver, output *strings.Builder) {
+	t.Helper()
+	if probe.Prompt == "" || probe.Expected == "" {
+		t.Fatal("missing question qualification probe")
+	}
+	var calls atomic.Int32
+	observer.Question = func(_ context.Context, question interaction.Question) (interaction.QuestionAnswer, error) {
+		var schema struct {
+			Properties map[string]struct {
+				Type string `json:"type"`
+			} `json:"properties"`
+			Required []string `json:"required"`
+		}
+		if json.Unmarshal(question.Schema, &schema) != nil || len(schema.Required) != 1 || schema.Properties[schema.Required[0]].Type != "string" {
+			return interaction.QuestionAnswer{}, errors.New("qualification requires one required string question")
+		}
+		content, err := json.Marshal(map[string]string{schema.Required[0]: "pnpm"})
+		if err != nil {
+			return interaction.QuestionAnswer{}, err
+		}
+		calls.Add(1)
+		return interaction.QuestionAnswer{Action: "accept", Content: content}, nil
+	}
+	output.Reset()
+	if _, err := session.Prompt(ctx, interaction.Command{ID: commandID, Text: probe.Prompt}, observer); err != nil {
+		t.Fatal(err)
+	}
+	if calls.Load() != 1 || !strings.Contains(output.String(), probe.Expected) {
+		t.Fatal("runtime did not ask and consume the qualification answer")
 	}
 }
 

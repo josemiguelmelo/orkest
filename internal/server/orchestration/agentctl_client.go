@@ -21,5 +21,6 @@ type AgentctlClient interface {
 	RestoreAgent(context.Context, string) error
 	CancelPrompt(context.Context, string, string) error
 	RespondPermission(context.Context, string, orchestrationmodel.PermissionResponse) error
+	RespondQuestion(context.Context, string, orchestrationmodel.QuestionResponse) error
 	Queue(context.Context, string, bool) error
 }

@@ -20,6 +20,8 @@ type conversationState struct {
 	queue              []interaction.Command
 	activeCommandID    string
 	permissionSequence uint64
+	questionSequence   uint64
+	questions          map[string]questionRecord
 	paused             bool
 	cancelled          bool
 	runEnded           bool
@@ -28,6 +30,7 @@ type conversationState struct {
 }
 
 func (c *conversationState) apply(event interaction.Event) {
+	c.applyQuestion(event)
 	if c.commands == nil {
 		c.commands = make(map[string]commandRecord)
 	}
@@ -127,6 +130,9 @@ func (c *conversationState) setCommandState(id string, state interaction.Command
 // validate checks lifecycle consistency without tying old journals to transient
 // runtime availability. Legacy single-turn journals omit PromptStarted.
 func (c *conversationState) validate(event interaction.Event) error {
+	if err := c.validateQuestion(event); err != nil {
+		return err
+	}
 	switch event.Type {
 	case interaction.EventPromptAccepted:
 		if event.CommandID == "" || c.runEnded {

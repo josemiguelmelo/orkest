@@ -25,6 +25,7 @@ type ProvisioningPaths struct {
 }
 
 type RuntimeDescriptor struct {
+	UseQuestionTool        bool
 	Runtime                coreruntime.Runtime
 	Version                string
 	VersionOutputPrefix    string

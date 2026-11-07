@@ -19,6 +19,7 @@
 | `POST /agent/prompt` | Submit a prompt with a stable `commandId`. |
 | `POST /agent/cancel` | Request cancellation of the active prompt. |
 | `POST /agent/permissions/respond` | Answer a pending permission request. |
+| `POST /agent/questions/respond` | Durably record an answer/decline/cancellation for the original question invocation. |
 | `GET /agent/stream` | Receive readiness and activity events. |
 
 - One run/process; `taskSessionId` enables durable restore/FIFO follow-ups. Sessions span runs.
@@ -78,6 +79,7 @@ Example prompt:
 - `prompt_accepted`, `prompt_started`, `prompt_continued`, `update`, `prompt_completed`, `prompt_failed`, `prompt_interrupted`
 - `session_restored`, `runtime_stopped`, `queue_paused`, `queue_resumed`, `queue_discarded`, `run_completed`, `run_failed`
 - `permission_requested`, `permission_response`, `cancel_requested`
+- `question_requested`, `question_answered`, `question_cancelled`, `question_delivery_uncertain`
 
 - Reconnect: `?afterSequence=LAST_PROCESSED_SEQUENCE`.
 - Memory window: 4096 events. Durable sessions replay older disk records; legacy
@@ -92,3 +94,17 @@ Example prompt:
   events cannot be enriched retroactively.
 - Updates require rebuilt images/platform restart as needed; running binaries retain
   behavior. Check [Docker](executors/docker.md) and [compatibility](../guides/sessions.md) first.
+
+## Structured questions
+
+Responses include `taskId`, `taskSessionId`, `runId`, `sessionId`, `commandId`,
+`requestId`, `submissionId`, optional platform-supplied `answeredBy`, and `answer`.
+An answer has `action: accept|decline|cancel`; `accept` includes object `content`
+matching the original form schema. Decline/cancel omit content. A `200` records
+the answer before waking the live callback; it does not prove runtime consumption.
+Identical retries acknowledge the saved record; conflicting/stale responses return
+`409 invalid_question`. Invalid form values return `400 invalid_answer`.
+
+The platform exposes authorized task and direct-conversation run routes ending in
+`/questions/{questionID}/respond`. Human clients use these routes rather than the
+trusted worker API. See [question lifecycle and compatibility](../development/user-questions.md).

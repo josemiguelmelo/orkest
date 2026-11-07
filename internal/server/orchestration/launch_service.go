@@ -307,3 +307,14 @@ func findLaunch(launches []orchestrationmodel.Launch, runID string) (orchestrati
 	}
 	return orchestrationmodel.Launch{}, false
 }
+
+func (s *LaunchService) RespondTaskQuestion(ctx context.Context, orgID, workspaceID, taskID, runID string, response orchestrationmodel.QuestionResponse) error {
+	launch, err := s.taskLaunch(ctx, orgID, workspaceID, taskID, runID)
+	if err != nil {
+		return err
+	}
+	if response.TaskID != taskID || response.RunID != runID || response.TaskSessionID != launch.TaskSessionID {
+		return errors.New("question scope does not match the run")
+	}
+	return s.client.RespondQuestion(ctx, launch.Endpoint, response)
+}

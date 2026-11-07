@@ -64,6 +64,14 @@ func toWireEvent(value interaction.Event) wire.Event {
 		mapped := toWirePermission(*value.Permission)
 		result.Permission = &mapped
 	}
+	if value.Question != nil {
+		mapped := toWireQuestion(*value.Question)
+		result.Question = &mapped
+	}
+	if value.QuestionResponse != nil {
+		mapped := toWireQuestionResponse(*value.QuestionResponse)
+		result.QuestionResponse = &mapped
+	}
 	result.StopReason = value.StopReason
 	result.Error = value.Error
 	return result
@@ -163,4 +171,24 @@ func fromWireRunConfig(value wire.RunConfig) configmodel.RunConfig {
 	result.RestoreSession = value.RestoreSession
 	result.EncryptedEnvironment = value.EncryptedEnvironment
 	return result
+}
+
+func toWireQuestion(value interaction.Question) wire.Question {
+	return wire.Question{ToolCallID: value.ToolCallID, Message: value.Message, Schema: value.Schema}
+}
+
+func toWireQuestionAnswer(value interaction.QuestionAnswer) wire.QuestionAnswer {
+	return wire.QuestionAnswer{Action: value.Action, Content: value.Content}
+}
+
+func toWireQuestionResponse(value interaction.QuestionResponse) wire.QuestionResponse {
+	return wire.QuestionResponse{AnsweredBy: value.AnsweredBy, TaskID: value.TaskID, TaskSessionID: value.TaskSessionID, RunID: value.RunID, SessionID: value.SessionID, CommandID: value.CommandID, RequestID: value.RequestID, SubmissionID: value.SubmissionID, Answer: toWireQuestionAnswer(value.Answer)}
+}
+
+func fromWireQuestionAnswer(value wire.QuestionAnswer) interaction.QuestionAnswer {
+	return interaction.QuestionAnswer{Action: value.Action, Content: value.Content}
+}
+
+func fromWireQuestionResponse(value wire.QuestionResponse) interaction.QuestionResponse {
+	return interaction.QuestionResponse{AnsweredBy: value.AnsweredBy, TaskID: value.TaskID, TaskSessionID: value.TaskSessionID, RunID: value.RunID, SessionID: value.SessionID, CommandID: value.CommandID, RequestID: value.RequestID, SubmissionID: value.SubmissionID, Answer: fromWireQuestionAnswer(value.Answer)}
 }

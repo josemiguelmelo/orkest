@@ -142,6 +142,14 @@ func fromWireEvent(value wire.Event) orchestrationmodel.AgentActivityEvent {
 		mapped := fromWirePermission(*value.Permission)
 		result.Permission = &mapped
 	}
+	if value.Question != nil {
+		mapped := fromWireQuestion(*value.Question)
+		result.Question = &mapped
+	}
+	if value.QuestionResponse != nil {
+		mapped := fromWireQuestionResponse(*value.QuestionResponse)
+		result.QuestionResponse = &mapped
+	}
 	result.StopReason = value.StopReason
 	result.Error = value.Error
 	return result
@@ -161,4 +169,24 @@ func fromWirePermission(value wire.Permission) orchestrationmodel.Permission {
 	result.Title = value.Title
 	result.Options = sliceutil.Map(value.Options, fromWirePermissionOption)
 	return result
+}
+
+func fromWireQuestion(value wire.Question) orchestrationmodel.Question {
+	return orchestrationmodel.Question{ToolCallID: value.ToolCallID, Message: value.Message, Schema: value.Schema}
+}
+
+func fromWireQuestionAnswer(value wire.QuestionAnswer) orchestrationmodel.QuestionAnswer {
+	return orchestrationmodel.QuestionAnswer{Action: value.Action, Content: value.Content}
+}
+
+func fromWireQuestionResponse(value wire.QuestionResponse) orchestrationmodel.QuestionResponse {
+	return orchestrationmodel.QuestionResponse{AnsweredBy: value.AnsweredBy, TaskID: value.TaskID, TaskSessionID: value.TaskSessionID, RunID: value.RunID, SessionID: value.SessionID, CommandID: value.CommandID, RequestID: value.RequestID, SubmissionID: value.SubmissionID, Answer: fromWireQuestionAnswer(value.Answer)}
+}
+
+func toWireQuestionAnswer(value orchestrationmodel.QuestionAnswer) wire.QuestionAnswer {
+	return wire.QuestionAnswer{Action: value.Action, Content: value.Content}
+}
+
+func toWireQuestionResponse(value orchestrationmodel.QuestionResponse) wire.QuestionResponse {
+	return wire.QuestionResponse{AnsweredBy: value.AnsweredBy, TaskID: value.TaskID, TaskSessionID: value.TaskSessionID, RunID: value.RunID, SessionID: value.SessionID, CommandID: value.CommandID, RequestID: value.RequestID, SubmissionID: value.SubmissionID, Answer: toWireQuestionAnswer(value.Answer)}
 }

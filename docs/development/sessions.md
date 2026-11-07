@@ -16,7 +16,12 @@ Mechanics behind the [session guide](../guides/sessions.md).
 | --- | --- | --- |
 | v1 | Legacy whole-configuration fingerprint | Retains legacy matching; no field-level diagnostics or environment-only exception |
 | v2 | Legacy whole fingerprint plus sections | An environment-only section difference may restore |
-| v3 (current) | Whole and section fingerprints exclude environment | Environment refresh does not invalidate session identity |
+| v3 | Whole and section fingerprints exclude environment | Environment refresh does not invalidate session identity |
+| v4 (question-tool sessions) | Same configuration identity as v3, plus question-tool feature version | Requires preserved private MCP endpoint state; older workers reject this format |
+
+Legacy v1/v2/v3 sessions retain their original MCP configuration. New fallback
+question sessions use v4 and retain a private `question-tool.json` alongside the
+manifest. See [user questions](user-questions.md) for deployment and restore limits.
 
 Current fingerprints also exclude the run ID, resolved MCP headers, and structured
 Git credentials. Runtime version, working path, provider/model, instructions,

@@ -2363,3 +2363,23 @@ input[type='checkbox'] {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+.agent-question {
+  margin-block: 1rem;
+}
+.agent-question fieldset {
+  border: 0;
+  padding: 0;
+  min-width: 0;
+}
+.agent-question-field {
+  display: grid;
+  gap: 0.35rem;
+  margin-block: 0.8rem;
+}
+.agent-question-field small {
+  color: var(--muted);
+}
+.agent-question-field :is(input, select, textarea) {
+  width: 100%;
+  min-width: 0;
+}

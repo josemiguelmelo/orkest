@@ -375,7 +375,7 @@ function TaskCard({
           ? { label: 'Stage completed', color: 'green' }
           : latest?.queuePaused || latest?.recoveryBlocked
             ? { label: 'On hold', color: 'blue' }
-            : execution === 'waiting_for_permission'
+            : (execution === 'waiting_for_permission' || execution === 'waiting_for_input')
               ? { label: 'Waiting for input', color: 'yellow' }
               : execution === 'running' || latest?.status === 'ready'
                 ? { label: 'In progress', color: 'green' }

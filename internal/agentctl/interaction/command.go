@@ -18,6 +18,7 @@ var (
 	ErrConversationBusy        = fmt.Errorf("%w: prompt already running", ErrConversation)
 	ErrConversationInterrupted = fmt.Errorf("%w: reconciliation required", ErrConversation)
 	ErrCommand                 = errors.New("invalid or conflicting command identity")
+	ErrQuestion                = errors.New("question identity or answer does not match a pending request")
 	ErrPermission              = errors.New("permission identity or option does not match a pending request")
 )
 

@@ -99,6 +99,9 @@ func (c *conversation) checkPromptAdmission(command interaction.Command) (bool, 
 
 func (c *conversation) commandObserver(commandID string) agentruntime.PromptObserver {
 	return agentruntime.PromptObserver{
+		Question: func(ctx context.Context, question interaction.Question) (interaction.QuestionAnswer, error) {
+			return c.waitQuestion(ctx, commandID, question)
+		},
 		Update: func(update interaction.Update) error {
 			c.eventMu.Lock()
 			defer c.eventMu.Unlock()

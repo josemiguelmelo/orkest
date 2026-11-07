@@ -33,6 +33,7 @@ func (c *conversation) ensureJournalUnderEventLock() error {
 	c.journal = journal
 	c.state = state
 	c.pending = make(map[string]*pendingPermission)
+	c.questions = make(map[string]*pendingQuestion)
 	return nil
 }
 

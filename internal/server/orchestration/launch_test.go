@@ -289,3 +289,7 @@ func (r *launchRepoFake) PendingPrompts(context.Context, string) ([]PromptDelive
 func (r *launchRepoFake) TaskCommand(context.Context, string, string, string, string, string) (bool, error) {
 	return false, nil
 }
+
+func (c *agentctlFake) RespondQuestion(context.Context, string, orchestrationmodel.QuestionResponse) error {
+	return nil
+}

@@ -42,6 +42,7 @@ type conversation struct {
 	session        agentruntime.RuntimeSession
 	executionState runmodel.ExecutionState
 	pending        map[string]*pendingPermission
+	questions      map[string]*pendingQuestion
 
 	// Shutdown cancels accepted workers and prevents further work admission.
 	ctx    context.Context
