@@ -17,8 +17,12 @@ for trusted single-user development. No Helm chart is included.
 - Set platform and worker UID/GID to the same non-root values with write access
   to the PVC. `ORKEST_KUBERNETES_UID` and `ORKEST_KUBERNETES_GID` default to the
   platform process IDs. Task directories are mode 0700.
-- Set `ORKEST_AGENT_MCP_URL` to an HTTP endpoint reachable from worker Pods.
-  The loopback fallback is rejected for Kubernetes execution.
+- The worker MCP endpoint is derived as
+  `http://<platform-service>.<namespace>.svc:<port>`. Set
+  `ORKEST_KUBERNETES_PLATFORM_SERVICE_NAME` and
+  `ORKEST_KUBERNETES_PLATFORM_SERVICE_PORT` to match the in-cluster platform
+  Service (defaults: `orkest`, `8080`). The Service must route to the platform's
+  `HTTP_ADDR`. `ORKEST_AGENT_MCP_URL` is ignored for Kubernetes.
 - Give the platform service account only namespaced Pod, Service, Secret
   lifecycle and Pod-log permissions. Worker Pods disable service-account token
   automount and have no Kubernetes API permissions. Keep worker Services out of

@@ -2,6 +2,14 @@ package main
 
 import "os"
 
+type kubernetesServerConfiguration struct {
+	Namespace, InstallationID, DataPVC, DataSubpath            string
+	ServiceAccount, UID, GID, StartupTimeout, TerminationGrace string
+	CodexAuthSecret, CodexAuthSecretKey, ImagePullSecrets      string
+	CPURequest, MemoryRequest, CPULimit, MemoryLimit           string
+	PlatformServiceName, PlatformServicePort                   string
+}
+
 // serverConfiguration snapshots composition settings once before startup I/O.
 type serverConfiguration struct {
 	DataDir                      string
@@ -30,22 +38,7 @@ type serverConfiguration struct {
 	BuildKitTLSKey               string
 	BuildKitDaemonless           string
 	ExecutionProfileBuildWorkers string
-	KubernetesNamespace          string
-	KubernetesInstallationID     string
-	KubernetesDataPVC            string
-	KubernetesDataSubpath        string
-	KubernetesServiceAccount     string
-	KubernetesUID                string
-	KubernetesGID                string
-	KubernetesStartupTimeout     string
-	KubernetesTerminationGrace   string
-	KubernetesCodexAuthSecret    string
-	KubernetesCodexAuthSecretKey string
-	KubernetesImagePullSecrets   string
-	KubernetesCPURequest         string
-	KubernetesMemoryRequest      string
-	KubernetesCPULimit           string
-	KubernetesMemoryLimit        string
+	Kubernetes                   kubernetesServerConfiguration
 }
 
 func loadServerConfiguration() serverConfiguration {
@@ -76,21 +69,25 @@ func loadServerConfiguration() serverConfiguration {
 		BuildKitTLSKey:               os.Getenv("ORKEST_BUILDKIT_TLS_KEY"),
 		BuildKitDaemonless:           os.Getenv("ORKEST_BUILDKIT_DAEMONLESS"),
 		ExecutionProfileBuildWorkers: os.Getenv("ORKEST_EXECUTION_PROFILE_BUILD_WORKERS"),
-		KubernetesNamespace:          os.Getenv("ORKEST_KUBERNETES_NAMESPACE"),
-		KubernetesInstallationID:     os.Getenv("ORKEST_KUBERNETES_INSTALLATION_ID"),
-		KubernetesDataPVC:            os.Getenv("ORKEST_KUBERNETES_DATA_PVC"),
-		KubernetesDataSubpath:        os.Getenv("ORKEST_KUBERNETES_DATA_SUBPATH"),
-		KubernetesServiceAccount:     os.Getenv("ORKEST_KUBERNETES_SERVICE_ACCOUNT"),
-		KubernetesUID:                os.Getenv("ORKEST_KUBERNETES_UID"),
-		KubernetesGID:                os.Getenv("ORKEST_KUBERNETES_GID"),
-		KubernetesStartupTimeout:     os.Getenv("ORKEST_KUBERNETES_STARTUP_TIMEOUT"),
-		KubernetesTerminationGrace:   os.Getenv("ORKEST_KUBERNETES_TERMINATION_GRACE_SECONDS"),
-		KubernetesCodexAuthSecret:    os.Getenv("ORKEST_KUBERNETES_CODEX_AUTH_SECRET"),
-		KubernetesCodexAuthSecretKey: os.Getenv("ORKEST_KUBERNETES_CODEX_AUTH_SECRET_KEY"),
-		KubernetesImagePullSecrets:   os.Getenv("ORKEST_KUBERNETES_IMAGE_PULL_SECRETS"),
-		KubernetesCPURequest:         os.Getenv("ORKEST_KUBERNETES_CPU_REQUEST"),
-		KubernetesMemoryRequest:      os.Getenv("ORKEST_KUBERNETES_MEMORY_REQUEST"),
-		KubernetesCPULimit:           os.Getenv("ORKEST_KUBERNETES_CPU_LIMIT"),
-		KubernetesMemoryLimit:        os.Getenv("ORKEST_KUBERNETES_MEMORY_LIMIT"),
+		Kubernetes: kubernetesServerConfiguration{
+			Namespace:           os.Getenv("ORKEST_KUBERNETES_NAMESPACE"),
+			InstallationID:      os.Getenv("ORKEST_KUBERNETES_INSTALLATION_ID"),
+			DataPVC:             os.Getenv("ORKEST_KUBERNETES_DATA_PVC"),
+			DataSubpath:         os.Getenv("ORKEST_KUBERNETES_DATA_SUBPATH"),
+			ServiceAccount:      os.Getenv("ORKEST_KUBERNETES_SERVICE_ACCOUNT"),
+			UID:                 os.Getenv("ORKEST_KUBERNETES_UID"),
+			GID:                 os.Getenv("ORKEST_KUBERNETES_GID"),
+			StartupTimeout:      os.Getenv("ORKEST_KUBERNETES_STARTUP_TIMEOUT"),
+			TerminationGrace:    os.Getenv("ORKEST_KUBERNETES_TERMINATION_GRACE_SECONDS"),
+			CodexAuthSecret:     os.Getenv("ORKEST_KUBERNETES_CODEX_AUTH_SECRET"),
+			CodexAuthSecretKey:  os.Getenv("ORKEST_KUBERNETES_CODEX_AUTH_SECRET_KEY"),
+			ImagePullSecrets:    os.Getenv("ORKEST_KUBERNETES_IMAGE_PULL_SECRETS"),
+			CPURequest:          os.Getenv("ORKEST_KUBERNETES_CPU_REQUEST"),
+			MemoryRequest:       os.Getenv("ORKEST_KUBERNETES_MEMORY_REQUEST"),
+			CPULimit:            os.Getenv("ORKEST_KUBERNETES_CPU_LIMIT"),
+			MemoryLimit:         os.Getenv("ORKEST_KUBERNETES_MEMORY_LIMIT"),
+			PlatformServiceName: os.Getenv("ORKEST_KUBERNETES_PLATFORM_SERVICE_NAME"),
+			PlatformServicePort: os.Getenv("ORKEST_KUBERNETES_PLATFORM_SERVICE_PORT"),
+		},
 	}
 }

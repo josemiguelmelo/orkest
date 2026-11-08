@@ -80,20 +80,20 @@ func NewWithAPI(ctx context.Context, config Config, api API) (*Executor, error) 
 	}
 	for field, value := range map[string]string{"data root": config.DataRoot, "namespace": config.Namespace, "installation ID": config.InstallationID, "data PVC": config.DataPVC} {
 		if strings.TrimSpace(value) == "" {
-			return nil, fmt.Errorf("Kubernetes %s is required", field)
+			return nil, fmt.Errorf("kubernetes %s is required", field)
 		}
 	}
 	if !dnsLabel(config.Namespace) {
-		return nil, errors.New("Kubernetes namespace must be a DNS label")
+		return nil, errors.New("kubernetes namespace must be a DNS label")
 	}
 	if !dnsLabel(config.InstallationID) {
-		return nil, errors.New("Kubernetes installation ID must be a DNS label")
+		return nil, errors.New("kubernetes installation ID must be a DNS label")
 	}
 	if !dnsLabel(config.DataPVC) {
-		return nil, errors.New("Kubernetes data PVC name must be a DNS label")
+		return nil, errors.New("kubernetes data PVC name must be a DNS label")
 	}
 	if config.ServiceAccount != "" && !dnsLabel(config.ServiceAccount) {
-		return nil, errors.New("Kubernetes worker service account must be a DNS label")
+		return nil, errors.New("kubernetes worker service account must be a DNS label")
 	}
 	root, err := filepath.Abs(config.DataRoot)
 	if err != nil {
@@ -106,7 +106,7 @@ func NewWithAPI(ctx context.Context, config Config, api API) (*Executor, error) 
 		config.GID = int64(os.Getgid())
 	}
 	if config.UID <= 0 || config.GID <= 0 {
-		return nil, errors.New("Kubernetes worker uid and gid must be positive non-root values")
+		return nil, errors.New("kubernetes worker uid and gid must be positive non-root values")
 	}
 	if config.StartupTimeout <= 0 {
 		config.StartupTimeout = 2 * time.Minute
@@ -124,17 +124,17 @@ func NewWithAPI(ctx context.Context, config Config, api API) (*Executor, error) 
 		config.MemoryLimit = "4Gi"
 	}
 	if (config.CodexAuthSecret == "") != (config.CodexAuthSecretKey == "") {
-		return nil, errors.New("Kubernetes Codex auth Secret name and key must be configured together")
+		return nil, errors.New("kubernetes Codex auth Secret name and key must be configured together")
 	}
 	if config.CodexAuthSecret != "" && !dnsLabel(config.CodexAuthSecret) {
-		return nil, errors.New("Kubernetes Codex auth Secret name must be a DNS label")
+		return nil, errors.New("kubernetes Codex auth Secret name must be a DNS label")
 	}
 	if config.CodexAuthSecretKey != "" && !secretKey(config.CodexAuthSecretKey) {
-		return nil, errors.New("Kubernetes Codex auth Secret key is invalid")
+		return nil, errors.New("kubernetes Codex auth Secret key is invalid")
 	}
 	for _, secret := range config.ImagePullSecrets {
 		if !dnsLabel(secret) {
-			return nil, fmt.Errorf("Kubernetes image-pull Secret %q must be a DNS label", secret)
+			return nil, fmt.Errorf("kubernetes image-pull Secret %q must be a DNS label", secret)
 		}
 	}
 	if config.TerminationGraceSeconds <= 0 {
@@ -154,7 +154,7 @@ func NewWithAPI(ctx context.Context, config Config, api API) (*Executor, error) 
 	}
 	config.DataRoot, config.Images = root, images
 	if config.DataSubpath != "" && (filepath.IsAbs(config.DataSubpath) || filepath.Clean(config.DataSubpath) == ".." || strings.HasPrefix(filepath.Clean(config.DataSubpath), ".."+string(filepath.Separator))) {
-		return nil, errors.New("Kubernetes PVC data subpath must be relative and contained")
+		return nil, errors.New("kubernetes PVC data subpath must be relative and contained")
 	}
 	providers := make(map[string]checkout.Provider, len(config.CodingProviders))
 	for _, provider := range config.CodingProviders {
@@ -167,8 +167,10 @@ func NewWithAPI(ctx context.Context, config Config, api API) (*Executor, error) 
 	return &Executor{api: api, config: config, providers: providers, ctx: workerCtx, cancel: cancel}, nil
 }
 
-var _ orchestration.AgentctlStarter = (*Executor)(nil)
-var _ orchestration.AgentProcessController = (*Executor)(nil)
+var (
+	_ orchestration.AgentctlStarter        = (*Executor)(nil)
+	_ orchestration.AgentProcessController = (*Executor)(nil)
+)
 
 func (e *Executor) StartAgentctl(ctx context.Context, run model.RunConfig) (model.Process, error) {
 	if err := run.Validate(); err != nil {
@@ -298,12 +300,14 @@ func (e *Executor) TerminateAgentctl(ctx context.Context, id string) error {
 	}
 	return e.deletePod(ctx, name, uid)
 }
+
 func (e *Executor) TerminateAgentctlByRunID(ctx context.Context, runID string) error {
 	if strings.TrimSpace(runID) == "" {
 		return errors.New("agent run identity is required")
 	}
 	return e.deletePod(ctx, resourceName(e.config.InstallationID, runID), "")
 }
+
 func (e *Executor) AgentctlRunning(ctx context.Context, id string) (bool, error) {
 	name, uid, err := e.parseID(id)
 	if err != nil {
@@ -311,12 +315,14 @@ func (e *Executor) AgentctlRunning(ctx context.Context, id string) (bool, error)
 	}
 	return e.podRunning(ctx, name, uid)
 }
+
 func (e *Executor) AgentctlRunningByRunID(ctx context.Context, runID string) (bool, error) {
 	if strings.TrimSpace(runID) == "" {
 		return false, errors.New("agent run identity is required")
 	}
 	return e.podRunning(ctx, resourceName(e.config.InstallationID, runID), "")
 }
+
 func (e *Executor) podRunning(ctx context.Context, name, uid string) (bool, error) {
 	pod, status, err := e.api.Do(ctx, http.MethodGet, e.resourcePath("pods", name), nil)
 	if err != nil {
@@ -326,11 +332,12 @@ func (e *Executor) podRunning(ctx context.Context, name, uid string) (bool, erro
 		return false, nil
 	}
 	if uid != "" && nestedStringValue(pod, "metadata", "uid") != uid {
-		return false, errors.New("Kubernetes Pod identity changed")
+		return false, errors.New("kubernetes Pod identity changed")
 	}
 	phase, _ := nestedString(pod, "status", "phase")
 	return phase != "Succeeded" && phase != "Failed", nil
 }
+
 func (e *Executor) deletePod(ctx context.Context, name, uid string) error {
 	pod, status, err := e.api.Do(ctx, http.MethodGet, e.resourcePath("pods", name), nil)
 	if err != nil {
@@ -374,12 +381,14 @@ func (e *Executor) deletePod(ctx context.Context, name, uid string) error {
 	}
 	return e.deleteService(ctx, name)
 }
+
 func (e *Executor) deleteService(ctx context.Context, name string) error {
 	if err := e.deleteOwned(ctx, "secrets", name+"-env"); err != nil {
 		return err
 	}
 	return e.deleteOwned(ctx, "services", name)
 }
+
 func (e *Executor) deleteOwned(ctx context.Context, resource, name string) error {
 	value, status, err := e.api.Do(ctx, http.MethodGet, e.resourcePath(resource, name), nil)
 	if err != nil {
@@ -411,7 +420,7 @@ func (e *Executor) forwardAgentctlLogs(name string) {
 	if err != nil {
 		return
 	}
-	defer stream.Close()
+	defer func() { _ = stream.Close() }()
 	agentctllogs.Forward(stream, "pod", name)
 }
 
@@ -425,15 +434,16 @@ func (e *Executor) taskDirectories(run model.RunConfig) (string, string, string,
 	base := filepath.Join(e.config.DataRoot, "tasks", scope)
 	work, state := filepath.Join(base, "work"), filepath.Join(base, "agentctl-state")
 	for _, p := range []string{work, state} {
-		if err = os.MkdirAll(p, 0700); err != nil {
+		if err = os.MkdirAll(p, 0o700); err != nil {
 			return "", "", "", fmt.Errorf("create Kubernetes shared task directory: %w", err)
 		}
-		if err = os.Chmod(p, 0700); err != nil {
+		if err = os.Chmod(p, 0o700); err != nil {
 			return "", "", "", fmt.Errorf("restrict shared task directory permissions: %w", err)
 		}
 	}
 	return work, state, scope, nil
 }
+
 func (e *Executor) labels(run model.RunConfig) map[string]string {
 	hash := func(s string) string { x := sha256.Sum256([]byte(s)); return fmt.Sprintf("%x", x)[:32] }
 	image := run.ExecutionImage
@@ -442,12 +452,15 @@ func (e *Executor) labels(run model.RunConfig) map[string]string {
 	}
 	return map[string]string{"app.kubernetes.io/managed-by": "orkest", "orkest.installation": e.config.InstallationID, "orkest.run": hash(run.RunID), "orkest.scope": hash(run.OrganizationID + "/" + run.WorkspaceID + "/" + run.TaskID), "orkest.runtime": string(run.Runtime), "orkest.image": hash(image)}
 }
+
 func (e *Executor) resourcePath(resource, name string) string {
 	return "/api/v1/namespaces/" + e.config.Namespace + "/" + resource + "/" + name
 }
+
 func (e *Executor) processID(name, uid string) string {
 	return e.config.Namespace + "/" + name + "/" + uid
 }
+
 func (e *Executor) parseID(id string) (string, string, error) {
 	parts := strings.Split(id, "/")
 	if len(parts) != 3 || parts[0] != e.config.Namespace || !dnsLabel(parts[1]) {
@@ -476,12 +489,12 @@ func (e *Executor) ensureResource(ctx context.Context, path string, desired map[
 			return nil, createErr
 		}
 		if code >= 300 {
-			return nil, fmt.Errorf("Kubernetes create returned HTTP %d", code)
+			return nil, fmt.Errorf("kubernetes create returned HTTP %d", code)
 		}
 		return created, nil
 	}
 	if status >= 300 {
-		return nil, fmt.Errorf("Kubernetes read returned HTTP %d", status)
+		return nil, fmt.Errorf("kubernetes read returned HTTP %d", status)
 	}
 	existing, _, err := e.api.Do(ctx, http.MethodGet, path, nil)
 	if err != nil {
@@ -505,32 +518,44 @@ func verifyLabels(resource map[string]any, labels map[string]string, name string
 func lastPart(s string) string { p := strings.Split(s, "/"); return p[len(p)-1] }
 
 func dnsLabel(s string) bool {
-	if len(s) < 1 || len(s) > 63 || !(s[0] >= 'a' && s[0] <= 'z' || s[0] >= '0' && s[0] <= '9') {
+	if len(s) < 1 || len(s) > 63 || !asciiLowerOrDigit(rune(s[0])) {
 		return false
 	}
 	for _, r := range s {
-		if !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-') {
+		if !asciiLowerOrDigit(r) && r != '-' {
 			return false
 		}
 	}
 	return s[len(s)-1] != '-'
 }
+
+func asciiLowerOrDigit(value rune) bool {
+	return value >= 'a' && value <= 'z' || value >= '0' && value <= '9'
+}
+
 func secretKey(value string) bool {
 	if value == "" {
 		return false
 	}
 	for _, char := range value {
-		if !(char >= 'a' && char <= 'z' || char >= 'A' && char <= 'Z' || char >= '0' && char <= '9' || char == '.' || char == '_' || char == '-') {
+		if !secretKeyChar(char) {
 			return false
 		}
 	}
 	return true
 }
+
+func secretKeyChar(value rune) bool {
+	return asciiLowerOrDigit(value) || value >= 'A' && value <= 'Z' || value == '.' || value == '_' || value == '-'
+}
+
 func resourceName(installation, run string) string {
 	x := sha256.Sum256([]byte(installation + "/" + run))
 	return "orkest-" + installation[:min(8, len(installation))] + "-" + fmt.Sprintf("%x", x[:])[:32]
 }
+
 func pathJoin(a, b string) string { return strings.Trim(filepath.ToSlash(filepath.Join(a, b)), "/") }
+
 func nested(v map[string]any, keys ...string) any {
 	var cur any = v
 	for _, key := range keys {
@@ -542,18 +567,22 @@ func nested(v map[string]any, keys ...string) any {
 	}
 	return cur
 }
+
 func nestedString(v map[string]any, keys ...string) (string, bool) {
 	s, ok := nested(v, keys...).(string)
 	return s, ok
 }
+
 func nestedStringValue(v map[string]any, keys ...string) string {
 	s, _ := nestedString(v, keys...)
 	return s
 }
+
 func nestedMap(v map[string]any, keys ...string) (map[string]any, bool) {
 	m, ok := nested(v, keys...).(map[string]any)
 	return m, ok
 }
+
 func boolAt(v map[string]any, keys ...any) bool {
 	cur := any(v)
 	for _, key := range keys {
@@ -585,7 +614,7 @@ func inClusterAPI() (API, error) {
 	host := os.Getenv("KUBERNETES_SERVICE_HOST")
 	port := os.Getenv("KUBERNETES_SERVICE_PORT_HTTPS")
 	if host == "" {
-		return nil, errors.New("Kubernetes executor requires in-cluster service discovery or an injected API client")
+		return nil, errors.New("kubernetes executor requires in-cluster service discovery or an injected API client")
 	}
 	if port == "" {
 		port = "443"
@@ -596,7 +625,7 @@ func inClusterAPI() (API, error) {
 		return nil, fmt.Errorf("read Kubernetes service account token: %w", err)
 	}
 	if strings.TrimSpace(string(tokenBytes)) == "" {
-		return nil, errors.New("Kubernetes service account token is empty")
+		return nil, errors.New("kubernetes service account token is empty")
 	}
 	ca, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/ca.crt")
 	if err != nil {
@@ -604,7 +633,7 @@ func inClusterAPI() (API, error) {
 	}
 	pool := x509.NewCertPool()
 	if !pool.AppendCertsFromPEM(ca) {
-		return nil, errors.New("Kubernetes CA bundle is invalid")
+		return nil, errors.New("kubernetes CA bundle is invalid")
 	}
 	return &restAPI{base: "https://" + host + ":" + port, tokenPath: tokenPath, client: &http.Client{Timeout: 30 * time.Second, Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}}}}, nil
 }
@@ -616,7 +645,7 @@ func (a *restAPI) authorize(req *http.Request) error {
 	}
 	value := strings.TrimSpace(string(token))
 	if value == "" {
-		return errors.New("Kubernetes service account token is empty")
+		return errors.New("kubernetes service account token is empty")
 	}
 	req.Header.Set("Authorization", "Bearer "+value)
 	return nil
@@ -645,7 +674,7 @@ func (a *restAPI) Do(ctx context.Context, method, path string, body any) (map[st
 	if err != nil {
 		return nil, 0, err
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 	var value map[string]any
 	if res.StatusCode != http.StatusNotFound {
 		if err = json.NewDecoder(io.LimitReader(res.Body, 4<<20)).Decode(&value); err != nil && err != io.EOF {
@@ -653,7 +682,7 @@ func (a *restAPI) Do(ctx context.Context, method, path string, body any) (map[st
 		}
 	}
 	if res.StatusCode >= 300 && res.StatusCode != 404 {
-		return value, res.StatusCode, fmt.Errorf("Kubernetes API returned HTTP %d", res.StatusCode)
+		return value, res.StatusCode, fmt.Errorf("kubernetes API returned HTTP %d", res.StatusCode)
 	}
 	return value, res.StatusCode, nil
 }
@@ -672,8 +701,8 @@ func (a *restAPI) PodLogs(ctx context.Context, path string) (io.ReadCloser, erro
 		return nil, err
 	}
 	if response.StatusCode >= 300 {
-		response.Body.Close()
-		return nil, fmt.Errorf("Kubernetes pod logs returned HTTP %d", response.StatusCode)
+		_ = response.Body.Close()
+		return nil, fmt.Errorf("kubernetes pod logs returned HTTP %d", response.StatusCode)
 	}
 	return response.Body, nil
 }

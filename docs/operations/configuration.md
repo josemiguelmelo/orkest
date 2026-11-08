@@ -31,10 +31,11 @@ The frontend callback must match the browser origin; see [Vite setup](../develop
 | `ORKEST_EXECUTOR`, `ORKEST_AGENTCTL_BINARY` | Docker (default), [Local](../reference/executors/local.md#setup), or [Kubernetes](../reference/executors/kubernetes.md); Local requires an absolute worker binary path and provides no task isolation |
 | `ORKEST_KUBERNETES_NAMESPACE`, `ORKEST_KUBERNETES_INSTALLATION_ID`, `ORKEST_KUBERNETES_DATA_PVC`, `ORKEST_KUBERNETES_DATA_SUBPATH` | In-cluster namespace, installation identity, shared PVC name, and optional PVC-relative prefix; see [Kubernetes prerequisites](../reference/executors/kubernetes.md#requirements) |
 | `ORKEST_KUBERNETES_SERVICE_ACCOUNT`, `ORKEST_KUBERNETES_UID`, `ORKEST_KUBERNETES_GID`, `ORKEST_KUBERNETES_STARTUP_TIMEOUT`, `ORKEST_KUBERNETES_TERMINATION_GRACE_SECONDS` | Optional Pod service account, matching non-root filesystem identity, readiness timeout, and graceful deletion period |
+| `ORKEST_KUBERNETES_PLATFORM_SERVICE_NAME`, `ORKEST_KUBERNETES_PLATFORM_SERVICE_PORT` | Internal platform Service DNS name/port used to derive the worker MCP endpoint; see [Kubernetes requirements](../reference/executors/kubernetes.md#requirements) |
 | `ORKEST_DATA_DIR` | [Durable files and session state](storage-and-secrets.md#retain-together) |
 | `ORKEST_AGENT_PROVIDER_ENV` | Comma-separated host variable names granted to runtimes |
 | `ORKEST_INTEGRATION_ENCRYPTION_KEY` | Required for encrypted secrets; [key format and retention](storage-and-secrets.md#protect-credentials) |
-| `ORKEST_AGENT_MCP_URL`, `ORKEST_AGENT_MCP_TOKEN_KEY` | Reachable built-in tools endpoint and optional signing-key override; [key storage](storage-and-secrets.md#protect-credentials) |
+| `ORKEST_AGENT_MCP_URL`, `ORKEST_AGENT_MCP_TOKEN_KEY` | Docker/Local built-in tools endpoint override, plus optional signing-key override. Kubernetes derives the endpoint from its platform Service settings; [key storage](storage-and-secrets.md#protect-credentials) |
 | `AGENTCTL_*_IMAGE` | [Per-runtime Docker images](../reference/executors/docker.md#build-and-configure-images) |
 | `ORKEST_CODEX_AUTH_FILE` | Optional source auth file; [Local](../reference/executors/local.md#credentials) defaults to the host login; [Docker](../reference/executors/docker.md#durable-files-and-credentials) requires a daemon-visible path |
 | `AGENTCTL_LISTEN`, `AGENTCTL_WORK_DIR`, `AGENTCTL_STATE_DIR`, `AGENTCTL_RUN_ID` | [Standalone worker](../guides/agentctl.md#run) address, work/state directories, and optional expected run for checkpoint recovery |
