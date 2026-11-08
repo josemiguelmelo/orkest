@@ -514,6 +514,7 @@ export declare const zCodingIntegration: z.ZodObject<{
         gitlab_server: "gitlab_server";
     }>;
     providerConfig: z.ZodRecord<z.ZodString, z.ZodUnknown>;
+    baseUrl: z.ZodReadonly<z.ZodURL>;
     updatedAt: z.ZodOptional<z.ZodString>;
 }, z.core.$strip>;
 export declare const zCodingProvider: z.ZodObject<{
@@ -643,6 +644,18 @@ export declare const zCodingIntegrationInputWritable: z.ZodObject<{
     }>;
     providerConfig: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnknown>>;
     credential: z.ZodOptional<z.ZodString>;
+}, z.core.$strip>;
+export declare const zCodingIntegrationWritable: z.ZodObject<{
+    id: z.ZodString;
+    workspaceId: z.ZodString;
+    name: z.ZodString;
+    providerName: z.ZodEnum<{
+        github: "github";
+        gitlab_cloud: "gitlab_cloud";
+        gitlab_server: "gitlab_server";
+    }>;
+    providerConfig: z.ZodRecord<z.ZodString, z.ZodUnknown>;
+    updatedAt: z.ZodOptional<z.ZodString>;
 }, z.core.$strip>;
 export declare const zTaskIntegrationInputWritable: z.ZodObject<{
     workflowId: z.ZodString;
@@ -1015,6 +1028,7 @@ export declare const zListCodingIntegrationsResponse: z.ZodArray<z.ZodObject<{
         gitlab_server: "gitlab_server";
     }>;
     providerConfig: z.ZodRecord<z.ZodString, z.ZodUnknown>;
+    baseUrl: z.ZodReadonly<z.ZodURL>;
     updatedAt: z.ZodOptional<z.ZodString>;
 }, z.core.$strip>>;
 export declare const zCreateCodingIntegrationBody: z.ZodObject<{
@@ -1044,6 +1058,7 @@ export declare const zCreateCodingIntegrationResponse: z.ZodObject<{
         gitlab_server: "gitlab_server";
     }>;
     providerConfig: z.ZodRecord<z.ZodString, z.ZodUnknown>;
+    baseUrl: z.ZodReadonly<z.ZodURL>;
     updatedAt: z.ZodOptional<z.ZodString>;
 }, z.core.$strip>;
 export declare const zDeleteCodingIntegrationPath: z.ZodObject<{

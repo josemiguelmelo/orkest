@@ -12,6 +12,7 @@ import (
 type CodingProvider interface {
 	ProviderName() string
 	ConfigSchema() json.RawMessage
+	BaseURL(json.RawMessage) (string, error)
 	ValidateConfig(json.RawMessage) error
 	ValidateAuthentication(context.Context, json.RawMessage, coderepositorymodel.Credentials) error
 	DiscoverRepositories(context.Context, json.RawMessage, coderepositorymodel.Credentials, int, int) (coderepositorymodel.RepositoryPage, error)

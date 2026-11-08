@@ -9,6 +9,7 @@ type CodingIntegration struct {
 	WorkspaceID    string          `json:"workspaceId"`
 	Name           string          `json:"name"`
 	ProviderName   string          `json:"providerName"`
+	BaseURL        string          `json:"baseUrl"`
 	ProviderConfig json.RawMessage `json:"providerConfig"`
 	UpdatedAt      string          `json:"updatedAt,omitempty"`
 }

@@ -65,7 +65,6 @@ func (d *TaskDispatcher) continueTaskSession(ctx context.Context, userID, organi
 	}
 	config.RunID, config.RestoreSession = runID, true
 	config.GitCredentials = nil
-	config.GitCredentialsRequired = false
 	config.Repositories = nil
 	if d.environmentResolver != nil {
 		environment, resolveErr := d.environmentResolver.Resolve(ctx, value.WorkspaceID)
@@ -95,9 +94,8 @@ func (d *TaskDispatcher) continueTaskSession(ctx context.Context, userID, organi
 func (d *TaskDispatcher) resolveTaskRepositories(ctx context.Context, userID, organizationID string, value taskmodel.Task, config *orchestrationmodel.RunConfig) error {
 	config.Repositories = nil
 	config.GitCredentials = nil
-	config.GitCredentialsRequired = false
 	if d.repositories == nil {
-		return nil
+		return d.resolveWorkspaceGitCredentials(ctx, userID, organizationID, value.WorkspaceID, config)
 	}
 	repositories, err := d.repositories.List(ctx, userID, organizationID, value.WorkspaceID)
 	if err != nil {
@@ -116,19 +114,26 @@ func (d *TaskDispatcher) resolveTaskRepositories(ctx context.Context, userID, or
 			IntegrationID: repository.IntegrationID, ProviderRepositoryID: repository.ProviderRepositoryID,
 			DefaultBranch: repository.DefaultBranch, Name: repository.Name,
 		})
-		if repository.IntegrationID == "" {
-			continue
-		}
-		if d.codingCredentials == nil {
-			return errors.New("coding credential resolver is unavailable")
-		}
-		credential, err := d.codingCredentials.CodingCredential(ctx, value.WorkspaceID, repository.IntegrationID)
-		if err != nil {
-			return fmt.Errorf("resolve repository push credential: %w", err)
-		}
-		config.GitCredentials = append(config.GitCredentials, orchestrationmodel.GitCredential{ProviderName: repository.ProviderName, ProviderConfig: credential.ProviderConfig, RepositoryURL: repository.URL, RepositoryPath: "repositories/" + repository.ProviderName + "/" + repository.ID, Token: credential.Token})
-		config.GitCredentialsRequired = true
 	}
+	return d.resolveWorkspaceGitCredentials(ctx, userID, organizationID, value.WorkspaceID, config)
+}
+
+func (d *TaskDispatcher) resolveWorkspaceGitCredentials(ctx context.Context, userID, organizationID, workspaceID string, config *orchestrationmodel.RunConfig) error {
+	if d.codingCredentials == nil {
+		return nil
+	}
+	integrations, err := d.codingCredentials.ListIntegrations(ctx, userID, organizationID, workspaceID)
+	if err != nil {
+		return fmt.Errorf("resolve workspace coding integrations: %w", err)
+	}
+	for _, integration := range integrations {
+		credential, err := d.codingCredentials.CodingCredential(ctx, workspaceID, integration.ID)
+		if err != nil {
+			return fmt.Errorf("resolve workspace coding credential: %w", err)
+		}
+		config.GitCredentials = append(config.GitCredentials, orchestrationmodel.GitCredential{ProviderName: integration.ProviderName, ProviderConfig: credential.ProviderConfig, RepositoryURL: integration.BaseURL, Token: credential.Token})
+	}
+	config.GitCredentialsRequired = config.GitCredentialsRequired || len(config.GitCredentials) > 0
 	return nil
 }
 

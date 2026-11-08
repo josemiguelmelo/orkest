@@ -76,6 +76,10 @@ Rules for the terms in the [glossary](glossary.md).
   branches; base-branch overrides and further PR policy remain open.
 - Commit as `Orkest Agent <agent@orkest.local>`. Exclude checkout/push credentials
   from repository configuration and plaintext checkpoints. See [credential handling](guides/integrations.md#coding-integrations).
+- Task runs receive workspace coding integration credentials for HTTPS Git operations
+  even with no linked repositories. Authentication is scoped to the matching provider
+  host and configured GitLab Server base path; repository selection still controls
+  Orkest-managed checkout.
 
 ### 3.3 Task
 

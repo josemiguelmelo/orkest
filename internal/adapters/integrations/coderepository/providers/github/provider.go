@@ -38,6 +38,13 @@ func NewGitHubProvider() GitHubProvider {
 
 func (GitHubProvider) ProviderName() string { return ProviderName }
 
+func (p GitHubProvider) BaseURL(config json.RawMessage) (string, error) {
+	if err := p.ValidateConfig(config); err != nil {
+		return "", err
+	}
+	return "https://github.com", nil
+}
+
 func (GitHubProvider) ConfigSchema() json.RawMessage {
 	return json.RawMessage(`{"type":"object","properties":{"host":{"type":"string","enum":["github.com"],"default":"github.com"}},"additionalProperties":false}`)
 }

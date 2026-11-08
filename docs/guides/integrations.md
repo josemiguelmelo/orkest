@@ -27,15 +27,19 @@ Credentials:
   membership/server policy.
 - One integration per provider/workspace. Credentials are write-only: omit to
   preserve, replace to rotate. Explicit validation needs a newly supplied credential.
-- Launch resolves PATs for agentctl's URL-scoped Git authentication. Platform snapshots
+- Every task run receives the workspace coding integration PATs, including tasks
+  with no linked repositories. HTTPS Git authentication is scoped to each provider
+  host and configured GitLab Server base path. Tasks can access repositories allowed
+  by the PAT, so limit its repository access and permissions. Platform snapshots
   encrypt them; newly written worker checkpoints omit the structured credential
   list. Older checkpoints may still contain credentials. Never put them in `.git/config`.
 - A restarted worker requiring Git credentials waits for matching configuration
   with fresh credentials before restoring. Automatic platform reinjection after
   reconnect is not established by the worker recovery guard; see
   [session recovery](../development/sessions.md#restore-and-ownership).
-- Run `gh`/`glab` from the registered checkout: wrappers select its credentials.
-  Public registrations without integrations lack authenticated push/CLI access.
+- Run `gh`/`glab` from a checkout on the matching provider host: wrappers select
+  its workspace integration credential, including for agent-created checkouts.
+  Workspaces without a matching coding integration lack authenticated push/CLI access.
 - Commit as `Orkest Agent <agent@orkest.local>`.
 
 ## Task integrations

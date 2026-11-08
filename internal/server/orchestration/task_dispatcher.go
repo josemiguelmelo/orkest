@@ -65,6 +65,7 @@ type (
 	}
 	TaskCredentialResolver interface {
 		CodingCredential(context.Context, string, string) (coderepositorymodel.Credentials, error)
+		ListIntegrations(context.Context, string, string, string) ([]coderepositorymodel.CodingIntegration, error)
 	}
 )
 

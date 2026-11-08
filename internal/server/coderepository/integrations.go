@@ -36,7 +36,31 @@ func (s *CodeRepositoryService) ListIntegrations(ctx context.Context, userID, or
 	if err != nil {
 		return nil, err
 	}
-	return repository.ListCodingIntegrations(ctx, workspaceID)
+	integrations, err := repository.ListCodingIntegrations(ctx, workspaceID)
+	if err != nil {
+		return nil, err
+	}
+	for i := range integrations {
+		integrations[i], err = s.withIntegrationBaseURL(integrations[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return integrations, nil
+}
+
+// Resolve the base URL from provider configuration, including existing integrations.
+func (s *CodeRepositoryService) withIntegrationBaseURL(integration coderepositorymodel.CodingIntegration) (coderepositorymodel.CodingIntegration, error) {
+	provider := s.providers[integration.ProviderName]
+	if provider == nil {
+		return coderepositorymodel.CodingIntegration{}, modelerrors.ErrInvalid
+	}
+	baseURL, err := provider.BaseURL(integration.ProviderConfig)
+	if err != nil {
+		return coderepositorymodel.CodingIntegration{}, err
+	}
+	integration.BaseURL = strings.TrimRight(baseURL, "/") + "/"
+	return integration, nil
 }
 
 func (s *CodeRepositoryService) authorizeIntegrationAdmin(ctx context.Context, userID, orgID, workspaceID string) error {
@@ -88,7 +112,11 @@ func (s *CodeRepositoryService) CreateIntegration(ctx context.Context, userID, o
 	if err != nil {
 		return coderepositorymodel.CodingIntegration{}, err
 	}
-	return repository.CreateCodingIntegration(ctx, coderepositorymodel.CodingIntegration{ID: id, WorkspaceID: workspaceID, Name: input.Name, ProviderName: provider.ProviderName(), ProviderConfig: input.ProviderConfig}, string(sealed))
+	integration, err := repository.CreateCodingIntegration(ctx, coderepositorymodel.CodingIntegration{ID: id, WorkspaceID: workspaceID, Name: input.Name, ProviderName: provider.ProviderName(), ProviderConfig: input.ProviderConfig}, string(sealed))
+	if err != nil {
+		return coderepositorymodel.CodingIntegration{}, err
+	}
+	return s.withIntegrationBaseURL(integration)
 }
 
 func (s *CodeRepositoryService) UpdateIntegration(ctx context.Context, userID, orgID, workspaceID, id string, input coderepositorymodel.CodingIntegrationInput) error {

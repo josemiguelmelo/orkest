@@ -43,13 +43,9 @@ func TestPrepareRuntimeConfiguresGitForMultipleRepositories(t *testing.T) {
 	if values["GIT_CONFIG_VALUE_0"] == "stale" || values["GIT_CONFIG_VALUE_1"] == "stale" || values["KEEP"] != "value" || values["PATH"] != "/bin" {
 		t.Fatalf("environment was not replaced and preserved correctly: %v", values)
 	}
-	for _, credential := range credentials {
-		path := filepath.Join(workDir, credential.RepositoryPath)
-		for key, expected := range map[string]string{"user.name": "Orkest Agent", "user.email": "agent@orkest.local"} {
-			output, err := exec.Command("git", "-C", path, "config", "--local", "--get", key).Output()
-			if err != nil || string(output) != expected+"\n" {
-				t.Errorf("repository %s has %s=%q, want %q (error: %v)", credential.RepositoryPath, key, output, expected, err)
-			}
+	for name, expected := range map[string]string{"GIT_AUTHOR_NAME": "Orkest Agent", "GIT_COMMITTER_NAME": "Orkest Agent", "GIT_AUTHOR_EMAIL": "agent@orkest.local", "GIT_COMMITTER_EMAIL": "agent@orkest.local"} {
+		if values[name] != expected {
+			t.Errorf("incorrect Git identity variable %s", name)
 		}
 	}
 }

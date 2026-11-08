@@ -45,7 +45,7 @@ type Skill struct {
 	SkillMD string `json:"skillMD"`
 }
 
-// GitCredential grants push access to one registered HTTPS repository for a run.
+// GitCredential grants HTTPS Git access to a repository or workspace provider URL prefix.
 // The token is sensitive and must never be included in logs or ordinary responses.
 type GitCredential struct {
 	ProviderName   string          `json:"providerName"`

@@ -123,6 +123,8 @@ func (*providerStub) PreparePublicTaskCheckout(context.Context, string, string, 
 	return nil
 }
 
+func (providerStub) BaseURL(json.RawMessage) (string, error) { return "https://github.com", nil }
+
 func (providerStub) ConfigSchema() json.RawMessage { return json.RawMessage(`{}`) }
 
 func (providerStub) ValidateConfig(json.RawMessage) error { return nil }
@@ -202,6 +204,9 @@ func TestCodingIntegrationCredentialsAreEncryptedWriteOnlyAndRotatable(t *testin
 	listed, err := service.ListIntegrations(context.Background(), "user", "org", "workspace")
 	if err != nil {
 		t.Fatal(err)
+	}
+	if created.BaseURL != "https://github.com/" || len(listed) != 1 || listed[0].BaseURL != created.BaseURL {
+		t.Fatal("create and list must return the resolved integration base URL")
 	}
 	encoded, _ := json.Marshal(listed)
 	if string(encoded) == "" || string(encoded) == "first-token" || containsSecret(string(encoded), "first-token") {
