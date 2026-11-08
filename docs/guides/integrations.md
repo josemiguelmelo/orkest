@@ -71,3 +71,7 @@ Credentials:
 Outbound comments/status and PR webhooks are out of scope. Live private-repository
 access/source sync need credentials. See [status](../status.md), [testing](../development/testing.md),
 and [migrations](../operations/migrations.md).
+
+## Task trigger integrations
+
+[Webhook trigger integrations](task-trigger-integrations.md) move explicitly linked tasks on external events, independently of task-source synchronization and coding credentials.

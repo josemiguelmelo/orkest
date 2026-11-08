@@ -23,6 +23,7 @@ import (
 	skillmodel "github.com/josemiguelmelo/orkest/internal/server/skill/model"
 	"github.com/josemiguelmelo/orkest/internal/server/task"
 	"github.com/josemiguelmelo/orkest/internal/server/taskintegration"
+	"github.com/josemiguelmelo/orkest/internal/server/tasktriggerintegration"
 	"github.com/josemiguelmelo/orkest/internal/server/workflow"
 	"github.com/josemiguelmelo/orkest/internal/server/workflowautomation"
 	"github.com/josemiguelmelo/orkest/internal/server/workspace"
@@ -32,25 +33,26 @@ import (
 
 // RouterDependencies names the services required by platform routes.
 type RouterDependencies struct {
-	Users            *identity.UserRegistrationService
-	Organizations    *organization.OrganizationService
-	Workspaces       *workspace.WorkspaceService
-	Agents           *agent.AgentDefinitionUseCase
-	CodeRepositories *coderepository.CodeRepositoryService
-	Tasks            *task.TaskService
-	Integrations     *taskintegration.TaskIntegrationService
-	MCPServers       *mcpserver.MCPServerService
-	SkillCatalog     *skill.CatalogService
-	Launches         *orchestration.LaunchService
-	Profiles         *executionprofile.ExecutionProfileService
-	RuntimeProfiles  *agentruntimeprofile.AgentRuntimeProfileService
-	DirectChats      *orchestration.DirectChatService
-	Workflows        *workflow.WorkflowConfigurationService
-	Automation       *workflowautomation.WorkflowAutomationService
-	Environment      *workspaceenv.WorkspaceEnvironmentService
-	HostMounts       *workspacemount.WorkspaceMountService
-	Artifacts        *artifact.ArtifactService
-	AgentTools       *appmcp.AgentTools
+	Users               *identity.UserRegistrationService
+	Organizations       *organization.OrganizationService
+	Workspaces          *workspace.WorkspaceService
+	Agents              *agent.AgentDefinitionUseCase
+	CodeRepositories    *coderepository.CodeRepositoryService
+	Tasks               *task.TaskService
+	Integrations        *taskintegration.TaskIntegrationService
+	TriggerIntegrations *tasktriggerintegration.TaskTriggerIntegrationService
+	MCPServers          *mcpserver.MCPServerService
+	SkillCatalog        *skill.CatalogService
+	Launches            *orchestration.LaunchService
+	Profiles            *executionprofile.ExecutionProfileService
+	RuntimeProfiles     *agentruntimeprofile.AgentRuntimeProfileService
+	DirectChats         *orchestration.DirectChatService
+	Workflows           *workflow.WorkflowConfigurationService
+	Automation          *workflowautomation.WorkflowAutomationService
+	Environment         *workspaceenv.WorkspaceEnvironmentService
+	Artifacts           *artifact.ArtifactService
+	AgentTools          *appmcp.AgentTools
+	HostMounts          *workspacemount.WorkspaceMountService
 }
 
 // NewRouter validates the served OpenAPI contract before exposing routes.
@@ -95,6 +97,7 @@ func NewRouter(ctx context.Context, deps RouterDependencies) (*chi.Mux, error) {
 	if deps.AgentTools != nil {
 		router.Handle("/mcp/agent-tools", deps.AgentTools.Handler())
 	}
+	router.Post("/webhooks/task-trigger-integrations/{integrationID}", taskTriggerIntegrationAPI{service: deps.TriggerIntegrations}.webhook)
 	router.Group(func(api chi.Router) {
 		api.Use(auth.middleware)
 		api.Route("/api", func(api chi.Router) {
@@ -126,6 +129,7 @@ func NewRouter(ctx context.Context, deps RouterDependencies) (*chi.Mux, error) {
 			taskRunAPI{tasks: deps.Tasks, launches: deps.Launches}.routes(api)
 			directChatAPI{chats: deps.DirectChats, agents: deps.Agents, workspaces: deps.Workspaces}.routes(api)
 			taskIntegrationAPI{service: deps.Integrations}.routes(api)
+			taskTriggerIntegrationAPI{service: deps.TriggerIntegrations}.routes(api)
 		})
 	})
 	openapi.Enable(router, "Orkest API", OpenAPIContract)

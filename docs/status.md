@@ -21,7 +21,8 @@ defines intended scope.
 | Execution profile builds | BuildKit and Docker backends | Real composition suite needs daemon, registry, and foundation images |
 | Team-member slot allocation | Unfinished | Task-level run reservation does not establish member capacity enforcement |
 | Platform-to-agentctl authentication | Unfinished | Worker API must stay within a trusted boundary |
-| Browser SSE, PR webhook rules, binary artifacts | Proposed or deferred | No implementation claim |
+| Task trigger integrations | GitHub signed review/merge webhooks, explicit links, stage movement or same-stage assigned-agent starts with custom prompts, and configuration UI | Unit/UI and PostgreSQL transaction coverage; live GitHub delivery and credentialed agent execution not qualified |
+| Browser SSE, binary artifacts | Proposed or deferred | No implementation claim |
 | Complete host/disk loss recovery | Outside MVP guarantee | Durable storage must survive |
 
 - Loading alone proves no safe interrupted continuation. Replay must establish
@@ -47,6 +48,23 @@ mixed delivery versions are unsupported. See [delivery ownership](development/wo
 and [migration operations](operations/migrations.md#workflow-delivery-claims).
 
 ## Verification record
+
+### 2026-11-08: webhook task trigger integrations
+
+- `make check` passed, including lint, Go tests, generated API consistency,
+  frontend lint/type checks and production builds.
+- PostgreSQL migration/repository suite passed with local database settings.
+  Trigger coverage verifies semantic deduplication, acknowledgement rollback and
+  concurrent worker claims; the focused suite also passed with race detection.
+- Trigger provider/policy, workflow startup context, HTTP and command wiring tests
+  passed with race detection. Frontend suite passed: 62 tests, including trigger
+  viewer restrictions and versioned edits that preserve write-only secrets.
+- Live GitHub delivery and credentialed review-response/merge workflows were not
+  run. Automated entry starts retain the existing new-session behavior; this does
+  not establish credentialed session restoration or provider continuation.
+- Migration and mixed-version precautions are documented under
+  [trigger migration operations](operations/migrations.md#task-trigger-integrations-and-event-context-00400041).
+
 
 ### 2026-11-07: structured user questions
 

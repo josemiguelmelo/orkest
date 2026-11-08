@@ -94,8 +94,8 @@ INSERT INTO workflow_rules(workspace_id,workflow_id,id,enabled,event_type,source
 VALUES($1,$2,$3,$4,$5,$6,$7,NULLIF(sqlc.arg(target_stage_id)::text,''));
 
 -- name: EnqueueWorkflowEvent :exec
-INSERT INTO workflow_events(id,workspace_id,task_id,stage_version,actor_id,event_type,run_id,causation_id,correlation_id)
-VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(id) DO NOTHING;
+INSERT INTO workflow_events(id,workspace_id,task_id,stage_version,actor_id,event_type,run_id,causation_id,correlation_id,prompt_text)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT(id) DO NOTHING;
 
 -- name: PendingWorkflowEvent :one
 SELECT * FROM workflow_events WHERE processed_at IS NULL ORDER BY occurred_at,id LIMIT 1 FOR UPDATE SKIP LOCKED;

@@ -3,6 +3,8 @@ info:
   title: Orkest API
   version: 0.0.0
 tags:
+  - name: TaskTriggerIntegrations
+    description: Authenticated webhooks and workspace trigger configuration.
   - name: RuntimeProviders
     description: Supported runtime provider configuration schemas.
   - name: System
@@ -1630,6 +1632,600 @@ paths:
         "401": {$ref: "#/components/responses/Unauthorized"}
         "403": {$ref: "#/components/responses/Forbidden"}
         "409": {$ref: "#/components/responses/Conflict"}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/task-trigger-integrations:
+    parameters:
+      - name: orgID
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: workspaceID
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags:
+        - TaskTriggerIntegrations
+      operationId: listTaskTriggerIntegrations
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TaskTriggerIntegration"
+        "400":
+          description: BadRequest
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: NotFound
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: InternalServerError
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    post:
+      tags:
+        - TaskTriggerIntegrations
+      operationId: createTaskTriggerIntegration
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "201":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskTriggerIntegration"
+        "400":
+          description: BadRequest
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: NotFound
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: InternalServerError
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskTriggerIntegrationInput"
+  /api/organizations/{orgID}/workspaces/{workspaceID}/task-trigger-integrations/{integrationID}:
+    parameters:
+      - name: orgID
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: workspaceID
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: integrationID
+        in: path
+        required: true
+        schema:
+          type: string
+    put:
+      tags:
+        - TaskTriggerIntegrations
+      operationId: updateTaskTriggerIntegration
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TaskTriggerIntegration"
+        "400":
+          description: BadRequest
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: NotFound
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: InternalServerError
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskTriggerIntegrationInput"
+    delete:
+      tags:
+        - TaskTriggerIntegrations
+      operationId: deleteTaskTriggerIntegration
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "204":
+          description: Success
+        "400":
+          description: BadRequest
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: NotFound
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: InternalServerError
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/organizations/{orgID}/workspaces/{workspaceID}/task-trigger-integrations/{integrationID}/links:
+    parameters:
+      - name: orgID
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: workspaceID
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: integrationID
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags:
+        - TaskTriggerIntegrations
+      operationId: listTaskTriggerResourceLinks
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TaskTriggerResourceLink"
+        "400":
+          description: BadRequest
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: NotFound
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: InternalServerError
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+    post:
+      tags:
+        - TaskTriggerIntegrations
+      operationId: linkTaskTriggerResource
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "204":
+          description: Success
+        "400":
+          description: BadRequest
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: NotFound
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: InternalServerError
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskTriggerResourceLink"
+    delete:
+      tags:
+        - TaskTriggerIntegrations
+      operationId: unlinkTaskTriggerResource
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "204":
+          description: Success
+        "400":
+          description: BadRequest
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: NotFound
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: InternalServerError
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TaskTriggerResourceLink"
+  /api/organizations/{orgID}/workspaces/{workspaceID}/task-trigger-integrations/{integrationID}/deliveries:
+    parameters:
+      - name: orgID
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: workspaceID
+        in: path
+        required: true
+        schema:
+          type: string
+      - name: integrationID
+        in: path
+        required: true
+        schema:
+          type: string
+    get:
+      tags:
+        - TaskTriggerIntegrations
+      operationId: listTaskTriggerDeliveries
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TaskTriggerDelivery"
+        "400":
+          description: BadRequest
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: NotFound
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: InternalServerError
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /api/task-trigger-integration-providers:
+    get:
+      tags:
+        - TaskTriggerIntegrations
+      operationId: listTaskTriggerIntegrationProviders
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TaskTriggerProvider"
+        "400":
+          description: BadRequest
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: NotFound
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "500":
+          description: InternalServerError
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+  /webhooks/task-trigger-integrations/{integrationID}:
+    parameters:
+      - name: integrationID
+        in: path
+        required: true
+        schema:
+          type: string
+    post:
+      tags:
+        - TaskTriggerIntegrations
+      operationId: receiveTaskTriggerWebhook
+      security: []
+      responses:
+        "202":
+          description: Success
+        "400":
+          description: BadRequest
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Unauthorized
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "403":
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "404":
+          description: NotFound
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Conflict
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "413":
+          description: Webhook exceeds 2 MiB
+        "500":
+          description: InternalServerError
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: true
 components:
   requestBodies:
     NamedResource:
@@ -1704,6 +2300,181 @@ components:
           schema:
             $ref: "#/components/schemas/Error"
   schemas:
+    TaskTriggerRule:
+      type: object
+      required:
+        - id
+        - event
+        - workflowId
+        - sourceStageId
+        - targetStageId
+        - action
+      properties:
+        id:
+          type: string
+        event:
+          type: string
+        workflowId:
+          type: string
+        sourceStageId:
+          type: string
+        targetStageId:
+          type: string
+        action:
+          type: string
+          enum: [move_task, start_work]
+        promptText:
+          type: string
+          maxLength: 32768
+    TaskTriggerIntegrationInput:
+      type: object
+      required:
+        - name
+        - provider
+        - config
+        - enabled
+        - rules
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        provider:
+          type: string
+        config:
+          type: object
+          additionalProperties: true
+        enabled:
+          type: boolean
+        version:
+          type: integer
+          format: int64
+        rules:
+          type: array
+          maxItems: 200
+          items:
+            $ref: "#/components/schemas/TaskTriggerRule"
+        webhookSecret:
+          type: string
+          writeOnly: true
+          description: Required on create; at least 32 characters. Omit on update to preserve.
+    TaskTriggerIntegration:
+      type: object
+      required:
+        - name
+        - provider
+        - config
+        - enabled
+        - version
+        - rules
+        - id
+        - workspaceId
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 200
+        provider:
+          type: string
+        config:
+          type: object
+          additionalProperties: true
+        enabled:
+          type: boolean
+        version:
+          type: integer
+          format: int64
+        rules:
+          type: array
+          maxItems: 200
+          items:
+            $ref: "#/components/schemas/TaskTriggerRule"
+        id:
+          type: string
+        workspaceId:
+          type: string
+    TaskTriggerResourceLink:
+      type: object
+      required:
+        - taskId
+        - repositoryId
+        - resourceId
+      properties:
+        taskId:
+          type: string
+        repositoryId:
+          type: string
+        resourceId:
+          type: string
+    TaskTriggerProvider:
+      type: object
+      required:
+        - id
+        - name
+        - configSchema
+        - events
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        configSchema:
+          type: object
+          additionalProperties: true
+        events:
+          type: array
+          items:
+            type: string
+    TaskTriggerEvent:
+      type: object
+      required:
+        - key
+        - type
+        - repositoryId
+        - resourceId
+        - occurredAt
+        - referenceUrl
+      properties:
+        key:
+          type: string
+        type:
+          type: string
+        repositoryId:
+          type: string
+        resourceId:
+          type: string
+        occurredAt:
+          type: string
+          format: date-time
+        referenceUrl:
+          type: string
+          format: uri
+    TaskTriggerDelivery:
+      type: object
+      required:
+        - id
+        - integrationId
+        - event
+        - status
+        - receivedAt
+      properties:
+        id:
+          type: string
+        integrationId:
+          type: string
+        event:
+          $ref: "#/components/schemas/TaskTriggerEvent"
+        status:
+          type: string
+          enum:
+            - pending
+            - processed
+            - ignored
+            - blocked
+            - failed
+        receivedAt:
+          type: string
+          format: date-time
     SkillInput:
       type: object
       required: [skillMD]

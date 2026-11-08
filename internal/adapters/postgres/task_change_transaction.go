@@ -22,25 +22,36 @@ func withTaskChange(ctx context.Context, pool *pgxpool.Pool, queries *sqlc.Queri
 		return taskmodel.Task{}, err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	q := queries.WithTx(tx)
+
+	if err = applyTaskChange(ctx, queries.WithTx(tx), userID, orgID, workspaceID, id, commandID, decide); err != nil {
+		return taskmodel.Task{}, err
+	}
+	if err = tx.Commit(ctx); err != nil {
+		return taskmodel.Task{}, mapError(err, modelerrors.ErrConflict, modelerrors.ErrConflict)
+	}
+	return tasks.Task(ctx, orgID, workspaceID, id)
+}
+
+// applyTaskChange allows inbox acknowledgement and workflow effects to share one transaction.
+func applyTaskChange(ctx context.Context, q *sqlc.Queries, userID, orgID, workspaceID, id, commandID string, decide func(task.TaskWorkflowSnapshot) (task.TaskWorkflowEffects, *taskmodel.TaskInput, error)) error {
 	entry, err := q.TaskWorkflowState(ctx, sqlc.TaskWorkflowStateParams{WorkspaceID: workspaceID, ID: id})
 	if err != nil {
-		return taskmodel.Task{}, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
+		return mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
 	}
 	data, err := q.LockWorkflow(ctx, sqlc.LockWorkflowParams{WorkspaceID: workspaceID, ID: entry.WorkflowID})
 	if err != nil {
-		return taskmodel.Task{}, err
+		return err
 	}
 	d, err := workflowDefinition(ctx, q, data)
 	if err != nil {
-		return taskmodel.Task{}, err
+		return err
 	}
 	state, err := q.LockWorkflowTask(ctx, sqlc.LockWorkflowTaskParams{WorkspaceID: workspaceID, ID: id})
 	if err != nil {
-		return taskmodel.Task{}, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
+		return mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
 	}
 	if state.WorkflowID != entry.WorkflowID {
-		return taskmodel.Task{}, modelerrors.ErrConflict
+		return modelerrors.ErrConflict
 	}
 	var previous *task.WorkflowCommand
 	if commandID != "" {
@@ -48,58 +59,52 @@ func withTaskChange(ctx context.Context, pool *pgxpool.Pool, queries *sqlc.Queri
 		if e == nil {
 			previous = new(task.WorkflowCommand)
 			if e = json.Unmarshal(row.Options, previous); e != nil {
-				return taskmodel.Task{}, e
+				return e
 			}
 		} else if !errors.Is(e, pgx.ErrNoRows) {
-			return taskmodel.Task{}, e
+			return e
 		}
 	}
 	row, err := q.GetTask(ctx, sqlc.GetTaskParams{OrganizationID: orgID, WorkspaceID: workspaceID, ID: id})
 	if err != nil {
-		return taskmodel.Task{}, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
+		return mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
 	}
 	active := false
 	if previous == nil {
 		if _, e := q.ActiveTaskLaunch(ctx, sqlc.ActiveTaskLaunchParams{WorkspaceID: workspaceID, TaskID: id}); e == nil {
 			active = true
 		} else if !errors.Is(e, pgx.ErrNoRows) {
-			return taskmodel.Task{}, e
+			return e
 		}
 	}
 	decision, content, err := decide(task.TaskWorkflowSnapshot{Workflow: d, Task: taskFromRow(row), ActiveLaunch: active, RecordedCommand: previous != nil, RecordedInput: previous, ActorID: userID, RunID: state.WorkflowRunID})
 	if err != nil {
-		return taskmodel.Task{}, err
+		return err
 	}
 	if decision.Replay {
-		if err = tx.Commit(ctx); err != nil {
-			return taskmodel.Task{}, err
-		}
-		return tasks.Task(ctx, orgID, workspaceID, id)
+		return nil
 	}
 
 	plan := workflowautomation.StageTransitionPlan{StageID: decision.StageID, AssigneeAgentID: decision.AssigneeAgentID, Start: decision.Start, Completed: decision.Completed}
 
 	if content != nil {
 		if _, err = q.UpdateTask(ctx, sqlc.UpdateTaskParams{OrganizationID: orgID, WorkspaceID: workspaceID, ID: id, Title: content.Title, Description: content.Description, Status: plan.StageID, Column7: plan.AssigneeAgentID, Labels: content.Labels}); err != nil {
-			return taskmodel.Task{}, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
+			return mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
 		}
 		if err = q.DeleteTaskRepositories(ctx, sqlc.DeleteTaskRepositoriesParams{WorkspaceID: workspaceID, TaskID: id}); err != nil {
-			return taskmodel.Task{}, err
+			return err
 		}
 		for _, repoID := range content.RepositoryIDs {
 			if err = q.InsertTaskRepository(ctx, sqlc.InsertTaskRepositoryParams{WorkspaceID: workspaceID, TaskID: id, RepositoryID: repoID}); err != nil {
-				return taskmodel.Task{}, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
+				return mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
 			}
 		}
 	} else if err = q.MoveWorkflowTask(ctx, sqlc.MoveWorkflowTaskParams{WorkspaceID: workspaceID, ID: id, StageVersion: state.StageVersion, Status: plan.StageID, Column5: plan.AssigneeAgentID}); err != nil {
-		return taskmodel.Task{}, err
+		return err
 	}
 	if err = persistStageEffects(ctx, q, workspaceID, id, userID, decision.Persistence); err != nil {
-		return taskmodel.Task{}, err
+		return err
 	}
 
-	if err = tx.Commit(ctx); err != nil {
-		return taskmodel.Task{}, mapError(err, modelerrors.ErrConflict, modelerrors.ErrConflict)
-	}
-	return tasks.Task(ctx, orgID, workspaceID, id)
+	return nil
 }

@@ -286,6 +286,51 @@ type TaskStageHistory struct {
 	ConfigurationVersion int64              `json:"configuration_version"`
 }
 
+type TaskTriggerDelivery struct {
+	ID            string             `json:"id"`
+	IntegrationID string             `json:"integration_id"`
+	DeliveryID    string             `json:"delivery_id"`
+	EventKey      string             `json:"event_key"`
+	Event         []byte             `json:"event"`
+	TaskID        string             `json:"task_id"`
+	StageVersion  int64              `json:"stage_version"`
+	Status        string             `json:"status"`
+	ReceivedAt    pgtype.Timestamptz `json:"received_at"`
+}
+
+type TaskTriggerIntegration struct {
+	ID              string `json:"id"`
+	WorkspaceID     string `json:"workspace_id"`
+	Name            string `json:"name"`
+	Provider        string `json:"provider"`
+	Config          []byte `json:"config"`
+	Enabled         bool   `json:"enabled"`
+	Version         int64  `json:"version"`
+	ConfiguredBy    string `json:"configured_by"`
+	EncryptedSecret string `json:"encrypted_secret"`
+}
+
+type TaskTriggerResourceLink struct {
+	IntegrationID string             `json:"integration_id"`
+	WorkspaceID   string             `json:"workspace_id"`
+	RepositoryID  string             `json:"repository_id"`
+	ResourceID    string             `json:"resource_id"`
+	TaskID        string             `json:"task_id"`
+	CreatedAt     pgtype.Timestamptz `json:"created_at"`
+}
+
+type TaskTriggerRule struct {
+	IntegrationID string `json:"integration_id"`
+	WorkspaceID   string `json:"workspace_id"`
+	ID            string `json:"id"`
+	EventType     string `json:"event_type"`
+	WorkflowID    string `json:"workflow_id"`
+	SourceStageID string `json:"source_stage_id"`
+	TargetStageID string `json:"target_stage_id"`
+	Action        string `json:"action"`
+	PromptText    string `json:"prompt_text"`
+}
+
 type User struct {
 	ID              string             `json:"id"`
 	KeycloakSubject string             `json:"keycloak_subject"`
@@ -324,6 +369,7 @@ type WorkflowEvent struct {
 	ProcessedAt          pgtype.Timestamptz `json:"processed_at"`
 	ConfigurationVersion pgtype.Int8        `json:"configuration_version"`
 	MatchedRuleID        pgtype.Text        `json:"matched_rule_id"`
+	PromptText           string             `json:"prompt_text"`
 }
 
 type WorkflowRule struct {

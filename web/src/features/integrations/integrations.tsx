@@ -1,3 +1,4 @@
+import { TriggerIntegrations } from './trigger-integrations';
 import { useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useForm } from 'react-hook-form';
@@ -124,6 +125,7 @@ export function IntegrationsPage() {
           )}
         </div>
       )}
+      <TriggerIntegrations />
       {editing !== undefined &&
         (providers.isPending ? (
           <Loading />

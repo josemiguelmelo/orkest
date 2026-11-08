@@ -205,8 +205,8 @@ func (q *Queries) EnqueueWorkflowCommand(ctx context.Context, arg EnqueueWorkflo
 }
 
 const enqueueWorkflowEvent = `-- name: EnqueueWorkflowEvent :exec
-INSERT INTO workflow_events(id,workspace_id,task_id,stage_version,actor_id,event_type,run_id,causation_id,correlation_id)
-VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(id) DO NOTHING
+INSERT INTO workflow_events(id,workspace_id,task_id,stage_version,actor_id,event_type,run_id,causation_id,correlation_id,prompt_text)
+VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT(id) DO NOTHING
 `
 
 type EnqueueWorkflowEventParams struct {
@@ -219,6 +219,7 @@ type EnqueueWorkflowEventParams struct {
 	RunID         string `json:"run_id"`
 	CausationID   string `json:"causation_id"`
 	CorrelationID string `json:"correlation_id"`
+	PromptText    string `json:"prompt_text"`
 }
 
 func (q *Queries) EnqueueWorkflowEvent(ctx context.Context, arg EnqueueWorkflowEventParams) error {
@@ -232,6 +233,7 @@ func (q *Queries) EnqueueWorkflowEvent(ctx context.Context, arg EnqueueWorkflowE
 		arg.RunID,
 		arg.CausationID,
 		arg.CorrelationID,
+		arg.PromptText,
 	)
 	return err
 }
@@ -605,7 +607,7 @@ func (q *Queries) OccupiedWorkflowStages(ctx context.Context, arg OccupiedWorkfl
 }
 
 const pendingWorkflowEvent = `-- name: PendingWorkflowEvent :one
-SELECT id, workspace_id, task_id, stage_version, actor_id, event_type, run_id, causation_id, correlation_id, occurred_at, processed_at, configuration_version, matched_rule_id FROM workflow_events WHERE processed_at IS NULL ORDER BY occurred_at,id LIMIT 1 FOR UPDATE SKIP LOCKED
+SELECT id, workspace_id, task_id, stage_version, actor_id, event_type, run_id, causation_id, correlation_id, occurred_at, processed_at, configuration_version, matched_rule_id, prompt_text FROM workflow_events WHERE processed_at IS NULL ORDER BY occurred_at,id LIMIT 1 FOR UPDATE SKIP LOCKED
 `
 
 func (q *Queries) PendingWorkflowEvent(ctx context.Context) (WorkflowEvent, error) {
@@ -625,6 +627,7 @@ func (q *Queries) PendingWorkflowEvent(ctx context.Context) (WorkflowEvent, erro
 		&i.ProcessedAt,
 		&i.ConfigurationVersion,
 		&i.MatchedRuleID,
+		&i.PromptText,
 	)
 	return i, err
 }

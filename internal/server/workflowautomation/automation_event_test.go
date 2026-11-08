@@ -112,3 +112,15 @@ func TestServiceHandlesEvaluationFailuresAndActiveLaunch(t *testing.T) {
 		})
 	}
 }
+
+func TestStageEntryPreservesExternalStartupContext(t *testing.T) {
+	definition := workflowmodel.DefaultDefinition("Default")
+	service := NewWorkflowAutomationService(nil, nil, nil, WorkflowRuleEvaluator{})
+	effects, err := service.evaluateEvent(AutomationEventSnapshot{Workflow: definition, Event: AutomationEvent{ID: "entry", Type: workflowmodel.StageEntered, StageVersion: 2, ActorID: "admin", TaskID: "task", PromptText: "Inspect https://github.com/owner/repo/pull/4"}, StageID: "in_progress", StageVersion: 2, AssigneeAgentID: "agent", WorkState: taskmodel.WorkStateIdle})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if effects.Persistence.Execution == nil || effects.Persistence.Execution.Options.PromptText != "Inspect https://github.com/owner/repo/pull/4" || effects.Persistence.Execution.Options.SessionMode != "new" {
+		t.Fatalf("startup context lost: %+v", effects.Persistence.Execution)
+	}
+}

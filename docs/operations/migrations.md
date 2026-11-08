@@ -114,3 +114,19 @@ Documented hazards below; SQL is the complete inventory.
   containers. It does not erase snapshots from session JSON or unmount active
   containers. Export selections before rollback; stop affected containers to
   revoke their host access.
+
+## Task trigger integrations and event context (0040–0041)
+
+0040 adds workspace-scoped trigger integrations, rules, explicit resource links,
+and a durable delivery inbox. Composite foreign keys prevent cross-workspace
+rules/links. Referenced workflow stages cannot be removed until their trigger
+rules are removed. 0041 adds default-empty startup context to workflow events;
+already persisted events/commands retain their previous meaning. Neither migration
+changes runtime/session formats or restarts independent agentctl workers.
+
+Stop old platform instances before enabling trigger integrations. Older binaries
+cannot display their configuration or coordinate new trigger references during
+workflow edits. Drain pending trigger deliveries and workflow events before a
+rollback. Down migrations delete trigger configuration, links, audit history and
+workflow-event context; export those records first. They do not stop agents or
+release execution ownership.

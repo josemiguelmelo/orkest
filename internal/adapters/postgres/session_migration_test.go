@@ -74,6 +74,20 @@ func testWorkflowMigrationRoundTrip(t *testing.T, ctx context.Context, pool *pgx
 	if _, err = tx.Exec(ctx, `INSERT INTO workflow_stages(workspace_id,workflow_id,id,position,name) VALUES('migration-workspace','migration-workspace','custom',4,'Custom'); UPDATE tasks SET status='custom' WHERE id='migration-task'; INSERT INTO task_integrations(id,workspace_id,workflow_id,provider,name,encrypted_credential) VALUES('migration-integration','migration-workspace','migration-workspace','github_cloud','Migration','test'); SET CONSTRAINTS ALL IMMEDIATE;`); err != nil {
 		t.Fatal(err)
 	}
+	// Remove later workflow dependants before exercising the historical rollback.
+	for _, name := range []string{"0041_workflow_event_context.sql", "0040_task_trigger_integrations.sql"} {
+		source, e := migrations.FS.ReadFile(name)
+		if e != nil {
+			t.Fatal(e)
+		}
+		_, down, ok := strings.Cut(string(source), "-- +goose Down")
+		if !ok {
+			t.Fatal("missing rollback", name)
+		}
+		if _, e = tx.Exec(ctx, down); e != nil {
+			t.Fatal("rollback dependency", name, e)
+		}
+	}
 	automationSource, err := migrations.FS.ReadFile("0036_workflow_automation.sql")
 	if err != nil {
 		t.Fatal(err)
