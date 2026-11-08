@@ -28,7 +28,9 @@ The frontend callback must match the browser origin; see [Vite setup](../develop
 
 | Settings | Meaning / details |
 | --- | --- |
-| `ORKEST_EXECUTOR`, `ORKEST_AGENTCTL_BINARY` | Docker (default) or [Local](../reference/executors/local.md#setup); Local requires an absolute worker binary path and provides no task isolation |
+| `ORKEST_EXECUTOR`, `ORKEST_AGENTCTL_BINARY` | Docker (default), [Local](../reference/executors/local.md#setup), or [Kubernetes](../reference/executors/kubernetes.md); Local requires an absolute worker binary path and provides no task isolation |
+| `ORKEST_KUBERNETES_NAMESPACE`, `ORKEST_KUBERNETES_INSTALLATION_ID`, `ORKEST_KUBERNETES_DATA_PVC`, `ORKEST_KUBERNETES_DATA_SUBPATH` | In-cluster namespace, installation identity, shared PVC name, and optional PVC-relative prefix; see [Kubernetes prerequisites](../reference/executors/kubernetes.md#requirements) |
+| `ORKEST_KUBERNETES_SERVICE_ACCOUNT`, `ORKEST_KUBERNETES_UID`, `ORKEST_KUBERNETES_GID`, `ORKEST_KUBERNETES_STARTUP_TIMEOUT`, `ORKEST_KUBERNETES_TERMINATION_GRACE_SECONDS` | Optional Pod service account, matching non-root filesystem identity, readiness timeout, and graceful deletion period |
 | `ORKEST_DATA_DIR` | [Durable files and session state](storage-and-secrets.md#retain-together) |
 | `ORKEST_AGENT_PROVIDER_ENV` | Comma-separated host variable names granted to runtimes |
 | `ORKEST_INTEGRATION_ENCRYPTION_KEY` | Required for encrypted secrets; [key format and retention](storage-and-secrets.md#protect-credentials) |

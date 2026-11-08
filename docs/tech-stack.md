@@ -16,13 +16,14 @@ The platform and agentctl share one Go module. The UI is a React application.
 | UI primitives | Tailwind, Radix | Owned components and accessible interactions |
 | API contracts | OpenAPI, Hey API | Served contracts and generated frontend client |
 | Coding provider APIs | go-github, GitLab client-go | Typed REST authentication and repository discovery behind provider adapters |
-| Execution | Docker Engine; Local processes | Independent agentctl workers |
+| Execution | Docker Engine; Local processes; Kubernetes Pods | Independent agentctl workers |
 | Agent protocol | ACP over stdio | Runtime commands and callbacks |
 | Worker transport | REST, receive-only WebSocket | Commands, status, ordered activity |
 | Tools | Streamable HTTP MCP | Built-in and external tools |
 | Image builds | BuildKit or Docker CLI | Compose and publish execution profile images |
 
-- Excluded: Redis, message broker, Kubernetes execution.
+- Excluded: Redis and message broker. Kubernetes execution is an initial in-cluster
+  adapter with shared-PVC requirements and documented qualification gaps.
 - Browser activity polls; SSE is proposed. Worker transport authentication is unfinished.
 
 ## Authoritative inventories

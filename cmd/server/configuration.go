@@ -30,6 +30,15 @@ type serverConfiguration struct {
 	BuildKitTLSKey               string
 	BuildKitDaemonless           string
 	ExecutionProfileBuildWorkers string
+	KubernetesNamespace          string
+	KubernetesInstallationID     string
+	KubernetesDataPVC            string
+	KubernetesDataSubpath        string
+	KubernetesServiceAccount     string
+	KubernetesUID                string
+	KubernetesGID                string
+	KubernetesStartupTimeout     string
+	KubernetesTerminationGrace   string
 }
 
 func loadServerConfiguration() serverConfiguration {
@@ -60,5 +69,14 @@ func loadServerConfiguration() serverConfiguration {
 		BuildKitTLSKey:               os.Getenv("ORKEST_BUILDKIT_TLS_KEY"),
 		BuildKitDaemonless:           os.Getenv("ORKEST_BUILDKIT_DAEMONLESS"),
 		ExecutionProfileBuildWorkers: os.Getenv("ORKEST_EXECUTION_PROFILE_BUILD_WORKERS"),
+		KubernetesNamespace:          os.Getenv("ORKEST_KUBERNETES_NAMESPACE"),
+		KubernetesInstallationID:     os.Getenv("ORKEST_KUBERNETES_INSTALLATION_ID"),
+		KubernetesDataPVC:            os.Getenv("ORKEST_KUBERNETES_DATA_PVC"),
+		KubernetesDataSubpath:        os.Getenv("ORKEST_KUBERNETES_DATA_SUBPATH"),
+		KubernetesServiceAccount:     os.Getenv("ORKEST_KUBERNETES_SERVICE_ACCOUNT"),
+		KubernetesUID:                os.Getenv("ORKEST_KUBERNETES_UID"),
+		KubernetesGID:                os.Getenv("ORKEST_KUBERNETES_GID"),
+		KubernetesStartupTimeout:     os.Getenv("ORKEST_KUBERNETES_STARTUP_TIMEOUT"),
+		KubernetesTerminationGrace:   os.Getenv("ORKEST_KUBERNETES_TERMINATION_GRACE_SECONDS"),
 	}
 }

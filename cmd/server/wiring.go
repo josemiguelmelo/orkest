@@ -15,6 +15,7 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/adapters/runnerclient/agentctlhttp"
 
 	"github.com/josemiguelmelo/orkest/internal/adapters/executors"
+	kubernetesexecutor "github.com/josemiguelmelo/orkest/internal/adapters/executors/kubernetes"
 	"github.com/josemiguelmelo/orkest/internal/adapters/http/server"
 	"github.com/josemiguelmelo/orkest/internal/adapters/imagebuild"
 	"github.com/josemiguelmelo/orkest/internal/adapters/imagebuild/buildkit"
@@ -47,9 +48,31 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/server/workspaceenv"
 )
 
+func parsePositiveInt64(value string, fallback int64) int64 {
+	parsed, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64)
+	if err != nil || parsed <= 0 {
+		return fallback
+	}
+	return parsed
+}
+
+func parseDuration(value string, fallback time.Duration) time.Duration {
+	parsed, err := time.ParseDuration(strings.TrimSpace(value))
+	if err != nil || parsed <= 0 {
+		return fallback
+	}
+	return parsed
+}
+
 // Run owns the platform HTTP lifecycle; it does not own agent processes.
 func runServer(ctx context.Context, logger *slog.Logger) error {
 	config := loadServerConfiguration()
+	if strings.EqualFold(strings.TrimSpace(config.Executor), "kubernetes") {
+		mcpURL := strings.TrimSpace(config.AgentMCPURL)
+		if mcpURL == "" || strings.Contains(mcpURL, "127.0.0.1") || strings.Contains(mcpURL, "localhost") {
+			return fmt.Errorf("ORKEST_AGENT_MCP_URL must be reachable from Kubernetes workers when ORKEST_EXECUTOR=kubernetes")
+		}
+	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	dataRoot := strings.TrimSpace(config.DataDir)
@@ -108,6 +131,17 @@ func runServer(ctx context.Context, logger *slog.Logger) error {
 		ProviderEnv:              splitEnvironmentNames(config.AgentProviderEnv),
 		CodingProviders:          providers,
 		CodingCredentialResolver: codeRepositories,
+		Kubernetes: kubernetesexecutor.Config{
+			Namespace:               config.KubernetesNamespace,
+			InstallationID:          config.KubernetesInstallationID,
+			DataPVC:                 config.KubernetesDataPVC,
+			DataSubpath:             config.KubernetesDataSubpath,
+			ServiceAccount:          config.KubernetesServiceAccount,
+			UID:                     parsePositiveInt64(config.KubernetesUID, int64(os.Getuid())),
+			GID:                     parsePositiveInt64(config.KubernetesGID, int64(os.Getgid())),
+			StartupTimeout:          parseDuration(config.KubernetesStartupTimeout, 2*time.Minute),
+			TerminationGraceSeconds: parsePositiveInt64(config.KubernetesTerminationGrace, 10),
+		},
 	})
 	if executorErr != nil {
 		return fmt.Errorf("initialize agent executor: %w", executorErr)
@@ -181,7 +215,7 @@ func runServer(ctx context.Context, logger *slog.Logger) error {
 	integrations := taskintegration.NewTaskIntegrationService(postgres.NewPostgresTaskIntegrationRepository(database), secretBox, workspaces, organizations, postgres.NewPostgresImportedTaskRepository(database), tasks, githubcloud.NewGitHubCloudProvider(), jiraserver.NewJiraServerProvider())
 	runnerCtx, stopRunner := context.WithCancel(ctx)
 	var runnerWG sync.WaitGroup
-	if config.ExecutionImageRepository != "" {
+	if config.ExecutionImageRepository != "" && executorKind != executors.Kubernetes {
 		registry := imagebuild.RegistryMapping{
 			DockerHost:   config.DockerRegistryHost,
 			BuildKitHost: config.BuildKitRegistryHost,
@@ -213,6 +247,8 @@ func runServer(ctx context.Context, logger *slog.Logger) error {
 		worker := executionprofile.NewExecutionProfileWorker(executionProfileRepository, builder, logger, workerCount)
 		runnerWG.Add(1)
 		go func() { defer runnerWG.Done(); worker.Run(runnerCtx) }()
+	} else if config.ExecutionImageRepository != "" {
+		logger.Warn("execution profile builds are disabled for the Kubernetes executor until the Kubernetes image builder is configured", "executor", executorKind)
 	}
 	runnerWG.Add(1)
 	go func() { defer runnerWG.Done(); integrations.Run(runnerCtx) }()

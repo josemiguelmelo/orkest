@@ -25,7 +25,9 @@ provides monitoring, chat, approvals, and recovery through agentctl and ACP.
   starts, and advancement after success.
 - Reusable agent definitions; workspace team members supply execution slots.
 - Docker execution by default, behind an extensible executor contract. Local is
-  a trusted, single-user host-process option without task isolation; Kubernetes is future work.
+  a trusted, single-user host-process option without task isolation. Kubernetes has
+  an initial in-cluster executor; see its qualification limits in the
+  [executor reference](reference/executors/kubernetes.md).
 - agentctl bridges the platform and runtime ACP sessions.
 - Task chat, approvals, cancellation, and interruption recovery; see §7.
 - HTTP MCP servers; stdio MCP excluded.
@@ -140,7 +142,9 @@ Confirmed capacity requirement; implementation unfinished:
 - Docker: default isolated environment.
 - Local: explicit trusted, single-user development option without task isolation.
 - Contract: create, start, connect, inspect, stop, clean up.
-- Kubernetes is future work; resource limits, network policy, and cleanup timing remain open.
+- Kubernetes uses an operator-provisioned shared PVC and direct Pods; image-profile
+  builds and full runtime/recovery qualification remain incomplete. See the
+  [Kubernetes executor reference](reference/executors/kubernetes.md).
 
 ### 3.10 Workflow
 
