@@ -9,6 +9,7 @@ import (
 // EventIntent is a complete business event identity, independent of SQL rows.
 // Scope and actor are supplied by the enclosing locked transaction.
 type EventIntent struct {
+	PromptText                        string
 	ID                                string
 	StageVersion                      int64
 	Type                              workflowmodel.EventType

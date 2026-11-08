@@ -1,6 +1,65 @@
 export type ClientOptions = {
     baseUrl: `${string}://${string}` | (string & {});
 };
+export type TaskTriggerRule = {
+    id: string;
+    event: string;
+    workflowId: string;
+    sourceStageId: string;
+    targetStageId: string;
+    action: 'move_task' | 'start_work';
+    promptText?: string;
+};
+export type TaskTriggerIntegrationInput = {
+    name: string;
+    provider: string;
+    config: {
+        [key: string]: unknown;
+    };
+    enabled: boolean;
+    version?: number;
+    rules: Array<TaskTriggerRule>;
+};
+export type TaskTriggerIntegration = {
+    name: string;
+    provider: string;
+    config: {
+        [key: string]: unknown;
+    };
+    enabled: boolean;
+    version: number;
+    rules: Array<TaskTriggerRule>;
+    id: string;
+    workspaceId: string;
+};
+export type TaskTriggerResourceLink = {
+    taskId: string;
+    repositoryId: string;
+    resourceId: string;
+};
+export type TaskTriggerProvider = {
+    id: string;
+    name: string;
+    configSchema: {
+        [key: string]: unknown;
+    };
+    events: Array<string>;
+};
+export type TaskTriggerEvent = {
+    key: string;
+    type: string;
+    repositoryId: string;
+    resourceId: string;
+    occurredAt: string;
+    referenceUrl: string;
+};
+export type TaskTriggerDelivery = {
+    id: string;
+    integrationId: string;
+    event: TaskTriggerEvent;
+    status: 'pending' | 'processed' | 'ignored' | 'blocked' | 'failed';
+    receivedAt: string;
+};
 export type SkillInput = {
     /**
      * Complete SKILL.md including required frontmatter
@@ -440,6 +499,20 @@ export type Error = {
 };
 export type OperationStatus = {
     status: string;
+};
+export type TaskTriggerIntegrationInputWritable = {
+    name: string;
+    provider: string;
+    config: {
+        [key: string]: unknown;
+    };
+    enabled: boolean;
+    version?: number;
+    rules: Array<TaskTriggerRule>;
+    /**
+     * Required on create; at least 32 characters. Omit on update to preserve.
+     */
+    webhookSecret?: string;
 };
 export type CurrentUserWritable = {
     user: User;
@@ -4382,4 +4455,441 @@ export type RespondDirectAgentConversationQuestionResponses = {
      * Answer durably recorded; runtime consumption is not implied
      */
     200: unknown;
+};
+export type ListTaskTriggerIntegrationsData = {
+    body?: never;
+    path: {
+        orgID: string;
+        workspaceID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/task-trigger-integrations';
+};
+export type ListTaskTriggerIntegrationsErrors = {
+    /**
+     * BadRequest
+     */
+    400: Error;
+    /**
+     * Unauthorized
+     */
+    401: Error;
+    /**
+     * Forbidden
+     */
+    403: Error;
+    /**
+     * NotFound
+     */
+    404: Error;
+    /**
+     * Conflict
+     */
+    409: Error;
+    /**
+     * InternalServerError
+     */
+    500: Error;
+};
+export type ListTaskTriggerIntegrationsError = ListTaskTriggerIntegrationsErrors[keyof ListTaskTriggerIntegrationsErrors];
+export type ListTaskTriggerIntegrationsResponses = {
+    /**
+     * Success
+     */
+    200: Array<TaskTriggerIntegration>;
+};
+export type ListTaskTriggerIntegrationsResponse = ListTaskTriggerIntegrationsResponses[keyof ListTaskTriggerIntegrationsResponses];
+export type CreateTaskTriggerIntegrationData = {
+    body: TaskTriggerIntegrationInputWritable;
+    path: {
+        orgID: string;
+        workspaceID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/task-trigger-integrations';
+};
+export type CreateTaskTriggerIntegrationErrors = {
+    /**
+     * BadRequest
+     */
+    400: Error;
+    /**
+     * Unauthorized
+     */
+    401: Error;
+    /**
+     * Forbidden
+     */
+    403: Error;
+    /**
+     * NotFound
+     */
+    404: Error;
+    /**
+     * Conflict
+     */
+    409: Error;
+    /**
+     * InternalServerError
+     */
+    500: Error;
+};
+export type CreateTaskTriggerIntegrationError = CreateTaskTriggerIntegrationErrors[keyof CreateTaskTriggerIntegrationErrors];
+export type CreateTaskTriggerIntegrationResponses = {
+    /**
+     * Success
+     */
+    201: TaskTriggerIntegration;
+};
+export type CreateTaskTriggerIntegrationResponse = CreateTaskTriggerIntegrationResponses[keyof CreateTaskTriggerIntegrationResponses];
+export type DeleteTaskTriggerIntegrationData = {
+    body?: never;
+    path: {
+        orgID: string;
+        workspaceID: string;
+        integrationID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/task-trigger-integrations/{integrationID}';
+};
+export type DeleteTaskTriggerIntegrationErrors = {
+    /**
+     * BadRequest
+     */
+    400: Error;
+    /**
+     * Unauthorized
+     */
+    401: Error;
+    /**
+     * Forbidden
+     */
+    403: Error;
+    /**
+     * NotFound
+     */
+    404: Error;
+    /**
+     * Conflict
+     */
+    409: Error;
+    /**
+     * InternalServerError
+     */
+    500: Error;
+};
+export type DeleteTaskTriggerIntegrationError = DeleteTaskTriggerIntegrationErrors[keyof DeleteTaskTriggerIntegrationErrors];
+export type DeleteTaskTriggerIntegrationResponses = {
+    /**
+     * Success
+     */
+    204: void;
+};
+export type DeleteTaskTriggerIntegrationResponse = DeleteTaskTriggerIntegrationResponses[keyof DeleteTaskTriggerIntegrationResponses];
+export type UpdateTaskTriggerIntegrationData = {
+    body: TaskTriggerIntegrationInputWritable;
+    path: {
+        orgID: string;
+        workspaceID: string;
+        integrationID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/task-trigger-integrations/{integrationID}';
+};
+export type UpdateTaskTriggerIntegrationErrors = {
+    /**
+     * BadRequest
+     */
+    400: Error;
+    /**
+     * Unauthorized
+     */
+    401: Error;
+    /**
+     * Forbidden
+     */
+    403: Error;
+    /**
+     * NotFound
+     */
+    404: Error;
+    /**
+     * Conflict
+     */
+    409: Error;
+    /**
+     * InternalServerError
+     */
+    500: Error;
+};
+export type UpdateTaskTriggerIntegrationError = UpdateTaskTriggerIntegrationErrors[keyof UpdateTaskTriggerIntegrationErrors];
+export type UpdateTaskTriggerIntegrationResponses = {
+    /**
+     * Success
+     */
+    200: TaskTriggerIntegration;
+};
+export type UpdateTaskTriggerIntegrationResponse = UpdateTaskTriggerIntegrationResponses[keyof UpdateTaskTriggerIntegrationResponses];
+export type UnlinkTaskTriggerResourceData = {
+    body: TaskTriggerResourceLink;
+    path: {
+        orgID: string;
+        workspaceID: string;
+        integrationID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/task-trigger-integrations/{integrationID}/links';
+};
+export type UnlinkTaskTriggerResourceErrors = {
+    /**
+     * BadRequest
+     */
+    400: Error;
+    /**
+     * Unauthorized
+     */
+    401: Error;
+    /**
+     * Forbidden
+     */
+    403: Error;
+    /**
+     * NotFound
+     */
+    404: Error;
+    /**
+     * Conflict
+     */
+    409: Error;
+    /**
+     * InternalServerError
+     */
+    500: Error;
+};
+export type UnlinkTaskTriggerResourceError = UnlinkTaskTriggerResourceErrors[keyof UnlinkTaskTriggerResourceErrors];
+export type UnlinkTaskTriggerResourceResponses = {
+    /**
+     * Success
+     */
+    204: void;
+};
+export type UnlinkTaskTriggerResourceResponse = UnlinkTaskTriggerResourceResponses[keyof UnlinkTaskTriggerResourceResponses];
+export type ListTaskTriggerResourceLinksData = {
+    body?: never;
+    path: {
+        orgID: string;
+        workspaceID: string;
+        integrationID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/task-trigger-integrations/{integrationID}/links';
+};
+export type ListTaskTriggerResourceLinksErrors = {
+    /**
+     * BadRequest
+     */
+    400: Error;
+    /**
+     * Unauthorized
+     */
+    401: Error;
+    /**
+     * Forbidden
+     */
+    403: Error;
+    /**
+     * NotFound
+     */
+    404: Error;
+    /**
+     * Conflict
+     */
+    409: Error;
+    /**
+     * InternalServerError
+     */
+    500: Error;
+};
+export type ListTaskTriggerResourceLinksError = ListTaskTriggerResourceLinksErrors[keyof ListTaskTriggerResourceLinksErrors];
+export type ListTaskTriggerResourceLinksResponses = {
+    /**
+     * Success
+     */
+    200: Array<TaskTriggerResourceLink>;
+};
+export type ListTaskTriggerResourceLinksResponse = ListTaskTriggerResourceLinksResponses[keyof ListTaskTriggerResourceLinksResponses];
+export type LinkTaskTriggerResourceData = {
+    body: TaskTriggerResourceLink;
+    path: {
+        orgID: string;
+        workspaceID: string;
+        integrationID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/task-trigger-integrations/{integrationID}/links';
+};
+export type LinkTaskTriggerResourceErrors = {
+    /**
+     * BadRequest
+     */
+    400: Error;
+    /**
+     * Unauthorized
+     */
+    401: Error;
+    /**
+     * Forbidden
+     */
+    403: Error;
+    /**
+     * NotFound
+     */
+    404: Error;
+    /**
+     * Conflict
+     */
+    409: Error;
+    /**
+     * InternalServerError
+     */
+    500: Error;
+};
+export type LinkTaskTriggerResourceError = LinkTaskTriggerResourceErrors[keyof LinkTaskTriggerResourceErrors];
+export type LinkTaskTriggerResourceResponses = {
+    /**
+     * Success
+     */
+    204: void;
+};
+export type LinkTaskTriggerResourceResponse = LinkTaskTriggerResourceResponses[keyof LinkTaskTriggerResourceResponses];
+export type ListTaskTriggerDeliveriesData = {
+    body?: never;
+    path: {
+        orgID: string;
+        workspaceID: string;
+        integrationID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/task-trigger-integrations/{integrationID}/deliveries';
+};
+export type ListTaskTriggerDeliveriesErrors = {
+    /**
+     * BadRequest
+     */
+    400: Error;
+    /**
+     * Unauthorized
+     */
+    401: Error;
+    /**
+     * Forbidden
+     */
+    403: Error;
+    /**
+     * NotFound
+     */
+    404: Error;
+    /**
+     * Conflict
+     */
+    409: Error;
+    /**
+     * InternalServerError
+     */
+    500: Error;
+};
+export type ListTaskTriggerDeliveriesError = ListTaskTriggerDeliveriesErrors[keyof ListTaskTriggerDeliveriesErrors];
+export type ListTaskTriggerDeliveriesResponses = {
+    /**
+     * Success
+     */
+    200: Array<TaskTriggerDelivery>;
+};
+export type ListTaskTriggerDeliveriesResponse = ListTaskTriggerDeliveriesResponses[keyof ListTaskTriggerDeliveriesResponses];
+export type ListTaskTriggerIntegrationProvidersData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/task-trigger-integration-providers';
+};
+export type ListTaskTriggerIntegrationProvidersErrors = {
+    /**
+     * BadRequest
+     */
+    400: Error;
+    /**
+     * Unauthorized
+     */
+    401: Error;
+    /**
+     * Forbidden
+     */
+    403: Error;
+    /**
+     * NotFound
+     */
+    404: Error;
+    /**
+     * Conflict
+     */
+    409: Error;
+    /**
+     * InternalServerError
+     */
+    500: Error;
+};
+export type ListTaskTriggerIntegrationProvidersError = ListTaskTriggerIntegrationProvidersErrors[keyof ListTaskTriggerIntegrationProvidersErrors];
+export type ListTaskTriggerIntegrationProvidersResponses = {
+    /**
+     * Success
+     */
+    200: Array<TaskTriggerProvider>;
+};
+export type ListTaskTriggerIntegrationProvidersResponse = ListTaskTriggerIntegrationProvidersResponses[keyof ListTaskTriggerIntegrationProvidersResponses];
+export type ReceiveTaskTriggerWebhookData = {
+    body: {
+        [key: string]: unknown;
+    };
+    path: {
+        integrationID: string;
+    };
+    query?: never;
+    url: '/webhooks/task-trigger-integrations/{integrationID}';
+};
+export type ReceiveTaskTriggerWebhookErrors = {
+    /**
+     * BadRequest
+     */
+    400: Error;
+    /**
+     * Unauthorized
+     */
+    401: Error;
+    /**
+     * Forbidden
+     */
+    403: Error;
+    /**
+     * NotFound
+     */
+    404: Error;
+    /**
+     * Conflict
+     */
+    409: Error;
+    /**
+     * Webhook exceeds 2 MiB
+     */
+    413: unknown;
+    /**
+     * InternalServerError
+     */
+    500: Error;
+};
+export type ReceiveTaskTriggerWebhookError = ReceiveTaskTriggerWebhookErrors[keyof ReceiveTaskTriggerWebhookErrors];
+export type ReceiveTaskTriggerWebhookResponses = {
+    /**
+     * Success
+     */
+    202: unknown;
 };

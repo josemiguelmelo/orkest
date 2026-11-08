@@ -10,7 +10,7 @@ import (
 )
 
 func persistStageEvent(ctx context.Context, q *sqlc.Queries, workspaceID, taskID, actorID string, event workflow.EventIntent) error {
-	return q.EnqueueWorkflowEvent(ctx, sqlc.EnqueueWorkflowEventParams{ID: event.ID, WorkspaceID: workspaceID, TaskID: taskID, ActorID: actorID, StageVersion: event.StageVersion, EventType: string(event.Type), RunID: event.RunID, CausationID: event.CausationID, CorrelationID: event.CorrelationID})
+	return q.EnqueueWorkflowEvent(ctx, sqlc.EnqueueWorkflowEventParams{PromptText: event.PromptText, ID: event.ID, WorkspaceID: workspaceID, TaskID: taskID, ActorID: actorID, StageVersion: event.StageVersion, EventType: string(event.Type), RunID: event.RunID, CausationID: event.CausationID, CorrelationID: event.CorrelationID})
 }
 
 func persistStageEffects(ctx context.Context, q *sqlc.Queries, workspaceID, taskID, actorID string, effects task.WorkflowPersistenceEffects) error {

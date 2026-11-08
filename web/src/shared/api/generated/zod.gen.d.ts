@@ -1,4 +1,95 @@
 import * as z from 'zod';
+export declare const zTaskTriggerRule: z.ZodObject<{
+    id: z.ZodString;
+    event: z.ZodString;
+    workflowId: z.ZodString;
+    sourceStageId: z.ZodString;
+    targetStageId: z.ZodString;
+    action: z.ZodEnum<{
+        move_task: "move_task";
+        start_work: "start_work";
+    }>;
+    promptText: z.ZodOptional<z.ZodString>;
+}, z.core.$strip>;
+export declare const zTaskTriggerIntegrationInput: z.ZodObject<{
+    name: z.ZodString;
+    provider: z.ZodString;
+    config: z.ZodRecord<z.ZodString, z.ZodUnknown>;
+    enabled: z.ZodBoolean;
+    version: z.ZodOptional<z.ZodCoercedBigInt<unknown>>;
+    rules: z.ZodArray<z.ZodObject<{
+        id: z.ZodString;
+        event: z.ZodString;
+        workflowId: z.ZodString;
+        sourceStageId: z.ZodString;
+        targetStageId: z.ZodString;
+        action: z.ZodEnum<{
+            move_task: "move_task";
+            start_work: "start_work";
+        }>;
+        promptText: z.ZodOptional<z.ZodString>;
+    }, z.core.$strip>>;
+}, z.core.$strip>;
+export declare const zTaskTriggerIntegration: z.ZodObject<{
+    name: z.ZodString;
+    provider: z.ZodString;
+    config: z.ZodRecord<z.ZodString, z.ZodUnknown>;
+    enabled: z.ZodBoolean;
+    version: z.ZodCoercedBigInt<unknown>;
+    rules: z.ZodArray<z.ZodObject<{
+        id: z.ZodString;
+        event: z.ZodString;
+        workflowId: z.ZodString;
+        sourceStageId: z.ZodString;
+        targetStageId: z.ZodString;
+        action: z.ZodEnum<{
+            move_task: "move_task";
+            start_work: "start_work";
+        }>;
+        promptText: z.ZodOptional<z.ZodString>;
+    }, z.core.$strip>>;
+    id: z.ZodString;
+    workspaceId: z.ZodString;
+}, z.core.$strip>;
+export declare const zTaskTriggerResourceLink: z.ZodObject<{
+    taskId: z.ZodString;
+    repositoryId: z.ZodString;
+    resourceId: z.ZodString;
+}, z.core.$strip>;
+export declare const zTaskTriggerProvider: z.ZodObject<{
+    id: z.ZodString;
+    name: z.ZodString;
+    configSchema: z.ZodRecord<z.ZodString, z.ZodUnknown>;
+    events: z.ZodArray<z.ZodString>;
+}, z.core.$strip>;
+export declare const zTaskTriggerEvent: z.ZodObject<{
+    key: z.ZodString;
+    type: z.ZodString;
+    repositoryId: z.ZodString;
+    resourceId: z.ZodString;
+    occurredAt: z.ZodISODateTime;
+    referenceUrl: z.ZodURL;
+}, z.core.$strip>;
+export declare const zTaskTriggerDelivery: z.ZodObject<{
+    id: z.ZodString;
+    integrationId: z.ZodString;
+    event: z.ZodObject<{
+        key: z.ZodString;
+        type: z.ZodString;
+        repositoryId: z.ZodString;
+        resourceId: z.ZodString;
+        occurredAt: z.ZodISODateTime;
+        referenceUrl: z.ZodURL;
+    }, z.core.$strip>;
+    status: z.ZodEnum<{
+        pending: "pending";
+        processed: "processed";
+        ignored: "ignored";
+        blocked: "blocked";
+        failed: "failed";
+    }>;
+    receivedAt: z.ZodISODateTime;
+}, z.core.$strip>;
 export declare const zSkillInput: z.ZodObject<{
     skillMD: z.ZodString;
 }, z.core.$strip>;
@@ -249,11 +340,11 @@ export declare const zTaskInput: z.ZodObject<{
     repositoryIds: z.ZodOptional<z.ZodArray<z.ZodString>>;
 }, z.core.$strip>;
 export declare const zStageWorkState: z.ZodEnum<{
+    failed: "failed";
     idle: "idle";
     queued: "queued";
     running: "running";
     completed: "completed";
-    failed: "failed";
 }>;
 export declare const zTaskRepository: z.ZodObject<{
     id: z.ZodString;
@@ -273,11 +364,11 @@ export declare const zTask: z.ZodObject<{
     stageVersion: z.ZodOptional<z.ZodCoercedBigInt<unknown>>;
     automationPending: z.ZodOptional<z.ZodBoolean>;
     stageWorkState: z.ZodOptional<z.ZodEnum<{
+        failed: "failed";
         idle: "idle";
         queued: "queued";
         running: "running";
         completed: "completed";
-        failed: "failed";
     }>>;
     closed: z.ZodOptional<z.ZodBoolean>;
     status: z.ZodString;
@@ -586,6 +677,26 @@ export declare const zError: z.ZodObject<{
 }, z.core.$strip>;
 export declare const zOperationStatus: z.ZodObject<{
     status: z.ZodString;
+}, z.core.$strip>;
+export declare const zTaskTriggerIntegrationInputWritable: z.ZodObject<{
+    name: z.ZodString;
+    provider: z.ZodString;
+    config: z.ZodRecord<z.ZodString, z.ZodUnknown>;
+    enabled: z.ZodBoolean;
+    version: z.ZodOptional<z.ZodCoercedBigInt<unknown>>;
+    rules: z.ZodArray<z.ZodObject<{
+        id: z.ZodString;
+        event: z.ZodString;
+        workflowId: z.ZodString;
+        sourceStageId: z.ZodString;
+        targetStageId: z.ZodString;
+        action: z.ZodEnum<{
+            move_task: "move_task";
+            start_work: "start_work";
+        }>;
+        promptText: z.ZodOptional<z.ZodString>;
+    }, z.core.$strip>>;
+    webhookSecret: z.ZodOptional<z.ZodString>;
 }, z.core.$strip>;
 export declare const zCurrentUserWritable: z.ZodObject<{
     user: z.ZodObject<{
@@ -2186,11 +2297,11 @@ export declare const zTransitionTaskResponse: z.ZodObject<{
     stageVersion: z.ZodOptional<z.ZodCoercedBigInt<unknown>>;
     automationPending: z.ZodOptional<z.ZodBoolean>;
     stageWorkState: z.ZodOptional<z.ZodEnum<{
+        failed: "failed";
         idle: "idle";
         queued: "queued";
         running: "running";
         completed: "completed";
-        failed: "failed";
     }>>;
     closed: z.ZodOptional<z.ZodBoolean>;
     status: z.ZodString;
@@ -2224,11 +2335,11 @@ export declare const zListTasksResponse: z.ZodArray<z.ZodObject<{
     stageVersion: z.ZodOptional<z.ZodCoercedBigInt<unknown>>;
     automationPending: z.ZodOptional<z.ZodBoolean>;
     stageWorkState: z.ZodOptional<z.ZodEnum<{
+        failed: "failed";
         idle: "idle";
         queued: "queued";
         running: "running";
         completed: "completed";
-        failed: "failed";
     }>>;
     closed: z.ZodOptional<z.ZodBoolean>;
     status: z.ZodString;
@@ -2279,11 +2390,11 @@ export declare const zCreateTaskResponse: z.ZodObject<{
     stageVersion: z.ZodOptional<z.ZodCoercedBigInt<unknown>>;
     automationPending: z.ZodOptional<z.ZodBoolean>;
     stageWorkState: z.ZodOptional<z.ZodEnum<{
+        failed: "failed";
         idle: "idle";
         queued: "queued";
         running: "running";
         completed: "completed";
-        failed: "failed";
     }>>;
     closed: z.ZodOptional<z.ZodBoolean>;
     status: z.ZodString;
@@ -2318,11 +2429,11 @@ export declare const zGetTaskResponse: z.ZodObject<{
     stageVersion: z.ZodOptional<z.ZodCoercedBigInt<unknown>>;
     automationPending: z.ZodOptional<z.ZodBoolean>;
     stageWorkState: z.ZodOptional<z.ZodEnum<{
+        failed: "failed";
         idle: "idle";
         queued: "queued";
         running: "running";
         completed: "completed";
-        failed: "failed";
     }>>;
     closed: z.ZodOptional<z.ZodBoolean>;
     status: z.ZodString;
@@ -2374,11 +2485,11 @@ export declare const zUpdateTaskResponse: z.ZodObject<{
     stageVersion: z.ZodOptional<z.ZodCoercedBigInt<unknown>>;
     automationPending: z.ZodOptional<z.ZodBoolean>;
     stageWorkState: z.ZodOptional<z.ZodEnum<{
+        failed: "failed";
         idle: "idle";
         queued: "queued";
         running: "running";
         completed: "completed";
-        failed: "failed";
     }>>;
     closed: z.ZodOptional<z.ZodBoolean>;
     status: z.ZodString;
@@ -3002,4 +3113,220 @@ export declare const zRespondDirectAgentConversationQuestionPath: z.ZodObject<{
     conversationID: z.ZodString;
     runID: z.ZodString;
     questionID: z.ZodString;
+}, z.core.$strip>;
+export declare const zListTaskTriggerIntegrationsPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+}, z.core.$strip>;
+/**
+ * Success
+ */
+export declare const zListTaskTriggerIntegrationsResponse: z.ZodArray<z.ZodObject<{
+    name: z.ZodString;
+    provider: z.ZodString;
+    config: z.ZodRecord<z.ZodString, z.ZodUnknown>;
+    enabled: z.ZodBoolean;
+    version: z.ZodCoercedBigInt<unknown>;
+    rules: z.ZodArray<z.ZodObject<{
+        id: z.ZodString;
+        event: z.ZodString;
+        workflowId: z.ZodString;
+        sourceStageId: z.ZodString;
+        targetStageId: z.ZodString;
+        action: z.ZodEnum<{
+            move_task: "move_task";
+            start_work: "start_work";
+        }>;
+        promptText: z.ZodOptional<z.ZodString>;
+    }, z.core.$strip>>;
+    id: z.ZodString;
+    workspaceId: z.ZodString;
+}, z.core.$strip>>;
+export declare const zCreateTaskTriggerIntegrationBody: z.ZodObject<{
+    name: z.ZodString;
+    provider: z.ZodString;
+    config: z.ZodRecord<z.ZodString, z.ZodUnknown>;
+    enabled: z.ZodBoolean;
+    version: z.ZodOptional<z.ZodCoercedBigInt<unknown>>;
+    rules: z.ZodArray<z.ZodObject<{
+        id: z.ZodString;
+        event: z.ZodString;
+        workflowId: z.ZodString;
+        sourceStageId: z.ZodString;
+        targetStageId: z.ZodString;
+        action: z.ZodEnum<{
+            move_task: "move_task";
+            start_work: "start_work";
+        }>;
+        promptText: z.ZodOptional<z.ZodString>;
+    }, z.core.$strip>>;
+    webhookSecret: z.ZodOptional<z.ZodString>;
+}, z.core.$strip>;
+export declare const zCreateTaskTriggerIntegrationPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+}, z.core.$strip>;
+/**
+ * Success
+ */
+export declare const zCreateTaskTriggerIntegrationResponse: z.ZodObject<{
+    name: z.ZodString;
+    provider: z.ZodString;
+    config: z.ZodRecord<z.ZodString, z.ZodUnknown>;
+    enabled: z.ZodBoolean;
+    version: z.ZodCoercedBigInt<unknown>;
+    rules: z.ZodArray<z.ZodObject<{
+        id: z.ZodString;
+        event: z.ZodString;
+        workflowId: z.ZodString;
+        sourceStageId: z.ZodString;
+        targetStageId: z.ZodString;
+        action: z.ZodEnum<{
+            move_task: "move_task";
+            start_work: "start_work";
+        }>;
+        promptText: z.ZodOptional<z.ZodString>;
+    }, z.core.$strip>>;
+    id: z.ZodString;
+    workspaceId: z.ZodString;
+}, z.core.$strip>;
+export declare const zDeleteTaskTriggerIntegrationPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+    integrationID: z.ZodString;
+}, z.core.$strip>;
+/**
+ * Success
+ */
+export declare const zDeleteTaskTriggerIntegrationResponse: z.ZodVoid;
+export declare const zUpdateTaskTriggerIntegrationBody: z.ZodObject<{
+    name: z.ZodString;
+    provider: z.ZodString;
+    config: z.ZodRecord<z.ZodString, z.ZodUnknown>;
+    enabled: z.ZodBoolean;
+    version: z.ZodOptional<z.ZodCoercedBigInt<unknown>>;
+    rules: z.ZodArray<z.ZodObject<{
+        id: z.ZodString;
+        event: z.ZodString;
+        workflowId: z.ZodString;
+        sourceStageId: z.ZodString;
+        targetStageId: z.ZodString;
+        action: z.ZodEnum<{
+            move_task: "move_task";
+            start_work: "start_work";
+        }>;
+        promptText: z.ZodOptional<z.ZodString>;
+    }, z.core.$strip>>;
+    webhookSecret: z.ZodOptional<z.ZodString>;
+}, z.core.$strip>;
+export declare const zUpdateTaskTriggerIntegrationPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+    integrationID: z.ZodString;
+}, z.core.$strip>;
+/**
+ * Success
+ */
+export declare const zUpdateTaskTriggerIntegrationResponse: z.ZodObject<{
+    name: z.ZodString;
+    provider: z.ZodString;
+    config: z.ZodRecord<z.ZodString, z.ZodUnknown>;
+    enabled: z.ZodBoolean;
+    version: z.ZodCoercedBigInt<unknown>;
+    rules: z.ZodArray<z.ZodObject<{
+        id: z.ZodString;
+        event: z.ZodString;
+        workflowId: z.ZodString;
+        sourceStageId: z.ZodString;
+        targetStageId: z.ZodString;
+        action: z.ZodEnum<{
+            move_task: "move_task";
+            start_work: "start_work";
+        }>;
+        promptText: z.ZodOptional<z.ZodString>;
+    }, z.core.$strip>>;
+    id: z.ZodString;
+    workspaceId: z.ZodString;
+}, z.core.$strip>;
+export declare const zUnlinkTaskTriggerResourceBody: z.ZodObject<{
+    taskId: z.ZodString;
+    repositoryId: z.ZodString;
+    resourceId: z.ZodString;
+}, z.core.$strip>;
+export declare const zUnlinkTaskTriggerResourcePath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+    integrationID: z.ZodString;
+}, z.core.$strip>;
+/**
+ * Success
+ */
+export declare const zUnlinkTaskTriggerResourceResponse: z.ZodVoid;
+export declare const zListTaskTriggerResourceLinksPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+    integrationID: z.ZodString;
+}, z.core.$strip>;
+/**
+ * Success
+ */
+export declare const zListTaskTriggerResourceLinksResponse: z.ZodArray<z.ZodObject<{
+    taskId: z.ZodString;
+    repositoryId: z.ZodString;
+    resourceId: z.ZodString;
+}, z.core.$strip>>;
+export declare const zLinkTaskTriggerResourceBody: z.ZodObject<{
+    taskId: z.ZodString;
+    repositoryId: z.ZodString;
+    resourceId: z.ZodString;
+}, z.core.$strip>;
+export declare const zLinkTaskTriggerResourcePath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+    integrationID: z.ZodString;
+}, z.core.$strip>;
+/**
+ * Success
+ */
+export declare const zLinkTaskTriggerResourceResponse: z.ZodVoid;
+export declare const zListTaskTriggerDeliveriesPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+    integrationID: z.ZodString;
+}, z.core.$strip>;
+/**
+ * Success
+ */
+export declare const zListTaskTriggerDeliveriesResponse: z.ZodArray<z.ZodObject<{
+    id: z.ZodString;
+    integrationId: z.ZodString;
+    event: z.ZodObject<{
+        key: z.ZodString;
+        type: z.ZodString;
+        repositoryId: z.ZodString;
+        resourceId: z.ZodString;
+        occurredAt: z.ZodISODateTime;
+        referenceUrl: z.ZodURL;
+    }, z.core.$strip>;
+    status: z.ZodEnum<{
+        pending: "pending";
+        processed: "processed";
+        ignored: "ignored";
+        blocked: "blocked";
+        failed: "failed";
+    }>;
+    receivedAt: z.ZodISODateTime;
+}, z.core.$strip>>;
+/**
+ * Success
+ */
+export declare const zListTaskTriggerIntegrationProvidersResponse: z.ZodArray<z.ZodObject<{
+    id: z.ZodString;
+    name: z.ZodString;
+    configSchema: z.ZodRecord<z.ZodString, z.ZodUnknown>;
+    events: z.ZodArray<z.ZodString>;
+}, z.core.$strip>>;
+export declare const zReceiveTaskTriggerWebhookBody: z.ZodRecord<z.ZodString, z.ZodUnknown>;
+export declare const zReceiveTaskTriggerWebhookPath: z.ZodObject<{
+    integrationID: z.ZodString;
 }, z.core.$strip>;

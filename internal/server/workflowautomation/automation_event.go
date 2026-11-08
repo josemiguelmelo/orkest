@@ -27,6 +27,7 @@ type AutomationEventSnapshot struct {
 }
 
 type AutomationEvent struct {
+	PromptText                             string
 	ID, CorrelationID, WorkspaceID, TaskID string
 	Type                                   workflowmodel.EventType
 	StageVersion                           int64
@@ -95,7 +96,7 @@ func (s *WorkflowAutomationService) planEvent(snapshot AutomationEventSnapshot) 
 	if moved {
 		version++
 	}
-	persistence, err := task.PlanWorkflowPersistence(e.TaskID, e.RunID, task.TaskWorkflowEffects{Command: task.WorkflowCommand{CommandID: e.ID + ":start", SessionMode: "new"}, Start: plan.Start, Moved: moved, Completed: plan.Completed, StageVersion: version}, e.ID, e.CorrelationID, "")
+	persistence, err := task.PlanWorkflowPersistence(e.TaskID, e.RunID, task.TaskWorkflowEffects{Command: task.WorkflowCommand{CommandID: e.ID + ":start", SessionMode: "new", PromptText: e.PromptText}, Start: plan.Start, Moved: moved, Completed: plan.Completed, StageVersion: version}, e.ID, e.CorrelationID, "")
 	// Automation commands do not add a separate user-transition history row.
 	persistence.History = nil
 	return AutomationEventEffects{Plan: &plan, RuleID: plan.RuleID, ActorID: actor, Moved: moved, Persistence: persistence}, err

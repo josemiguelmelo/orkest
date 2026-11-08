@@ -102,6 +102,12 @@ Rules for the terms in the [glossary](glossary.md).
 - GitHub imports issues/draft issues, excluding PRs. [Label semantics](guides/integrations.md#task-integrations)
   differ by provider; no unified policy is established.
 
+Webhook trigger integrations are separate from task-source synchronization.
+Administrators configure event/source-stage/destination rules and explicit resource
+links; movement uses existing workflow and execution guards. See
+[trigger integrations](guides/task-trigger-integrations.md) for supported events,
+authorization and delivery semantics.
+
 ### 3.5 Tool
 
 - Built-in Streamable HTTP MCP tools expose authorized task/repository data and artifacts.
@@ -169,7 +175,7 @@ Confirmed capacity requirement; implementation unfinished:
 - Artifacts retain immutable revisions and optional run/stage-entry identity.
   Support text/JSON and external references. Required pinned inputs gate consumer
   startup; outputs do not gate producer completion.
-- PR-triggered rules/provider conditions remain future work.
+- Configured webhook trigger integrations can move explicitly linked tasks between stages or start the assigned agent in the current stage with a rule-specific prompt. GitHub review-submitted and PR-merged events are implemented. Provider conditions remain future work.
 
 See [workflow behavior](guides/workflows.md) and [transactions](development/workflows.md).
 

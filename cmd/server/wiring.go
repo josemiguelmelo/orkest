@@ -25,6 +25,7 @@ import (
 	gitlabprovider "github.com/josemiguelmelo/orkest/internal/adapters/integrations/coderepository/providers/gitlab"
 	githubcloud "github.com/josemiguelmelo/orkest/internal/adapters/integrations/taskintegration/providers/githubcloud"
 	jiraserver "github.com/josemiguelmelo/orkest/internal/adapters/integrations/taskintegration/providers/jiraserver"
+	githubtrigger "github.com/josemiguelmelo/orkest/internal/adapters/integrations/tasktriggerintegration/providers/github"
 	appmcp "github.com/josemiguelmelo/orkest/internal/adapters/mcp"
 	"github.com/josemiguelmelo/orkest/internal/adapters/postgres"
 	coreruntime "github.com/josemiguelmelo/orkest/internal/contracts/runtimecatalog"
@@ -43,6 +44,7 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/server/skill"
 	"github.com/josemiguelmelo/orkest/internal/server/task"
 	"github.com/josemiguelmelo/orkest/internal/server/taskintegration"
+	"github.com/josemiguelmelo/orkest/internal/server/tasktriggerintegration"
 	"github.com/josemiguelmelo/orkest/internal/server/workflow"
 	workflowautomation "github.com/josemiguelmelo/orkest/internal/server/workflowautomation"
 	"github.com/josemiguelmelo/orkest/internal/server/workspace"
@@ -270,6 +272,10 @@ func runServer(ctx context.Context, logger *slog.Logger) error {
 		return err
 	}
 	integrations := taskintegration.NewTaskIntegrationService(postgres.NewPostgresTaskIntegrationRepository(database), secretBox, workspaces, organizations, postgres.NewPostgresImportedTaskRepository(database), tasks, githubcloud.NewGitHubCloudProvider(), jiraserver.NewJiraServerProvider())
+	triggerIntegrations, err := tasktriggerintegration.NewTaskTriggerIntegrationService(postgres.NewTaskTriggerIntegrationPostgresRepository(database), workspaces, secretBox, githubtrigger.NewGitHubProvider())
+	if err != nil {
+		return err
+	}
 	runnerCtx, stopRunner := context.WithCancel(ctx)
 	var runnerWG sync.WaitGroup
 	if config.ExecutionImageRepository != "" && executorKind != executors.Kubernetes {
@@ -309,29 +315,32 @@ func runServer(ctx context.Context, logger *slog.Logger) error {
 	}
 	runnerWG.Add(1)
 	go func() { defer runnerWG.Done(); integrations.Run(runnerCtx) }()
+	runnerWG.Add(1)
+	go func() { defer runnerWG.Done(); triggerIntegrations.Run(runnerCtx, logger) }()
 	execution := workflowautomation.NewWorkflowExecutionService(postgres.NewExecutionCommandPostgresRepository(database), tasks, dispatcher, logger)
 	worker := workflowautomation.NewWorkflowAutomationWorker(taskWorkflows, execution, logger)
 	runnerWG.Add(1)
 	go func() { defer runnerWG.Done(); worker.Run(runnerCtx) }()
 	router, err := httpapi.NewRouter(ctx, httpapi.RouterDependencies{
-		Users:            users,
-		Organizations:    organizations,
-		Workspaces:       workspaces,
-		Agents:           agents,
-		CodeRepositories: codeRepositories,
-		Tasks:            tasks,
-		Integrations:     integrations,
-		MCPServers:       mcpServerService,
-		SkillCatalog:     skillCatalog,
-		Launches:         launchService,
-		Profiles:         executionProfileService,
-		RuntimeProfiles:  agentRuntimeProfiles,
-		DirectChats:      directChats,
-		Workflows:        workflows,
-		Automation:       taskWorkflows,
-		Environment:      workspaceEnvironment,
-		Artifacts:        artifacts,
-		AgentTools:       agentTools,
+		Users:               users,
+		Organizations:       organizations,
+		Workspaces:          workspaces,
+		Agents:              agents,
+		CodeRepositories:    codeRepositories,
+		Tasks:               tasks,
+		Integrations:        integrations,
+		TriggerIntegrations: triggerIntegrations,
+		MCPServers:          mcpServerService,
+		SkillCatalog:        skillCatalog,
+		Launches:            launchService,
+		Profiles:            executionProfileService,
+		RuntimeProfiles:     agentRuntimeProfiles,
+		DirectChats:         directChats,
+		Workflows:           workflows,
+		Automation:          taskWorkflows,
+		Environment:         workspaceEnvironment,
+		Artifacts:           artifacts,
+		AgentTools:          agentTools,
 	})
 	if err != nil {
 		stopRunner()

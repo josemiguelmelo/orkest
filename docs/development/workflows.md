@@ -72,9 +72,9 @@ Movement and delivery:
   change persisted command JSON or API shapes. Delivery claim metadata is added by
   migration 0038; see [upgrade and rollback](../operations/migrations.md#workflow-delivery-claims).
 - [Artifact snapshots](artifacts.md) commit with reservation; [stage bindings](../guides/artifacts.md) define inputs.
-- A future PR adapter should verify/deduplicate notifications, resolve artifact→workspace
-  task, and persist normalized events. Provider conditions/matchers belong in that adapter.
-  PR ingestion, output gates, and scripts remain deferred.
+- The trigger adapter verifies/deduplicates notifications, resolves explicit resource links to workspace
+  tasks, and persists normalized events. Future provider conditions/matchers belong in that adapter.
+  PR ingestion is now implemented by [task trigger integrations](../guides/task-trigger-integrations.md); output gates and scripts remain deferred.
 - Returning to In progress and starting revisions are separate; entry rules decide execution.
 
 ## Verification

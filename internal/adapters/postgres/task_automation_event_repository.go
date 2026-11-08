@@ -52,7 +52,7 @@ func (r *AutomationEventPostgresRepository) WithAutomationEvent(ctx context.Cont
 		return false, err
 	}
 	decision, err := decide(workflowautomation.AutomationEventSnapshot{
-		Workflow: d, Event: workflowautomation.AutomationEvent{ID: e.ID, CorrelationID: e.CorrelationID, WorkspaceID: e.WorkspaceID, TaskID: e.TaskID, Type: workflowmodel.EventType(e.EventType), StageVersion: e.StageVersion, RunID: e.RunID, ActorID: e.ActorID},
+		Workflow: d, Event: workflowautomation.AutomationEvent{PromptText: e.PromptText, ID: e.ID, CorrelationID: e.CorrelationID, WorkspaceID: e.WorkspaceID, TaskID: e.TaskID, Type: workflowmodel.EventType(e.EventType), StageVersion: e.StageVersion, RunID: e.RunID, ActorID: e.ActorID},
 		StageID: state.Status, AssigneeAgentID: state.Assignee, RunID: state.WorkflowRunID, StageVersion: state.StageVersion, WorkState: taskmodel.WorkState(state.StageWorkState), ActiveLaunch: active,
 	})
 	if err != nil {
