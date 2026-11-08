@@ -65,7 +65,7 @@ func New(ctx context.Context, config Config) (*Executor, error) {
 		return nil, errors.New("context is required")
 	}
 	if config.API == nil {
-		api, err := inClusterAPI(config)
+		api, err := inClusterAPI()
 		if err != nil {
 			return nil, err
 		}
@@ -88,6 +88,12 @@ func NewWithAPI(ctx context.Context, config Config, api API) (*Executor, error) 
 	}
 	if !dnsLabel(config.InstallationID) {
 		return nil, errors.New("Kubernetes installation ID must be a DNS label")
+	}
+	if !dnsLabel(config.DataPVC) {
+		return nil, errors.New("Kubernetes data PVC name must be a DNS label")
+	}
+	if config.ServiceAccount != "" && !dnsLabel(config.ServiceAccount) {
+		return nil, errors.New("Kubernetes worker service account must be a DNS label")
 	}
 	root, err := filepath.Abs(config.DataRoot)
 	if err != nil {
@@ -122,6 +128,9 @@ func NewWithAPI(ctx context.Context, config Config, api API) (*Executor, error) 
 	}
 	if config.CodexAuthSecret != "" && !dnsLabel(config.CodexAuthSecret) {
 		return nil, errors.New("Kubernetes Codex auth Secret name must be a DNS label")
+	}
+	if config.CodexAuthSecretKey != "" && !secretKey(config.CodexAuthSecretKey) {
+		return nil, errors.New("Kubernetes Codex auth Secret key is invalid")
 	}
 	for _, secret := range config.ImagePullSecrets {
 		if !dnsLabel(secret) {
@@ -320,7 +329,7 @@ func (e *Executor) podRunning(ctx context.Context, name, uid string) (bool, erro
 		return false, errors.New("Kubernetes Pod identity changed")
 	}
 	phase, _ := nestedString(pod, "status", "phase")
-	return phase == "Pending" || phase == "Running" || phase == "Unknown", nil
+	return phase != "Succeeded" && phase != "Failed", nil
 }
 func (e *Executor) deletePod(ctx context.Context, name, uid string) error {
 	pod, status, err := e.api.Do(ctx, http.MethodGet, e.resourcePath("pods", name), nil)
@@ -506,6 +515,17 @@ func dnsLabel(s string) bool {
 	}
 	return s[len(s)-1] != '-'
 }
+func secretKey(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, char := range value {
+		if !(char >= 'a' && char <= 'z' || char >= 'A' && char <= 'Z' || char >= '0' && char <= '9' || char == '.' || char == '_' || char == '-') {
+			return false
+		}
+	}
+	return true
+}
 func resourceName(installation, run string) string {
 	x := sha256.Sum256([]byte(installation + "/" + run))
 	return "orkest-" + installation[:min(8, len(installation))] + "-" + fmt.Sprintf("%x", x[:])[:32]
@@ -557,11 +577,11 @@ func boolAt(v map[string]any, keys ...any) bool {
 }
 
 type restAPI struct {
-	base, token string
-	client      *http.Client
+	base, tokenPath string
+	client          *http.Client
 }
 
-func inClusterAPI(config Config) (API, error) {
+func inClusterAPI() (API, error) {
 	host := os.Getenv("KUBERNETES_SERVICE_HOST")
 	port := os.Getenv("KUBERNETES_SERVICE_PORT_HTTPS")
 	if host == "" {
@@ -570,9 +590,13 @@ func inClusterAPI(config Config) (API, error) {
 	if port == "" {
 		port = "443"
 	}
-	tokenBytes, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/token")
+	const tokenPath = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+	tokenBytes, err := os.ReadFile(tokenPath)
 	if err != nil {
 		return nil, fmt.Errorf("read Kubernetes service account token: %w", err)
+	}
+	if strings.TrimSpace(string(tokenBytes)) == "" {
+		return nil, errors.New("Kubernetes service account token is empty")
 	}
 	ca, err := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/ca.crt")
 	if err != nil {
@@ -582,17 +606,22 @@ func inClusterAPI(config Config) (API, error) {
 	if !pool.AppendCertsFromPEM(ca) {
 		return nil, errors.New("Kubernetes CA bundle is invalid")
 	}
-	namespace := strings.TrimSpace(config.Namespace)
-	if namespace == "" {
-		ns, readErr := os.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/namespace")
-		if readErr != nil {
-			return nil, fmt.Errorf("read Kubernetes namespace: %w", readErr)
-		}
-		namespace = strings.TrimSpace(string(ns))
-		config.Namespace = namespace
-	}
-	return &restAPI{base: "https://" + host + ":" + port, token: strings.TrimSpace(string(tokenBytes)), client: &http.Client{Timeout: 30 * time.Second, Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}}}}, nil
+	return &restAPI{base: "https://" + host + ":" + port, tokenPath: tokenPath, client: &http.Client{Timeout: 30 * time.Second, Transport: &http.Transport{TLSClientConfig: &tls.Config{RootCAs: pool, MinVersion: tls.VersionTLS12}}}}, nil
 }
+
+func (a *restAPI) authorize(req *http.Request) error {
+	token, err := os.ReadFile(a.tokenPath)
+	if err != nil {
+		return fmt.Errorf("read Kubernetes service account token: %w", err)
+	}
+	value := strings.TrimSpace(string(token))
+	if value == "" {
+		return errors.New("Kubernetes service account token is empty")
+	}
+	req.Header.Set("Authorization", "Bearer "+value)
+	return nil
+}
+
 func (a *restAPI) Do(ctx context.Context, method, path string, body any) (map[string]any, int, error) {
 	var reader io.Reader
 	if body != nil {
@@ -606,7 +635,9 @@ func (a *restAPI) Do(ctx context.Context, method, path string, body any) (map[st
 	if err != nil {
 		return nil, 0, err
 	}
-	req.Header.Set("Authorization", "Bearer "+a.token)
+	if err = a.authorize(req); err != nil {
+		return nil, 0, err
+	}
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
@@ -632,7 +663,9 @@ func (a *restAPI) PodLogs(ctx context.Context, path string) (io.ReadCloser, erro
 	if err != nil {
 		return nil, err
 	}
-	req.Header.Set("Authorization", "Bearer "+a.token)
+	if err = a.authorize(req); err != nil {
+		return nil, err
+	}
 	streamClient := &http.Client{Transport: a.client.Transport}
 	response, err := streamClient.Do(req)
 	if err != nil {

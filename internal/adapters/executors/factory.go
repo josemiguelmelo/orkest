@@ -79,6 +79,9 @@ func New(ctx context.Context, config Config) (Selection, error) {
 		}
 		return Selection{Kind: kind, Executor: executor}, nil
 	case Kubernetes:
+		if strings.TrimSpace(config.CodexAuthFile) != "" {
+			return Selection{}, fmt.Errorf("ORKEST_CODEX_AUTH_FILE is not supported with the Kubernetes executor; configure the Kubernetes Codex auth Secret and key")
+		}
 		config.Kubernetes.DataRoot = config.DataRoot
 		config.Kubernetes.Images = config.DockerImages
 		config.Kubernetes.ProviderEnv = config.ProviderEnv
