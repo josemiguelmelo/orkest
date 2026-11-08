@@ -400,14 +400,14 @@ components:
         gitCredentialsRequired: { type: boolean, default: false }
         gitCredentials:
           type: array
-          description: Sensitive repository push credentials; never returned by the API.
+          description: Sensitive HTTPS Git credentials scoped to a repository or workspace provider URL prefix; never returned by the API.
           items:
             type: object
             additionalProperties: false
             required: [repositoryUrl, repositoryPath, token]
             properties:
               repositoryUrl: { type: string, format: uri }
-              repositoryPath: { type: string }
+              repositoryPath: { type: string, description: "Checkout path for a repository grant; empty for a workspace provider URL prefix." }
               token: { type: string, writeOnly: true }
         runId: { type: string, pattern: '\S' }
         runtime: { type: string, enum: [opencode, claude-code, codex, github-copilot, kiro] }

@@ -1,18 +1,12 @@
 package gitprovider
 
 import (
-	"bytes"
 	"context"
 	"encoding/base64"
-	"fmt"
-	"io"
-	"os/exec"
-	"path/filepath"
 	"strconv"
 	"strings"
 
 	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
-	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
 )
 
 // RuntimePreparation contains the runtime paths, environment, and repository credentials
@@ -26,37 +20,12 @@ type RuntimePreparation struct {
 
 // PrepareRuntime configures repository identity, Git transport credentials, and
 // matching provider CLIs. It returns the environment the runtime should inherit.
-func PrepareRuntime(ctx context.Context, preparation RuntimePreparation, adapters []CLIAuthAdapter) ([]string, error) {
+func PrepareRuntime(_ context.Context, preparation RuntimePreparation, adapters []CLIAuthAdapter) ([]string, error) {
 	if len(preparation.Credentials) == 0 {
 		return preparation.Environment, nil
 	}
-	if err := configureRepositoryIdentity(ctx, preparation.WorkDir, preparation.Credentials); err != nil {
-		return nil, err
-	}
 	environment := withGitHTTPAuth(preparation.Environment, preparation.Credentials)
 	return configureCLIs(preparation.RuntimeRoot, environment, preparation.Credentials, adapters)
-}
-
-func configureRepositoryIdentity(ctx context.Context, workDir string, credentials []configmodel.GitCredential) error {
-	for _, credential := range credentials {
-		if filepath.IsAbs(credential.RepositoryPath) || filepath.Clean(credential.RepositoryPath) != credential.RepositoryPath || strings.HasPrefix(credential.RepositoryPath, "..") {
-			return &agentruntime.RuntimeError{Kind: agentruntime.RuntimeFailure, Message: "configure Git identity failed", Cause: fmt.Errorf("invalid repository path")}
-		}
-		path := filepath.Join(workDir, credential.RepositoryPath)
-		for _, setting := range [][2]string{{"user.name", "Orkest Agent"}, {"user.email", "agent@orkest.local"}} {
-			cmd := exec.CommandContext(ctx, "git", "-C", path, "config", "--local", setting[0], setting[1])
-			var stderr bytes.Buffer
-			cmd.Stdout, cmd.Stderr = io.Discard, &stderr
-			if err := cmd.Run(); err != nil {
-				cause := fmt.Errorf("git config %s failed: %w", setting[0], err)
-				if output := strings.TrimSpace(stderr.String()); output != "" {
-					cause = fmt.Errorf("%w: %s", cause, output)
-				}
-				return &agentruntime.RuntimeError{Kind: agentruntime.RuntimeFailure, Message: "configure Git identity failed", Cause: cause}
-			}
-		}
-	}
-	return nil
 }
 
 func withGitHTTPAuth(environment []string, credentials []configmodel.GitCredential) []string {
@@ -68,6 +37,10 @@ func withGitHTTPAuth(environment []string, credentials []configmodel.GitCredenti
 		}
 	}
 	values["GIT_CONFIG_COUNT"] = strconv.Itoa(len(credentials))
+	values["GIT_AUTHOR_NAME"] = "Orkest Agent"
+	values["GIT_AUTHOR_EMAIL"] = "agent@orkest.local"
+	values["GIT_COMMITTER_NAME"] = "Orkest Agent"
+	values["GIT_COMMITTER_EMAIL"] = "agent@orkest.local"
 	for index, credential := range credentials {
 		auth := base64.StdEncoding.EncodeToString([]byte("x-access-token:" + credential.Token))
 		values["GIT_CONFIG_KEY_"+strconv.Itoa(index)] = "http." + credential.RepositoryURL + ".extraheader"

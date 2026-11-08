@@ -366,6 +366,10 @@ export type CodingIntegration = {
     providerConfig: {
         [key: string]: unknown;
     };
+    /**
+     * Provider HTTPS base URL ending in a slash.
+     */
+    readonly baseUrl: string;
     updatedAt?: string;
 };
 export type CodingProvider = {
@@ -467,6 +471,16 @@ export type CodingIntegrationInputWritable = {
         [key: string]: unknown;
     };
     credential?: string;
+};
+export type CodingIntegrationWritable = {
+    id: string;
+    workspaceId: string;
+    name: string;
+    providerName: 'github' | 'gitlab_cloud' | 'gitlab_server';
+    providerConfig: {
+        [key: string]: unknown;
+    };
+    updatedAt?: string;
 };
 export type TaskIntegrationInputWritable = {
     workflowId: string;

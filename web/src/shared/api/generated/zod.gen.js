@@ -388,6 +388,7 @@ export const zCodingIntegration = z.object({
         'gitlab_server'
     ]),
     providerConfig: z.record(z.string(), z.unknown()),
+    baseUrl: z.url().readonly(),
     updatedAt: z.string().optional()
 });
 export const zCodingProvider = z.object({
@@ -487,6 +488,18 @@ export const zCodingIntegrationInputWritable = z.object({
     ]),
     providerConfig: z.record(z.string(), z.unknown()).optional(),
     credential: z.string().optional()
+});
+export const zCodingIntegrationWritable = z.object({
+    id: z.string(),
+    workspaceId: z.string(),
+    name: z.string(),
+    providerName: z.enum([
+        'github',
+        'gitlab_cloud',
+        'gitlab_server'
+    ]),
+    providerConfig: z.record(z.string(), z.unknown()),
+    updatedAt: z.string().optional()
 });
 export const zTaskIntegrationInputWritable = z.object({
     workflowId: z.string(),

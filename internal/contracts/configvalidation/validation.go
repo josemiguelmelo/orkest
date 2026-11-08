@@ -74,11 +74,17 @@ func Skill(id, definition string, duplicate bool) *Issue {
 
 func GitCredential(provider, token, path, repositoryURL string, providerConfig json.RawMessage) *Issue {
 	invalid := &Issue{Field: "gitCredentials", Reason: "must contain valid HTTPS repository credentials"}
-	if strings.TrimSpace(provider) == "" || strings.TrimSpace(token) == "" || strings.TrimSpace(path) == "" {
+	if strings.TrimSpace(provider) == "" || strings.TrimSpace(token) == "" {
 		return invalid
 	}
 	if !httpURL(repositoryURL, true) {
 		return invalid
+	}
+	if strings.TrimSpace(path) == "" {
+		parsed, _ := url.Parse(repositoryURL)
+		if !strings.HasSuffix(parsed.Path, "/") || parsed.RawQuery != "" || parsed.Fragment != "" {
+			return invalid
+		}
 	}
 	if strings.ContainsAny(token, "\x00\r\n") {
 		return invalid

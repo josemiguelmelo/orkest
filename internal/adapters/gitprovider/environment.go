@@ -51,3 +51,12 @@ func writeCLIWrapper(directory, name, script string) error {
 func shellSingleQuote(value string) string {
 	return "'" + strings.ReplaceAll(value, "'", "'\\''") + "'"
 }
+
+// repositoryPattern supports repository grants and workspace provider URL prefixes.
+func repositoryPattern(repositoryURL string) string {
+	if strings.HasSuffix(repositoryURL, "/") {
+		return shellSingleQuote(repositoryURL) + "*"
+	}
+	canonical := strings.TrimSuffix(repositoryURL, ".git")
+	return shellSingleQuote(canonical) + "|" + shellSingleQuote(canonical+".git")
+}

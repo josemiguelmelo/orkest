@@ -72,7 +72,7 @@ func (p Provider) ValidateConfig(raw json.RawMessage) error {
 	return nil
 }
 
-func (p Provider) baseURL(raw json.RawMessage) (string, error) {
+func (p Provider) BaseURL(raw json.RawMessage) (string, error) {
 	if err := p.ValidateConfig(raw); err != nil {
 		return "", err
 	}
@@ -89,7 +89,7 @@ func (p Provider) baseURL(raw json.RawMessage) (string, error) {
 }
 
 func (p Provider) ValidateAuthentication(ctx context.Context, cfg json.RawMessage, credential coderepositorymodel.Credentials) error {
-	base, err := p.baseURL(cfg)
+	base, err := p.BaseURL(cfg)
 	if err != nil {
 		return err
 	}
@@ -111,7 +111,7 @@ func (p Provider) ValidateAuthentication(ctx context.Context, cfg json.RawMessag
 }
 
 func (p Provider) DiscoverRepositories(ctx context.Context, cfg json.RawMessage, credential coderepositorymodel.Credentials, page, perPage int) (coderepositorymodel.RepositoryPage, error) {
-	base, err := p.baseURL(cfg)
+	base, err := p.BaseURL(cfg)
 	if err != nil {
 		return coderepositorymodel.RepositoryPage{}, err
 	}

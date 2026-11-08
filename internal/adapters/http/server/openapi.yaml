@@ -2092,13 +2092,14 @@ components:
       additionalProperties: false
     CodingIntegration:
       type: object
-      required: [id, workspaceId, name, providerName, providerConfig]
+      required: [id, workspaceId, name, providerName, providerConfig, baseUrl]
       properties:
         id: {type: string}
         workspaceId: {type: string}
         name: {type: string}
         providerName: {type: string, enum: [github, gitlab_cloud, gitlab_server]}
         providerConfig: {type: object, additionalProperties: true}
+        baseUrl: {type: string, format: uri, readOnly: true, description: Provider HTTPS base URL ending in a slash.}
         updatedAt: {type: string}
     CodingProvider:
       type: object

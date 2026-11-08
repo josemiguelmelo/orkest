@@ -33,7 +33,7 @@ func (GitLabCLIAuthAdapter) ConfigureCLI(runtimeRoot string, environment []strin
 	}
 	var script strings.Builder
 	script.WriteString("#!/bin/sh\nset -eu\nunset GITLAB_TOKEN GITLAB_ACCESS_TOKEN OAUTH_TOKEN GITLAB_HOST GITLAB_URI GL_HOST GITLAB_REPO GITLAB_SUBFOLDER GITLAB_API_HOST\n")
-	script.WriteString("repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || { echo 'glab requires a registered repository checkout' >&2; exit 1; }\n")
+	script.WriteString("repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || { echo 'glab requires a repository checkout' >&2; exit 1; }\n")
 	script.WriteString("remote=$(git -C \"$repo_root\" remote get-url origin 2>/dev/null) || { echo 'glab could not read this checkout origin' >&2; exit 1; }\n")
 	script.WriteString("case \"$remote\" in\n")
 	values := environmentMap(environment, "GITLAB_TOKEN", "GITLAB_ACCESS_TOKEN", "OAUTH_TOKEN", "GITLAB_HOST", "GITLAB_URI", "GL_HOST", "GITLAB_REPO", "GITLAB_SUBFOLDER", "GITLAB_API_HOST", "GLAB_NO_PROMPT", "ORKEST_GITLAB_")
@@ -42,8 +42,7 @@ func (GitLabCLIAuthAdapter) ConfigureCLI(runtimeRoot string, environment []strin
 		if err != nil {
 			return nil, &agentruntime.RuntimeError{Kind: agentruntime.RuntimeFailure, Message: "configure GitLab CLI authentication failed", Cause: err}
 		}
-		canonical := strings.TrimSuffix(credential.RepositoryURL, ".git")
-		fmt.Fprintf(&script, "  %s|%s) GITLAB_TOKEN=\"${ORKEST_GITLAB_TOKEN_%d:?GitLab credential unavailable}\"; GITLAB_HOST=%s; GITLAB_REPO=\"$remote\"; GITLAB_SUBFOLDER=%s; export GITLAB_TOKEN GITLAB_HOST GITLAB_REPO GITLAB_SUBFOLDER ;;\n", shellSingleQuote(canonical), shellSingleQuote(canonical+".git"), index, shellSingleQuote(host), shellSingleQuote(subfolder))
+		fmt.Fprintf(&script, "  %s) GITLAB_TOKEN=\"${ORKEST_GITLAB_TOKEN_%d:?GitLab credential unavailable}\"; GITLAB_HOST=%s; GITLAB_REPO=\"$remote\"; GITLAB_SUBFOLDER=%s; export GITLAB_TOKEN GITLAB_HOST GITLAB_REPO GITLAB_SUBFOLDER ;;\n", repositoryPattern(credential.RepositoryURL), index, shellSingleQuote(host), shellSingleQuote(subfolder))
 		values["ORKEST_GITLAB_TOKEN_"+strconv.Itoa(index)] = credential.Token
 	}
 	script.WriteString("  *) echo 'glab has no credential for this checkout' >&2; exit 1 ;;\nesac\n")
@@ -72,7 +71,7 @@ func gitLabCLIHost(credential configmodel.GitCredential) (string, string, error)
 		return "", "", errors.New("GitLab CLI host does not match registered repository")
 	}
 	basePath := strings.Trim(baseURL.Path, "/")
-	if basePath != "" && !strings.HasPrefix(strings.Trim(repositoryURL.Path, "/"), basePath+"/") {
+	if basePath != "" && strings.Trim(repositoryURL.Path, "/") != basePath && !strings.HasPrefix(strings.Trim(repositoryURL.Path, "/"), basePath+"/") {
 		return "", "", errors.New("GitLab CLI subfolder does not match registered repository")
 	}
 	return baseURL.Host, basePath, nil

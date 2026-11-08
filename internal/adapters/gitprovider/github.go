@@ -30,7 +30,7 @@ func (GitHubCLIAuthAdapter) ConfigureCLI(runtimeRoot string, environment []strin
 	}
 	var script strings.Builder
 	script.WriteString("#!/bin/sh\nset -eu\nunset GH_TOKEN GITHUB_TOKEN GH_ENTERPRISE_TOKEN GITHUB_ENTERPRISE_TOKEN GH_HOST\n")
-	script.WriteString("repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || { echo 'gh requires a registered repository checkout' >&2; exit 1; }\n")
+	script.WriteString("repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || { echo 'gh requires a repository checkout' >&2; exit 1; }\n")
 	script.WriteString("remote=$(git -C \"$repo_root\" remote get-url origin 2>/dev/null) || { echo 'gh could not read this checkout origin' >&2; exit 1; }\n")
 	script.WriteString("case \"$remote\" in\n")
 	for index, credential := range credentials {
@@ -38,8 +38,7 @@ func (GitHubCLIAuthAdapter) ConfigureCLI(runtimeRoot string, environment []strin
 		if err != nil || repository.Scheme != "https" || !strings.EqualFold(repository.Hostname(), "github.com") {
 			return nil, &agentruntime.RuntimeError{Kind: agentruntime.RuntimeFailure, Message: "configure GitHub CLI authentication failed", Cause: errors.New("GitHub CLI repository host is invalid")}
 		}
-		canonical := strings.TrimSuffix(credential.RepositoryURL, ".git")
-		fmt.Fprintf(&script, "  %s|%s) GH_TOKEN=\"${ORKEST_GH_TOKEN_%d:?GitHub credential unavailable}\"; export GH_TOKEN ;;\n", shellSingleQuote(canonical), shellSingleQuote(canonical+".git"), index)
+		fmt.Fprintf(&script, "  %s) GH_TOKEN=\"${ORKEST_GH_TOKEN_%d:?GitHub credential unavailable}\"; export GH_TOKEN ;;\n", repositoryPattern(credential.RepositoryURL), index)
 	}
 	script.WriteString("  *) echo 'gh has no credential for this checkout' >&2; exit 1 ;;\nesac\n")
 	fmt.Fprintf(&script, "exec %s \"$@\"\n", shellSingleQuote(ghPath))
