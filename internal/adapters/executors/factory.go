@@ -81,7 +81,6 @@ func New(ctx context.Context, config Config) (Selection, error) {
 	case Kubernetes:
 		config.Kubernetes.DataRoot = config.DataRoot
 		config.Kubernetes.Images = config.DockerImages
-		config.Kubernetes.CodexAuthFile = config.CodexAuthFile
 		config.Kubernetes.ProviderEnv = config.ProviderEnv
 		config.Kubernetes.CodingProviders = config.CodingProviders
 		config.Kubernetes.CodingCredentialResolver = config.CodingCredentialResolver

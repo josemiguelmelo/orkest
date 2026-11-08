@@ -141,6 +141,13 @@ func runServer(ctx context.Context, logger *slog.Logger) error {
 			GID:                     parsePositiveInt64(config.KubernetesGID, int64(os.Getgid())),
 			StartupTimeout:          parseDuration(config.KubernetesStartupTimeout, 2*time.Minute),
 			TerminationGraceSeconds: parsePositiveInt64(config.KubernetesTerminationGrace, 10),
+			CodexAuthSecret:         config.KubernetesCodexAuthSecret,
+			CodexAuthSecretKey:      config.KubernetesCodexAuthSecretKey,
+			ImagePullSecrets:        splitEnvironmentNames(config.KubernetesImagePullSecrets),
+			CPURequest:              config.KubernetesCPURequest,
+			MemoryRequest:           config.KubernetesMemoryRequest,
+			CPULimit:                config.KubernetesCPULimit,
+			MemoryLimit:             config.KubernetesMemoryLimit,
 		},
 	})
 	if executorErr != nil {

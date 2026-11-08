@@ -39,6 +39,13 @@ type serverConfiguration struct {
 	KubernetesGID                string
 	KubernetesStartupTimeout     string
 	KubernetesTerminationGrace   string
+	KubernetesCodexAuthSecret    string
+	KubernetesCodexAuthSecretKey string
+	KubernetesImagePullSecrets   string
+	KubernetesCPURequest         string
+	KubernetesMemoryRequest      string
+	KubernetesCPULimit           string
+	KubernetesMemoryLimit        string
 }
 
 func loadServerConfiguration() serverConfiguration {
@@ -78,5 +85,12 @@ func loadServerConfiguration() serverConfiguration {
 		KubernetesGID:                os.Getenv("ORKEST_KUBERNETES_GID"),
 		KubernetesStartupTimeout:     os.Getenv("ORKEST_KUBERNETES_STARTUP_TIMEOUT"),
 		KubernetesTerminationGrace:   os.Getenv("ORKEST_KUBERNETES_TERMINATION_GRACE_SECONDS"),
+		KubernetesCodexAuthSecret:    os.Getenv("ORKEST_KUBERNETES_CODEX_AUTH_SECRET"),
+		KubernetesCodexAuthSecretKey: os.Getenv("ORKEST_KUBERNETES_CODEX_AUTH_SECRET_KEY"),
+		KubernetesImagePullSecrets:   os.Getenv("ORKEST_KUBERNETES_IMAGE_PULL_SECRETS"),
+		KubernetesCPURequest:         os.Getenv("ORKEST_KUBERNETES_CPU_REQUEST"),
+		KubernetesMemoryRequest:      os.Getenv("ORKEST_KUBERNETES_MEMORY_REQUEST"),
+		KubernetesCPULimit:           os.Getenv("ORKEST_KUBERNETES_CPU_LIMIT"),
+		KubernetesMemoryLimit:        os.Getenv("ORKEST_KUBERNETES_MEMORY_LIMIT"),
 	}
 }

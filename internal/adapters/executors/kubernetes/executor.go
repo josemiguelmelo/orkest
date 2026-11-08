@@ -39,9 +39,11 @@ type logAPI interface {
 type Config struct {
 	DataRoot, Namespace, InstallationID, DataPVC, DataSubpath string
 	ServiceAccount                                            string
+	CodexAuthSecret, CodexAuthSecretKey                       string
+	ImagePullSecrets                                          []string
+	CPURequest, MemoryRequest, CPULimit, MemoryLimit          string
 	UID, GID                                                  int64
 	Images                                                    map[runtimecatalog.Runtime]string
-	CodexAuthFile                                             string
 	ProviderEnv                                               []string
 	CodingProviders                                           []coderepository.CodingProvider
 	CodingCredentialResolver                                  checkout.CredentialResolver
@@ -103,6 +105,29 @@ func NewWithAPI(ctx context.Context, config Config, api API) (*Executor, error) 
 	if config.StartupTimeout <= 0 {
 		config.StartupTimeout = 2 * time.Minute
 	}
+	if config.CPURequest == "" {
+		config.CPURequest = "250m"
+	}
+	if config.MemoryRequest == "" {
+		config.MemoryRequest = "512Mi"
+	}
+	if config.CPULimit == "" {
+		config.CPULimit = "2"
+	}
+	if config.MemoryLimit == "" {
+		config.MemoryLimit = "4Gi"
+	}
+	if (config.CodexAuthSecret == "") != (config.CodexAuthSecretKey == "") {
+		return nil, errors.New("Kubernetes Codex auth Secret name and key must be configured together")
+	}
+	if config.CodexAuthSecret != "" && !dnsLabel(config.CodexAuthSecret) {
+		return nil, errors.New("Kubernetes Codex auth Secret name must be a DNS label")
+	}
+	for _, secret := range config.ImagePullSecrets {
+		if !dnsLabel(secret) {
+			return nil, fmt.Errorf("Kubernetes image-pull Secret %q must be a DNS label", secret)
+		}
+	}
 	if config.TerminationGraceSeconds <= 0 {
 		config.TerminationGraceSeconds = 10
 	}
@@ -139,9 +164,6 @@ var _ orchestration.AgentProcessController = (*Executor)(nil)
 func (e *Executor) StartAgentctl(ctx context.Context, run model.RunConfig) (model.Process, error) {
 	if err := run.Validate(); err != nil {
 		return model.Process{}, err
-	}
-	if run.Runtime == runtimecatalog.Codex && e.config.CodexAuthFile != "" {
-		return model.Process{}, errors.New("Kubernetes Codex auth requires an operator Secret mapping; host auth-file mounts are unsupported")
 	}
 	image := run.ExecutionImage
 	if image == "" {
@@ -181,6 +203,12 @@ func (e *Executor) StartAgentctl(ctx context.Context, run model.RunConfig) (mode
 			command = append(command, "-env", key)
 		}
 	}
+	useCodexAuth := run.Runtime == runtimecatalog.Codex && e.config.CodexAuthSecret != ""
+	if useCodexAuth {
+		const authPath = "/agentctl-state/codex-auth/auth.json"
+		env = append(env, map[string]any{"name": "ORKEST_CODEX_AUTH_FILE", "value": authPath})
+		command = append(command, "-env", "ORKEST_CODEX_AUTH_FILE")
+	}
 	if len(secretValues) > 0 {
 		secretName := name + "-env"
 		secret := map[string]any{"apiVersion": "v1", "kind": "Secret", "metadata": map[string]any{"name": secretName, "namespace": e.config.Namespace, "labels": labels}, "type": "Opaque", "stringData": secretValues}
@@ -200,6 +228,25 @@ func (e *Executor) StartAgentctl(ctx context.Context, run model.RunConfig) (mode
 	pod := map[string]any{"apiVersion": "v1", "kind": "Pod", "metadata": map[string]any{"name": name, "namespace": e.config.Namespace, "labels": labels}, "spec": map[string]any{"restartPolicy": "Never", "automountServiceAccountToken": false, "serviceAccountName": e.config.ServiceAccount, "terminationGracePeriodSeconds": e.config.TerminationGraceSeconds, "securityContext": map[string]any{"runAsNonRoot": true, "runAsUser": uid, "runAsGroup": gid}, "containers": []any{map[string]any{"name": "agentctl", "image": image, "args": command, "env": env, "ports": []any{map[string]any{"name": "agentctl", "containerPort": agentctlPort, "protocol": "TCP"}}, "readinessProbe": map[string]any{"httpGet": map[string]any{"path": "/health", "port": "agentctl"}, "periodSeconds": 2, "failureThreshold": 90}, "securityContext": security, "volumeMounts": []any{map[string]any{"name": "task-work", "mountPath": "/workspace", "subPath": base + "/work"}, map[string]any{"name": "task-state", "mountPath": "/agentctl-state", "subPath": base + "/agentctl-state"}}, "resources": map[string]any{"requests": map[string]string{"cpu": "250m", "memory": "512Mi"}, "limits": map[string]string{"cpu": "2", "memory": "4Gi"}}}}, "volumes": []any{map[string]any{"name": "task-work", "persistentVolumeClaim": map[string]any{"claimName": e.config.DataPVC, "readOnly": false}}, map[string]any{"name": "task-state", "persistentVolumeClaim": map[string]any{"claimName": e.config.DataPVC, "readOnly": false}}}}}
 	if e.config.ServiceAccount == "" {
 		delete(pod["spec"].(map[string]any), "serviceAccountName")
+	}
+	spec := pod["spec"].(map[string]any)
+	containers := spec["containers"].([]any)
+	containerSpec := containers[0].(map[string]any)
+	containerSpec["resources"] = map[string]any{"requests": map[string]string{"cpu": e.config.CPURequest, "memory": e.config.MemoryRequest}, "limits": map[string]string{"cpu": e.config.CPULimit, "memory": e.config.MemoryLimit}}
+	if len(e.config.ImagePullSecrets) > 0 {
+		refs := make([]any, 0, len(e.config.ImagePullSecrets))
+		for _, secret := range e.config.ImagePullSecrets {
+			refs = append(refs, map[string]any{"name": secret})
+		}
+		spec["imagePullSecrets"] = refs
+	}
+	if useCodexAuth {
+		volumes := spec["volumes"].([]any)
+		volumes = append(volumes, map[string]any{"name": "codex-auth", "secret": map[string]any{"secretName": e.config.CodexAuthSecret, "items": []any{map[string]any{"key": e.config.CodexAuthSecretKey, "path": "auth.json"}}}})
+		spec["volumes"] = volumes
+		mounts := containerSpec["volumeMounts"].([]any)
+		mounts = append(mounts, map[string]any{"name": "codex-auth", "mountPath": "/agentctl-state/codex-auth", "readOnly": true})
+		containerSpec["volumeMounts"] = mounts
 	}
 	identity := e.processID(name, "")
 	created, err := e.ensureResource(ctx, e.resourcePath("pods", name), pod, labels)

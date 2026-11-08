@@ -24,15 +24,27 @@ for trusted single-user development. No Helm chart is included.
   automount and have no Kubernetes API permissions. Keep worker Services out of
   ingress and public load balancers; allow platform-to-worker TCP 8081 and
   worker-to-platform MCP traffic in cluster network policy.
+- Start from the [namespace RBAC example](kubernetes-rbac.yaml), replacing the
+  namespace and platform service account names with deployment values. The
+  worker account is separate and has no RoleBinding.
 - Configure runtime images with the existing `AGENTCTL_*_IMAGE` variables. The
   platform's image pull credentials must be available to the namespace. Runtime
   image overrides and execution-image digests are selected per run.
 
 Provider environment values named by `ORKEST_AGENT_PROVIDER_ENV` are copied into
 a run-scoped Kubernetes Secret and exposed to that Pod by Secret key reference.
-The Secret is removed after confirmed Pod termination. `ORKEST_CODEX_AUTH_FILE`
-host-path mounts are not supported by this executor; Codex API-key environment
-configuration continues to work.
+The Secret is removed after confirmed Pod termination. For Codex host login,
+configure `ORKEST_KUBERNETES_CODEX_AUTH_SECRET` and
+`ORKEST_KUBERNETES_CODEX_AUTH_SECRET_KEY` to mount an existing Secret key
+read-only for Codex workers only. The host-path `ORKEST_CODEX_AUTH_FILE` option
+is not used by Kubernetes. Codex API-key environment configuration continues to
+work.
+
+`ORKEST_KUBERNETES_IMAGE_PULL_SECRETS` accepts a comma-separated list of
+operator-owned pull Secret names. Requests and limits default to 250m/512Mi and
+2 CPU/4Gi; override them with `ORKEST_KUBERNETES_CPU_REQUEST`,
+`ORKEST_KUBERNETES_MEMORY_REQUEST`, `ORKEST_KUBERNETES_CPU_LIMIT`, and
+`ORKEST_KUBERNETES_MEMORY_LIMIT`.
 
 ## Lifecycle and storage
 
