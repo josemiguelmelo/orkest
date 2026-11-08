@@ -7,7 +7,8 @@ history. A Go platform serves React; independent `agentctl` workers run runtimes
 
 Active prototype; see [status](docs/status.md):
 
-- Implemented: management, dispatch, Docker/Local execution, durable sessions.
+- Implemented: management, dispatch, Docker/Local execution, initial Kubernetes
+  Pod execution, durable sessions.
 - Unfinished: member capacity, worker transport authentication.
 - Live qualification is scenario-specific: OpenCode memory continuation has a dated
   verification record; other providers, real approvals, MCP, and full platform
@@ -22,7 +23,8 @@ Active prototype; see [status](docs/status.md):
 - GitHub Projects v2 and Jira Server task imports; GitHub and GitLab coding integrations.
 - OpenCode, Claude Code, Codex, GitHub Copilot CLI, and Kiro CLI through independent workers.
 - Ordered activity, chat, approvals, cancellation, and durable PostgreSQL/session history.
-- Docker execution, optional toolchain image builds, and trusted Local execution.
+- Docker execution, initial in-cluster Kubernetes execution, optional toolchain
+  image builds, and trusted Local execution.
 
 ## Prerequisites
 
@@ -32,6 +34,7 @@ Active prototype; see [status](docs/status.md):
 - Python 3 for runtime-boundary checks and selected tooling.
 
 - Docker agents need Engine socket access; Local needs pinned host runtime/dependencies.
+- Kubernetes prerequisites and current limits are in the [executor reference](docs/reference/executors/kubernetes.md).
 
 ## Run locally
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -15,6 +16,7 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/adapters/runnerclient/agentctlhttp"
 
 	"github.com/josemiguelmelo/orkest/internal/adapters/executors"
+	kubernetesexecutor "github.com/josemiguelmelo/orkest/internal/adapters/executors/kubernetes"
 	"github.com/josemiguelmelo/orkest/internal/adapters/http/server"
 	"github.com/josemiguelmelo/orkest/internal/adapters/imagebuild"
 	"github.com/josemiguelmelo/orkest/internal/adapters/imagebuild/buildkit"
@@ -47,9 +49,63 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/server/workspaceenv"
 )
 
+func parsePositiveInt64(value string, fallback int64) int64 {
+	parsed, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64)
+	if err != nil || parsed <= 0 {
+		return fallback
+	}
+	return parsed
+}
+
+func parseDuration(value string, fallback time.Duration) time.Duration {
+	parsed, err := time.ParseDuration(strings.TrimSpace(value))
+	if err != nil || parsed <= 0 {
+		return fallback
+	}
+	return parsed
+}
+
+func kubernetesAgentMCPURL(config kubernetesServerConfiguration) (string, error) {
+	namespace := strings.TrimSpace(config.Namespace)
+	if namespace == "" {
+		return "", fmt.Errorf("ORKEST_KUBERNETES_NAMESPACE is required to derive the worker MCP endpoint")
+	}
+	service := strings.TrimSpace(config.PlatformServiceName)
+	if service == "" {
+		service = "orkest"
+	}
+	if !isDNSLabel(service) || !isDNSLabel(namespace) {
+		return "", fmt.Errorf("kubernetes platform service name and namespace must be DNS labels")
+	}
+	port := int64(8080)
+	if value := strings.TrimSpace(config.PlatformServicePort); value != "" {
+		parsed, err := strconv.ParseInt(value, 10, 64)
+		if err != nil || parsed <= 0 || parsed > 65535 {
+			return "", fmt.Errorf("ORKEST_KUBERNETES_PLATFORM_SERVICE_PORT must be between 1 and 65535")
+		}
+		port = parsed
+	}
+	return fmt.Sprintf("http://%s.%s.svc:%d", service, namespace, port), nil
+}
+
+func isDNSLabel(value string) bool {
+	if value == "" || len(value) > 63 {
+		return false
+	}
+	valid := func(r rune) bool { return r >= 'a' && r <= 'z' || r >= '0' && r <= '9' || r == '-' }
+	for _, r := range value {
+		if !valid(r) {
+			return false
+		}
+	}
+	first := rune(value[0])
+	return (first >= 'a' && first <= 'z' || first >= '0' && first <= '9') && value[len(value)-1] != '-'
+}
+
 // Run owns the platform HTTP lifecycle; it does not own agent processes.
 func runServer(ctx context.Context, logger *slog.Logger) error {
 	config := loadServerConfiguration()
+	kubernetesExecutor := strings.EqualFold(strings.TrimSpace(config.Executor), "kubernetes")
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	dataRoot := strings.TrimSpace(config.DataDir)
@@ -67,6 +123,18 @@ func runServer(ctx context.Context, logger *slog.Logger) error {
 	addr := config.HTTPAddr
 	if addr == "" {
 		addr = "127.0.0.1:8080"
+		if kubernetesExecutor {
+			addr = "0.0.0.0:8080"
+		}
+	}
+	if kubernetesExecutor {
+		host, _, splitErr := net.SplitHostPort(addr)
+		if splitErr != nil {
+			return fmt.Errorf("HTTP_ADDR must use host:port format for Kubernetes service access: %w", splitErr)
+		}
+		if ip := net.ParseIP(strings.Trim(host, "[]")); ip != nil && ip.IsLoopback() || strings.EqualFold(host, "localhost") {
+			return fmt.Errorf("HTTP_ADDR must bind to a non-loopback interface when ORKEST_EXECUTOR=kubernetes")
+		}
 	}
 
 	database, err := postgres.Initialize(ctx)
@@ -108,6 +176,24 @@ func runServer(ctx context.Context, logger *slog.Logger) error {
 		ProviderEnv:              splitEnvironmentNames(config.AgentProviderEnv),
 		CodingProviders:          providers,
 		CodingCredentialResolver: codeRepositories,
+		Kubernetes: kubernetesexecutor.Config{
+			Namespace:               config.Kubernetes.Namespace,
+			InstallationID:          config.Kubernetes.InstallationID,
+			DataPVC:                 config.Kubernetes.DataPVC,
+			DataSubpath:             config.Kubernetes.DataSubpath,
+			ServiceAccount:          config.Kubernetes.ServiceAccount,
+			UID:                     parsePositiveInt64(config.Kubernetes.UID, int64(os.Getuid())),
+			GID:                     parsePositiveInt64(config.Kubernetes.GID, int64(os.Getgid())),
+			StartupTimeout:          parseDuration(config.Kubernetes.StartupTimeout, 2*time.Minute),
+			TerminationGraceSeconds: parsePositiveInt64(config.Kubernetes.TerminationGrace, 10),
+			CodexAuthSecret:         config.Kubernetes.CodexAuthSecret,
+			CodexAuthSecretKey:      config.Kubernetes.CodexAuthSecretKey,
+			ImagePullSecrets:        splitEnvironmentNames(config.Kubernetes.ImagePullSecrets),
+			CPURequest:              config.Kubernetes.CPURequest,
+			MemoryRequest:           config.Kubernetes.MemoryRequest,
+			CPULimit:                config.Kubernetes.CPULimit,
+			MemoryLimit:             config.Kubernetes.MemoryLimit,
+		},
 	})
 	if executorErr != nil {
 		return fmt.Errorf("initialize agent executor: %w", executorErr)
@@ -142,7 +228,12 @@ func runServer(ctx context.Context, logger *slog.Logger) error {
 	tasks := task.NewTaskService(taskRepository, postgres.NewTaskCreationPostgresRepository(database), postgres.NewTaskUpdatePostgresRepository(database), taskWorkflows, workspaces)
 	artifacts := artifact.NewArtifactService(postgres.NewArtifactPostgresRepository(database), tasks)
 	mcpEndpoint := strings.TrimSpace(config.AgentMCPURL)
-	if mcpEndpoint == "" {
+	if kubernetesExecutor {
+		mcpEndpoint, err = kubernetesAgentMCPURL(config.Kubernetes)
+		if err != nil {
+			return err
+		}
+	} else if mcpEndpoint == "" {
 		mcpEndpoint = "http://127.0.0.1:8080"
 	}
 	mcpKey, err := appmcp.AgentToolsTokenKey(dataRoot, config.AgentMCPTokenKey)
@@ -181,7 +272,7 @@ func runServer(ctx context.Context, logger *slog.Logger) error {
 	integrations := taskintegration.NewTaskIntegrationService(postgres.NewPostgresTaskIntegrationRepository(database), secretBox, workspaces, organizations, postgres.NewPostgresImportedTaskRepository(database), tasks, githubcloud.NewGitHubCloudProvider(), jiraserver.NewJiraServerProvider())
 	runnerCtx, stopRunner := context.WithCancel(ctx)
 	var runnerWG sync.WaitGroup
-	if config.ExecutionImageRepository != "" {
+	if config.ExecutionImageRepository != "" && executorKind != executors.Kubernetes {
 		registry := imagebuild.RegistryMapping{
 			DockerHost:   config.DockerRegistryHost,
 			BuildKitHost: config.BuildKitRegistryHost,
@@ -213,6 +304,8 @@ func runServer(ctx context.Context, logger *slog.Logger) error {
 		worker := executionprofile.NewExecutionProfileWorker(executionProfileRepository, builder, logger, workerCount)
 		runnerWG.Add(1)
 		go func() { defer runnerWG.Done(); worker.Run(runnerCtx) }()
+	} else if config.ExecutionImageRepository != "" {
+		logger.Warn("execution profile builds are disabled for the Kubernetes executor until the Kubernetes image builder is configured", "executor", executorKind)
 	}
 	runnerWG.Add(1)
 	go func() { defer runnerWG.Done(); integrations.Run(runnerCtx) }()

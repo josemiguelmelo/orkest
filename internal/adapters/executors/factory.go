@@ -8,6 +8,7 @@ import (
 
 	"github.com/josemiguelmelo/orkest/internal/adapters/executors/checkout"
 	dockerexecutor "github.com/josemiguelmelo/orkest/internal/adapters/executors/docker"
+	kubernetesexecutor "github.com/josemiguelmelo/orkest/internal/adapters/executors/kubernetes"
 	localexecutor "github.com/josemiguelmelo/orkest/internal/adapters/executors/local"
 	coreruntime "github.com/josemiguelmelo/orkest/internal/contracts/runtimecatalog"
 	"github.com/josemiguelmelo/orkest/internal/server/coderepository"
@@ -17,8 +18,9 @@ import (
 type Kind string
 
 const (
-	Docker Kind = "docker"
-	Local  Kind = "local"
+	Docker     Kind = "docker"
+	Local      Kind = "local"
+	Kubernetes Kind = "kubernetes"
 )
 
 // Executor is the application-facing lifecycle contract for an executor.
@@ -45,6 +47,7 @@ type Config struct {
 	ProviderEnv              []string
 	CodingProviders          []coderepository.CodingProvider
 	CodingCredentialResolver checkout.CredentialResolver
+	Kubernetes               kubernetesexecutor.Config
 }
 
 // New constructs the configured executor. An empty kind retains Docker as the default.
@@ -75,7 +78,21 @@ func New(ctx context.Context, config Config) (Selection, error) {
 			return Selection{}, err
 		}
 		return Selection{Kind: kind, Executor: executor}, nil
+	case Kubernetes:
+		if strings.TrimSpace(config.CodexAuthFile) != "" {
+			return Selection{}, fmt.Errorf("ORKEST_CODEX_AUTH_FILE is not supported with the Kubernetes executor; configure the Kubernetes Codex auth Secret and key")
+		}
+		config.Kubernetes.DataRoot = config.DataRoot
+		config.Kubernetes.Images = config.DockerImages
+		config.Kubernetes.ProviderEnv = config.ProviderEnv
+		config.Kubernetes.CodingProviders = config.CodingProviders
+		config.Kubernetes.CodingCredentialResolver = config.CodingCredentialResolver
+		executor, err := kubernetesexecutor.New(ctx, config.Kubernetes)
+		if err != nil {
+			return Selection{}, err
+		}
+		return Selection{Kind: kind, Executor: executor}, nil
 	default:
-		return Selection{}, fmt.Errorf("unsupported ORKEST_EXECUTOR %q (expected %q or %q)", config.Kind, Docker, Local)
+		return Selection{}, fmt.Errorf("unsupported ORKEST_EXECUTOR %q (expected %q, %q, or %q)", config.Kind, Docker, Local, Kubernetes)
 	}
 }
