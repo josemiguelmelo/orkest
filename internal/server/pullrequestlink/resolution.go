@@ -21,13 +21,14 @@ type TaskState struct {
 }
 
 type ResolutionSnapshot struct {
-	AvailableAt    time.Time
-	Integration    trigger.Integration
-	Delivery       trigger.Delivery
-	Suppressed     bool
-	ExistingTaskID string
-	Candidates     []Candidate
-	Tasks          []TaskState
+	RepositoryRegistered bool
+	AvailableAt          time.Time
+	Integration          trigger.Integration
+	Delivery             trigger.Delivery
+	Suppressed           bool
+	ExistingTaskID       string
+	Candidates           []Candidate
+	Tasks                []TaskState
 }
 
 type Resolution struct {
@@ -45,6 +46,10 @@ func PlanResolution(s ResolutionSnapshot, now time.Time) Resolution {
 	result := Resolution{Status: "ignored"}
 	if !s.Integration.Enabled {
 		result.Diagnostic = "integration_disabled"
+		return result
+	}
+	if !s.RepositoryRegistered {
+		result.Diagnostic = "repository_not_registered"
 		return result
 	}
 	if s.Suppressed {

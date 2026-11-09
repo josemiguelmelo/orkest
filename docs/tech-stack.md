@@ -55,7 +55,8 @@ The platform and agentctl share one Go module. The UI is a React application.
 - Signed trigger webhook reception resolves the exact durable event through the
   PR association service before acknowledgement; background resolution recovers
   delayed branch evidence. Ingestion does not bind tasks; association owns task
-  binding and stage eligibility. Each trigger integration can cover multiple repositories.
+  binding and stage eligibility. Trigger integrations derive repository scope from
+  workspace registration and task associations; they have no repository allowlist.
 - Repository observation compares snapshots without callbacks or I/O; its run
   coordinator owns polling, journaling, batch persistence and state advancement.
 - Composition lives in `cmd/server` and `cmd/agentctl`; `bin/orkest` remains the

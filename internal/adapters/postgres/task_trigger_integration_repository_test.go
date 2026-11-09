@@ -34,7 +34,7 @@ func testTaskTriggerIntegrations(t *testing.T, db *PostgresDatabase, org, worksp
 		t.Fatal(err)
 	}
 	repo := NewTaskTriggerIntegrationPostgresRepository(db)
-	integration, err := saveTestTriggerConfiguration(ctx, repo, trigger.Integration{ID: newID(), WorkspaceID: workspace, OrganizationID: org, Name: "Review hooks", Provider: "github", Config: json.RawMessage(`{"repositoryIds":["123"]}`), Enabled: true, ConfiguredBy: actor, EncryptedSecret: "encrypted", Rules: []trigger.Rule{{ID: "review", Event: "pull_request.review_submitted", WorkflowID: workspace, SourceStageID: "todo", TargetStageID: "in_review", Action: "move_task"}}}, true)
+	integration, err := saveTestTriggerConfiguration(ctx, repo, trigger.Integration{ID: newID(), WorkspaceID: workspace, OrganizationID: org, Name: "Review hooks", Provider: "github", Config: json.RawMessage(`{}`), Enabled: true, ConfiguredBy: actor, EncryptedSecret: "encrypted", Rules: []trigger.Rule{{ID: "review", Event: "pull_request.review_submitted", WorkflowID: workspace, SourceStageID: "todo", TargetStageID: "in_review", Action: "move_task"}}}, true)
 	if err != nil {
 		t.Fatal(err)
 	}

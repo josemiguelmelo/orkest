@@ -37,6 +37,7 @@ are separate. User guides: [sessions](../guides/sessions.md), [workflows](../gui
   variables; never auto-retry.
 - Catalog-supplied provider JSON: string/string-array object renderer; Ajv 2020 constraints.
   Unsupported constructs fail explicitly; supported providers need no core UI change.
+  Trigger editors omit retired settings when saving against the current descriptor.
 - MCP headers: preserve/replace/clear. Saves omit unchanged integration credentials;
   validation requires new credentials. Forms discard secrets; never log/store in browser storage.
 

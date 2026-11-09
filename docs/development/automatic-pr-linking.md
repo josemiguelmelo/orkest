@@ -20,21 +20,27 @@ for earlier iterations of this feature.
   evidence and flushes it once. Failed writes fence execution; diagnostics retain
   the last successful baseline. These are recovery guarantees for the current
   implementation, rather than compatibility with a previous feature version.
-- The webhook service verifies provider signatures and repository configuration,
-  durably enqueues events, then resolves each exact integration/event identity.
+- The webhook service verifies provider signatures, durably enqueues events, then
+  resolves each exact integration/event identity.
 - Ingestion chooses an initial status in the domain service. Its repository uses
   one transaction to check the expected configuration version and enqueue the
   entire batch idempotently. It does not bind tasks or invoke domain callbacks.
 - PR association uses existing automatic ownership or unambiguous repository,
-  branch and commit evidence. It validates repository selection and stage timing,
-  then commits the association and delivery binding with concurrency guards.
+  branch and commit evidence. It validates workspace repository registration, task
+  repository selection and stage timing, then commits the association and delivery
+  binding with concurrency guards.
 - Trigger processing owns rule evaluation. Existing workflow services own task
   movement and execution through the durable workflow outbox.
 
 ## Multiple repositories and recovery
 
-A GitHub trigger integration accepts a nonempty, unique `repositoryIds` list.
-The same webhook URL and secret can be configured on those repositories. There
+A GitHub trigger integration has no repository list; its provider configuration is
+`{}`. The same URL and secret can receive organization-wide GitHub webhooks.
+Association ignores events whose provider repository identity is not registered in
+that integration's workspace, then requires a task association before processing.
+Polling uses task-selected registered repositories and their workspace coding
+credentials. Stored lists from the retired `repositoryIds` setting are ignored;
+the editor drops retired settings on save. No data conversion is required. There
 is no manual association creation endpoint. Links can be listed and unlinked;
 unlink suppresses automatic recreation for that integration and PR.
 
@@ -44,9 +50,13 @@ branch deletion and subsequent reviews. GitHub polling recovers missed webhook
 notifications using each repository's own workspace coding credentials, with
 bounded pagination and a 24-hour recovery horizon.
 
-The schema is defined by migration 0043. There is no separate configuration
-conversion migration. Runtime/model/session configuration is unchanged. Unrelated
-runtime session compatibility and restoration remain supported.
+The schema is defined by migration 0043. Migration 0044 repairs early development
+databases that recorded 0043 before its reconciliation table was added. It creates
+only the missing table and preserves existing reconciliation rows. Its down step
+retains the table; migration 0043 owns removal. Restart a rebuilt platform to apply
+pending migrations. There is no separate configuration conversion migration.
+Runtime/model/session configuration is unchanged. Unrelated runtime session
+compatibility and restoration remain supported.
 
 ## Verification and limits
 

@@ -307,6 +307,24 @@ func (q *Queries) PullRequestEventResolution(ctx context.Context, arg PullReques
 	return i, err
 }
 
+const pullRequestRepositoryRegistered = `-- name: PullRequestRepositoryRegistered :one
+SELECT EXISTS(SELECT 1 FROM code_repositories
+WHERE workspace_id=$1 AND provider_name=$2 AND provider_repository_id=$3)
+`
+
+type PullRequestRepositoryRegisteredParams struct {
+	WorkspaceID          string      `json:"workspace_id"`
+	ProviderName         string      `json:"provider_name"`
+	ProviderRepositoryID pgtype.Text `json:"provider_repository_id"`
+}
+
+func (q *Queries) PullRequestRepositoryRegistered(ctx context.Context, arg PullRequestRepositoryRegisteredParams) (bool, error) {
+	row := q.db.QueryRow(ctx, pullRequestRepositoryRegistered, arg.WorkspaceID, arg.ProviderName, arg.ProviderRepositoryID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const pullRequestTaskStates = `-- name: PullRequestTaskStates :many
 SELECT t.id,t.stage_version,
  EXISTS(SELECT 1 FROM task_repositories tr JOIN code_repositories r ON r.workspace_id=tr.workspace_id AND r.id=tr.repository_id

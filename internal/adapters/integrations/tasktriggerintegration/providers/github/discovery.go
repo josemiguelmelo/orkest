@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -27,16 +26,9 @@ type Discovery struct {
 	Client      *http.Client
 }
 
-func (d Discovery) Discover(ctx context.Context, workspaceID string, raw json.RawMessage, since time.Time, repositories []pullrequestlink.DiscoveryRepository) ([]trigger.Event, error) {
-	config, err := decodeConfiguration(raw)
-	if err != nil {
-		return nil, err
-	}
+func (d Discovery) Discover(ctx context.Context, workspaceID string, _ json.RawMessage, since time.Time, repositories []pullrequestlink.DiscoveryRepository) ([]trigger.Event, error) {
 	var events []trigger.Event
 	for _, repository := range repositories {
-		if !slices.Contains(config.RepositoryIDs, repository.ProviderRepositoryID) {
-			continue
-		}
 		discovered, err := d.discoverRepository(ctx, workspaceID, since, repository)
 		if err != nil {
 			return nil, err

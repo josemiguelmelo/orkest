@@ -18,6 +18,7 @@ func TestResolutionPolicy(t *testing.T) {
 	}{
 		{"associate", func(*ResolutionSnapshot) {}, "pending", "", true},
 		{"disabled", func(s *ResolutionSnapshot) { s.Integration.Enabled = false }, "ignored", "integration_disabled", false},
+		{"unregistered repository", func(s *ResolutionSnapshot) { s.RepositoryRegistered = false }, "ignored", "repository_not_registered", false},
 		{"suppressed", func(s *ResolutionSnapshot) { s.Suppressed = true }, "ignored", "association_suppressed", false},
 		{"missing evidence", func(s *ResolutionSnapshot) { s.Candidates = nil }, "awaiting_link", "waiting_for_branch_evidence", false},
 		{"expired", func(s *ResolutionSnapshot) { s.Candidates = nil; s.Delivery.ReceivedAt = now.Add(-24 * time.Hour) }, "ignored", "association_expired", false},
@@ -31,7 +32,7 @@ func TestResolutionPolicy(t *testing.T) {
 		{"old stage", func(s *ResolutionSnapshot) { s.Tasks[0].StageEnteredAt = now.Add(2 * time.Second) }, "ignored", "stale_stage_entry", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			snapshot := ResolutionSnapshot{Integration: trigger.Integration{Enabled: true}, Delivery: trigger.Delivery{ReceivedAt: now, Event: trigger.Event{RepositoryID: "repo", HeadRepositoryID: "repo", HeadBranch: "skill/name", HeadCommitID: "sha", OccurredAt: now}}, Candidates: []Candidate{{EligibleForLinking: true, TaskID: "task", RepositoryID: "repo", HeadRepositoryID: "repo", Branch: "skill/name", CommitID: "sha"}}, Tasks: []TaskState{{TaskID: "task", RepositorySelected: true, StageVersion: 3}}}
+			snapshot := ResolutionSnapshot{RepositoryRegistered: true, Integration: trigger.Integration{Enabled: true}, Delivery: trigger.Delivery{ReceivedAt: now, Event: trigger.Event{RepositoryID: "repo", HeadRepositoryID: "repo", HeadBranch: "skill/name", HeadCommitID: "sha", OccurredAt: now}}, Candidates: []Candidate{{EligibleForLinking: true, TaskID: "task", RepositoryID: "repo", HeadRepositoryID: "repo", Branch: "skill/name", CommitID: "sha"}}, Tasks: []TaskState{{TaskID: "task", RepositorySelected: true, StageVersion: 3}}}
 			tc.change(&snapshot)
 			before := PlanResolution(snapshot, now)
 			result := PlanResolution(snapshot, now)

@@ -2,6 +2,11 @@ import { describe, it, expect } from 'vitest';
 import { githubProvider } from '../../test/fixtures';
 import { integrationBody, providerFields, validateConfig } from './schema';
 describe('provider configuration', () => {
+  it('supports providers without configuration fields', () => {
+    const schema = { type: 'object', additionalProperties: false };
+    expect(providerFields(schema).properties).toEqual({});
+    expect(validateConfig(schema, {})).toEqual({});
+  });
   it('renders and validates published provider constraints', () => {
     expect(providerFields(githubProvider.configSchema).required).toEqual(['projectUrl']);
     expect(

@@ -140,7 +140,14 @@ function TriggerEditor({
               name,
               enabled,
               provider: providerID,
-              config: validateConfig(provider.configSchema, config),
+              config: validateConfig(
+                provider.configSchema,
+                Object.fromEntries(
+                  Object.entries(config).filter(([key]) =>
+                    Object.hasOwn(fields?.properties ?? {}, key),
+                  ),
+                ),
+              ),
               rules,
               ...(item ? { version: item.version } : {}),
               ...(secret ? { webhookSecret: secret } : {}),
@@ -180,6 +187,10 @@ function TriggerEditor({
             ))}
           </select>
         </Field>
+        <p className="muted">
+          Only events from repositories registered in this workspace and associated with its tasks
+          can trigger rules.
+        </p>
         {fields &&
           Object.entries(fields.properties).map(([key, field]) => (
             <Field key={key} label={field.title ?? key} hint={field.description ?? ''}>
@@ -281,8 +292,7 @@ function TriggerEditor({
                   onChange={(e) =>
                     updateRule(index, {
                       action: e.target.value as TaskTriggerRule['action'],
-                      targetStageId:
-                        e.target.value === 'start_work' ? rule.sourceStageId : '',
+                      targetStageId: e.target.value === 'start_work' ? rule.sourceStageId : '',
                     })
                   }
                 >
@@ -465,7 +475,9 @@ function TriggerCard({
             ))
           )}
           <h4>Recent deliveries</h4>
-          {item.discoveryDiagnostic ? <p role="status">PR discovery: {item.discoveryDiagnostic}</p> : null}
+          {item.discoveryDiagnostic ? (
+            <p role="status">PR discovery: {item.discoveryDiagnostic}</p>
+          ) : null}
           {deliveries.isError ? (
             <ErrorState error={deliveries.error} />
           ) : (

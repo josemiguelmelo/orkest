@@ -49,7 +49,7 @@ func TestDiscoveryRecoversReviewsWithWebhookIdentities(t *testing.T) {
 	})}
 	discovery := Discovery{Credentials: credentialsFake{t}, Client: client}
 	repositories := []pullrequestlink.DiscoveryRepository{{ProviderRepositoryID: "123", IntegrationID: "coding", Candidates: []pullrequestlink.Candidate{{EligibleForLinking: true, Branch: "user/skill", CommitID: "abc"}}}}
-	events, err := discovery.Discover(context.Background(), "workspace", json.RawMessage(`{"repositoryIds":["123"]}`), now.Add(-time.Minute), repositories)
+	events, err := discovery.Discover(context.Background(), "workspace", json.RawMessage(`{}`), now.Add(-time.Minute), repositories)
 	if err != nil || len(events) != 3 {
 		t.Fatalf("events: %+v %v", events, err)
 	}
@@ -65,7 +65,7 @@ func TestDiscoveryRecoversReviewsWithWebhookIdentities(t *testing.T) {
 		{name: "review", kind: "pull_request_review", body: fmt.Sprintf(`{"action":"submitted","repository":{"id":123,"full_name":"owner/repo"},"pull_request":{"number":4},"review":{"id":9,"submitted_at":%q}}`, now.Format(time.RFC3339)), wantKey: "review:9", index: 2},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			_, webhookEvents, err := NewGitHubProvider().VerifyAndDecode(context.Background(), signedRequest(tc.kind, tc.body), json.RawMessage(`{"repositoryIds":["123"]}`), "test-webhook-secret")
+			_, webhookEvents, err := NewGitHubProvider().VerifyAndDecode(context.Background(), signedRequest(tc.kind, tc.body), json.RawMessage(`{}`), "test-webhook-secret")
 			if err != nil || len(webhookEvents) != 1 {
 				t.Fatalf("webhook events: %+v %v", webhookEvents, err)
 			}
@@ -74,13 +74,13 @@ func TestDiscoveryRecoversReviewsWithWebhookIdentities(t *testing.T) {
 			}
 		})
 	}
-	events, err = discovery.Discover(context.Background(), "workspace", json.RawMessage(`{"repositoryIds":["123"]}`), now.Add(time.Minute), repositories)
+	events, err = discovery.Discover(context.Background(), "workspace", json.RawMessage(`{}`), now.Add(time.Minute), repositories)
 	if err != nil || len(events) != 0 {
 		t.Fatalf("settings save replayed historical events: %+v %v", events, err)
 	}
 }
 
-func TestDiscoveryVisitsConfiguredRepositories(t *testing.T) {
+func TestDiscoveryIgnoresRetiredRepositoryList(t *testing.T) {
 	visited := map[string]bool{}
 	client := &http.Client{Transport: transportFunc(func(r *http.Request) (*http.Response, error) {
 		var body string
@@ -92,14 +92,14 @@ func TestDiscoveryVisitsConfiguredRepositories(t *testing.T) {
 		case "/repos/owner/one/pulls", "/repos/owner/two/pulls":
 			body = `[]`
 		default:
-			t.Fatalf("unconfigured repository requested: %s", r.URL.Path)
+			t.Fatalf("unexpected repository requested: %s", r.URL.Path)
 		}
 		visited[r.URL.Path] = true
 		return &http.Response{StatusCode: 200, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body)), Request: r}, nil
 	})}
 	discovery := Discovery{Credentials: credentialsFake{t}, Client: client}
-	repositories := []pullrequestlink.DiscoveryRepository{{ProviderRepositoryID: "123", IntegrationID: "coding"}, {ProviderRepositoryID: "456", IntegrationID: "coding"}, {ProviderRepositoryID: "999", IntegrationID: "coding"}}
-	if _, err := discovery.Discover(context.Background(), "workspace", json.RawMessage(`{"repositoryIds":["123","456"]}`), time.Now(), repositories); err != nil {
+	repositories := []pullrequestlink.DiscoveryRepository{{ProviderRepositoryID: "123", IntegrationID: "coding"}, {ProviderRepositoryID: "456", IntegrationID: "coding"}}
+	if _, err := discovery.Discover(context.Background(), "workspace", json.RawMessage(`{"repositoryIds":["123"]}`), time.Now(), repositories); err != nil {
 		t.Fatal(err)
 	}
 	if !visited["/repositories/123"] || !visited["/repositories/456"] {

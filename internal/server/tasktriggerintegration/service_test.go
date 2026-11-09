@@ -63,7 +63,7 @@ func TestProcessingPolicy(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			definition := workflowmodel.DefaultDefinition("Default")
 			definition.ID = "workflow"
-			r := &repository{snapshot: trigger.ProcessingSnapshot{TaskFound: true, LinkActive: true, Integration: trigger.Integration{ID: "integration", Provider: "github", Config: json.RawMessage(`{"repositoryIds":["123"]}`), Enabled: true, ConfiguredBy: "admin", Rules: []trigger.Rule{{ID: "rule", Event: githubtrigger.ReviewSubmitted, WorkflowID: "workflow", SourceStageID: "in_review", TargetStageID: "in_progress"}}}, Delivery: trigger.Delivery{ID: "event-id", Event: trigger.Event{Type: githubtrigger.ReviewSubmitted, RepositoryID: "123", ResourceID: "4", ReferenceURL: "https://github.com/owner/repo/pull/4"}}, StageVersion: 2, Task: task.TaskWorkflowSnapshot{Workflow: definition, Task: taskmodel.Task{ID: "task", WorkflowID: "workflow", Status: "in_review", StageVersion: 2, StageWorkState: taskmodel.WorkStateIdle}}}}
+			r := &repository{snapshot: trigger.ProcessingSnapshot{TaskFound: true, LinkActive: true, Integration: trigger.Integration{ID: "integration", Provider: "github", Config: json.RawMessage(`{}`), Enabled: true, ConfiguredBy: "admin", Rules: []trigger.Rule{{ID: "rule", Event: githubtrigger.ReviewSubmitted, WorkflowID: "workflow", SourceStageID: "in_review", TargetStageID: "in_progress"}}}, Delivery: trigger.Delivery{ID: "event-id", Event: trigger.Event{Type: githubtrigger.ReviewSubmitted, RepositoryID: "123", ResourceID: "4", ReferenceURL: "https://github.com/owner/repo/pull/4"}}, StageVersion: 2, Task: task.TaskWorkflowSnapshot{Workflow: definition, Task: taskmodel.Task{ID: "task", WorkflowID: "workflow", Status: "in_review", StageVersion: 2, StageWorkState: taskmodel.WorkStateIdle}}}}
 			r.snapshot.ActorRole = tc.role
 			tc.mutate(&r.snapshot)
 			service, err := trigger.NewTaskTriggerIntegrationService(r, access{role: tc.role}, nil, nil, githubtrigger.NewGitHubProvider())
@@ -94,7 +94,7 @@ func TestReviewStartRuleStartsAssignedAgentInSameStage(t *testing.T) {
 	prompt := "Read review comments and reply with the fix."
 	r := &repository{snapshot: trigger.ProcessingSnapshot{
 		TaskFound: true, LinkActive: true,
-		Integration:  trigger.Integration{ID: "integration", Provider: "github", Config: json.RawMessage(`{"repositoryIds":["123"]}`), Enabled: true, ConfiguredBy: "admin", Rules: []trigger.Rule{{ID: "rule", Event: githubtrigger.ReviewSubmitted, WorkflowID: "workflow", SourceStageID: "in_review", TargetStageID: "in_review", Action: "start_work", PromptText: prompt}}},
+		Integration:  trigger.Integration{ID: "integration", Provider: "github", Config: json.RawMessage(`{}`), Enabled: true, ConfiguredBy: "admin", Rules: []trigger.Rule{{ID: "rule", Event: githubtrigger.ReviewSubmitted, WorkflowID: "workflow", SourceStageID: "in_review", TargetStageID: "in_review", Action: "start_work", PromptText: prompt}}},
 		Delivery:     trigger.Delivery{ID: "event-id", Event: trigger.Event{Type: githubtrigger.ReviewSubmitted, RepositoryID: "123", ResourceID: "4", ReferenceURL: "https://github.com/owner/repo/pull/4"}},
 		StageVersion: 2,
 		ActorRole:    "admin",
@@ -177,7 +177,7 @@ func TestReceivePersistsThenResolvesEventsAcrossRepositories(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	repo := &webhookRepository{integration: trigger.Integration{ID: "integration", Version: 1, Enabled: true, Provider: "github", Config: json.RawMessage(`{"repositoryIds":["123","456"]}`), EncryptedSecret: string(encrypted)}}
+	repo := &webhookRepository{integration: trigger.Integration{ID: "integration", Version: 1, Enabled: true, Provider: "github", Config: json.RawMessage(`{}`), EncryptedSecret: string(encrypted)}}
 	resolver := &webhookResolver{t: t, repo: repo}
 	service, err := trigger.NewTaskTriggerIntegrationService(repo, nil, box, resolver, githubtrigger.NewGitHubProvider())
 	if err != nil {
@@ -261,7 +261,7 @@ func TestSaveConfigurationRulesAndSecrets(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			in := trigger.Input{Name: " Reviews ", Provider: "github", Version: 3, Config: json.RawMessage(`{"repositoryIds":["123"]}`), Rules: []trigger.Rule{{ID: "rule", Event: githubtrigger.ReviewSubmitted, WorkflowID: "workflow", SourceStageID: "in_review", TargetStageID: "in_progress"}}}
+			in := trigger.Input{Name: " Reviews ", Provider: "github", Version: 3, Config: json.RawMessage(`{}`), Rules: []trigger.Rule{{ID: "rule", Event: githubtrigger.ReviewSubmitted, WorkflowID: "workflow", SourceStageID: "in_review", TargetStageID: "in_progress"}}}
 			if tc.mutate != nil {
 				tc.mutate(&in)
 			}

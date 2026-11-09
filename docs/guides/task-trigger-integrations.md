@@ -10,11 +10,13 @@ credentials. Trigger integrations do not import tasks or change source status.
 
 1. Register the GitHub repositories through coding integrations and select the
    relevant repositories on each task.
-2. Open Integrations → Trigger integrations. Choose GitHub, enter the repository
-   IDs (`repositoryIds`) and a random secret of at least 32 characters, and configure movement rules.
-3. Copy the same integration webhook URL into each configured GitHub repository’s webhook settings, choose
-   `application/json`, set the same secret, and select Pull requests and Pull
-   request reviews. Use HTTPS for the externally reachable platform URL.
+2. Open Integrations → Trigger integrations. Choose GitHub, enter a random secret
+   of at least 32 characters, and configure event rules. No repository list is needed.
+3. Configure the integration webhook URL in GitHub at the organization level or on
+   individual repositories. Choose `application/json`, set the same secret, and select
+   Pull requests and Pull request reviews. Use HTTPS for the externally reachable
+   platform URL. A shared webhook may send events for repositories outside this workspace;
+   Orkest acknowledges and ignores those events.
 4. Run the task normally. agentctl observes new branches in task checkouts,
    regardless of names chosen by user skills. Matching PRs link automatically;
    no per-PR registration step is required. One PR maps to one task within a
@@ -58,6 +60,10 @@ retains these columns and their configuration.
 - Rules select an event, workflow, source stage and different destination stage.
   Only one rule may match an event/workflow/source stage in an integration.
   Referenced stages cannot be deleted while the integration rule exists.
+- Repository scope comes from registered workspace repositories, never an integration
+  allowlist. A verified event must match the repository's provider identity in the
+  integration's workspace and a task association before any rule can apply. Newly
+  registered repositories become eligible automatically; no integration edit is needed.
 - Matching uses current configuration. Saving configuration never starts work.
   Disabling an integration also prevents its queued deliveries from moving tasks.
 - Ingestion verifies HMAC-SHA256 on the original body and limits bodies to 2 MiB.
@@ -153,6 +159,8 @@ semantic identities and deduplicate through the same inbox. Provider reads may
 retry; failed or uncertain agent execution never automatically retries.
 
 This feature is under development and has no existing association data. Configure
-GitHub integrations with `repositoryIds`; earlier development configuration and
-observation formats are not supported. Migration 0043 defines association,
-suppression and reconciliation storage. Runtime/model fingerprints are unchanged.
+GitHub integrations with an empty provider configuration (`{}`). Previously saved
+`repositoryIds` are ignored during webhook decoding, polling and processing; editing
+an integration removes the retired setting. Earlier observation formats are not
+supported. Migration 0043 defines association, suppression and reconciliation
+storage. Runtime/model fingerprints are unchanged.

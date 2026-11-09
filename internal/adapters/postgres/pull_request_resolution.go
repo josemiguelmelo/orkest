@@ -54,6 +54,10 @@ func loadPullRequestResolution(ctx context.Context, q *sqlc.Queries, row sqlc.Ta
 		return s, err
 	}
 	e := s.Delivery.Event
+	s.RepositoryRegistered, err = q.PullRequestRepositoryRegistered(ctx, sqlc.PullRequestRepositoryRegisteredParams{WorkspaceID: integration.WorkspaceID, ProviderName: integration.Provider, ProviderRepositoryID: pgtype.Text{String: e.RepositoryID, Valid: true}})
+	if err != nil {
+		return s, err
+	}
 	s.Suppressed, err = q.TaskTriggerLinkSuppressed(ctx, sqlc.TaskTriggerLinkSuppressedParams{IntegrationID: integration.ID, RepositoryID: e.RepositoryID, ResourceID: e.ResourceID})
 	if err != nil {
 		return s, err

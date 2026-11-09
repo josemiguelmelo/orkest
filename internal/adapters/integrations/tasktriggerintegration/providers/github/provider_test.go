@@ -30,7 +30,7 @@ func TestVerifyAndDecode(t *testing.T) {
 		{"ping", "ping", `{}`, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			id, events, err := NewGitHubProvider().VerifyAndDecode(context.Background(), signedRequest(tc.kind, tc.body), json.RawMessage(`{"repositoryIds":["123"]}`), "test-webhook-secret")
+			id, events, err := NewGitHubProvider().VerifyAndDecode(context.Background(), signedRequest(tc.kind, tc.body), json.RawMessage(`{}`), "test-webhook-secret")
 			if err != nil || id != "delivery-1" {
 				t.Fatalf("id=%s err=%v", id, err)
 			}
@@ -48,13 +48,7 @@ func TestVerifyAndDecode(t *testing.T) {
 	t.Run("tampered bytes", func(t *testing.T) {
 		request := signedRequest("pull_request_review", review)
 		request.Body = append(request.Body, ' ')
-		_, _, err := NewGitHubProvider().VerifyAndDecode(context.Background(), request, json.RawMessage(`{"repositoryIds":["123"]}`), "test-webhook-secret")
-		if !errors.Is(err, problem.ErrForbidden) {
-			t.Fatal(err)
-		}
-	})
-	t.Run("wrong repository", func(t *testing.T) {
-		_, _, err := NewGitHubProvider().VerifyAndDecode(context.Background(), signedRequest("pull_request_review", review), json.RawMessage(`{"repositoryIds":["999"]}`), "test-webhook-secret")
+		_, _, err := NewGitHubProvider().VerifyAndDecode(context.Background(), request, json.RawMessage(`{}`), "test-webhook-secret")
 		if !errors.Is(err, problem.ErrForbidden) {
 			t.Fatal(err)
 		}
@@ -67,9 +61,9 @@ func TestVerifyAndDecode(t *testing.T) {
 	})
 }
 
-func TestMultipleRepositoryConfiguration(t *testing.T) {
+func TestWebhookRepositoriesAreNotConfigured(t *testing.T) {
 	provider := NewGitHubProvider()
-	config := json.RawMessage(`{"repositoryIds":["123","456"]}`)
+	config := json.RawMessage(`{}`)
 	for _, id := range []string{"123", "456"} {
 		body := `{"action":"submitted","repository":{"id":` + id + `,"full_name":"owner/repo"},"pull_request":{"number":4},"review":{"id":9,"submitted_at":"2026-11-08T12:00:00Z"}}`
 		_, events, err := provider.VerifyAndDecode(context.Background(), signedRequest("pull_request_review", body), config, "test-webhook-secret")
@@ -77,12 +71,36 @@ func TestMultipleRepositoryConfiguration(t *testing.T) {
 			t.Fatalf("repository %s: %+v %v", id, events, err)
 		}
 	}
-	for _, raw := range []string{`{}`, `{"repositoryIds":[]}`, `{"repositoryIds":["123","123"]}`, `{"repositoryIds":["0"]}`, `{"repositoryIds":["123"],"repositoryId":"456"}`} {
+	// Stored lists from the previous configuration format no longer restrict events.
+	body := `{"action":"submitted","repository":{"id":456,"full_name":"owner/repo"},"pull_request":{"number":4},"review":{"id":9,"submitted_at":"2026-11-08T12:00:00Z"}}`
+	_, events, err := provider.VerifyAndDecode(context.Background(), signedRequest("pull_request_review", body), json.RawMessage(`{"repositoryIds":["123"]}`), "test-webhook-secret")
+	if err != nil || len(events) != 1 || events[0].RepositoryID != "456" {
+		t.Fatalf("retired repository list restricted webhook: %+v %v", events, err)
+	}
+}
+
+func TestConfigurationAndResourceValidation(t *testing.T) {
+	provider := NewGitHubProvider()
+	if err := provider.ValidateConfig(json.RawMessage(`{}`)); err != nil {
+		t.Fatal(err)
+	}
+	for _, raw := range []string{`null`, `[]`, `{"repositoryIds":["123"]}`, `{"repositoryId":"123"}`} {
 		if err := provider.ValidateConfig(json.RawMessage(raw)); err == nil {
 			t.Fatalf("accepted invalid configuration %s", raw)
 		}
 	}
-	if err := provider.ValidateConfig(json.RawMessage(`{"repositoryId":"123"}`)); err == nil {
-		t.Fatal("accepted retired repositoryId setting")
+	for _, link := range []trigger.ResourceLink{{RepositoryID: "0", ResourceID: "4"}, {RepositoryID: "123", ResourceID: "0"}} {
+		if err := provider.ValidateResource(json.RawMessage(`{}`), link); err == nil {
+			t.Fatalf("accepted invalid resource %+v", link)
+		}
+	}
+	if err := provider.ValidateResource(json.RawMessage(`{"repositoryIds":["123"]}`), trigger.ResourceLink{RepositoryID: "456", ResourceID: "4"}); err != nil {
+		t.Fatalf("retired repository list restricted resource: %v", err)
+	}
+	var schema struct {
+		Properties map[string]json.RawMessage `json:"properties"`
+	}
+	if err := json.Unmarshal(provider.Descriptor().ConfigSchema, &schema); err != nil || len(schema.Properties) != 0 {
+		t.Fatalf("unexpected provider settings: %s %v", provider.Descriptor().ConfigSchema, err)
 	}
 }

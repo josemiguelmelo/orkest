@@ -39,7 +39,7 @@ const rendererSchema = z
     title: z.string().optional(),
     description: z.string().optional(),
     type: z.literal('object'),
-    properties: z.record(z.string(), fieldSchema),
+    properties: z.record(z.string(), fieldSchema).default({}),
     required: z.array(z.string()).optional(),
     additionalProperties: z.literal(false).optional(),
   })

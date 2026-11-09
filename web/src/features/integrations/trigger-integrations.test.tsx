@@ -13,6 +13,8 @@ const api = vi.hoisted(() => ({
   listTaskTriggerIntegrations: vi.fn(),
   listWorkspaceWorkflows: vi.fn(),
   listTasks: vi.fn(),
+  listCodeRepositories: vi.fn(),
+  createTaskTriggerIntegration: vi.fn(),
   updateTaskTriggerIntegration: vi.fn(),
 }));
 vi.mock('../../shared/api/generated/sdk.gen', () => api);
@@ -37,23 +39,29 @@ const integration: TaskTriggerIntegration = {
   ],
 };
 afterEach(() => vi.clearAllMocks());
-function setup(role: 'admin' | 'viewer') {
+function setup(role: 'admin' | 'viewer', github = false) {
   api.listTaskTriggerIntegrationProviders.mockResolvedValue({
     data: [
       {
-        id: 'example',
+        id: github ? 'github' : 'example',
         name: 'Example provider',
         events: ['review.published'],
         configSchema: {
           type: 'object',
-          properties: { repositoryId: { type: 'string', title: 'Repository ID' } },
-          required: ['repositoryId'],
+          properties: github ? {} : { repositoryId: { type: 'string', title: 'Repository ID' } },
+          required: github ? [] : ['repositoryId'],
           additionalProperties: false,
         },
       },
     ],
   });
-  api.listTaskTriggerIntegrations.mockResolvedValue({ data: [integration] });
+  api.listTaskTriggerIntegrations.mockResolvedValue({
+    data: [
+      github
+        ? { ...integration, provider: 'github', config: { repositoryIds: ['123'] } }
+        : integration,
+    ],
+  });
   api.listTasks.mockResolvedValue({ data: [] });
   api.listWorkspaceWorkflows.mockResolvedValue({
     data: [
@@ -73,6 +81,7 @@ function setup(role: 'admin' | 'viewer') {
     ],
   });
   api.updateTaskTriggerIntegration.mockResolvedValue({ data: { ...integration, version: 8 } });
+  api.createTaskTriggerIntegration.mockResolvedValue({ data: integration });
   render(
     <QueryClientProvider
       client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
@@ -99,6 +108,32 @@ it('renders trigger configuration read-only for viewers', async () => {
   expect(screen.getByLabelText('Webhook URL')).toHaveValue(
     `${window.location.origin}/webhooks/task-trigger-integrations/integration`,
   );
+});
+it('creates a GitHub integration without repository configuration', async () => {
+  setup('admin', true);
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole('button', { name: 'Connect trigger' }));
+  expect(screen.queryByLabelText('Repository IDs')).not.toBeInTheDocument();
+  expect(screen.queryByRole('group', { name: 'Repositories' })).not.toBeInTheDocument();
+  await user.type(screen.getByLabelText('Name'), 'New trigger');
+  await user.type(screen.getByLabelText('Webhook secret'), 'a'.repeat(32));
+  await user.click(screen.getByRole('button', { name: 'Save trigger' }));
+  await waitFor(() => expect(api.createTaskTriggerIntegration).toHaveBeenCalled());
+  expect(api.createTaskTriggerIntegration.mock.calls[0]?.[0]).toMatchObject({
+    body: { provider: 'github', config: {} },
+  });
+  expect(api.listCodeRepositories).not.toHaveBeenCalled();
+});
+it('removes retired repository configuration when editing a saved GitHub integration', async () => {
+  setup('admin', true);
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole('button', { name: 'Edit' }));
+  expect(screen.queryByLabelText('Repository IDs')).not.toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: 'Save trigger' }));
+  await waitFor(() => expect(api.updateTaskTriggerIntegration).toHaveBeenCalled());
+  expect(api.updateTaskTriggerIntegration.mock.calls[0]?.[0]).toMatchObject({
+    body: { config: {}, version: 7, rules: integration.rules },
+  });
 });
 it('uses provider descriptors and retains version, rules and the write-only secret on update', async () => {
   setup('admin');

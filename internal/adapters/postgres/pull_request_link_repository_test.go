@@ -37,7 +37,7 @@ func testAutomaticPullRequestLinks(t *testing.T, db *PostgresDatabase, org, work
 		t.Fatal(err)
 	}
 	hooks := NewTaskTriggerIntegrationPostgresRepository(db)
-	integration, err := saveTestTriggerConfiguration(ctx, hooks, trigger.Integration{ID: uuid(), WorkspaceID: workspace, OrganizationID: org, Name: "Automatic", Provider: "github", Config: json.RawMessage(`{"repositoryIds":["765"]}`), Enabled: true, ConfiguredBy: actor, EncryptedSecret: "encrypted"}, true)
+	integration, err := saveTestTriggerConfiguration(ctx, hooks, trigger.Integration{ID: uuid(), WorkspaceID: workspace, OrganizationID: org, Name: "Automatic", Provider: "github", Config: json.RawMessage(`{}`), Enabled: true, ConfiguredBy: actor, EncryptedSecret: "encrypted"}, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -220,6 +220,45 @@ func testAutomaticPullRequestLinks(t *testing.T, db *PostgresDatabase, org, work
 	if !staleFound {
 		t.Fatalf("stale event became executable: %+v", deliveries)
 	}
+	// Organization-wide webhooks may include unrelated repository identities.
+	otherWorkspace := uuid()
+	if _, err := NewWorkspacePostgresRepository(db).CreateWorkspace(ctx, otherWorkspace, org, "Other webhook workspace"); err != nil {
+		t.Fatal(err)
+	}
+	for _, fixture := range []struct {
+		id, workspace, provider string
+	}{
+		{"901", workspace, "gitlab_cloud"},
+		{"902", otherWorkspace, "github"},
+	} {
+		if _, err := db.pool.Exec(ctx, `INSERT INTO code_repositories(id,workspace_id,provider_name,url,provider_repository_id) VALUES($1,$2,$3,$4,$5)`, uuid(), fixture.workspace, fixture.provider, "https://example.test/owner/"+fixture.id, fixture.id); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, repository := range []string{"900", "901", "902"} {
+		unrelated := event
+		unrelated.Key, unrelated.RepositoryID, unrelated.HeadRepositoryID = "review:unrelated:"+repository, repository, repository
+		if err := ingestTestTriggerEvents(ctx, hooks, integration, "unrelated-"+repository, []trigger.Event{unrelated}); err != nil {
+			t.Fatal(err)
+		}
+		if err := links.ResolveEvent(ctx, integration.ID, unrelated.Key); err != nil {
+			t.Fatal(err)
+		}
+		deliveries, err := hooks.Deliveries(ctx, integration.ID)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ignored := false
+		for _, delivery := range deliveries {
+			if delivery.Event.Key == unrelated.Key {
+				ignored = delivery.Status == "ignored" && delivery.Diagnostic == "repository_not_registered"
+			}
+		}
+		if !ignored {
+			t.Fatalf("unrelated repository %s was not ignored: %+v", repository, deliveries)
+		}
+	}
+
 	target, found, err := linkRepository.ClaimDiscovery(ctx)
 	if err != nil || !found || target.Since.IsZero() {
 		t.Fatalf("discovery claim: %+v %v %v", target, found, err)

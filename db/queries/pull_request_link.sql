@@ -29,6 +29,10 @@ WHERE task_pull_request_links.task_id=EXCLUDED.task_id;
 -- name: ExistingPullRequestTask :one
 SELECT task_id FROM task_pull_request_links WHERE workspace_id=$1 AND provider=$2 AND repository_id=$3 AND resource_id=$4;
 
+-- name: PullRequestRepositoryRegistered :one
+SELECT EXISTS(SELECT 1 FROM code_repositories
+WHERE workspace_id=$1 AND provider_name=$2 AND provider_repository_id=$3);
+
 -- name: SavePullRequestResolution :execrows
 UPDATE task_trigger_deliveries SET task_id=$2,stage_version=$3,status=$4,diagnostic=$5,resolution_after=COALESCE(sqlc.narg(retry_at)::timestamptz,resolution_after)
 WHERE id=$1 AND status=sqlc.arg(expected_status);
