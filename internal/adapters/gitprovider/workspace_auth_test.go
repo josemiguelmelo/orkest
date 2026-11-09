@@ -14,7 +14,7 @@ import (
 func TestWorkspaceAuthWithoutLinkedCheckouts(t *testing.T) {
 	binDir := t.TempDir()
 	for _, name := range []string{"gh", "glab"} {
-		if err := os.WriteFile(filepath.Join(binDir, name), []byte("#!/bin/sh\nprintf '%s' \"${GH_TOKEN:-}${GITLAB_TOKEN:-}\"\n"), 0o700); err != nil {
+		if err := os.WriteFile(filepath.Join(binDir, name), []byte("#!/bin/sh\ncase \"$0\" in *glab) printf '%s' \"${GITLAB_TOKEN:-}\" ;; *) printf '%s' \"${GH_TOKEN:-}\" ;; esac\n"), 0o700); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -30,9 +30,19 @@ func TestWorkspaceAuthWithoutLinkedCheckouts(t *testing.T) {
 	}
 	runtimeRoot := t.TempDir()
 	checkout := t.TempDir()
-	environment, err := PrepareRuntime(context.Background(), RuntimePreparation{RuntimeRoot: runtimeRoot, WorkDir: checkout, Environment: os.Environ(), Credentials: credentials}, DefaultCLIAuthAdapters())
+	environment, err := PrepareRuntime(context.Background(), RuntimePreparation{RuntimeRoot: runtimeRoot, WorkDir: checkout, Environment: append(os.Environ(), "GH_TOKEN=stale-workspace-token"), Credentials: credentials}, DefaultCLIAuthAdapters())
 	if err != nil {
 		t.Fatal(err)
+	}
+	// Invoke an absolute CLI path outside a checkout, as Codex does when its
+	// shell resets PATH. Integration auth takes precedence over workspace env.
+	if values := envMap(environment); values["GH_TOKEN"] != "test-github" || values["ORKEST_GH_TOKEN_0"] != "" {
+		t.Fatal("workspace GitHub authentication requires an internal wrapper token")
+	}
+	direct := exec.Command(filepath.Join(binDir, "gh"), "auth", "status")
+	direct.Dir, direct.Env = t.TempDir(), environment
+	if output, err := direct.Output(); err != nil || string(output) != "test-github" {
+		t.Fatalf("direct GitHub CLI authentication failed: %v", err)
 	}
 	if output, err := exec.Command("git", "-C", checkout, "init", "--quiet").CombinedOutput(); err != nil {
 		t.Fatalf("git init: %v: %s", err, output)
@@ -41,8 +51,7 @@ func TestWorkspaceAuthWithoutLinkedCheckouts(t *testing.T) {
 		t.Fatalf("git remote: %v: %s", err, output)
 	}
 	for _, tc := range []struct{ remote, directory, cli, token string }{
-		{"https://github.com/acme/unlinked.git", "github-cli", "gh", "test-github"},
-		{"https://github.com.evil.example/acme/project.git", "github-cli", "gh", ""},
+		{"https://github.com/acme/unlinked.git", "", "gh", "test-github"},
 		{"https://gitlab.example/gitlab/group/project.git", "gitlab-cli", "glab", "test-gitlab"},
 		{"https://gitlab.example/other/project.git", "gitlab-cli", "glab", ""},
 	} {
@@ -55,7 +64,11 @@ func TestWorkspaceAuthWithoutLinkedCheckouts(t *testing.T) {
 		if output, err := exec.Command("git", "-C", checkout, "remote", "set-url", "origin", tc.remote).CombinedOutput(); err != nil {
 			t.Fatalf("set origin: %v: %s", err, output)
 		}
-		cmd = exec.Command(filepath.Join(runtimeRoot, tc.directory, tc.cli), "auth", "status")
+		cliPath := filepath.Join(runtimeRoot, tc.directory, tc.cli)
+		if tc.directory == "" {
+			cliPath = filepath.Join(binDir, tc.cli)
+		}
+		cmd = exec.Command(cliPath, "auth", "status")
 		cmd.Dir, cmd.Env = checkout, environment
 		output, err = cmd.Output()
 		if tc.token == "" {

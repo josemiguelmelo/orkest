@@ -43,7 +43,7 @@ func TestConfigureProviderCLIsSelectsCredentialsByProvider(t *testing.T) {
 	}
 }
 
-func TestProviderCLIAdaptersScopeSecretsToMatchingCheckout(t *testing.T) {
+func TestProviderCLIAdaptersConfigureAuthentication(t *testing.T) {
 	binDir := t.TempDir()
 	for _, executable := range []string{"gh", "glab"} {
 		if err := os.WriteFile(filepath.Join(binDir, executable), []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
@@ -61,18 +61,11 @@ func TestProviderCLIAdaptersScopeSecretsToMatchingCheckout(t *testing.T) {
 		t.Fatal(err)
 	}
 	values := envMap(environment)
-	if values["ORKEST_GH_TOKEN_0"] != "github-secret" || values["ORKEST_GITLAB_TOKEN_0"] != "gitlab-secret" {
+	if values["GH_TOKEN"] != "github-secret" || values["ORKEST_GITLAB_TOKEN_0"] != "gitlab-secret" {
 		t.Fatalf("provider token environment missing")
 	}
-	if values["GH_TOKEN"] != "" || values["GITLAB_TOKEN"] != "" {
+	if values["ORKEST_GH_TOKEN_0"] != "" || values["GITLAB_TOKEN"] != "" {
 		t.Fatalf("unscoped provider tokens leaked into runtime environment")
-	}
-	githubScript, err := os.ReadFile(filepath.Join(runtimeRoot, "github-cli", "gh"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(string(githubScript), "https://github.com/acme/project") || strings.Contains(string(githubScript), "gitlab.example") || strings.Contains(string(githubScript), "github-secret") {
-		t.Fatalf("GitHub CLI wrapper has incorrect repository scope or embeds a token: %s", githubScript)
 	}
 	gitlabScript, err := os.ReadFile(filepath.Join(runtimeRoot, "gitlab-cli", "glab"))
 	if err != nil {
@@ -97,4 +90,19 @@ func envMap(environment []string) map[string]string {
 		}
 	}
 	return values
+}
+
+func TestGitHubAuthenticationAcceptsSavedRepositoryCredentials(t *testing.T) {
+	credentials := []configmodel.GitCredential{
+		{ProviderName: "github", RepositoryURL: "https://github.com/acme/one.git", Token: "shared-token"},
+		{ProviderName: "github", RepositoryURL: "https://github.com/acme/two.git", Token: "shared-token"},
+	}
+	environment, err := (GitHubCLIAuthAdapter{}).ConfigureCLI(t.TempDir(), []string{"PATH=/usr/bin"}, credentials)
+	if err != nil || envMap(environment)["GH_TOKEN"] != "shared-token" {
+		t.Fatal("saved repository credentials did not produce CLI authentication")
+	}
+	credentials[1].Token = "different-token"
+	if _, err := (GitHubCLIAuthAdapter{}).ConfigureCLI(t.TempDir(), nil, credentials); err == nil {
+		t.Fatal("conflicting saved credentials silently selected a token")
+	}
 }
