@@ -127,11 +127,11 @@ func (*GitHubProvider) VerifyAndDecode(ctx context.Context, request trigger.Webh
 		if payload.Review.ID <= 0 {
 			return "", nil, problem.ErrInvalid
 		}
-		event.Type, event.Key, event.OccurredAt = ReviewSubmitted, "review:"+strconv.FormatInt(payload.Review.ID, 10), payload.Review.SubmittedAt
+		event.Type, event.Key, event.OccurredAt = ReviewSubmitted, reviewEventKey(payload.Review.ID), payload.Review.SubmittedAt
 	case request.Headers["X-Github-Event"] == "pull_request" && payload.Action == "closed" && payload.PullRequest.Merged:
-		event.Type, event.Key, event.OccurredAt = PullRequestMerged, "merged:"+event.RepositoryID+":"+event.ResourceID, payload.PullRequest.MergedAt
+		event.Type, event.Key, event.OccurredAt = PullRequestMerged, mergedEventKey(event.RepositoryID, event.ResourceID), payload.PullRequest.MergedAt
 	case request.Headers["X-Github-Event"] == "pull_request" && (payload.Action == "opened" || payload.Action == "reopened" || payload.Action == "synchronize"):
-		event.Type, event.Key, event.OccurredAt = "pull_request.discovered", "discovered:"+event.RepositoryID+":"+event.ResourceID+":"+payload.PullRequest.Head.SHA+":"+payload.PullRequest.UpdatedAt.Format(time.RFC3339Nano), payload.PullRequest.UpdatedAt
+		event.Type, event.Key, event.OccurredAt = "pull_request.discovered", discoveredEventKey(event.RepositoryID, event.ResourceID, payload.PullRequest.Head.SHA, payload.PullRequest.UpdatedAt), payload.PullRequest.UpdatedAt
 	default:
 		return deliveryID, nil, nil
 	}

@@ -97,12 +97,12 @@ func (d Discovery) discoverRepository(ctx context.Context, workspaceID string, s
 				continue
 			}
 			resourceID := strconv.Itoa(pr.GetNumber())
-			event := trigger.Event{Type: "pull_request.discovered", Key: "discovered:" + repository.ProviderRepositoryID + ":" + resourceID + ":" + head.GetSHA() + ":" + pr.GetUpdatedAt().Format(time.RFC3339Nano), RepositoryID: repository.ProviderRepositoryID, ResourceID: resourceID, ReferenceURL: pr.GetHTMLURL(), OccurredAt: pr.GetUpdatedAt().Time, HeadRepositoryID: strconv.FormatInt(head.GetRepo().GetID(), 10), HeadBranch: head.GetRef(), HeadCommitID: head.GetSHA()}
+			event := trigger.Event{Type: "pull_request.discovered", Key: discoveredEventKey(repository.ProviderRepositoryID, resourceID, head.GetSHA(), pr.GetUpdatedAt().Time), RepositoryID: repository.ProviderRepositoryID, ResourceID: resourceID, ReferenceURL: pr.GetHTMLURL(), OccurredAt: pr.GetUpdatedAt().Time, HeadRepositoryID: strconv.FormatInt(head.GetRepo().GetID(), 10), HeadBranch: head.GetRef(), HeadCommitID: head.GetSHA()}
 			events = append(events, event)
 			if !pr.GetMergedAt().IsZero() {
 				merged := event
 				merged.Type = PullRequestMerged
-				merged.Key = "merged:" + repository.ProviderRepositoryID + ":" + resourceID
+				merged.Key = mergedEventKey(repository.ProviderRepositoryID, resourceID)
 				merged.OccurredAt = pr.GetMergedAt().Time
 				events = append(events, merged)
 			}
@@ -118,7 +118,7 @@ func (d Discovery) discoverRepository(ctx context.Context, workspaceID string, s
 					}
 					submitted := event
 					submitted.Type = ReviewSubmitted
-					submitted.Key = "review:" + strconv.FormatInt(review.GetID(), 10)
+					submitted.Key = reviewEventKey(review.GetID())
 					submitted.OccurredAt = review.GetSubmittedAt().Time
 					events = append(events, submitted)
 				}
