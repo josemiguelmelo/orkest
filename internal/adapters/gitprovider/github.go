@@ -2,53 +2,32 @@ package gitprovider
 
 import (
 	"errors"
-	"fmt"
-	"net/url"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"strconv"
-	"strings"
 
 	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
 	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
 )
 
-// GitHubCLIAuthAdapter scopes gh's token to the registered checkout origin.
+// GitHubCLIAuthAdapter exports the workspace integration token for gh.
 type GitHubCLIAuthAdapter struct{}
 
 func (GitHubCLIAuthAdapter) ProviderNames() []string { return []string{"github"} }
 
-func (GitHubCLIAuthAdapter) ConfigureCLI(runtimeRoot string, environment []string, credentials []configmodel.GitCredential) ([]string, error) {
-	ghPath, err := exec.LookPath("gh")
-	if err != nil {
-		return nil, &agentruntime.LaunchError{Message: "GitHub CLI is unavailable", Cause: err}
+func (GitHubCLIAuthAdapter) ConfigureCLI(_ string, environment []string, credentials []configmodel.GitCredential) ([]string, error) {
+	if len(credentials) == 0 {
+		return environment, nil
 	}
-	binDir := filepath.Join(runtimeRoot, "github-cli")
-	if err := os.MkdirAll(binDir, 0o700); err != nil {
-		return nil, &agentruntime.RuntimeError{Kind: agentruntime.RuntimeFailure, Message: "configure GitHub CLI authentication failed", Cause: err}
-	}
-	var script strings.Builder
-	script.WriteString("#!/bin/sh\nset -eu\nunset GH_TOKEN GITHUB_TOKEN GH_ENTERPRISE_TOKEN GITHUB_ENTERPRISE_TOKEN GH_HOST\n")
-	script.WriteString("repo_root=$(git rev-parse --show-toplevel 2>/dev/null) || { echo 'gh requires a repository checkout' >&2; exit 1; }\n")
-	script.WriteString("remote=$(git -C \"$repo_root\" remote get-url origin 2>/dev/null) || { echo 'gh could not read this checkout origin' >&2; exit 1; }\n")
-	script.WriteString("case \"$remote\" in\n")
-	for index, credential := range credentials {
-		repository, err := url.Parse(credential.RepositoryURL)
-		if err != nil || repository.Scheme != "https" || !strings.EqualFold(repository.Hostname(), "github.com") {
-			return nil, &agentruntime.RuntimeError{Kind: agentruntime.RuntimeFailure, Message: "configure GitHub CLI authentication failed", Cause: errors.New("GitHub CLI repository host is invalid")}
+	token := credentials[0].Token
+	for _, credential := range credentials[1:] {
+		if credential.Token != token {
+			return nil, &agentruntime.LaunchError{Message: "configure GitHub CLI authentication failed", Cause: errors.New("conflicting GitHub credentials")}
 		}
-		fmt.Fprintf(&script, "  %s) GH_TOKEN=\"${ORKEST_GH_TOKEN_%d:?GitHub credential unavailable}\"; export GH_TOKEN ;;\n", repositoryPattern(credential.RepositoryURL), index)
-	}
-	script.WriteString("  *) echo 'gh has no credential for this checkout' >&2; exit 1 ;;\nesac\n")
-	fmt.Fprintf(&script, "exec %s \"$@\"\n", shellSingleQuote(ghPath))
-	if err := writeCLIWrapper(binDir, "gh", script.String()); err != nil {
-		return nil, &agentruntime.RuntimeError{Kind: agentruntime.RuntimeFailure, Message: "configure GitHub CLI authentication failed", Cause: err}
 	}
 	values := environmentMap(environment, "GH_TOKEN", "GITHUB_TOKEN", "ORKEST_GH_")
-	for index, credential := range credentials {
-		values["ORKEST_GH_TOKEN_"+strconv.Itoa(index)] = credential.Token
-	}
+	values["GH_TOKEN"] = token
 	values["GH_PROMPT_DISABLED"] = "1"
-	return prependPath(values, binDir), nil
+	result := make([]string, 0, len(values))
+	for name, value := range values {
+		result = append(result, name+"="+value)
+	}
+	return result, nil
 }

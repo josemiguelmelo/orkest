@@ -16,6 +16,10 @@
 - `ask`: `workspace-write`; `autonomous`: `agent-full-access`.
 - Reserve HOME, CODEX, model-provider/auth-mode variables against caller overrides.
 - Retain private Codex home/adapter state with durable task storage.
+- Workspace GitHub integration credentials are exported as `GH_TOKEN` on launch
+  and restore, overriding workspace GitHub token variables. This authenticates
+  absolute `gh` paths and shells that reset `PATH`, including outside checkouts.
+  Git HTTPS authentication remains configured separately through `GIT_CONFIG_*`.
 
 The configured model must also be confirmed through ACP before prompts on both
 create and restore. Unsupported confirmation preserves state and fails visibly.
