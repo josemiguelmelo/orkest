@@ -97,13 +97,13 @@ func TestTaskContextIsSentOnceAndStageChangesAreFocused(t *testing.T) {
 			t.Fatal(err)
 		}
 		config := repo.reserved[len(repo.reserved)-1]
-		for _, want := range []string{instruction, "Focus on correctness"} {
+		for _, want := range []string{"Focus on correctness"} {
 			if !strings.Contains(config.InitialPrompt, want) {
 				t.Fatalf("missing %q in startup prompt", want)
 			}
 		}
-		if i == 0 && (!strings.Contains(config.InitialPrompt, "Task details") || !strings.Contains(config.InitialPrompt, "User startup message:")) {
-			t.Fatal("first run did not initialize task context")
+		if i == 0 && (config.InitialPrompt != "Focus on correctness" || !strings.Contains(config.Agent.Instructions, "Task details") || !strings.Contains(config.Agent.Instructions, instruction)) {
+			t.Fatal("first run did not keep context out of the user prompt and initialize runtime instructions", config)
 		}
 		if i == 1 && (strings.Contains(config.InitialPrompt, "Task details") || !strings.Contains(config.InitialPrompt, "Task context update (stage):")) {
 			t.Fatal("continuation repeated unchanged context or omitted stage update", config.InitialPrompt)
@@ -113,8 +113,8 @@ func TestTaskContextIsSentOnceAndStageChangesAreFocused(t *testing.T) {
 	if !repo.reserved[1].RestoreSession || getter.calls != 1 {
 		t.Fatal("continuation did not retain configuration")
 	}
-	if !strings.Contains(repo.reserved[0].InitialPrompt, "Create a detailed plan") {
-		t.Fatal("saved prompt changed")
+	if !strings.Contains(repo.reserved[0].Agent.Instructions, "Create a detailed plan") {
+		t.Fatal("saved runtime instructions lost task context")
 	}
 	value.StageCustomPrompt = "Implement the plan"
 	if err = dispatcher.StartTask(context.Background(), "user", "org", taskmodel.StartCommand{Task: value, PromptText: "Only the next message"}); !errors.Is(err, errReservedForTest) {

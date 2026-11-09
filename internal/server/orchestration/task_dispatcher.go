@@ -165,7 +165,7 @@ func (d *TaskDispatcher) StartTask(ctx context.Context, userID, organizationID s
 	if err := config.Validate(); err != nil {
 		return err
 	}
-	if strings.TrimSpace(commandID) == "" || len(commandID) > 200 || strings.TrimSpace(prompt) == "" || len(prompt) > orchestrationmodel.MaxPromptBytes {
+	if strings.TrimSpace(commandID) == "" || len(commandID) > 200 || strings.TrimSpace(prompt) == "" || len(prompt) > orchestrationmodel.MaxPromptBytes || len(config.Agent.Instructions) > orchestrationmodel.MaxPromptBytes {
 		return orchestrationmodel.ErrCommand
 	}
 	config.InitialCommandID, config.InitialPrompt = commandID, prompt

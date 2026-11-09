@@ -35,12 +35,17 @@ func composeTaskPrompt(value taskmodel.Task, config *orchestrationmodel.RunConfi
 		sum := sha256.Sum256([]byte(section))
 		fingerprints[key] = hex.EncodeToString(sum[:])
 	}
-	full := !config.RestoreSession || config.TaskContext == nil || config.TaskContext.Version != taskContextVersion
+	newSession := !config.RestoreSession
+	full := newSession || config.TaskContext == nil || config.TaskContext.Version != taskContextVersion
 	parts := make([]string, 0, 4)
 	if full {
 		parts = append(parts, task, sections["stage"])
 		if artifact != "" {
 			parts = append(parts, artifact)
+		}
+		if newSession {
+			config.Agent.Instructions = strings.TrimSpace(config.Agent.Instructions + "\n\nTask session context:\n" + strings.Join(parts, "\n\n"))
+			parts = parts[:0]
 		}
 	} else {
 		for _, key := range []string{"task", "stage", "artifacts"} {
@@ -56,14 +61,12 @@ func composeTaskPrompt(value taskmodel.Task, config *orchestrationmodel.RunConfi
 	}
 	config.TaskContext = &orchestrationmodel.TaskContextBaseline{Version: taskContextVersion, Fingerprints: fingerprints}
 	if userText != "" {
-		if full {
-			parts = append(parts, "User startup message:\n"+userText)
-		} else if len(parts) > 0 {
+		if len(parts) > 0 {
 			parts = append(parts, "User message:\n"+userText)
 		} else {
 			return userText, nil
 		}
-	} else if !full && len(parts) == 0 {
+	} else if len(parts) == 0 {
 		parts = append(parts, "Continue work within the current workflow stage.")
 	}
 	return strings.Join(parts, "\n\n"), nil
