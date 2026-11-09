@@ -20,7 +20,7 @@ defines intended scope.
 | Execution profile builds | BuildKit and Docker backends | Real composition suite needs daemon, registry, and foundation images |
 | Team-member slot allocation | Unfinished | Task-level run reservation does not establish member capacity enforcement |
 | Platform-to-agentctl authentication | Unfinished | Worker API must stay within a trusted boundary |
-| Task trigger integrations | GitHub signed review/merge webhooks, explicit links, stage movement or same-stage assigned-agent starts with custom prompts, and configuration UI | Unit/UI and PostgreSQL transaction coverage; live GitHub delivery and credentialed agent execution not qualified |
+| Task trigger integrations | GitHub signed review/merge webhooks, automatic branch/commit PR association, reconciliation, explicit links, stage movement or same-stage assigned-agent starts with custom prompts, and configuration UI | Unit/UI and PostgreSQL transaction coverage; live GitHub delivery and credentialed agent execution not qualified |
 | Browser SSE, binary artifacts | Proposed or deferred | No implementation claim |
 | Complete host/disk loss recovery | Outside MVP guarantee | Durable storage must survive |
 
@@ -82,3 +82,12 @@ and [migration operations](operations/migrations.md#workflow-delivery-claims).
   discovery, human-duration waits, or interrupted invocation continuation.
 - Deploy matching platform/UI and worker builds; new fallback sessions use native
   manifest v4. [Compatibility and rollout](development/user-questions.md#persistence-compatibility-and-deployment).
+
+### Automatic PR association
+
+agentctl journals Git branch evidence from task checkouts/worktrees without
+controlling names. The platform associates same-repository GitHub PRs and retains
+unmatched deliveries while evidence arrives. Reconciliation uses coding credentials;
+existing trigger/workflow services retain execution ownership. See
+[behavior and limitations](guides/task-trigger-integrations.md#automatic-association-and-recovery).
+Live GitHub delivery and credentialed runtime continuation remain unqualified.

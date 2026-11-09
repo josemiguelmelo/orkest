@@ -3,22 +3,25 @@ package interaction
 
 import (
 	"time"
+
+	observation "github.com/josemiguelmelo/orkest/internal/contracts/repositoryobservation"
 )
 
 // EventType identifies the payload of an activity record. Values are stable wire names.
 type EventType string
 
 const (
-	EventRuntimeStopped    EventType = "runtime_stopped"
-	EventPromptStarted     EventType = "prompt_started"
-	EventPromptInterrupted EventType = "prompt_interrupted"
-	EventQueuePaused       EventType = "queue_paused"
-	EventQueueResumed      EventType = "queue_resumed"
-	EventQueueDiscarded    EventType = "queue_discarded"
-	EventRunFailed         EventType = "run_failed"
-	EventPromptContinued   EventType = "prompt_continued"
-	EventRunCompleted      EventType = "run_completed"
-	EventSessionRestored   EventType = "session_restored"
+	EventRuntimeStopped     EventType = "runtime_stopped"
+	EventPromptStarted      EventType = "prompt_started"
+	EventPromptInterrupted  EventType = "prompt_interrupted"
+	EventQueuePaused        EventType = "queue_paused"
+	EventQueueResumed       EventType = "queue_resumed"
+	EventQueueDiscarded     EventType = "queue_discarded"
+	EventRunFailed          EventType = "run_failed"
+	EventPromptContinued    EventType = "prompt_continued"
+	EventRunCompleted       EventType = "run_completed"
+	EventSessionRestored    EventType = "session_restored"
+	EventRepositoryObserved EventType = "repository_observed"
 
 	EventPromptAccepted      EventType = "prompt_accepted"
 	EventPromptCompleted     EventType = "prompt_completed"
@@ -62,6 +65,8 @@ type ToolContent struct {
 
 // Event is sensitive task activity, persisted before subscribers are notified.
 type Event struct {
+	RepositoryObservation *observation.Snapshot `json:"repositoryObservation,omitempty"`
+
 	At               time.Time         `json:"at"`
 	Sequence         uint64            `json:"sequence"`
 	Type             EventType         `json:"type"`

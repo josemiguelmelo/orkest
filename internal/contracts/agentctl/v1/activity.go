@@ -2,6 +2,8 @@ package agentctlv1
 
 import (
 	"time"
+
+	observation "github.com/josemiguelmelo/orkest/internal/contracts/repositoryobservation"
 )
 
 type Update struct {
@@ -33,6 +35,8 @@ type ToolContent struct {
 }
 
 type Event struct {
+	RepositoryObservation *observation.Snapshot `json:"repositoryObservation,omitempty"`
+
 	At               time.Time         `json:"at"`
 	Sequence         uint64            `json:"sequence"`
 	Type             string            `json:"type"`

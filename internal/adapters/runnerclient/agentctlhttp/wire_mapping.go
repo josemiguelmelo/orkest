@@ -152,6 +152,7 @@ func fromWireEvent(value wire.Event) orchestrationmodel.AgentActivityEvent {
 	}
 	result.StopReason = value.StopReason
 	result.Error = value.Error
+	result.RepositoryObservation = value.RepositoryObservation
 	return result
 }
 

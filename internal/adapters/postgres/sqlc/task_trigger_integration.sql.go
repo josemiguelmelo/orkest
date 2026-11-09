@@ -132,36 +132,30 @@ func (q *Queries) GetTaskTriggerIntegration(ctx context.Context, id string) (Get
 
 const insertTaskTriggerDelivery = `-- name: InsertTaskTriggerDelivery :exec
 INSERT INTO task_trigger_deliveries(id,integration_id,delivery_id,event_key,event,task_id,stage_version,status)
-SELECT $1,i.id,$2,$3,$4,COALESCE(t.id,''),COALESCE(t.stage_version,0),CASE WHEN t.id IS NULL OR NOT i.enabled THEN 'ignored' ELSE 'pending' END
-FROM task_trigger_integrations i
-LEFT JOIN task_trigger_resource_links l ON l.integration_id=i.id AND l.repository_id=$5 AND l.resource_id=$6 AND l.created_at<=$7
-LEFT JOIN tasks t ON t.workspace_id=i.workspace_id AND t.id=l.task_id
-AND NOT EXISTS(SELECT 1 FROM workflow_events e WHERE e.workspace_id=t.workspace_id AND e.task_id=t.id AND e.event_type='stage_entered' AND e.stage_version=t.stage_version AND e.occurred_at>$7+interval '1 second')
-WHERE i.id=$8
-ON CONFLICT DO NOTHING
+VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT DO NOTHING
 `
 
 type InsertTaskTriggerDeliveryParams struct {
-	ID            string             `json:"id"`
-	DeliveryID    string             `json:"delivery_id"`
-	EventKey      string             `json:"event_key"`
-	Event         []byte             `json:"event"`
-	RepositoryID  string             `json:"repository_id"`
-	ResourceID    string             `json:"resource_id"`
-	OccurredAt    pgtype.Timestamptz `json:"occurred_at"`
-	IntegrationID string             `json:"integration_id"`
+	ID            string `json:"id"`
+	IntegrationID string `json:"integration_id"`
+	DeliveryID    string `json:"delivery_id"`
+	EventKey      string `json:"event_key"`
+	Event         []byte `json:"event"`
+	TaskID        string `json:"task_id"`
+	StageVersion  int64  `json:"stage_version"`
+	Status        string `json:"status"`
 }
 
 func (q *Queries) InsertTaskTriggerDelivery(ctx context.Context, arg InsertTaskTriggerDeliveryParams) error {
 	_, err := q.db.Exec(ctx, insertTaskTriggerDelivery,
 		arg.ID,
+		arg.IntegrationID,
 		arg.DeliveryID,
 		arg.EventKey,
 		arg.Event,
-		arg.RepositoryID,
-		arg.ResourceID,
-		arg.OccurredAt,
-		arg.IntegrationID,
+		arg.TaskID,
+		arg.StageVersion,
+		arg.Status,
 	)
 	return err
 }
@@ -198,7 +192,7 @@ func (q *Queries) InsertTaskTriggerRule(ctx context.Context, arg InsertTaskTrigg
 }
 
 const listTaskTriggerDeliveries = `-- name: ListTaskTriggerDeliveries :many
-SELECT id, integration_id, delivery_id, event_key, event, task_id, stage_version, status, received_at FROM task_trigger_deliveries WHERE integration_id=$1 ORDER BY received_at DESC,id DESC LIMIT 100
+SELECT id, integration_id, delivery_id, event_key, event, task_id, stage_version, status, received_at, resolution_after, diagnostic FROM task_trigger_deliveries WHERE integration_id=$1 ORDER BY received_at DESC,id DESC LIMIT 100
 `
 
 func (q *Queries) ListTaskTriggerDeliveries(ctx context.Context, integrationID string) ([]TaskTriggerDelivery, error) {
@@ -220,6 +214,8 @@ func (q *Queries) ListTaskTriggerDeliveries(ctx context.Context, integrationID s
 			&i.StageVersion,
 			&i.Status,
 			&i.ReceivedAt,
+			&i.ResolutionAfter,
+			&i.Diagnostic,
 		); err != nil {
 			return nil, err
 		}
@@ -344,6 +340,29 @@ func (q *Queries) ListTaskTriggerRules(ctx context.Context, integrationID string
 	return items, nil
 }
 
+const lockTaskTriggerDelivery = `-- name: LockTaskTriggerDelivery :one
+SELECT id, integration_id, delivery_id, event_key, event, task_id, stage_version, status, received_at, resolution_after, diagnostic FROM task_trigger_deliveries WHERE id=$1 FOR UPDATE
+`
+
+func (q *Queries) LockTaskTriggerDelivery(ctx context.Context, id string) (TaskTriggerDelivery, error) {
+	row := q.db.QueryRow(ctx, lockTaskTriggerDelivery, id)
+	var i TaskTriggerDelivery
+	err := row.Scan(
+		&i.ID,
+		&i.IntegrationID,
+		&i.DeliveryID,
+		&i.EventKey,
+		&i.Event,
+		&i.TaskID,
+		&i.StageVersion,
+		&i.Status,
+		&i.ReceivedAt,
+		&i.ResolutionAfter,
+		&i.Diagnostic,
+	)
+	return i, err
+}
+
 const lockTaskTriggerIntegration = `-- name: LockTaskTriggerIntegration :one
 SELECT i.id, i.workspace_id, i.name, i.provider, i.config, i.enabled, i.version, i.configured_by, i.encrypted_secret,w.organization_id FROM task_trigger_integrations i JOIN workspaces w ON w.id=i.workspace_id WHERE i.id=$1 FOR UPDATE OF i
 `
@@ -380,7 +399,7 @@ func (q *Queries) LockTaskTriggerIntegration(ctx context.Context, id string) (Lo
 }
 
 const nextTaskTriggerDelivery = `-- name: NextTaskTriggerDelivery :one
-SELECT id, integration_id, delivery_id, event_key, event, task_id, stage_version, status, received_at FROM task_trigger_deliveries WHERE status='pending' ORDER BY received_at,id LIMIT 1 FOR UPDATE SKIP LOCKED
+SELECT id, integration_id, delivery_id, event_key, event, task_id, stage_version, status, received_at, resolution_after, diagnostic FROM task_trigger_deliveries WHERE status='pending' ORDER BY received_at,id LIMIT 1 FOR UPDATE SKIP LOCKED
 `
 
 func (q *Queries) NextTaskTriggerDelivery(ctx context.Context) (TaskTriggerDelivery, error) {
@@ -396,6 +415,8 @@ func (q *Queries) NextTaskTriggerDelivery(ctx context.Context) (TaskTriggerDeliv
 		&i.StageVersion,
 		&i.Status,
 		&i.ReceivedAt,
+		&i.ResolutionAfter,
+		&i.Diagnostic,
 	)
 	return i, err
 }
@@ -432,6 +453,53 @@ func (q *Queries) PutTaskTriggerResourceLink(ctx context.Context, arg PutTaskTri
 	return result.RowsAffected(), nil
 }
 
+const suppressTaskTriggerLink = `-- name: SuppressTaskTriggerLink :exec
+INSERT INTO task_pull_request_suppressions(integration_id,repository_id,resource_id) VALUES($1,$2,$3) ON CONFLICT DO NOTHING
+`
+
+type SuppressTaskTriggerLinkParams struct {
+	IntegrationID string `json:"integration_id"`
+	RepositoryID  string `json:"repository_id"`
+	ResourceID    string `json:"resource_id"`
+}
+
+func (q *Queries) SuppressTaskTriggerLink(ctx context.Context, arg SuppressTaskTriggerLinkParams) error {
+	_, err := q.db.Exec(ctx, suppressTaskTriggerLink, arg.IntegrationID, arg.RepositoryID, arg.ResourceID)
+	return err
+}
+
+const taskTriggerIngestionLink = `-- name: TaskTriggerIngestionLink :one
+SELECT l.task_id,l.created_at,t.stage_version,
+ (SELECT max(e.occurred_at) FROM workflow_events e WHERE e.workspace_id=t.workspace_id AND e.task_id=t.id AND e.event_type='stage_entered' AND e.stage_version=t.stage_version)::timestamptz AS stage_entered_at
+FROM task_trigger_resource_links l JOIN tasks t ON t.workspace_id=l.workspace_id AND t.id=l.task_id
+WHERE l.integration_id=$1 AND l.repository_id=$2 AND l.resource_id=$3
+`
+
+type TaskTriggerIngestionLinkParams struct {
+	IntegrationID string `json:"integration_id"`
+	RepositoryID  string `json:"repository_id"`
+	ResourceID    string `json:"resource_id"`
+}
+
+type TaskTriggerIngestionLinkRow struct {
+	TaskID         string             `json:"task_id"`
+	CreatedAt      pgtype.Timestamptz `json:"created_at"`
+	StageVersion   int64              `json:"stage_version"`
+	StageEnteredAt pgtype.Timestamptz `json:"stage_entered_at"`
+}
+
+func (q *Queries) TaskTriggerIngestionLink(ctx context.Context, arg TaskTriggerIngestionLinkParams) (TaskTriggerIngestionLinkRow, error) {
+	row := q.db.QueryRow(ctx, taskTriggerIngestionLink, arg.IntegrationID, arg.RepositoryID, arg.ResourceID)
+	var i TaskTriggerIngestionLinkRow
+	err := row.Scan(
+		&i.TaskID,
+		&i.CreatedAt,
+		&i.StageVersion,
+		&i.StageEnteredAt,
+	)
+	return i, err
+}
+
 const taskTriggerLinkActive = `-- name: TaskTriggerLinkActive :one
 SELECT EXISTS(
  SELECT 1 FROM task_trigger_resource_links l
@@ -461,6 +529,21 @@ func (q *Queries) TaskTriggerLinkActive(ctx context.Context, arg TaskTriggerLink
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
+}
+
+const unsuppressTaskTriggerLink = `-- name: UnsuppressTaskTriggerLink :exec
+DELETE FROM task_pull_request_suppressions WHERE integration_id=$1 AND repository_id=$2 AND resource_id=$3
+`
+
+type UnsuppressTaskTriggerLinkParams struct {
+	IntegrationID string `json:"integration_id"`
+	RepositoryID  string `json:"repository_id"`
+	ResourceID    string `json:"resource_id"`
+}
+
+func (q *Queries) UnsuppressTaskTriggerLink(ctx context.Context, arg UnsuppressTaskTriggerLinkParams) error {
+	_, err := q.db.Exec(ctx, unsuppressTaskTriggerLink, arg.IntegrationID, arg.RepositoryID, arg.ResourceID)
+	return err
 }
 
 const updateTaskTriggerIntegration = `-- name: UpdateTaskTriggerIntegration :execrows

@@ -2343,6 +2343,7 @@ components:
         - id
         - workspaceId
       properties:
+        discoveryDiagnostic: {type: string}
         name:
           type: string
           minLength: 1
@@ -2408,6 +2409,9 @@ components:
         - occurredAt
         - referenceUrl
       properties:
+        headRepositoryId: {type: string}
+        headBranch: {type: string}
+        headCommitId: {type: string}
         key:
           type: string
         type:
@@ -2431,6 +2435,7 @@ components:
         - status
         - receivedAt
       properties:
+        diagnostic: {type: string}
         id:
           type: string
         integrationId:
@@ -2440,6 +2445,7 @@ components:
         status:
           type: string
           enum:
+            - awaiting_link
             - pending
             - processed
             - ignored

@@ -598,6 +598,7 @@ components:
               run_failed,
               prompt_continued,
               session_restored,
+              repository_observed,
               runtime_stopped,
               update,
               question_requested,
@@ -619,6 +620,7 @@ components:
         commandId: { type: string }
         requestId: { type: string }
         text: { type: string }
+        repositoryObservation: {$ref: "#/components/schemas/RepositoryObservation"}
         stopReason: { type: string }
         error: { type: string }
         permission: { $ref: "#/components/schemas/Permission" }
@@ -662,3 +664,29 @@ components:
         type: { enum: [ready, event] }
         info: { $ref: "#/components/schemas/Info" }
         event: { $ref: "#/components/schemas/ConversationEvent" }
+
+    RepositoryObservation:
+      type: object
+      required: [checkout, branches]
+      properties:
+        baseline: {type: boolean}
+        diagnostic: {type: string}
+        checkout:
+          type: object
+          required: [repositoryId, provider, providerRepositoryId, path, defaultBranch, repositoryUrl]
+          properties:
+            repositoryId: {type: string}
+            provider: {type: string}
+            providerRepositoryId: {type: string}
+            path: {type: string}
+            defaultBranch: {type: string}
+            repositoryUrl: {type: string}
+        branches:
+          type: array
+          items:
+            type: object
+            required: [name, commitId]
+            properties:
+              name: {type: string}
+              commitId: {type: string}
+              candidate: {type: boolean}

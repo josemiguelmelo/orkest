@@ -12,6 +12,7 @@ import (
 
 	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
+	"github.com/josemiguelmelo/orkest/internal/agentctl/repositoryobserver"
 	runmodel "github.com/josemiguelmelo/orkest/internal/agentctl/run/model"
 	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
 )
@@ -49,14 +50,20 @@ type RunController struct {
 }
 
 // NewRunController wires the runtime and durable storage at the application boundary.
-func NewRunController(ctx context.Context, host agentruntime.RuntimeHost, stateDir string, logger *slog.Logger) *RunController {
+func NewRunController(ctx context.Context, host agentruntime.RuntimeHost, stateDir string, logger *slog.Logger, scanners ...repositoryobserver.Scanner) *RunController {
 	ctx, cancel := context.WithCancel(ctx)
 	if logger == nil {
 		logger = slog.Default()
 	}
+	var scanner repositoryobserver.Scanner
+	if len(scanners) > 0 {
+		scanner = scanners[0]
+	}
+	conversation := newConversation(ctx, stateDir, logger)
+	conversation.repositoryScanner = scanner
 	return &RunController{
 		ctx: ctx, cancel: cancel, host: host, stateDir: stateDir,
-		conversation: newConversation(ctx, stateDir, logger),
+		conversation: conversation,
 		checkpoints:  checkpointStore{StateDir: stateDir}, logger: logger,
 	}
 }

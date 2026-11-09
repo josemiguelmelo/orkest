@@ -4,9 +4,12 @@ import (
 	"context"
 
 	"github.com/josemiguelmelo/orkest/internal/server/task"
+	workflowmodel "github.com/josemiguelmelo/orkest/internal/server/workflow/model"
 )
 
 type ProcessingSnapshot struct {
+	TaskFound    bool
+	LinkActive   bool
 	ActorRole    string
 	Integration  Integration
 	Delivery     Delivery
@@ -22,12 +25,15 @@ type ProcessingResult struct {
 type TaskTriggerIntegrationRepository interface {
 	List(context.Context, string) ([]Integration, error)
 	Get(context.Context, string) (Integration, error)
-	Save(context.Context, Integration, bool) (Integration, error)
+	RuleWorkflows(context.Context, string, []Rule) ([]workflowmodel.Definition, error)
+	Save(context.Context, ConfigurationPlan) (Integration, error)
 	Delete(context.Context, string, string) error
-	Link(context.Context, Integration, ResourceLink) error
+	ResourceLinkSnapshot(context.Context, string, ResourceLink) (ResourceLinkSnapshot, error)
+	CommitResourceLink(context.Context, ResourceLinkSnapshot, ResourceLinkChange) error
 	Links(context.Context, string) ([]ResourceLink, error)
-	Unlink(context.Context, string, ResourceLink) error
-	Ingest(context.Context, Integration, string, []Event) error
+	IngestionSnapshot(context.Context, string, Event) (IngestionSnapshot, error)
+	CommitIngestion(context.Context, IngestionSnapshot, string, IngestionDecision) error
 	Deliveries(context.Context, string) ([]Delivery, error)
-	ProcessNext(context.Context, func(context.Context, ProcessingSnapshot) (ProcessingResult, error)) (bool, error)
+	NextProcessing(context.Context) (ProcessingSnapshot, bool, error)
+	CommitProcessing(context.Context, ProcessingSnapshot, ProcessingResult) (bool, error)
 }

@@ -1,7 +1,7 @@
 # Task trigger integrations
 
 Trigger integrations receive signed external webhooks and run configured actions
-for explicitly linked workspace tasks. Actions can move a task between workflow
+for automatically associated workspace tasks. Explicit links remain available for exceptions. Actions can move a task between workflow
 stages or start its assigned agent while keeping the current stage. Source integrations continue
 to own imported task content; coding integrations continue to own repository
 credentials. Trigger integrations do not import tasks or change source status.
@@ -15,8 +15,10 @@ credentials. Trigger integrations do not import tasks or change source status.
 3. Copy the webhook URL into GitHub repository webhook settings, choose
    `application/json`, set the same secret, and select Pull requests and Pull
    request reviews. Use HTTPS for the externally reachable platform URL.
-4. Under Links and activity, link the task and PR number **before** the event.
-   One PR maps to one task per integration. Multiple PRs may map to a task.
+4. Run the task normally. agentctl observes new branches in task checkouts,
+   regardless of names chosen by user skills. Matching PRs link automatically;
+   no per-PR registration step is required. One PR maps to one task within a
+   workspace. Multiple PRs may map to a task.
 5. Configure the destination stage's assignment, custom instructions and entry
    start rule if the event should initiate agent work.
 
@@ -57,19 +59,21 @@ is no implicit all-PRs-merged gate. GitHub Cloud is the initial adapter.
 - Acknowledgement follows durable PostgreSQL ingestion. Repeated delivery IDs and
   semantic event identities do not create repeated effects. Unsupported events
   and GitHub pings are acknowledged without creating work.
-- Missing links, events before linking, events older than the current stage entry
-  (with one second timestamp precision tolerance), and changed stage versions are
-  ignored. Delivery audit keeps up to the latest 100 entries in the API/UI.
+- Unmatched events wait up to 24 hours for branch evidence, checking every five
+  seconds. Conflicting ownership blocks association. Events older than the current
+  stage entry (with one second timestamp precision tolerance), and changed stage
+  versions, cannot trigger work. Delivery audit keeps up to the latest 100 entries in the API/UI.
 - Task links and selected repositories are checked again during processing.
   The configuring administrator's access is also rechecked.
 - Active/queued execution or revoked access blocks movement. Blocked deliveries
   require user intervention; they never interrupt agents, resume cancelled work,
   or automatically retry an execution. Start failures remain visible through the
   existing workflow execution state.
-- Automated starts use a new session, as existing stage-entry automation does.
-  This implementation does not change continued sessions or their pinned models.
-- Unlinking prevents pending deliveries from applying while they remain unlinked.
-  Relinking never remaps an already accepted delivery to another task.
+- Same-stage starts request compatible session continuation. Stage-entry starts
+  retain their existing session policy. Continued sessions keep their pinned models.
+- Unlinking suppresses automatic recreation for that integration/PR. An explicit
+  administrator link clears suppression. Existing accepted deliveries never remap
+  to another task.
 
 ## API and extension contract
 
@@ -87,8 +91,10 @@ rendering contain no provider switch. The UI currently supports the same string
 and string-array configuration schema subset as source integrations.
 
 `internal/server/tasktriggerintegration` owns policy and repository ports. Its
-processor calls the existing pure workflow transition planner. The PostgreSQL
-adapter locks delivery, integration, workflow and task, then commits stage state,
+service reads a snapshot, calls the pure workflow transition planner, and explicitly
+commits the result. Snapshot reads do not consume deliveries. The PostgreSQL
+adapter rechecks the snapshot under delivery, integration, workflow and task locks,
+then commits stage state,
 transition history, stage-entry events and delivery acknowledgement together.
 External execution remains outside database transactions, through the existing
 fenced workflow command outbox. A crash rolls back the inbox transaction; retry
@@ -96,3 +102,49 @@ cannot duplicate a committed transition. PostgreSQL polling needs no broker.
 
 GitHub signature and event conventions follow the
 [GitHub webhook documentation](https://docs.github.com/en/webhooks/using-webhooks/validating-webhook-deliveries).
+
+## Automatic association and recovery
+
+The executor writes a credential-free, relative checkout manifest into the task
+working directory. agentctl takes a Git baseline before the prompt, scans every
+2 seconds while it runs, and completes a final scan before terminal events. Git
+inspection is independent of runtime tools and user skills. It does not create,
+rename, push, fetch, or intercept branches, and installs no hooks.
+
+Discovery covers registered task checkouts, linked worktrees, and clones inside
+the task root (maximum traversal depth 12 and 100,000 entries; `node_modules` is
+excluded). Paths and Git directories outside the root are not followed. Additional
+clones must match a manifest repository URL to acquire registered identity;
+unregistered checkouts expose a diagnostic without acquiring task permissions.
+
+An association requires a newly observed non-default branch plus exact provider
+repository, head branch, and commit evidence from a signed webhook or authenticated
+provider response. Baseline branches are not inferred to belong to the task.
+Current automatic matching supports same-repository GitHub Cloud PRs; fork heads
+remain unmatched. Worktrees share branch evidence with their registered checkout.
+A clone/branch created before its first scan remains baseline state. Polling can
+miss branches created and deleted between scans; these cases never fabricate
+ownership. Unknown/ambiguous activity remains visible in delivery diagnostics.
+
+Snapshots are journaled before publication and cached durably per task across
+runs. Restore overlays journal evidence on the cache; incompatible/corrupt state
+is reported rather than replaced. Branch disappearance removes matching evidence;
+confirmed PR ownership remains stable across deletion and review iterations.
+
+The platform reconciles GitHub PRs and published reviews once per minute using
+workspace coding integration credentials. It reads up to five pages of 100 PRs
+and five pages of reviews per matching PR, with a 30-second request budget and a
+24-hour recovery horizon. Pagination/credential failures expose a discovery
+diagnostic. Polling considers events after the current configuration activation;
+saving settings does not replay old reviews. Webhook and polling events share
+semantic identities and deduplicate through the same inbox. Provider reads may
+retry; failed or uncertain agent execution never automatically retries.
+
+Upgrade the platform schema/binary before rolling out workers with observation.
+Old workers and existing checkouts without a manifest cannot supply new evidence;
+their compatible sessions still continue. The next prepared checkout receives a
+manifest. Existing manual links remain valid. Migration 0042 does not replay old
+ignored deliveries; rollback discards association provenance, suppression state,
+and reconciliation diagnostics and marks waiting deliveries ignored. Stop the new
+association/reconciliation workers before rollback. Runtime/model fingerprints
+are unchanged.
