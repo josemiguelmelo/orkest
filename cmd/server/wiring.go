@@ -273,7 +273,9 @@ func runServer(ctx context.Context, logger *slog.Logger) error {
 		return err
 	}
 	integrations := taskintegration.NewTaskIntegrationService(postgres.NewPostgresTaskIntegrationRepository(database), secretBox, workspaces, organizations, postgres.NewPostgresImportedTaskRepository(database), tasks, githubcloud.NewGitHubCloudProvider(), jiraserver.NewJiraServerProvider())
-	triggerIntegrations, err := tasktriggerintegration.NewTaskTriggerIntegrationService(postgres.NewTaskTriggerIntegrationPostgresRepository(database), workspaces, secretBox, githubtrigger.NewGitHubProvider())
+	prLinkRepository := postgres.NewPullRequestLinkRepository(database)
+	prLinks := pullrequestlink.NewPullRequestLinkService(prLinkRepository)
+	triggerIntegrations, err := tasktriggerintegration.NewTaskTriggerIntegrationService(postgres.NewTaskTriggerIntegrationPostgresRepository(database), workspaces, secretBox, prLinks, githubtrigger.NewGitHubProvider())
 	if err != nil {
 		return err
 	}
@@ -318,8 +320,6 @@ func runServer(ctx context.Context, logger *slog.Logger) error {
 	go func() { defer runnerWG.Done(); integrations.Run(runnerCtx) }()
 	runnerWG.Add(1)
 	go func() { defer runnerWG.Done(); triggerIntegrations.Run(runnerCtx, logger) }()
-	prLinkRepository := postgres.NewPullRequestLinkRepository(database)
-	prLinks := pullrequestlink.NewPullRequestLinkService(prLinkRepository)
 	prReconciliation := pullrequestlink.NewReconciler(prLinkRepository, triggerIntegrations, map[string]pullrequestlink.Discoverer{"github": githubtrigger.Discovery{Credentials: codeRepositories}})
 	runnerWG.Add(1)
 	go func() { defer runnerWG.Done(); prReconciliation.Run(runnerCtx, logger) }()

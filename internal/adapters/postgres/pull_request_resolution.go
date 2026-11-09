@@ -62,13 +62,6 @@ func loadPullRequestResolution(ctx context.Context, q *sqlc.Queries, row sqlc.Ta
 	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
 		return s, err
 	}
-	owners, err := q.PullRequestResourceOwners(ctx, sqlc.PullRequestResourceOwnersParams{WorkspaceID: integration.WorkspaceID, Provider: integration.Provider, RepositoryID: e.RepositoryID, ResourceID: e.ResourceID})
-	if err != nil {
-		return s, err
-	}
-	for _, owner := range owners {
-		s.Owners = append(s.Owners, pullrequestlink.ResourceOwner{TaskID: owner.TaskID, CreatedAt: owner.CreatedAt.Time})
-	}
 	candidates, err := q.PullRequestBranchCandidates(ctx, sqlc.PullRequestBranchCandidatesParams{WorkspaceID: integration.WorkspaceID, ProviderName: integration.Provider, ProviderRepositoryID: pgtype.Text{String: e.RepositoryID, Valid: true}})
 	if err != nil {
 		return s, err
@@ -87,7 +80,7 @@ func loadPullRequestResolution(ctx context.Context, q *sqlc.Queries, row sqlc.Ta
 }
 
 func pullRequestCandidate(row sqlc.PullRequestBranchCandidatesRow) pullrequestlink.Candidate {
-	return pullrequestlink.Candidate{DefaultBranch: row.DefaultBranch, Baseline: row.Baseline, Diagnostic: row.Diagnostic, TaskID: row.TaskID, RepositoryID: row.RepositoryID.String, HeadRepositoryID: row.RepositoryID.String, Branch: row.Branch, CommitID: row.CommitID}
+	return pullrequestlink.Candidate{DefaultBranch: row.DefaultBranch, EligibleForLinking: row.EligibleForLinking, Diagnostic: row.Diagnostic, TaskID: row.TaskID, RepositoryID: row.RepositoryID.String, HeadRepositoryID: row.RepositoryID.String, Branch: row.Branch, CommitID: row.CommitID}
 }
 
 func (r *PullRequestLinkRepository) CommitResolution(ctx context.Context, expected pullrequestlink.ResolutionSnapshot, result pullrequestlink.Resolution) (bool, error) {
@@ -145,4 +138,22 @@ func (r *PullRequestLinkRepository) CommitResolution(ctx context.Context, expect
 		return false, problem.ErrConflict
 	}
 	return true, tx.Commit(ctx)
+}
+
+func (r *PullRequestLinkRepository) EventResolution(ctx context.Context, integrationID, eventKey string) (pullrequestlink.ResolutionSnapshot, bool, error) {
+	tx, err := r.database.pool.Begin(ctx)
+	if err != nil {
+		return pullrequestlink.ResolutionSnapshot{}, false, err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	q := sqlc.New(tx)
+	row, err := q.PullRequestEventResolution(ctx, sqlc.PullRequestEventResolutionParams{IntegrationID: integrationID, EventKey: eventKey})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return pullrequestlink.ResolutionSnapshot{}, false, nil
+	}
+	if err != nil {
+		return pullrequestlink.ResolutionSnapshot{}, false, err
+	}
+	snapshot, err := loadPullRequestResolution(ctx, q, row)
+	return snapshot, err == nil, err
 }

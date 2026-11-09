@@ -124,9 +124,10 @@ func (c *conversation) runPrompt(runtime agentruntime.RuntimeSession, command in
 	startedAt := time.Now()
 	logAttrs := c.logAttrs(command.ID)
 	c.logger.Info("runtime prompt started", logAttrs...)
-	stopObservation := c.observeRepositories()
+	observationLoop := c.startRepositoryObservation()
 	result, err := runtime.Prompt(c.ctx, command, c.commandObserver(command.ID))
-	stopObservation()
+	observationLoop.Stop()
+	c.scanRepositories(c.ctx)
 	if !c.finishPrompt(command.ID, result, err) {
 		return
 	}

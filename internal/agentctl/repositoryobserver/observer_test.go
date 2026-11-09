@@ -1,62 +1,73 @@
 package repositoryobserver
 
 import (
-	"context"
-	"errors"
+	"reflect"
 	"testing"
 
 	observation "github.com/josemiguelmelo/orkest/internal/contracts/repositoryobservation"
 )
 
-type scannerFake struct{ snapshots []observation.Snapshot }
-
-func (s *scannerFake) Scan(context.Context) ([]observation.Snapshot, error) {
-	result := make([]observation.Snapshot, len(s.snapshots))
-	copy(result, s.snapshots)
-	for i := range result {
-		result[i].Branches = append([]observation.Branch(nil), result[i].Branches...)
-	}
-	return result, nil
-}
-
-func TestObservationBaselineRestoreAndFailedCommit(t *testing.T) {
-	scanner := &scannerFake{snapshots: []observation.Snapshot{{Checkout: observation.Checkout{Path: "repo", DefaultBranch: "main"}, Branches: []observation.Branch{{Name: "main", CommitID: "one"}}}}}
-	observer := New(scanner, nil)
-	var committed []observation.Snapshot
-	sink := func(s observation.Snapshot) error { committed = append(committed, s); return nil }
-	if err := observer.Scan(context.Background(), sink); err != nil {
-		t.Fatal(err)
-	}
-	if !committed[0].Baseline || committed[0].Branches[0].Candidate {
+func TestComparisonPreservesBaselineAndAdvancesOnlyWhenRecorded(t *testing.T) {
+	state := New(nil)
+	initial := observation.Snapshot{Checkout: observation.Checkout{Path: "repo", DefaultBranch: "main"}, Branches: []observation.Branch{{Name: "main", CommitID: "one"}}}
+	changes := Compare(state, []observation.Snapshot{initial})
+	if len(changes) != 1 || changes[0].Branches[0].EligibleForLinking {
 		t.Fatal("baseline claimed ownership")
 	}
-	scanner.snapshots[0].Branches = append(scanner.snapshots[0].Branches, observation.Branch{Name: "user/skill-name", CommitID: "two"})
-	failure := errors.New("disk unavailable")
-	if err := observer.Scan(context.Background(), func(observation.Snapshot) error { return failure }); !errors.Is(err, failure) {
-		t.Fatal(err)
+	state.Record(changes[0])
+	current := initial
+	current.Branches = append([]observation.Branch{}, initial.Branches...)
+	current.Branches = append(current.Branches, observation.Branch{Name: "user/skill-name", CommitID: "two"})
+	changes = Compare(state, []observation.Snapshot{current})
+	if len(changes) != 1 || !changes[0].Branches[1].EligibleForLinking {
+		t.Fatal("new branch was not eligible")
 	}
-	if err := observer.Scan(context.Background(), sink); err != nil {
-		t.Fatal(err)
+	if current.Branches[1].EligibleForLinking {
+		t.Fatal("comparison mutated scan result")
 	}
-	if !committed[1].Branches[1].Candidate {
-		t.Fatal("new branch not a candidate after retry")
+	// A failed persistence operation does not call Record; the same change remains pending.
+	if retry := Compare(state, []observation.Snapshot{current}); !reflect.DeepEqual(changes, retry) {
+		t.Fatal("comparison consumed unpersisted change")
 	}
-	restored := New(scanner, committed)
-	if err := restored.Scan(context.Background(), func(observation.Snapshot) error { t.Fatal("restore duplicated observation"); return nil }); err != nil {
-		t.Fatal(err)
+	state.Record(changes[0])
+	restored := New(changes)
+	if repeated := Compare(restored, []observation.Snapshot{current}); len(repeated) != 0 {
+		t.Fatal("restore duplicated observation")
 	}
-	scanner.snapshots[0].Branches[1].CommitID = "three"
-	if err := restored.Scan(context.Background(), sink); err != nil {
-		t.Fatal(err)
+	current.Branches[1].CommitID = "three"
+	changes = Compare(restored, []observation.Snapshot{current})
+	if len(changes) != 1 || !changes[0].Branches[1].EligibleForLinking {
+		t.Fatal("commit update lost ownership")
 	}
-	if !committed[2].Branches[1].Candidate {
-		t.Fatal("restore lost candidate")
-	}
-	scanner.snapshots[0].Branches = scanner.snapshots[0].Branches[:1]
-	if err := restored.Scan(context.Background(), sink); err != nil {
-		t.Fatal(err)
-	}
-	if len(committed[3].Branches) != 1 {
+	restored.Record(changes[0])
+	current.Branches = current.Branches[:1]
+	changes = Compare(restored, []observation.Snapshot{current})
+	if len(changes) != 1 || len(changes[0].Branches) != 1 {
 		t.Fatal("deleted branch retained")
+	}
+}
+
+func TestDiagnosticsAndMissingCheckoutPreserveSuccessfulBaseline(t *testing.T) {
+	initial := observation.Snapshot{Checkout: observation.Checkout{Path: "repo", DefaultBranch: "main"}, Branches: []observation.Branch{{Name: "preexisting", CommitID: "one"}}}
+	state := New([]observation.Snapshot{initial})
+	missing := Compare(state, nil)
+	if len(missing) != 1 || missing[0].Diagnostic != "checkout_unavailable" {
+		t.Fatal("missing checkout not reported")
+	}
+	state.Record(missing[0])
+	if repeated := Compare(state, nil); len(repeated) != 0 {
+		t.Fatal("missing checkout diagnostic repeated")
+	}
+	changes := Compare(state, []observation.Snapshot{initial})
+	if len(changes) != 1 || changes[0].Branches[0].EligibleForLinking {
+		t.Fatal("recovered checkout claimed baseline branch")
+	}
+	state.Record(changes[0])
+	diagnostic := observation.Snapshot{Checkout: initial.Checkout, Diagnostic: "git_inspection_failed"}
+	state.Record(diagnostic)
+	initial.Branches = append(initial.Branches, observation.Branch{Name: "created-while-unavailable", CommitID: "two"})
+	changes = Compare(state, []observation.Snapshot{initial})
+	if len(changes) != 1 || changes[0].Branches[0].EligibleForLinking || !changes[0].Branches[1].EligibleForLinking {
+		t.Fatal("inspection failure destroyed baseline")
 	}
 }

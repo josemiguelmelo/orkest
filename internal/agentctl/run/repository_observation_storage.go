@@ -49,12 +49,19 @@ func (s *repositoryObservationStore) history() []observation.Snapshot {
 	return snapshots
 }
 
-func (s *repositoryObservationStore) save(snapshot observation.Snapshot) error {
-	// Diagnostic snapshots must not destroy the baseline needed after recovery.
-	if snapshot.Diagnostic != "" {
+// save flushes all successful snapshots once; diagnostics cannot replace baselines.
+func (s *repositoryObservationStore) save(snapshots ...observation.Snapshot) error {
+	changed := false
+	for _, snapshot := range snapshots {
+		if snapshot.Diagnostic != "" {
+			continue
+		}
+		s.snapshots[snapshot.Checkout.Path] = snapshot
+		changed = true
+	}
+	if !changed {
 		return nil
 	}
-	s.snapshots[snapshot.Checkout.Path] = snapshot
 	data, err := json.Marshal(s.snapshots)
 	if err != nil {
 		return err

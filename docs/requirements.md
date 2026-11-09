@@ -104,8 +104,8 @@ Rules for the terms in the [glossary](glossary.md).
 
 Webhook trigger integrations are separate from task-source synchronization.
 Administrators configure event/source-stage/destination rules. Task checkout
-branch evidence automatically associates matching PRs; explicit resource links
-remain available for exceptions; movement uses existing workflow and execution guards. See
+branch evidence automatically associates matching PRs when signed webhooks arrive.
+One integration supports multiple configured repositories; manual link creation is unavailable; movement uses existing workflow and execution guards. See
 [trigger integrations](guides/task-trigger-integrations.md) for supported events,
 authorization and delivery semantics.
 

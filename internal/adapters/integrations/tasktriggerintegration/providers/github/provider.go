@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -26,7 +27,7 @@ var repositoryName = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$`)
 type GitHubProvider struct{}
 
 type configuration struct {
-	RepositoryID string `json:"repositoryId" jsonschema:"title=Repository ID,description=GitHub numeric repository ID,minLength=1"`
+	RepositoryIDs []string `json:"repositoryIds" jsonschema:"title=Repository IDs,description=GitHub numeric repository IDs,minItems=1,uniqueItems=true"`
 }
 
 func NewGitHubProvider() *GitHubProvider { return &GitHubProvider{} }
@@ -35,17 +36,29 @@ func (*GitHubProvider) Descriptor() trigger.ProviderDescriptor {
 	return trigger.ProviderDescriptor{ID: "github", Name: "GitHub", ConfigSchema: taskintegration.GenerateProviderConfigSchema(configuration{}, "GitHub webhook"), Events: []string{ReviewSubmitted, PullRequestMerged}}
 }
 
-func (*GitHubProvider) ValidateConfig(raw json.RawMessage) error {
+func decodeConfiguration(raw json.RawMessage) (configuration, error) {
 	c, err := taskintegration.DecodeProviderConfig[configuration](raw)
-	if err != nil || !positiveID(c.RepositoryID) {
-		return problem.ErrInvalid
+	if err != nil || len(c.RepositoryIDs) == 0 {
+		return configuration{}, problem.ErrInvalid
 	}
-	return nil
+	seen := map[string]bool{}
+	for _, id := range c.RepositoryIDs {
+		if !positiveID(id) || seen[id] {
+			return configuration{}, problem.ErrInvalid
+		}
+		seen[id] = true
+	}
+	return c, nil
+}
+
+func (*GitHubProvider) ValidateConfig(raw json.RawMessage) error {
+	_, err := decodeConfiguration(raw)
+	return err
 }
 
 func (*GitHubProvider) ValidateResource(raw json.RawMessage, link trigger.ResourceLink) error {
-	var c configuration
-	if json.Unmarshal(raw, &c) != nil || link.RepositoryID != c.RepositoryID || !positiveID(link.ResourceID) {
+	c, err := decodeConfiguration(raw)
+	if err != nil || !slices.Contains(c.RepositoryIDs, link.RepositoryID) || !positiveID(link.ResourceID) {
 		return problem.ErrInvalid
 	}
 	return nil
@@ -97,17 +110,18 @@ func (*GitHubProvider) VerifyAndDecode(ctx context.Context, request trigger.Webh
 	if json.Unmarshal(request.Body, &payload) != nil {
 		return "", nil, problem.ErrInvalid
 	}
-	var config configuration
-	if json.Unmarshal(raw, &config) != nil {
+	config, err := decodeConfiguration(raw)
+	if err != nil {
 		return "", nil, problem.ErrInvalid
 	}
 	if request.Headers["X-Github-Event"] == "ping" {
 		return deliveryID, nil, nil
 	}
-	if strconv.FormatInt(payload.Repository.ID, 10) != config.RepositoryID {
+	repositoryID := strconv.FormatInt(payload.Repository.ID, 10)
+	if !slices.Contains(config.RepositoryIDs, repositoryID) {
 		return "", nil, problem.ErrForbidden
 	}
-	event := trigger.Event{HeadRepositoryID: strconv.FormatInt(payload.PullRequest.Head.Repo.ID, 10), HeadBranch: payload.PullRequest.Head.Ref, HeadCommitID: payload.PullRequest.Head.SHA, RepositoryID: config.RepositoryID, ResourceID: strconv.FormatInt(payload.PullRequest.Number, 10)}
+	event := trigger.Event{HeadRepositoryID: strconv.FormatInt(payload.PullRequest.Head.Repo.ID, 10), HeadBranch: payload.PullRequest.Head.Ref, HeadCommitID: payload.PullRequest.Head.SHA, RepositoryID: repositoryID, ResourceID: strconv.FormatInt(payload.PullRequest.Number, 10)}
 	switch {
 	case request.Headers["X-Github-Event"] == "pull_request_review" && payload.Action == "submitted":
 		if payload.Review.ID <= 0 {

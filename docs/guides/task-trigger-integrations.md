@@ -1,18 +1,18 @@
 # Task trigger integrations
 
 Trigger integrations receive signed external webhooks and run configured actions
-for automatically associated workspace tasks. Explicit links remain available for exceptions. Actions can move a task between workflow
+for automatically associated workspace tasks. Task associations are automatic. Actions can move a task between workflow
 stages or start its assigned agent while keeping the current stage. Source integrations continue
 to own imported task content; coding integrations continue to own repository
 credentials. Trigger integrations do not import tasks or change source status.
 
 ## Configure GitHub
 
-1. Register the GitHub repository through a coding integration and select it on
-   the task. The numeric GitHub repository ID must match the trigger configuration.
+1. Register the GitHub repositories through coding integrations and select the
+   relevant repositories on each task.
 2. Open Integrations → Trigger integrations. Choose GitHub, enter the repository
-   ID and a random secret of at least 32 characters, and configure movement rules.
-3. Copy the webhook URL into GitHub repository webhook settings, choose
+   IDs (`repositoryIds`) and a random secret of at least 32 characters, and configure movement rules.
+3. Copy the same integration webhook URL into each configured GitHub repository’s webhook settings, choose
    `application/json`, set the same secret, and select Pull requests and Pull
    request reviews. Use HTTPS for the externally reachable platform URL.
 4. Run the task normally. agentctl observes new branches in task checkouts,
@@ -45,7 +45,7 @@ is no implicit all-PRs-merged gate. GitHub Cloud is the initial adapter.
 ## Behavior and access
 
 - Workspace administrators and inherited organization administrators configure
-  integrations and links. Workspace readers may inspect configuration and activity;
+  integrations and may unlink automatic associations. Workspace readers may inspect configuration and activity;
   secrets are encrypted and never returned. Empty update secrets preserve the
   current secret. Configuration updates require the current version.
 - Rules select an event, workflow, source stage and different destination stage.
@@ -56,7 +56,11 @@ is no implicit all-PRs-merged gate. GitHub Cloud is the initial adapter.
 - Ingestion verifies HMAC-SHA256 on the original body and limits bodies to 2 MiB.
   The public webhook URL is not a credential. Browser/OIDC sessions do not
   authenticate webhook deliveries.
-- Acknowledgement follows durable PostgreSQL ingestion. Repeated delivery IDs and
+- The webhook service durably ingests the event and resolves its task association
+  before acknowledging it. Resolution uses the event’s repository identity plus
+  observed branch/commit evidence within the integration’s workspace. Missing
+  evidence remains queued for recovery; conflicting evidence never guesses a task.
+- Acknowledgement follows durable PostgreSQL ingestion and association planning. Repeated delivery IDs and
   semantic event identities do not create repeated effects. Unsupported events
   and GitHub pings are acknowledged without creating work.
 - Unmatched events wait up to 24 hours for branch evidence, checking every five
@@ -71,14 +75,15 @@ is no implicit all-PRs-merged gate. GitHub Cloud is the initial adapter.
   existing workflow execution state.
 - Same-stage starts request compatible session continuation. Stage-entry starts
   retain their existing session policy. Continued sessions keep their pinned models.
-- Unlinking suppresses automatic recreation for that integration/PR. An explicit
-  administrator link clears suppression. Existing accepted deliveries never remap
+- Unlinking suppresses automatic recreation for that integration/PR. The manual
+  link creation endpoint is unavailable. Existing accepted deliveries never remap
   to another task.
 
 ## API and extension contract
 
 The authenticated API exposes provider discovery and workspace-scoped integration
-CRUD, links, and delivery history. See the served OpenAPI contract for schemas.
+CRUD, automatic link listing/unlinking, and delivery history. Manual link creation
+is not exposed. See the served OpenAPI contract for schemas.
 Webhooks use `POST /webhooks/task-trigger-integrations/{integrationID}`.
 
 Implement `TaskTriggerProvider` in `internal/adapters/integrations/tasktriggerintegration/providers/<provider>`:
@@ -140,11 +145,7 @@ saving settings does not replay old reviews. Webhook and polling events share
 semantic identities and deduplicate through the same inbox. Provider reads may
 retry; failed or uncertain agent execution never automatically retries.
 
-Upgrade the platform schema/binary before rolling out workers with observation.
-Old workers and existing checkouts without a manifest cannot supply new evidence;
-their compatible sessions still continue. The next prepared checkout receives a
-manifest. Existing manual links remain valid. Migration 0042 does not replay old
-ignored deliveries; rollback discards association provenance, suppression state,
-and reconciliation diagnostics and marks waiting deliveries ignored. Stop the new
-association/reconciliation workers before rollback. Runtime/model fingerprints
-are unchanged.
+This feature is under development and has no existing association data. Configure
+GitHub integrations with `repositoryIds`; earlier development configuration and
+observation formats are not supported. Migration 0042 defines association,
+suppression and reconciliation storage. Runtime/model fingerprints are unchanged.

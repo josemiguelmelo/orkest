@@ -66,32 +66,6 @@ func (q *Queries) ClaimPullRequestDiscovery(ctx context.Context) (ClaimPullReque
 	return i, err
 }
 
-const conflictingPullRequestLink = `-- name: ConflictingPullRequestLink :one
-SELECT EXISTS(SELECT 1 FROM task_trigger_resource_links l JOIN task_trigger_integrations i ON i.id=l.integration_id
- WHERE l.workspace_id=$1 AND i.provider=$2 AND l.repository_id=$3 AND l.resource_id=$4 AND l.task_id<>$5)
-`
-
-type ConflictingPullRequestLinkParams struct {
-	WorkspaceID  string `json:"workspace_id"`
-	Provider     string `json:"provider"`
-	RepositoryID string `json:"repository_id"`
-	ResourceID   string `json:"resource_id"`
-	TaskID       string `json:"task_id"`
-}
-
-func (q *Queries) ConflictingPullRequestLink(ctx context.Context, arg ConflictingPullRequestLinkParams) (bool, error) {
-	row := q.db.QueryRow(ctx, conflictingPullRequestLink,
-		arg.WorkspaceID,
-		arg.Provider,
-		arg.RepositoryID,
-		arg.ResourceID,
-		arg.TaskID,
-	)
-	var exists bool
-	err := row.Scan(&exists)
-	return exists, err
-}
-
 const existingPullRequestTask = `-- name: ExistingPullRequestTask :one
 SELECT task_id FROM task_pull_request_links WHERE workspace_id=$1 AND provider=$2 AND repository_id=$3 AND resource_id=$4
 `
@@ -199,7 +173,7 @@ WITH snapshots AS (
 )
 SELECT s.task_id,r.provider_repository_id AS repository_id,(b.value->>'name')::text AS branch,(b.value->>'commitId')::text AS commit_id,
 COALESCE(r.default_branch,'')::text AS default_branch,COALESCE(s.snapshot->>'diagnostic','')::text AS diagnostic,
-(COALESCE(b.value->>'candidate','false')<>'true') AS baseline
+(COALESCE(b.value->>'eligibleForLinking','false')='true') AS eligible_for_linking
 FROM snapshots s
 JOIN task_repositories tr ON tr.workspace_id=$1 AND tr.task_id=s.task_id AND tr.repository_id=s.snapshot->'checkout'->>'repositoryId'
 JOIN code_repositories r ON r.workspace_id=tr.workspace_id AND r.id=tr.repository_id
@@ -215,13 +189,13 @@ type PullRequestBranchCandidatesParams struct {
 }
 
 type PullRequestBranchCandidatesRow struct {
-	TaskID        string      `json:"task_id"`
-	RepositoryID  pgtype.Text `json:"repository_id"`
-	Branch        string      `json:"branch"`
-	CommitID      string      `json:"commit_id"`
-	DefaultBranch string      `json:"default_branch"`
-	Diagnostic    string      `json:"diagnostic"`
-	Baseline      bool        `json:"baseline"`
+	TaskID             string      `json:"task_id"`
+	RepositoryID       pgtype.Text `json:"repository_id"`
+	Branch             string      `json:"branch"`
+	CommitID           string      `json:"commit_id"`
+	DefaultBranch      string      `json:"default_branch"`
+	Diagnostic         string      `json:"diagnostic"`
+	EligibleForLinking bool        `json:"eligible_for_linking"`
 }
 
 func (q *Queries) PullRequestBranchCandidates(ctx context.Context, arg PullRequestBranchCandidatesParams) ([]PullRequestBranchCandidatesRow, error) {
@@ -240,7 +214,7 @@ func (q *Queries) PullRequestBranchCandidates(ctx context.Context, arg PullReque
 			&i.CommitID,
 			&i.DefaultBranch,
 			&i.Diagnostic,
-			&i.Baseline,
+			&i.EligibleForLinking,
 		); err != nil {
 			return nil, err
 		}
@@ -304,46 +278,33 @@ func (q *Queries) PullRequestDiscoveryRepositories(ctx context.Context, arg Pull
 	return items, nil
 }
 
-const pullRequestResourceOwners = `-- name: PullRequestResourceOwners :many
-SELECT l.task_id,l.created_at FROM task_trigger_resource_links l JOIN task_trigger_integrations i ON i.id=l.integration_id
-WHERE l.workspace_id=$1 AND i.provider=$2 AND l.repository_id=$3 AND l.resource_id=$4 ORDER BY l.task_id,l.created_at
+const pullRequestEventResolution = `-- name: PullRequestEventResolution :one
+SELECT id, integration_id, delivery_id, event_key, event, task_id, stage_version, status, received_at, resolution_after, diagnostic FROM task_trigger_deliveries
+WHERE integration_id=$1 AND event_key=$2 AND status='awaiting_link'
 `
 
-type PullRequestResourceOwnersParams struct {
-	WorkspaceID  string `json:"workspace_id"`
-	Provider     string `json:"provider"`
-	RepositoryID string `json:"repository_id"`
-	ResourceID   string `json:"resource_id"`
+type PullRequestEventResolutionParams struct {
+	IntegrationID string `json:"integration_id"`
+	EventKey      string `json:"event_key"`
 }
 
-type PullRequestResourceOwnersRow struct {
-	TaskID    string             `json:"task_id"`
-	CreatedAt pgtype.Timestamptz `json:"created_at"`
-}
-
-func (q *Queries) PullRequestResourceOwners(ctx context.Context, arg PullRequestResourceOwnersParams) ([]PullRequestResourceOwnersRow, error) {
-	rows, err := q.db.Query(ctx, pullRequestResourceOwners,
-		arg.WorkspaceID,
-		arg.Provider,
-		arg.RepositoryID,
-		arg.ResourceID,
+func (q *Queries) PullRequestEventResolution(ctx context.Context, arg PullRequestEventResolutionParams) (TaskTriggerDelivery, error) {
+	row := q.db.QueryRow(ctx, pullRequestEventResolution, arg.IntegrationID, arg.EventKey)
+	var i TaskTriggerDelivery
+	err := row.Scan(
+		&i.ID,
+		&i.IntegrationID,
+		&i.DeliveryID,
+		&i.EventKey,
+		&i.Event,
+		&i.TaskID,
+		&i.StageVersion,
+		&i.Status,
+		&i.ReceivedAt,
+		&i.ResolutionAfter,
+		&i.Diagnostic,
 	)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []PullRequestResourceOwnersRow
-	for rows.Next() {
-		var i PullRequestResourceOwnersRow
-		if err := rows.Scan(&i.TaskID, &i.CreatedAt); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
+	return i, err
 }
 
 const pullRequestTaskStates = `-- name: PullRequestTaskStates :many

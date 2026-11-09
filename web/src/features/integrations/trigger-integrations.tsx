@@ -376,9 +376,6 @@ function TriggerCard({
   const { scope, permissions } = useApp();
   const apiPath = { ...path(scope), integrationID: item.id };
   const [expanded, setExpanded] = useState(false);
-  const [taskID, setTaskID] = useState('');
-  const [repositoryID, setRepositoryID] = useState('');
-  const [resourceID, setResourceID] = useState('');
   const [error, setError] = useState<unknown>();
   const [busy, setBusy] = useState(false);
   const tasks = useQuery(tasksQuery(scope));
@@ -466,53 +463,6 @@ function TriggerCard({
                 )}
               </div>
             ))
-          )}
-          {permissions.workspaceAdmin && (
-            <form
-              className="form"
-              onSubmit={(event) => {
-                event.preventDefault();
-                void act(() =>
-                  sdk.linkTaskTriggerResource({
-                    ...command,
-                    path: apiPath,
-                    body: { taskId: taskID, repositoryId: repositoryID, resourceId: resourceID },
-                  }),
-                );
-              }}
-            >
-              <Field label="Task">
-                <select required value={taskID} onChange={(e) => setTaskID(e.target.value)}>
-                  <option value="">Choose task</option>
-                  {tasks.data?.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.title}
-                    </option>
-                  ))}
-                </select>
-              </Field>
-              <Field label="External repository ID">
-                <input
-                  required
-                  value={repositoryID}
-                  onChange={(e) => setRepositoryID(e.target.value)}
-                />
-              </Field>
-              <Field label="Pull request number">
-                <input
-                  required
-                  value={resourceID}
-                  onChange={(e) => setResourceID(e.target.value)}
-                />
-              </Field>
-              <p className="muted">
-                The task must select the registered repository. Link before submitting a review or
-                merging.
-              </p>
-              <Button type="submit" disabled={busy}>
-                Link pull request
-              </Button>
-            </form>
           )}
           <h4>Recent deliveries</h4>
           {item.discoveryDiagnostic ? <p role="status">PR discovery: {item.discoveryDiagnostic}</p> : null}

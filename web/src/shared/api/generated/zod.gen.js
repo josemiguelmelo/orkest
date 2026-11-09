@@ -1602,16 +1602,6 @@ export const zListTaskTriggerResourceLinksPath = z.object({
  * Success
  */
 export const zListTaskTriggerResourceLinksResponse = z.array(zTaskTriggerResourceLink);
-export const zLinkTaskTriggerResourceBody = zTaskTriggerResourceLink;
-export const zLinkTaskTriggerResourcePath = z.object({
-    orgID: z.string(),
-    workspaceID: z.string(),
-    integrationID: z.string()
-});
-/**
- * Success
- */
-export const zLinkTaskTriggerResourceResponse = z.void();
 export const zListTaskTriggerDeliveriesPath = z.object({
     orgID: z.string(),
     workspaceID: z.string(),

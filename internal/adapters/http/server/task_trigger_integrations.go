@@ -22,7 +22,6 @@ func (a taskTriggerIntegrationAPI) routes(r chi.Router) {
 			r.Delete("/", a.delete)
 			r.Get("/deliveries", a.deliveries)
 			r.Get("/links", a.links)
-			r.Post("/links", a.link)
 			r.Delete("/links", a.unlink)
 		})
 	})
@@ -61,15 +60,6 @@ func (a taskTriggerIntegrationAPI) links(w http.ResponseWriter, r *http.Request)
 	user, org, workspace, id := triggerScope(r)
 	v, err := a.service.Links(r.Context(), user, org, workspace, id)
 	respond(w, v, err, http.StatusOK)
-}
-
-func (a taskTriggerIntegrationAPI) link(w http.ResponseWriter, r *http.Request) {
-	var body trigger.ResourceLink
-	if !decodeBody(w, r, &body) {
-		return
-	}
-	user, org, workspace, id := triggerScope(r)
-	respond(w, nil, a.service.Link(r.Context(), user, org, workspace, id, body), http.StatusNoContent)
 }
 
 func (a taskTriggerIntegrationAPI) unlink(w http.ResponseWriter, r *http.Request) {

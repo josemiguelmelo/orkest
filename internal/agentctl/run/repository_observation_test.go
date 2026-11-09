@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
+	"github.com/josemiguelmelo/orkest/internal/agentctl/repositoryobserver"
 	observation "github.com/josemiguelmelo/orkest/internal/contracts/repositoryobservation"
 )
 
@@ -17,7 +18,7 @@ func (s observationScanner) Scan(context.Context) ([]observation.Snapshot, error
 
 func TestRestoreWithRepositoryEvidenceAndFollowup(t *testing.T) {
 	directory := t.TempDir()
-	snapshot := observation.Snapshot{Checkout: observation.Checkout{Path: "repo", DefaultBranch: "main"}, Branches: []observation.Branch{{Name: "skill/branch", CommitID: "one", Candidate: true}}}
+	snapshot := observation.Snapshot{Checkout: observation.Checkout{Path: "repo", DefaultBranch: "main"}, Branches: []observation.Branch{{Name: "skill/branch", CommitID: "one", EligibleForLinking: true}}}
 	recordRecoveryHistory(t, directory, interaction.Event{Type: interaction.EventRepositoryObserved, RepositoryObservation: &snapshot})
 	process := newRecoverySession()
 	controller := NewRunController(context.Background(), recoveryRuntimeHost{process}, directory, nil, observationScanner{snapshot})
@@ -55,7 +56,7 @@ func TestRestoreWithRepositoryEvidenceAndFollowup(t *testing.T) {
 	for _, event := range history {
 		if event.RepositoryObservation != nil {
 			observations++
-			if !event.RepositoryObservation.Branches[0].Candidate {
+			if !event.RepositoryObservation.Branches[0].EligibleForLinking {
 				t.Fatal("restored ownership lost")
 			}
 		}
@@ -66,5 +67,62 @@ func TestRestoreWithRepositoryEvidenceAndFollowup(t *testing.T) {
 	store, err := loadRepositoryObservations(directory, "org", "workspace", "task")
 	if err != nil || len(store.history()) != 1 {
 		t.Fatalf("task baseline not retained across runs: %+v %v", store, err)
+	}
+}
+
+func TestObservationWriteFailurePreservesJournalEvidenceAndAcceptedState(t *testing.T) {
+	directory := t.TempDir()
+	process := newRecoverySession()
+	conversation := newConversation(context.Background(), directory, nil)
+	defer conversation.cancel()
+	conversation.bind(recoveryConfig(), process)
+	journal, _, err := loadJournal(directory, recoveryConfig(), false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = journal.Close() }()
+	conversation.journal = journal
+	initial := observation.Snapshot{Checkout: observation.Checkout{Path: "repo", DefaultBranch: "main"}, Branches: []observation.Branch{{Name: "main", CommitID: "one"}}}
+	conversation.repositoryScanner = observationScanner{initial}
+	if err := conversation.initializeRepositoryObservation(); err != nil {
+		t.Fatal(err)
+	}
+	conversation.scanRepositories(conversation.ctx)
+	if conversation.ctx.Err() != nil {
+		t.Fatal("initial observation failed")
+	}
+	current := initial
+	current.Branches = append([]observation.Branch{}, initial.Branches...)
+	current.Branches = append(current.Branches, observation.Branch{Name: "skill/branch", CommitID: "two"})
+	conversation.repositoryScanner = observationScanner{current}
+	// Renaming a snapshot file onto an existing directory fails deterministically.
+	conversation.repositoryObservationStore.path = directory
+	conversation.scanRepositories(conversation.ctx)
+	if conversation.ctx.Err() == nil {
+		t.Fatal("failed durable write did not fence execution")
+	}
+	if changes := repositoryobserver.Compare(conversation.repositoryObservationState, []observation.Snapshot{current}); len(changes) != 1 || !changes[0].Branches[1].EligibleForLinking {
+		t.Fatal("failed write advanced accepted state")
+	}
+	history, err := journal.Replay(0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var replayed []observation.Snapshot
+	for _, event := range history {
+		if event.RepositoryObservation != nil {
+			replayed = append(replayed, *event.RepositoryObservation)
+		}
+	}
+	store, err := loadRepositoryObservations(directory, "org", "workspace", "task")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.save(replayed...); err != nil {
+		t.Fatal(err)
+	}
+	restored := repositoryobserver.New(store.history())
+	if changes := repositoryobserver.Compare(restored, []observation.Snapshot{current}); len(changes) != 0 {
+		t.Fatal("journal recovery lost accepted branch evidence")
 	}
 }

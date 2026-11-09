@@ -37,7 +37,7 @@ func testAutomaticPullRequestLinks(t *testing.T, db *PostgresDatabase, org, work
 		t.Fatal(err)
 	}
 	hooks := NewTaskTriggerIntegrationPostgresRepository(db)
-	integration, err := saveTestTriggerConfiguration(ctx, hooks, trigger.Integration{ID: uuid(), WorkspaceID: workspace, OrganizationID: org, Name: "Automatic", Provider: "github", Config: json.RawMessage(`{"repositoryId":"765"}`), Enabled: true, ConfiguredBy: actor, EncryptedSecret: "encrypted"}, true)
+	integration, err := saveTestTriggerConfiguration(ctx, hooks, trigger.Integration{ID: uuid(), WorkspaceID: workspace, OrganizationID: org, Name: "Automatic", Provider: "github", Config: json.RawMessage(`{"repositoryIds":["765"]}`), Enabled: true, ConfiguredBy: actor, EncryptedSecret: "encrypted"}, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -52,6 +52,16 @@ func testAutomaticPullRequestLinks(t *testing.T, db *PostgresDatabase, org, work
 	}
 	linkRepository := NewPullRequestLinkRepository(db)
 	links := pullrequestlink.NewPullRequestLinkService(linkRepository)
+	if _, found, err := linkRepository.EventResolution(ctx, "another-integration", event.Key); err != nil || found {
+		t.Fatalf("cross-integration resolution: %v %v", found, err)
+	}
+	if err := links.ResolveEvent(ctx, integration.ID, event.Key); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := db.pool.Exec(ctx, `UPDATE task_trigger_deliveries SET resolution_after=now() WHERE integration_id=$1`, integration.ID); err != nil {
+		t.Fatal(err)
+	}
 	if found, err := links.ResolveNext(ctx); err != nil || !found {
 		t.Fatalf("defer: %v %v", found, err)
 	}
@@ -85,7 +95,7 @@ func testAutomaticPullRequestLinks(t *testing.T, db *PostgresDatabase, org, work
 	if err := launches.CreateLaunch(ctx, orchestrationmodel.Launch{RunID: runID, OrganizationID: org, WorkspaceID: workspace, TaskID: taskID, Status: "ready"}); err != nil {
 		t.Fatal(err)
 	}
-	snapshot := observation.Snapshot{Checkout: observation.Checkout{RepositoryID: repositoryID, Path: "repositories/github/automatic", DefaultBranch: "main"}, Branches: []observation.Branch{{Name: event.HeadBranch, CommitID: event.HeadCommitID, Candidate: true}}}
+	snapshot := observation.Snapshot{Checkout: observation.Checkout{RepositoryID: repositoryID, Path: "repositories/github/automatic", DefaultBranch: "main"}, Branches: []observation.Branch{{Name: event.HeadBranch, CommitID: event.HeadCommitID, EligibleForLinking: true}}}
 	if err := launches.SaveEvent(ctx, orchestrationmodel.Event{RunID: runID, Sequence: 1, Payload: orchestrationmodel.AgentActivityEvent{At: time.Now(), Type: orchestrationmodel.EventRepositoryObserved, RepositoryObservation: &snapshot}}); err != nil {
 		t.Fatal(err)
 	}
@@ -97,8 +107,15 @@ func testAutomaticPullRequestLinks(t *testing.T, db *PostgresDatabase, org, work
 	}
 	var workers sync.WaitGroup
 	failures := make(chan error, 2)
-	for range 2 {
-		workers.Go(func() { _, err := links.ResolveNext(ctx); failures <- err })
+	for index := range 2 {
+		workers.Go(func() {
+			if index == 0 {
+				_, err := links.ResolveNext(ctx)
+				failures <- err
+				return
+			}
+			failures <- links.ResolveEvent(ctx, integration.ID, event.Key)
+		})
 	}
 	workers.Wait()
 	close(failures)
@@ -115,7 +132,7 @@ func testAutomaticPullRequestLinks(t *testing.T, db *PostgresDatabase, org, work
 	if err != nil || deliveries[0].Status != "pending" {
 		t.Fatalf("event not bound: %+v %v", deliveries, err)
 	}
-	if err := writeTestTriggerLink(ctx, hooks, integration.ID, true, linked[0]); err != nil {
+	if err := unlinkTestTriggerResource(ctx, hooks, integration.ID, linked[0]); err != nil {
 		t.Fatal(err)
 	}
 	event.Key = "review:after-unlink"
@@ -181,13 +198,6 @@ func testAutomaticPullRequestLinks(t *testing.T, db *PostgresDatabase, org, work
 		t.Fatal(err)
 	}
 	event.Key, event.ResourceID = "review:stale", "9"
-	if err := writeTestTriggerLink(ctx, hooks, integration.ID, true, linked[0]); err != nil {
-		t.Fatal(err)
-	}
-	// Relink explicitly only to clear suppression, then remove the link for delayed resolution.
-	if err := writeTestTriggerLink(ctx, hooks, integration.ID, false, linked[0]); err != nil {
-		t.Fatal(err)
-	}
 	if _, err := db.pool.Exec(ctx, `DELETE FROM task_trigger_resource_links WHERE integration_id=$1 AND resource_id='9'`, integration.ID); err != nil {
 		t.Fatal(err)
 	}

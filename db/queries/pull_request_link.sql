@@ -12,17 +12,13 @@ WITH snapshots AS (
 )
 SELECT s.task_id,r.provider_repository_id AS repository_id,(b.value->>'name')::text AS branch,(b.value->>'commitId')::text AS commit_id,
 COALESCE(r.default_branch,'')::text AS default_branch,COALESCE(s.snapshot->>'diagnostic','')::text AS diagnostic,
-(COALESCE(b.value->>'candidate','false')<>'true') AS baseline
+(COALESCE(b.value->>'eligibleForLinking','false')='true') AS eligible_for_linking
 FROM snapshots s
 JOIN task_repositories tr ON tr.workspace_id=$1 AND tr.task_id=s.task_id AND tr.repository_id=s.snapshot->'checkout'->>'repositoryId'
 JOIN code_repositories r ON r.workspace_id=tr.workspace_id AND r.id=tr.repository_id
 CROSS JOIN LATERAL jsonb_array_elements(COALESCE(NULLIF(s.snapshot->'branches','null'::jsonb),'[]'::jsonb)) b
 WHERE r.provider_name=$2 AND r.provider_repository_id=$3
 ORDER BY s.task_id,branch,commit_id;
-
--- name: ConflictingPullRequestLink :one
-SELECT EXISTS(SELECT 1 FROM task_trigger_resource_links l JOIN task_trigger_integrations i ON i.id=l.integration_id
- WHERE l.workspace_id=$1 AND i.provider=$2 AND l.repository_id=$3 AND l.resource_id=$4 AND l.task_id<>$5);
 
 -- name: AssociatePullRequest :execrows
 INSERT INTO task_pull_request_links(workspace_id,provider,repository_id,resource_id,task_id,head_repository_id,head_branch)
@@ -70,10 +66,6 @@ INSERT INTO task_pull_request_reconciliation(integration_id,configuration_versio
 SELECT id,version FROM task_trigger_integrations WHERE id=$1
 ON CONFLICT(integration_id) DO UPDATE SET configuration_version=EXCLUDED.configuration_version,activated_at=now(),next_attempt=now(),diagnostic='';
 
--- name: PullRequestResourceOwners :many
-SELECT l.task_id,l.created_at FROM task_trigger_resource_links l JOIN task_trigger_integrations i ON i.id=l.integration_id
-WHERE l.workspace_id=$1 AND i.provider=$2 AND l.repository_id=$3 AND l.resource_id=$4 ORDER BY l.task_id,l.created_at;
-
 -- name: PullRequestTaskStates :many
 SELECT t.id,t.stage_version,
  EXISTS(SELECT 1 FROM task_repositories tr JOIN code_repositories r ON r.workspace_id=tr.workspace_id AND r.id=tr.repository_id
@@ -86,3 +78,7 @@ SELECT run_id FROM agent_launches WHERE workspace_id=$1 ORDER BY run_id FOR UPDA
 
 -- name: LockAssociationTasks :exec
 SELECT id FROM tasks WHERE workspace_id=$1 ORDER BY id FOR UPDATE;
+
+-- name: PullRequestEventResolution :one
+SELECT * FROM task_trigger_deliveries
+WHERE integration_id=$1 AND event_key=$2 AND status='awaiting_link';

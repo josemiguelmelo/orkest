@@ -91,3 +91,15 @@ unmatched deliveries while evidence arrives. Reconciliation uses coding credenti
 existing trigger/workflow services retain execution ownership. See
 [behavior and limitations](guides/task-trigger-integrations.md#automatic-association-and-recovery).
 Live GitHub delivery and credentialed runtime continuation remain unqualified.
+
+### Trigger integration simplification
+
+Manual PR association creation is removed. Webhooks persist verified events and
+resolve task association before acknowledgement; delayed evidence remains
+recoverable. One integration supports multiple repository IDs. This feature has
+no deployed data: there is no manual-owner fallback or migration for older
+configuration formats. PR resolution exclusively owns task binding. Ingestion
+uses one transaction guarded by the expected configuration version. Observer
+comparison is pure; the run coordinator explicitly journals and persists changes
+before advancing state. Polling start/stop and the final scan are explicit.
+Live GitHub delivery qualification remains unverified.

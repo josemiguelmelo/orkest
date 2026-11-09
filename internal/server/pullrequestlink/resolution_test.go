@@ -27,22 +27,11 @@ func TestResolutionPolicy(t *testing.T) {
 			s.Candidates = append(s.Candidates, other)
 		}, "blocked", "conflicting_branch_ownership", false},
 		{"existing ownership", func(s *ResolutionSnapshot) { s.Candidates = nil; s.ExistingTaskID = "task" }, "pending", "", true},
-		{"manual ownership", func(s *ResolutionSnapshot) {
-			s.Candidates = nil
-			s.Owners = []ResourceOwner{{TaskID: "task", CreatedAt: now.Add(-time.Minute)}}
-		}, "pending", "", true},
-		{"manual link after event", func(s *ResolutionSnapshot) {
-			s.Candidates = nil
-			s.Owners = []ResourceOwner{{TaskID: "task", CreatedAt: now.Add(time.Minute)}}
-		}, "awaiting_link", "waiting_for_branch_evidence", false},
-		{"owner conflict", func(s *ResolutionSnapshot) {
-			s.Owners = []ResourceOwner{{TaskID: "other", CreatedAt: now.Add(time.Minute)}}
-		}, "blocked", "conflicting_pull_request_ownership", false},
 		{"unselected", func(s *ResolutionSnapshot) { s.Tasks[0].RepositorySelected = false }, "blocked", "repository_not_selected_or_link_conflict", false},
 		{"old stage", func(s *ResolutionSnapshot) { s.Tasks[0].StageEnteredAt = now.Add(2 * time.Second) }, "ignored", "stale_stage_entry", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			snapshot := ResolutionSnapshot{Integration: trigger.Integration{Enabled: true}, Delivery: trigger.Delivery{ReceivedAt: now, Event: trigger.Event{RepositoryID: "repo", HeadRepositoryID: "repo", HeadBranch: "skill/name", HeadCommitID: "sha", OccurredAt: now}}, Candidates: []Candidate{{TaskID: "task", RepositoryID: "repo", HeadRepositoryID: "repo", Branch: "skill/name", CommitID: "sha"}}, Tasks: []TaskState{{TaskID: "task", RepositorySelected: true, StageVersion: 3}}}
+			snapshot := ResolutionSnapshot{Integration: trigger.Integration{Enabled: true}, Delivery: trigger.Delivery{ReceivedAt: now, Event: trigger.Event{RepositoryID: "repo", HeadRepositoryID: "repo", HeadBranch: "skill/name", HeadCommitID: "sha", OccurredAt: now}}, Candidates: []Candidate{{EligibleForLinking: true, TaskID: "task", RepositoryID: "repo", HeadRepositoryID: "repo", Branch: "skill/name", CommitID: "sha"}}, Tasks: []TaskState{{TaskID: "task", RepositorySelected: true, StageVersion: 3}}}
 			tc.change(&snapshot)
 			before := PlanResolution(snapshot, now)
 			result := PlanResolution(snapshot, now)
