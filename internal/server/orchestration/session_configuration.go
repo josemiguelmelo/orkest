@@ -11,6 +11,18 @@ import (
 	orchestrationmodel "github.com/josemiguelmelo/orkest/internal/server/orchestration/model"
 )
 
+func (d *TaskDispatcher) resolveHostMounts(ctx context.Context, config *orchestrationmodel.RunConfig) error {
+	if d.mounts == nil {
+		return nil
+	}
+	mounts, err := d.mounts.Resolve(ctx, config.WorkspaceID)
+	if err != nil {
+		return fmt.Errorf("resolve workspace host mounts: %w", err)
+	}
+	config.HostMounts = mounts
+	return nil
+}
+
 func (d *TaskDispatcher) resolveExecutionImage(ctx context.Context, workspaceID string, config *orchestrationmodel.RunConfig) error {
 	if config.ExecutionProfileID == "" {
 		return nil

@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../app/context';
 import { CodingIntegrationsPanel } from './coding-integrations';
+import { WorkspaceHostMountsPanel } from './host-mounts';
 import { command, data } from '../../shared/api/client';
 import * as sdk from '../../shared/api/generated/sdk.gen';
 import type { Membership, WorkspaceEnvironmentValue } from '../../shared/api/generated/types.gen';
@@ -278,6 +279,7 @@ export function WorkspaceSettingsPage() {
       </PageHeader>
       <WorkspaceEnvironmentPanel />
       <CodingIntegrationsPanel />
+      <WorkspaceHostMountsPanel key={`${scope.orgID}/${scope.workspaceID}`} />
       <Members workspace />
       {permissions.workspaceAdmin && (
         <section className="panel">

@@ -19,6 +19,7 @@ Documented hazards below; SQL is the complete inventory.
 | [Workflows](#workflows) | 0035, 0036 |
 | [Artifacts](#artifacts) | 0037 |
 | [Workflow delivery claims](#workflow-delivery-claims) | 0038 |
+| [Workspace host volumes](#workspace-host-volumes) | 0040 |
 
 ## Earlier schemas and repository links
 
@@ -93,3 +94,23 @@ Documented hazards below; SQL is the complete inventory.
   existing workflow and session behavior.
 - Rollback permanently removes saved stage prompts. Export needed prompts first.
   Existing reserved prompt outbox entries remain intact.
+
+## Workspace host volumes
+
+- **0040:** adds workspace bind-mount selections with cascading workspace deletion.
+  No existing workspace, task, file, or session is changed.
+- New sessions retain mount snapshots in their existing configuration JSON.
+  Legacy sessions without that field remain mount-free. No worker protocol or
+  native runtime storage format changes are needed.
+- Home-relative `~/` targets require a matching platform version that resolves
+  private session homes. Older mount-aware versions only support `/mnt/host` and
+  cannot continue these snapshots. The native session storage layout is unchanged.
+- Do not run older platform binaries against sessions created with host mounts:
+  old readers discard unknown snapshot fields and can recreate containers without
+  their required mounts. Drain/stop affected runs and preserve/export session
+  configurations before downgrade; use the matching platform version to continue
+  mounted sessions.
+- Rollback drops saved workspace selections, not host files or independent
+  containers. It does not erase snapshots from session JSON or unmount active
+  containers. Export selections before rollback; stop affected containers to
+  revoke their host access.

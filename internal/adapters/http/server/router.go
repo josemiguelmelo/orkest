@@ -27,6 +27,7 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/server/workflowautomation"
 	"github.com/josemiguelmelo/orkest/internal/server/workspace"
 	"github.com/josemiguelmelo/orkest/internal/server/workspaceenv"
+	"github.com/josemiguelmelo/orkest/internal/server/workspacemount"
 )
 
 // RouterDependencies names the services required by platform routes.
@@ -47,6 +48,7 @@ type RouterDependencies struct {
 	Workflows        *workflow.WorkflowConfigurationService
 	Automation       *workflowautomation.WorkflowAutomationService
 	Environment      *workspaceenv.WorkspaceEnvironmentService
+	HostMounts       *workspacemount.WorkspaceMountService
 	Artifacts        *artifact.ArtifactService
 	AgentTools       *appmcp.AgentTools
 }
@@ -112,6 +114,9 @@ func NewRouter(ctx context.Context, deps RouterDependencies) (*chi.Mux, error) {
 			}
 			if deps.Environment != nil {
 				workspaceEnvironmentAPI{service: deps.Environment}.routes(api)
+			}
+			if deps.HostMounts != nil {
+				workspaceHostMountsAPI{service: deps.HostMounts}.routes(api)
 			}
 			codeRepositoryAPI{repositories: deps.CodeRepositories}.routes(api)
 			codingIntegrationAPI{service: deps.CodeRepositories}.routes(api)

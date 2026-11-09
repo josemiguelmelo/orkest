@@ -173,6 +173,9 @@ var (
 )
 
 func (e *Executor) StartAgentctl(ctx context.Context, run model.RunConfig) (model.Process, error) {
+	if len(run.HostMounts) > 0 {
+		return model.Process{}, errors.New("host mounts require the Docker executor")
+	}
 	if err := run.Validate(); err != nil {
 		return model.Process{}, err
 	}

@@ -11,6 +11,7 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/platform/secretbox"
 	"github.com/josemiguelmelo/orkest/internal/server/orchestration"
 	orchestrationmodel "github.com/josemiguelmelo/orkest/internal/server/orchestration/model"
+	mountmodel "github.com/josemiguelmelo/orkest/internal/server/workspacemount/model"
 )
 
 func testTaskSessions(t *testing.T, database *PostgresDatabase, orgID, workspaceID, taskID string) {
@@ -34,7 +35,7 @@ func testTaskSessions(t *testing.T, database *PostgresDatabase, orgID, workspace
 			Agent: orchestrationmodel.AgentDefinition{Name: "original", Instructions: "original"}, Model: orchestrationmodel.ModelSelection{Provider: "test", ID: "model"},
 			MCPServers:  []orchestrationmodel.MCPServer{{ID: "mcp", Name: "mcp", URL: "https://example.test/mcp", Headers: map[string]string{"Authorization": "private"}}},
 			Environment: map[string]string{"TOKEN": "environment-secret"},
-		}, InitialCommandID: "initial", InitialPrompt: "hello"},
+		}, HostMounts: []mountmodel.Mount{{Source: "/srv/input", Target: "/mnt/host/input", ReadOnly: true}}, InitialCommandID: "initial", InitialPrompt: "hello"},
 	}
 	second := configs[0]
 	second.TaskSessionID, second.RunID = newID(), newID()
@@ -70,6 +71,9 @@ func testTaskSessions(t *testing.T, database *PostgresDatabase, orgID, workspace
 	}
 	if current.Environment["TOKEN"] != "environment-secret" {
 		t.Fatalf("environment snapshot lost value: %#v", current.Environment)
+	}
+	if len(current.HostMounts) != 1 || current.HostMounts[0] != config.HostMounts[0] {
+		t.Fatal("session host mount snapshot was lost")
 	}
 	var persisted string
 	if err := database.pool.QueryRow(ctx, `SELECT configuration::text FROM task_agent_sessions WHERE id=$1`, config.TaskSessionID).Scan(&persisted); err != nil {
@@ -108,6 +112,9 @@ func testTaskSessions(t *testing.T, database *PostgresDatabase, orgID, workspace
 	current, exists, err = repo.CurrentSession(ctx, orgID, workspaceID, taskID)
 	if err != nil || !exists || current.Environment["TOKEN"] != "rotated-secret" {
 		t.Fatalf("updated run environment snapshot mismatch: %#v, %v", current.Environment, err)
+	}
+	if len(current.HostMounts) != 1 || current.HostMounts[0] != config.HostMounts[0] {
+		t.Fatal("session continuation changed host mounts")
 	}
 	launches, err := repo.ListTaskLaunches(ctx, orgID, workspaceID, taskID)
 	if err != nil || len(launches) != 2 || launches[0].TaskSessionID != config.TaskSessionID {

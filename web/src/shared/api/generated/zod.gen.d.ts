@@ -70,6 +70,19 @@ export declare const zWorkspace: z.ZodObject<{
         viewer: "viewer";
     }>>;
 }, z.core.$strip>;
+export declare const zWorkspaceHostMount: z.ZodObject<{
+    source: z.ZodString;
+    target: z.ZodString;
+    readOnly: z.ZodBoolean;
+}, z.core.$strip>;
+export declare const zWorkspaceHostMountSettings: z.ZodObject<{
+    enabled: z.ZodBoolean;
+    mounts: z.ZodArray<z.ZodObject<{
+        source: z.ZodString;
+        target: z.ZodString;
+        readOnly: z.ZodBoolean;
+    }, z.core.$strip>>;
+}, z.core.$strip>;
 export declare const zWorkspaceEnvironmentInput: z.ZodObject<{
     value: z.ZodString;
     secret: z.ZodDefault<z.ZodOptional<z.ZodBoolean>>;
@@ -1369,6 +1382,38 @@ export declare const zListWorkspaceMembersResponse: z.ZodArray<z.ZodObject<{
         viewer: "viewer";
     }>;
 }, z.core.$strip>>;
+export declare const zGetWorkspaceHostMountsPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+}, z.core.$strip>;
+/**
+ * Workspace mounts and Docker availability
+ */
+export declare const zGetWorkspaceHostMountsResponse: z.ZodObject<{
+    enabled: z.ZodBoolean;
+    mounts: z.ZodArray<z.ZodObject<{
+        source: z.ZodString;
+        target: z.ZodString;
+        readOnly: z.ZodBoolean;
+    }, z.core.$strip>>;
+}, z.core.$strip>;
+export declare const zPutWorkspaceHostMountsBody: z.ZodObject<{
+    mounts: z.ZodArray<z.ZodObject<{
+        source: z.ZodString;
+        target: z.ZodString;
+        readOnly: z.ZodBoolean;
+    }, z.core.$strip>>;
+}, z.core.$strip>;
+export declare const zPutWorkspaceHostMountsPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+}, z.core.$strip>;
+/**
+ * Mounts updated
+ */
+export declare const zPutWorkspaceHostMountsResponse: z.ZodObject<{
+    status: z.ZodString;
+}, z.core.$strip>;
 export declare const zListWorkspaceEnvironmentPath: z.ZodObject<{
     orgID: z.ZodString;
     workspaceID: z.ZodString;

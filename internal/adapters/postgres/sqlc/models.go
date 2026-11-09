@@ -365,6 +365,11 @@ type WorkspaceEnvironment struct {
 	UpdatedAt   pgtype.Timestamptz `json:"updated_at"`
 }
 
+type WorkspaceHostMount struct {
+	WorkspaceID string `json:"workspace_id"`
+	Mounts      []byte `json:"mounts"`
+}
+
 type WorkspaceMembership struct {
 	OrganizationID string             `json:"organization_id"`
 	WorkspaceID    string             `json:"workspace_id"`

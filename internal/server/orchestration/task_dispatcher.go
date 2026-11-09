@@ -16,6 +16,7 @@ import (
 	taskmodel "github.com/josemiguelmelo/orkest/internal/server/task/model"
 	workflowmodel "github.com/josemiguelmelo/orkest/internal/server/workflow/model"
 	workspaceenvmodel "github.com/josemiguelmelo/orkest/internal/server/workspaceenv/model"
+	mountmodel "github.com/josemiguelmelo/orkest/internal/server/workspacemount/model"
 )
 
 type taskAgentGetter interface {
@@ -33,6 +34,7 @@ type TaskDispatcher struct {
 	mcpServers          TaskMCPResolver
 	skillResolver       TaskSkillResolver
 	environmentResolver TaskEnvironmentResolver
+	mounts              TaskMountResolver
 	repositories        TaskRepositoryReader
 	agentTools          TaskToolResolver
 	codingCredentials   TaskCredentialResolver
@@ -56,6 +58,9 @@ type (
 	}
 	TaskEnvironmentResolver interface {
 		Resolve(context.Context, string) (workspaceenvmodel.RuntimeValues, error)
+	}
+	TaskMountResolver interface {
+		Resolve(context.Context, string) ([]mountmodel.Mount, error)
 	}
 	TaskRepositoryReader interface {
 		List(context.Context, string, string, string) ([]coderepositorymodel.CodeRepository, error)
@@ -83,6 +88,7 @@ type TaskDispatcherDependencies struct {
 	Profiles     ExecutionImageResolver
 	Skills       TaskSkillResolver
 	Environment  TaskEnvironmentResolver
+	Mounts       TaskMountResolver
 	Repositories TaskRepositoryReader
 	Credentials  TaskCredentialResolver
 	Tools        TaskToolResolver
@@ -105,6 +111,7 @@ func NewTaskDispatcher(deps TaskDispatcherDependencies) (*TaskDispatcher, error)
 		profiles:            deps.Profiles,
 		skillResolver:       deps.Skills,
 		environmentResolver: deps.Environment,
+		mounts:              deps.Mounts,
 		repositories:        deps.Repositories,
 		codingCredentials:   deps.Credentials,
 		agentTools:          deps.Tools,
