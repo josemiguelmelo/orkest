@@ -23,6 +23,9 @@ func (d *TaskDispatcher) createTaskSession(ctx context.Context, userID, organiza
 		return orchestrationmodel.RunConfig{}, err
 	}
 	config.ExecutionProfileID = definition.ExecutionProfileID
+	if err = d.resolveHostMounts(ctx, &config); err != nil {
+		return orchestrationmodel.RunConfig{}, err
+	}
 	if err = d.resolveExecutionImage(ctx, value.WorkspaceID, &config); err != nil {
 		return orchestrationmodel.RunConfig{}, err
 	}

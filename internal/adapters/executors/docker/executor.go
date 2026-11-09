@@ -24,6 +24,7 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/server/coderepository"
 	"github.com/josemiguelmelo/orkest/internal/server/orchestration"
 	orchestrationmodel "github.com/josemiguelmelo/orkest/internal/server/orchestration/model"
+	mountmodel "github.com/josemiguelmelo/orkest/internal/server/workspacemount/model"
 	"github.com/moby/moby/api/pkg/stdcopy"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/mount"
@@ -146,6 +147,9 @@ func (e *Executor) StartAgentctl(ctx context.Context, config orchestrationmodel.
 	if err := config.Validate(); err != nil {
 		return orchestrationmodel.Process{}, err
 	}
+	if err := mountmodel.Validate(config.HostMounts); err != nil {
+		return orchestrationmodel.Process{}, fmt.Errorf("validate Docker host mounts: %w", err)
+	}
 	image := config.ExecutionImage
 	if image == "" {
 		image = e.config.Images[config.Runtime]
@@ -203,6 +207,11 @@ func (e *Executor) StartAgentctl(ctx context.Context, config orchestrationmodel.
 		// silently restart an incomplete run until reconciliation is implemented.
 		RestartPolicy: container.RestartPolicy{Name: container.RestartPolicyDisabled},
 	}
+	hostMounts, err := bindMounts(config, stateDir)
+	if err != nil {
+		return orchestrationmodel.Process{}, err
+	}
+	hostConfig.Mounts = append(hostConfig.Mounts, hostMounts...)
 	if config.Runtime == coreruntime.Codex && e.config.CodexAuthFile != "" {
 		hostConfig.Mounts = append(hostConfig.Mounts, mount.Mount{
 			Type: mount.TypeBind, Source: e.config.CodexAuthFile, Target: codexAuthMountPath, ReadOnly: true,

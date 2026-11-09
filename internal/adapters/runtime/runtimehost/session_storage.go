@@ -14,6 +14,7 @@ import (
 
 	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
 	"github.com/josemiguelmelo/orkest/internal/platform/durablefile"
+	"github.com/josemiguelmelo/orkest/internal/platform/sessionpath"
 )
 
 // sessionStorage owns the stable task-scoped layout independently of native protocols.
@@ -60,16 +61,11 @@ func (e *sessionManifestCompatibilityError) Error() string {
 }
 
 func taskStorageRoot(stateDir string, config configmodel.RuntimeConfig) string {
-	scope, _ := json.Marshal([]string{config.OrganizationID, config.WorkspaceID, config.TaskID})
-	return filepath.Join(stateDir, fmt.Sprintf("%x", sha256.Sum256(scope)))
+	return sessionpath.TaskRoot(stateDir, config.OrganizationID, config.WorkspaceID, config.TaskID)
 }
 
 func (s sessionStorage) Root(config configmodel.RuntimeConfig) string {
-	root := taskStorageRoot(s.StateDir, config)
-	if config.TaskSessionID != "" {
-		return filepath.Join(root, "sessions", fmt.Sprintf("%x", sha256.Sum256([]byte(config.TaskSessionID))))
-	}
-	return root
+	return sessionpath.Root(s.StateDir, config.OrganizationID, config.WorkspaceID, config.TaskID, config.TaskSessionID)
 }
 
 func configurationFingerprint(config configmodel.RuntimeConfig) string {

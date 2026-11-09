@@ -17,6 +17,7 @@ import (
 	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
 	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
+	"github.com/josemiguelmelo/orkest/internal/platform/sessionpath"
 )
 
 func TestRestoreSessionAcrossRuns(t *testing.T) {
@@ -26,6 +27,13 @@ func TestRestoreSessionAcrossRuns(t *testing.T) {
 	}
 	environment := runtimehost.Environment{WorkDir: t.TempDir(), StateDir: t.TempDir(), GrantedEnv: []string{"ORKEST_ACP_FIXTURE=1"}}
 	config := configmodel.RunConfig{RuntimeConfig: configmodel.RuntimeConfig{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", TaskSessionID: "conversation", RunID: "first", Runtime: "opencode", Model: configmodel.ModelSelection{Provider: "provider", ID: "model"}, Agent: configmodel.AgentDefinition{Name: "Work", Instructions: "Work"}}}
+	home := sessionpath.Home(environment.StateDir, config.OrganizationID, config.WorkspaceID, config.TaskID, config.TaskSessionID)
+	if err := os.MkdirAll(filepath.Join(home, ".aws"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, ".aws", "config"), []byte("fixture-home-config"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	first, err := opencodetest.NewHost(binary, environment).Launch(ctx, config.ForRuntime())
@@ -52,6 +60,13 @@ func TestRestoreSessionAcrossRuns(t *testing.T) {
 	}
 	if text != "Hello from fixture" {
 		t.Fatal("history replay leaked into live conversation", text)
+	}
+	text = ""
+	if _, err := runtime.Prompt(ctx, interaction.Command{ID: "home-command", Text: "probe:home-config"}, agentruntime.PromptObserver{Update: func(update interaction.Update) error { text += update.Text; return nil }}); err != nil {
+		t.Fatal(err)
+	}
+	if text != "fixture-home-configHello from fixture" {
+		t.Fatal("restored runtime did not read the home-relative configuration")
 	}
 	_ = restored.Close()
 	config.Model.ID = "changed"

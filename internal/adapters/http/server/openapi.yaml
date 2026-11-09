@@ -561,6 +561,33 @@ paths:
           $ref: "#/components/responses/Unauthorized"
         "500":
           $ref: "#/components/responses/InternalServerError"
+  /api/organizations/{orgID}/workspaces/{workspaceID}/host-mounts:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [Workspaces]
+      operationId: getWorkspaceHostMounts
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      responses:
+        "200": {description: Workspace mounts and Docker availability, content: {application/json: {schema: {$ref: "#/components/schemas/WorkspaceHostMountSettings"}}}}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "500": {$ref: "#/components/responses/InternalServerError"}
+    put:
+      tags: [Workspaces]
+      operationId: putWorkspaceHostMounts
+      description: Admin-only replacement for trusted deployments. Workspace admins may enter arbitrary host paths without server environment configuration. New sessions snapshot these mounts; existing sessions retain theirs.
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      requestBody: {required: true, content: {application/json: {schema: {type: object, additionalProperties: false, required: [mounts], properties: {mounts: {type: array, maxItems: 32, items: {$ref: "#/components/schemas/WorkspaceHostMount"}}}}}}}
+      responses:
+        "200": {description: Mounts updated, content: {application/json: {schema: {$ref: "#/components/schemas/OperationStatus"}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "500": {$ref: "#/components/responses/InternalServerError"}
   /api/organizations/{orgID}/workspaces/{workspaceID}/environment:
     parameters:
       - {name: orgID, in: path, required: true, schema: {type: string}}
@@ -1731,6 +1758,20 @@ components:
         organizationId: {type: string}
         name: {type: string}
         role: {type: string, enum: [owner, admin, member, viewer]}
+    WorkspaceHostMount:
+      type: object
+      additionalProperties: false
+      required: [source, target, readOnly]
+      properties:
+        source: {type: string, minLength: 2, maxLength: 4096, description: Absolute clean file or directory path on the Docker daemon host}
+        target: {type: string, pattern: '^(/mnt/host/|~/).+', maxLength: 4096, description: Clean path beneath /mnt/host or home-relative ~/ resolved to the private agent session home; targets must not overlap}
+        readOnly: {type: boolean}
+    WorkspaceHostMountSettings:
+      type: object
+      required: [enabled, mounts]
+      properties:
+        enabled: {type: boolean}
+        mounts: {type: array, items: {$ref: "#/components/schemas/WorkspaceHostMount"}}
     WorkspaceEnvironmentInput:
       type: object
       required: [value]

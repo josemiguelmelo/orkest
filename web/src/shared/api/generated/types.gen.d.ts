@@ -38,6 +38,21 @@ export type Workspace = {
     name: string;
     role?: 'owner' | 'admin' | 'member' | 'viewer';
 };
+export type WorkspaceHostMount = {
+    /**
+     * Absolute clean file or directory path on the Docker daemon host
+     */
+    source: string;
+    /**
+     * Clean path beneath /mnt/host or home-relative ~/ resolved to the private agent session home; targets must not overlap
+     */
+    target: string;
+    readOnly: boolean;
+};
+export type WorkspaceHostMountSettings = {
+    enabled: boolean;
+    mounts: Array<WorkspaceHostMount>;
+};
 export type WorkspaceEnvironmentInput = {
     value: string;
     secret?: boolean;
@@ -1672,6 +1687,82 @@ export type ListWorkspaceMembersResponses = {
     200: Array<Membership>;
 };
 export type ListWorkspaceMembersResponse = ListWorkspaceMembersResponses[keyof ListWorkspaceMembersResponses];
+export type GetWorkspaceHostMountsData = {
+    body?: never;
+    path: {
+        orgID: string;
+        workspaceID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/host-mounts';
+};
+export type GetWorkspaceHostMountsErrors = {
+    /**
+     * Missing or invalid credentials
+     */
+    401: Error;
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+    /**
+     * Resource is absent or inaccessible
+     */
+    404: Error;
+    /**
+     * Internal server error
+     */
+    500: Error;
+};
+export type GetWorkspaceHostMountsError = GetWorkspaceHostMountsErrors[keyof GetWorkspaceHostMountsErrors];
+export type GetWorkspaceHostMountsResponses = {
+    /**
+     * Workspace mounts and Docker availability
+     */
+    200: WorkspaceHostMountSettings;
+};
+export type GetWorkspaceHostMountsResponse = GetWorkspaceHostMountsResponses[keyof GetWorkspaceHostMountsResponses];
+export type PutWorkspaceHostMountsData = {
+    body: {
+        mounts: Array<WorkspaceHostMount>;
+    };
+    path: {
+        orgID: string;
+        workspaceID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/host-mounts';
+};
+export type PutWorkspaceHostMountsErrors = {
+    /**
+     * Request body or role is invalid
+     */
+    400: Error;
+    /**
+     * Missing or invalid credentials
+     */
+    401: Error;
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+    /**
+     * Resource is absent or inaccessible
+     */
+    404: Error;
+    /**
+     * Internal server error
+     */
+    500: Error;
+};
+export type PutWorkspaceHostMountsError = PutWorkspaceHostMountsErrors[keyof PutWorkspaceHostMountsErrors];
+export type PutWorkspaceHostMountsResponses = {
+    /**
+     * Mounts updated
+     */
+    200: OperationStatus;
+};
+export type PutWorkspaceHostMountsResponse = PutWorkspaceHostMountsResponses[keyof PutWorkspaceHostMountsResponses];
 export type ListWorkspaceEnvironmentData = {
     body?: never;
     path: {

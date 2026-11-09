@@ -4,6 +4,7 @@ import (
 	"slices"
 
 	"github.com/josemiguelmelo/orkest/internal/contracts/configvalidation"
+	mountmodel "github.com/josemiguelmelo/orkest/internal/server/workspacemount/model"
 )
 
 // RunConfig is the resolved configuration bound to one task execution run.
@@ -13,10 +14,11 @@ type RunConfig struct {
 	ArtifactRevisionIDs []string `json:"-"`
 	RuntimeConfig
 	// Platform-only image selection is persisted with the session, excluded by ForRuntime.
-	ExecutionProfileID   string `json:"executionProfileId,omitempty"`
-	ExecutionImage       string `json:"executionImage,omitempty"`
-	RestoreSession       bool   `json:"restoreSession,omitempty"`
-	EncryptedEnvironment string `json:"encryptedEnvironment,omitempty"`
+	ExecutionProfileID   string             `json:"executionProfileId,omitempty"`
+	ExecutionImage       string             `json:"executionImage,omitempty"`
+	RestoreSession       bool               `json:"restoreSession,omitempty"`
+	EncryptedEnvironment string             `json:"encryptedEnvironment,omitempty"`
+	HostMounts           []mountmodel.Mount `json:"hostMounts,omitempty"`
 	// Repositories are executor-only checkout inputs and are intentionally
 	// excluded from the agentctl HTTP configuration payload.
 	Repositories     []WorkspaceRepository `json:"-"`
@@ -58,6 +60,7 @@ func (c RunConfig) Clone() RunConfig {
 	c.RuntimeConfig = c.RuntimeConfig.Clone()
 	c.ArtifactRevisionIDs = slices.Clone(c.ArtifactRevisionIDs)
 	c.Repositories = slices.Clone(c.Repositories)
+	c.HostMounts = slices.Clone(c.HostMounts)
 	return c
 }
 

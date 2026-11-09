@@ -47,6 +47,15 @@ export const zWorkspace = z.object({
         'viewer'
     ]).optional()
 });
+export const zWorkspaceHostMount = z.object({
+    source: z.string().min(2).max(4096),
+    target: z.string().max(4096).regex(/^(\/mnt\/host\/|~\/).+/),
+    readOnly: z.boolean()
+});
+export const zWorkspaceHostMountSettings = z.object({
+    enabled: z.boolean(),
+    mounts: z.array(zWorkspaceHostMount)
+});
 export const zWorkspaceEnvironmentInput = z.object({
     value: z.string().max(65536),
     secret: z.boolean().optional().default(false)
@@ -810,6 +819,25 @@ export const zListWorkspaceMembersPath = z.object({
  * Workspace members
  */
 export const zListWorkspaceMembersResponse = z.array(zMembership);
+export const zGetWorkspaceHostMountsPath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string()
+});
+/**
+ * Workspace mounts and Docker availability
+ */
+export const zGetWorkspaceHostMountsResponse = zWorkspaceHostMountSettings;
+export const zPutWorkspaceHostMountsBody = z.object({
+    mounts: z.array(zWorkspaceHostMount).max(32)
+});
+export const zPutWorkspaceHostMountsPath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string()
+});
+/**
+ * Mounts updated
+ */
+export const zPutWorkspaceHostMountsResponse = zOperationStatus;
 export const zListWorkspaceEnvironmentPath = z.object({
     orgID: z.string(),
     workspaceID: z.string()

@@ -15,6 +15,7 @@ defines intended scope.
 | OpenCode | Pinned profile and shared host | Limited live current/v1-session memory continuation and Docker storage checks were reported; approvals/MCP/interrupted tool effects still need qualification |
 | Claude Code, Codex, Copilot, Kiro | Pinned profiles and shared host | Deterministic conformance; live calls, approvals, MCP, and continuation need qualification |
 | Docker and Local executors | Implemented | Fake-client/unit coverage; Docker suite exercises real containers |
+| Workspace Docker host volumes | Direct admin UI settings without environment configuration; session-pinned bind mounts under `/mnt/host` or private-home `~/`; trusted deployments only | Unit/API/UI/PostgreSQL and real Engine file/directory access, missing-source failure, and container replacement; synthetic AWS profile/Gradle property discovery and deterministic restored-runtime home lookup; not credentialed ACP/model continuation |
 | GitHub/GitLab coding integrations | Implemented | Provider and credential tests; live private-repository access needs credentials |
 | GitHub Projects v2 / Jira Server imports | Implemented | Provider and synchronization tests; real source access needs credentials |
 | Execution profile builds | BuildKit and Docker backends | Real composition suite needs daemon, registry, and foundation images |

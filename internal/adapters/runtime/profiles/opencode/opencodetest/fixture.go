@@ -151,6 +151,8 @@ func Run(version string) {
 						} else {
 							data, err = os.ReadFile(filepath.Join(os.Getenv("XDG_CONFIG_HOME"), "opencode", "skills", "conformance", "SKILL.md"))
 						}
+					case "probe:home-config":
+						data, err = os.ReadFile(filepath.Join(os.Getenv("HOME"), ".aws", "config"))
 					case "probe:http-mcp":
 						if optionsFixture {
 							data, err = fixtureMCPConfig()

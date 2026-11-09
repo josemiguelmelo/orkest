@@ -56,6 +56,9 @@ func (d *TaskDispatcher) createDirectSession(ctx context.Context, userID, organi
 		return orchestrationmodel.RunConfig{}, err
 	}
 	config.ExecutionProfileID = definition.ExecutionProfileID
+	if err := d.resolveHostMounts(ctx, &config); err != nil {
+		return orchestrationmodel.RunConfig{}, err
+	}
 	if strings.TrimSpace(definition.SystemPrompt) == "" && strings.TrimSpace(definition.Description) == "" {
 		config.Agent.Instructions = "Assist the user with their requests."
 	}

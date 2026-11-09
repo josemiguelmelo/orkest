@@ -47,6 +47,7 @@ import (
 	workflowautomation "github.com/josemiguelmelo/orkest/internal/server/workflowautomation"
 	"github.com/josemiguelmelo/orkest/internal/server/workspace"
 	"github.com/josemiguelmelo/orkest/internal/server/workspaceenv"
+	"github.com/josemiguelmelo/orkest/internal/server/workspacemount"
 )
 
 func parsePositiveInt64(value string, fallback int64) int64 {
@@ -200,6 +201,7 @@ func runServer(ctx context.Context, logger *slog.Logger) error {
 	}
 	executor := executorSelection.Executor
 	executorKind := executorSelection.Kind
+	workspaceMounts := workspacemount.New(postgres.NewWorkspaceHostMountsRepository(database), workspaces, executorKind == executors.Docker)
 	defer func() { _ = executor.Close() }()
 	completion, completionErr := orchestration.NewLaunchCompletionService(ctx, launchRepo, executor)
 	if completionErr != nil {
@@ -256,6 +258,7 @@ func runServer(ctx context.Context, logger *slog.Logger) error {
 		Profiles:     profileResolver,
 		Skills:       skillCatalog,
 		Environment:  workspaceEnvironment,
+		Mounts:       workspaceMounts,
 		Repositories: codeRepositories,
 		Credentials:  codeRepositories,
 		Tools:        agentTools,
@@ -330,6 +333,7 @@ func runServer(ctx context.Context, logger *slog.Logger) error {
 		Workflows:        workflows,
 		Automation:       taskWorkflows,
 		Environment:      workspaceEnvironment,
+		HostMounts:       workspaceMounts,
 		Artifacts:        artifacts,
 		AgentTools:       agentTools,
 	})
