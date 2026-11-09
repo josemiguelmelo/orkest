@@ -45,6 +45,7 @@ type Config struct {
 	UID, GID                                                  int64
 	Images                                                    map[runtimecatalog.Runtime]string
 	ProviderEnv                                               []string
+	Environment                                               map[string]string
 	CodingProviders                                           []coderepository.CodingProvider
 	CodingCredentialResolver                                  checkout.CredentialResolver
 	StartupTimeout                                            time.Duration
@@ -207,9 +208,16 @@ func (e *Executor) StartAgentctl(ctx context.Context, run model.RunConfig) (mode
 	}
 	env := make([]any, 0, len(e.config.ProviderEnv)+1)
 	secretValues := make(map[string]string)
+	for key, value := range e.config.Environment {
+		secretValues[key] = value
+		command = append(command, "-env", key)
+	}
 	for _, key := range e.config.ProviderEnv {
 		key = strings.TrimSpace(key)
 		if key == "" || key == "ORKEST_CODEX_AUTH_FILE" {
+			continue
+		}
+		if _, exists := secretValues[key]; exists {
 			continue
 		}
 		if value, ok := os.LookupEnv(key); ok {

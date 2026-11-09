@@ -110,6 +110,30 @@ func TestStartAgentctlUsesContainerNetworkEndpointWhenConfigured(t *testing.T) {
 	}
 }
 
+func TestStartAgentctlForwardsGitIdentity(t *testing.T) {
+	t.Setenv("ORKEST_GIT_AUTHOR_NAME", "Ignored host value")
+	t.Setenv("ORKEST_GIT_AUTHOR_EMAIL", "ignored@example.com")
+	engine := &fakeEngine{containerID: "container-id", hostPort: "49152", running: true}
+	executor, err := NewWithClient(context.Background(), Config{
+		DataRoot: t.TempDir(), ContainerUser: "1000:1000",
+		ProviderEnv: []string{"ORKEST_GIT_AUTHOR_NAME", "ORKEST_GIT_AUTHOR_EMAIL"},
+		Environment: map[string]string{"ORKEST_GIT_AUTHOR_NAME": "Build Agent", "ORKEST_GIT_AUTHOR_EMAIL": "build@example.com"},
+	}, engine)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := executor.StartAgentctl(context.Background(), runConfig()); err != nil {
+		t.Fatal(err)
+	}
+	environment := strings.Join(engine.created.Config.Env, "\n")
+	command := strings.Join(engine.created.Config.Cmd, " ")
+	for name, value := range map[string]string{"ORKEST_GIT_AUTHOR_NAME": "Build Agent", "ORKEST_GIT_AUTHOR_EMAIL": "build@example.com"} {
+		if !strings.Contains(environment, name+"="+value) || !strings.Contains(command, "-env "+name) {
+			t.Fatalf("Git identity variable %s was not forwarded and granted to the runtime", name)
+		}
+	}
+}
+
 func TestCodexAuthFileIsMountedReadOnlyOnlyForCodex(t *testing.T) {
 	authFile := filepath.Join(t.TempDir(), "auth.json")
 	if err := os.WriteFile(authFile, []byte(`{"tokens":{}}`), 0o600); err != nil {

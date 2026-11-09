@@ -21,10 +21,10 @@ type RuntimePreparation struct {
 // PrepareRuntime configures repository identity, Git transport credentials, and
 // matching provider CLIs. It returns the environment the runtime should inherit.
 func PrepareRuntime(_ context.Context, preparation RuntimePreparation, adapters []CLIAuthAdapter) ([]string, error) {
-	if len(preparation.Credentials) == 0 {
-		return preparation.Environment, nil
-	}
 	environment := withGitHTTPAuth(preparation.Environment, preparation.Credentials)
+	if len(preparation.Credentials) == 0 {
+		return environment, nil
+	}
 	return configureCLIs(preparation.RuntimeRoot, environment, preparation.Credentials, adapters)
 }
 
@@ -37,10 +37,10 @@ func withGitHTTPAuth(environment []string, credentials []configmodel.GitCredenti
 		}
 	}
 	values["GIT_CONFIG_COUNT"] = strconv.Itoa(len(credentials))
-	values["GIT_AUTHOR_NAME"] = "Orkest Agent"
-	values["GIT_AUTHOR_EMAIL"] = "agent@orkest.local"
-	values["GIT_COMMITTER_NAME"] = "Orkest Agent"
-	values["GIT_COMMITTER_EMAIL"] = "agent@orkest.local"
+	values["GIT_AUTHOR_NAME"] = values["ORKEST_GIT_AUTHOR_NAME"]
+	values["GIT_AUTHOR_EMAIL"] = values["ORKEST_GIT_AUTHOR_EMAIL"]
+	values["GIT_COMMITTER_NAME"] = values["ORKEST_GIT_AUTHOR_NAME"]
+	values["GIT_COMMITTER_EMAIL"] = values["ORKEST_GIT_AUTHOR_EMAIL"]
 	for index, credential := range credentials {
 		auth := base64.StdEncoding.EncodeToString([]byte("x-access-token:" + credential.Token))
 		values["GIT_CONFIG_KEY_"+strconv.Itoa(index)] = "http." + credential.RepositoryURL + ".extraheader"

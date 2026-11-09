@@ -45,6 +45,7 @@ func TestRestoreSessionAcrossRuns(t *testing.T) {
 	}
 	_ = first.Close()
 	config.RunID = "second"
+	environment.GrantedEnv = append(environment.GrantedEnv, "ORKEST_GIT_AUTHOR_NAME=Restored Agent", "ORKEST_GIT_AUTHOR_EMAIL=restored@example.com")
 	restored, err := opencodetest.NewHost(binary, environment).Restore(ctx, config.ForRuntime())
 	if err != nil {
 		t.Fatal(err)
@@ -67,6 +68,13 @@ func TestRestoreSessionAcrossRuns(t *testing.T) {
 	}
 	if text != "fixture-home-configHello from fixture" {
 		t.Fatal("restored runtime did not read the home-relative configuration")
+	}
+	text = ""
+	if _, err := runtime.Prompt(ctx, interaction.Command{ID: "identity-command", Text: "probe:git-identity"}, agentruntime.PromptObserver{Update: func(update interaction.Update) error { text += update.Text; return nil }}); err != nil {
+		t.Fatal(err)
+	}
+	if text != "Restored Agent|restored@example.com|Restored Agent|restored@example.comHello from fixture" {
+		t.Fatalf("restored runtime did not receive configured Git identity: %q", text)
 	}
 	_ = restored.Close()
 	config.Model.ID = "changed"

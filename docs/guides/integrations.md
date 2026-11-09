@@ -40,7 +40,24 @@ Credentials:
 - Run `gh`/`glab` from a checkout on the matching provider host: wrappers select
   its workspace integration credential, including for agent-created checkouts.
   Workspaces without a matching coding integration lack authenticated push/CLI access.
-- Commit as `Orkest Agent <agent@orkest.local>`.
+- Agent commits use the same author and committer identity, defaulting to
+  `Orkest Agent <agent@orkest.local>`, even without coding integrations.
+  Configure application-wide values in the platform environment (or `.env`):
+
+  ```dotenv
+  ORKEST_GIT_AUTHOR_NAME=Your Agent
+  ORKEST_GIT_AUTHOR_EMAIL=agent@example.com
+  ```
+
+  Unset or whitespace-only values independently use the corresponding default.
+  Docker, Local, and Kubernetes executors forward these values automatically;
+  no `ORKEST_AGENT_PROVIDER_ENV` entry is needed. Restart/recreate the platform
+  after changing them. Already-running workers retain their startup values;
+  newly started workers, including workers restoring existing sessions, use the
+  current values without replacing the session or changing its runtime/model.
+  Defaults and whitespace trimming are applied when the platform loads its
+  configuration. Standalone agentctl requires explicit `-env ORKEST_GIT_AUTHOR_NAME`
+  and `-env ORKEST_GIT_AUTHOR_EMAIL` grants with both values set.
 
 ## Task integrations
 

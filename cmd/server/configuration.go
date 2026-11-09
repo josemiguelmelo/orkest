@@ -1,6 +1,9 @@
 package main
 
-import "os"
+import (
+	"os"
+	"strings"
+)
 
 type kubernetesServerConfiguration struct {
 	Namespace, InstallationID, DataPVC, DataSubpath            string
@@ -26,6 +29,8 @@ type serverConfiguration struct {
 	CodexAuthFile                string
 	AgentctlBinary               string
 	AgentProviderEnv             string
+	GitAuthorName                string
+	GitAuthorEmail               string
 	AgentMCPURL                  string
 	AgentMCPTokenKey             string
 	DockerRegistryHost           string
@@ -42,7 +47,7 @@ type serverConfiguration struct {
 }
 
 func loadServerConfiguration() serverConfiguration {
-	return serverConfiguration{
+	config := serverConfiguration{
 		DataDir:                      os.Getenv("ORKEST_DATA_DIR"),
 		HTTPAddr:                     os.Getenv("HTTP_ADDR"),
 		IntegrationEncryptionKey:     os.Getenv("ORKEST_INTEGRATION_ENCRYPTION_KEY"),
@@ -57,6 +62,8 @@ func loadServerConfiguration() serverConfiguration {
 		CodexAuthFile:                os.Getenv("ORKEST_CODEX_AUTH_FILE"),
 		AgentctlBinary:               os.Getenv("ORKEST_AGENTCTL_BINARY"),
 		AgentProviderEnv:             os.Getenv("ORKEST_AGENT_PROVIDER_ENV"),
+		GitAuthorName:                strings.TrimSpace(os.Getenv("ORKEST_GIT_AUTHOR_NAME")),
+		GitAuthorEmail:               strings.TrimSpace(os.Getenv("ORKEST_GIT_AUTHOR_EMAIL")),
 		AgentMCPURL:                  os.Getenv("ORKEST_AGENT_MCP_URL"),
 		AgentMCPTokenKey:             os.Getenv("ORKEST_AGENT_MCP_TOKEN_KEY"),
 		DockerRegistryHost:           os.Getenv("ORKEST_DOCKER_REGISTRY_HOST"),
@@ -90,4 +97,11 @@ func loadServerConfiguration() serverConfiguration {
 			PlatformServicePort: os.Getenv("ORKEST_KUBERNETES_PLATFORM_SERVICE_PORT"),
 		},
 	}
+	if config.GitAuthorName == "" {
+		config.GitAuthorName = "Orkest Agent"
+	}
+	if config.GitAuthorEmail == "" {
+		config.GitAuthorEmail = "agent@orkest.local"
+	}
+	return config
 }

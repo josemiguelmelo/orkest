@@ -45,6 +45,7 @@ type Config struct {
 	CodexAuthFile            string
 	AgentctlBinary           string
 	ProviderEnv              []string
+	Environment              map[string]string
 	CodingProviders          []coderepository.CodingProvider
 	CodingCredentialResolver checkout.CredentialResolver
 	Kubernetes               kubernetesexecutor.Config
@@ -62,6 +63,7 @@ func New(ctx context.Context, config Config) (Selection, error) {
 			DataRoot: config.DataRoot, NetworkName: config.DockerNetwork,
 			CodexAuthFile: config.CodexAuthFile, Images: config.DockerImages,
 			ProviderEnv: config.ProviderEnv, CodingProviders: config.CodingProviders,
+			Environment:              config.Environment,
 			CodingCredentialResolver: config.CodingCredentialResolver,
 		})
 		if err != nil {
@@ -72,6 +74,7 @@ func New(ctx context.Context, config Config) (Selection, error) {
 		executor, err := localexecutor.New(localexecutor.Config{
 			DataRoot: config.DataRoot, AgentctlBinary: config.AgentctlBinary,
 			CodexAuthFile: config.CodexAuthFile, ProviderEnv: config.ProviderEnv,
+			Environment:     config.Environment,
 			CodingProviders: config.CodingProviders, CodingCredentialResolver: config.CodingCredentialResolver,
 		})
 		if err != nil {
@@ -85,6 +88,7 @@ func New(ctx context.Context, config Config) (Selection, error) {
 		config.Kubernetes.DataRoot = config.DataRoot
 		config.Kubernetes.Images = config.DockerImages
 		config.Kubernetes.ProviderEnv = config.ProviderEnv
+		config.Kubernetes.Environment = config.Environment
 		config.Kubernetes.CodingProviders = config.CodingProviders
 		config.Kubernetes.CodingCredentialResolver = config.CodingCredentialResolver
 		executor, err := kubernetesexecutor.New(ctx, config.Kubernetes)
