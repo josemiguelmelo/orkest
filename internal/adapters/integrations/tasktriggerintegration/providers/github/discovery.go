@@ -86,14 +86,7 @@ func (d Discovery) discoverRepository(ctx context.Context, workspaceID string, s
 				break
 			}
 			head := pr.GetHead()
-			matched := false
-			for _, candidate := range repository.Candidates {
-				if head.GetRepo().GetID() == repositoryID && head.GetRef() == candidate.Branch && head.GetSHA() == candidate.CommitID {
-					matched = true
-					break
-				}
-			}
-			if !matched {
+			if !matchesObservedHead(head, repositoryID, repository.Candidates) {
 				continue
 			}
 			resourceID := strconv.Itoa(pr.GetNumber())
@@ -106,30 +99,11 @@ func (d Discovery) discoverRepository(ctx context.Context, workspaceID string, s
 				merged.OccurredAt = pr.GetMergedAt().Time
 				events = append(events, merged)
 			}
-			reviewPage := 1
-			for reviewAttempts := 0; reviewAttempts < 5; reviewAttempts++ {
-				reviews, reviewResponse, err := client.PullRequests.ListReviews(ctx, owner, name, pr.GetNumber(), &github.ListOptions{Page: reviewPage, PerPage: 100})
-				if err != nil {
-					return nil, errors.New("review discovery failed")
-				}
-				for _, review := range reviews {
-					if strings.EqualFold(review.GetState(), "PENDING") || strings.EqualFold(review.GetState(), "DISMISSED") || review.GetSubmittedAt().IsZero() || review.GetSubmittedAt().Before(cutoff) {
-						continue
-					}
-					submitted := event
-					submitted.Type = ReviewSubmitted
-					submitted.Key = reviewEventKey(review.GetID())
-					submitted.OccurredAt = review.GetSubmittedAt().Time
-					events = append(events, submitted)
-				}
-				if reviewResponse.NextPage == 0 {
-					break
-				}
-				if reviewAttempts == 4 {
-					return nil, errors.New("review discovery limit exceeded")
-				}
-				reviewPage = reviewResponse.NextPage
+			reviews, err := discoverReviewEvents(ctx, client, remote, pr.GetNumber(), event, cutoff)
+			if err != nil {
+				return nil, err
 			}
+			events = append(events, reviews...)
 		}
 		if reachedCutoff || response.NextPage == 0 {
 			return events, nil
@@ -137,4 +111,42 @@ func (d Discovery) discoverRepository(ctx context.Context, workspaceID string, s
 		page = response.NextPage
 	}
 	return nil, errors.New("pull request discovery limit exceeded")
+}
+
+func matchesObservedHead(head *github.PullRequestBranch, repositoryID int64, candidates []pullrequestlink.Candidate) bool {
+	for _, candidate := range candidates {
+		if head.GetRepo().GetID() == repositoryID && head.GetRef() == candidate.Branch && head.GetSHA() == candidate.CommitID {
+			return true
+		}
+	}
+	return false
+}
+
+func discoverReviewEvents(ctx context.Context, client *github.Client, remote *github.Repository, resourceNumber int, event trigger.Event, cutoff time.Time) ([]trigger.Event, error) {
+	var events []trigger.Event
+	reviewPage := 1
+	for reviewAttempts := 0; reviewAttempts < 5; reviewAttempts++ {
+		reviews, reviewResponse, err := client.PullRequests.ListReviews(ctx, remote.GetOwner().GetLogin(), remote.GetName(), resourceNumber, &github.ListOptions{Page: reviewPage, PerPage: 100})
+		if err != nil {
+			return nil, errors.New("review discovery failed")
+		}
+		for _, review := range reviews {
+			if strings.EqualFold(review.GetState(), "PENDING") || strings.EqualFold(review.GetState(), "DISMISSED") || review.GetSubmittedAt().IsZero() || review.GetSubmittedAt().Before(cutoff) {
+				continue
+			}
+			submitted := event
+			submitted.Type = ReviewSubmitted
+			submitted.Key = reviewEventKey(review.GetID())
+			submitted.OccurredAt = review.GetSubmittedAt().Time
+			events = append(events, submitted)
+		}
+		if reviewResponse.NextPage == 0 {
+			break
+		}
+		if reviewAttempts == 4 {
+			return nil, errors.New("review discovery limit exceeded")
+		}
+		reviewPage = reviewResponse.NextPage
+	}
+	return events, nil
 }

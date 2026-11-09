@@ -196,3 +196,95 @@ func TestReceivePersistsThenResolvesEventsAcrossRepositories(t *testing.T) {
 		t.Fatalf("wrong event routing: %v", resolver.keys)
 	}
 }
+
+type configurationRepository struct {
+	trigger.TaskTriggerIntegrationRepository
+	integration trigger.Integration
+	plan        *trigger.ConfigurationPlan
+}
+
+func (r *configurationRepository) Get(context.Context, string) (trigger.Integration, error) {
+	return r.integration, nil
+}
+
+func (r *configurationRepository) RuleWorkflows(context.Context, string, []trigger.Rule) ([]workflowmodel.Definition, error) {
+	definition := workflowmodel.DefaultDefinition("Default")
+	definition.ID = "workflow"
+	return []workflowmodel.Definition{definition}, nil
+}
+
+func (r *configurationRepository) Save(_ context.Context, plan trigger.ConfigurationPlan) (trigger.Integration, error) {
+	r.plan = &plan
+	return plan.Integration, nil
+}
+
+func TestSaveConfigurationRulesAndSecrets(t *testing.T) {
+	box, err := secretbox.New(strings.Repeat("ab", 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	originalSecret := strings.Repeat("original", 4)
+	encrypted, err := box.Seal(originalSecret)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name       string
+		mutate     func(*trigger.Input)
+		wantAction string
+		wantTarget string
+		wantSecret string
+		wantErr    error
+	}{
+		{name: "default move preserves secret", wantAction: "move_task", wantTarget: "in_progress", wantSecret: originalSecret},
+		{name: "start stays in source stage", mutate: func(in *trigger.Input) { in.Rules[0].Action = "start_work" }, wantAction: "start_work", wantTarget: "in_review", wantSecret: originalSecret},
+		{name: "replaces secret", mutate: func(in *trigger.Input) { in.WebhookSecret = strings.Repeat("replacement", 4) }, wantAction: "move_task", wantTarget: "in_progress", wantSecret: strings.Repeat("replacement", 4)},
+		{name: "duplicate rule ID", mutate: func(in *trigger.Input) {
+			rule := in.Rules[0]
+			rule.SourceStageID = "todo"
+			in.Rules = append(in.Rules, rule)
+		}, wantErr: problem.ErrInvalid},
+		{name: "duplicate event source", mutate: func(in *trigger.Input) {
+			rule := in.Rules[0]
+			rule.ID = "another-rule"
+			in.Rules = append(in.Rules, rule)
+		}, wantErr: problem.ErrInvalid},
+		{name: "unsupported event", mutate: func(in *trigger.Input) { in.Rules[0].Event = "unsupported" }, wantErr: problem.ErrInvalid},
+		{name: "unsupported action", mutate: func(in *trigger.Input) { in.Rules[0].Action = "unsupported" }, wantErr: problem.ErrInvalid},
+		{name: "move to source", mutate: func(in *trigger.Input) { in.Rules[0].TargetStageID = "in_review" }, wantErr: problem.ErrInvalid},
+		{name: "short secret", mutate: func(in *trigger.Input) { in.WebhookSecret = "short" }, wantErr: problem.ErrInvalid},
+		{name: "oversized secret", mutate: func(in *trigger.Input) { in.WebhookSecret = strings.Repeat("a", 4097) }, wantErr: problem.ErrInvalid},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo := &configurationRepository{integration: trigger.Integration{ID: "integration", WorkspaceID: "workspace", OrganizationID: "org", Provider: "github", Version: 3, EncryptedSecret: string(encrypted)}}
+			service, err := trigger.NewTaskTriggerIntegrationService(repo, access{role: "admin"}, box, nil, githubtrigger.NewGitHubProvider())
+			if err != nil {
+				t.Fatal(err)
+			}
+			in := trigger.Input{Name: " Reviews ", Provider: "github", Version: 3, Config: json.RawMessage(`{"repositoryIds":["123"]}`), Rules: []trigger.Rule{{ID: "rule", Event: githubtrigger.ReviewSubmitted, WorkflowID: "workflow", SourceStageID: "in_review", TargetStageID: "in_progress"}}}
+			if tc.mutate != nil {
+				tc.mutate(&in)
+			}
+			got, err := service.Save(context.Background(), "user", "org", "workspace", "integration", in)
+			if !errors.Is(err, tc.wantErr) {
+				t.Fatalf("Save error = %v, want %v", err, tc.wantErr)
+			}
+			if tc.wantErr != nil {
+				if repo.plan != nil {
+					t.Fatal("persisted invalid configuration")
+				}
+				return
+			}
+			if repo.plan == nil || repo.plan.Create || got.Name != "Reviews" || got.ConfiguredBy != "user" || got.Rules[0].Action != tc.wantAction || got.Rules[0].TargetStageID != tc.wantTarget {
+				t.Fatalf("unexpected configuration: %+v", got)
+			}
+			secret, err := box.Open([]byte(got.EncryptedSecret))
+			if err != nil || secret != tc.wantSecret {
+				t.Fatalf("saved secret did not decrypt to expected value: %v", err)
+			}
+			if in.WebhookSecret == "" && got.EncryptedSecret != string(encrypted) {
+				t.Fatal("rewrote preserved encrypted secret")
+			}
+		})
+	}
+}

@@ -73,40 +73,14 @@ func (*GitHubProvider) VerifyAndDecode(ctx context.Context, request trigger.Webh
 	if err := ctx.Err(); err != nil {
 		return "", nil, err
 	}
-	signature, err := hex.DecodeString(strings.TrimPrefix(request.Headers["X-Hub-Signature-256"], "sha256="))
-	mac := hmac.New(sha256.New, []byte(secret))
-	_, _ = mac.Write(request.Body)
-	if secret == "" || err != nil || !strings.HasPrefix(request.Headers["X-Hub-Signature-256"], "sha256=") || !hmac.Equal(signature, mac.Sum(nil)) {
-		return "", nil, problem.ErrForbidden
+	if err := verifyWebhookSignature(request.Body, request.Headers["X-Hub-Signature-256"], secret); err != nil {
+		return "", nil, err
 	}
 	deliveryID := request.Headers["X-Github-Delivery"]
 	if deliveryID == "" || len(deliveryID) > 200 {
 		return "", nil, problem.ErrInvalid
 	}
-	var payload struct {
-		Action     string `json:"action"`
-		Repository struct {
-			ID       int64  `json:"id"`
-			FullName string `json:"full_name"`
-		} `json:"repository"`
-		PullRequest struct {
-			UpdatedAt time.Time `json:"updated_at"`
-			Head      struct {
-				Ref  string `json:"ref"`
-				SHA  string `json:"sha"`
-				Repo struct {
-					ID int64 `json:"id"`
-				} `json:"repo"`
-			} `json:"head"`
-			Number   int64     `json:"number"`
-			Merged   bool      `json:"merged"`
-			MergedAt time.Time `json:"merged_at"`
-		} `json:"pull_request"`
-		Review struct {
-			ID          int64     `json:"id"`
-			SubmittedAt time.Time `json:"submitted_at"`
-		} `json:"review"`
-	}
+	var payload webhookPayload
 	if json.Unmarshal(request.Body, &payload) != nil {
 		return "", nil, problem.ErrInvalid
 	}
@@ -114,33 +88,76 @@ func (*GitHubProvider) VerifyAndDecode(ctx context.Context, request trigger.Webh
 	if err != nil {
 		return "", nil, problem.ErrInvalid
 	}
-	if request.Headers["X-Github-Event"] == "ping" {
-		return deliveryID, nil, nil
+	events, err := decodeWebhookEvents(request.Headers["X-Github-Event"], payload, config)
+	if err != nil {
+		return "", nil, err
+	}
+	return deliveryID, events, nil
+}
+
+func verifyWebhookSignature(body []byte, signatureHeader, secret string) error {
+	signature, err := hex.DecodeString(strings.TrimPrefix(signatureHeader, "sha256="))
+	mac := hmac.New(sha256.New, []byte(secret))
+	_, _ = mac.Write(body)
+	if secret == "" || err != nil || !strings.HasPrefix(signatureHeader, "sha256=") || !hmac.Equal(signature, mac.Sum(nil)) {
+		return problem.ErrForbidden
+	}
+	return nil
+}
+
+type webhookPayload struct {
+	Action     string `json:"action"`
+	Repository struct {
+		ID       int64  `json:"id"`
+		FullName string `json:"full_name"`
+	} `json:"repository"`
+	PullRequest struct {
+		UpdatedAt time.Time `json:"updated_at"`
+		Head      struct {
+			Ref  string `json:"ref"`
+			SHA  string `json:"sha"`
+			Repo struct {
+				ID int64 `json:"id"`
+			} `json:"repo"`
+		} `json:"head"`
+		Number   int64     `json:"number"`
+		Merged   bool      `json:"merged"`
+		MergedAt time.Time `json:"merged_at"`
+	} `json:"pull_request"`
+	Review struct {
+		ID          int64     `json:"id"`
+		SubmittedAt time.Time `json:"submitted_at"`
+	} `json:"review"`
+}
+
+func decodeWebhookEvents(eventHeader string, payload webhookPayload, config configuration) ([]trigger.Event, error) {
+	if eventHeader == "ping" {
+		return nil, nil
 	}
 	repositoryID := strconv.FormatInt(payload.Repository.ID, 10)
 	if !slices.Contains(config.RepositoryIDs, repositoryID) {
-		return "", nil, problem.ErrForbidden
+		return nil, problem.ErrForbidden
 	}
 	event := trigger.Event{HeadRepositoryID: strconv.FormatInt(payload.PullRequest.Head.Repo.ID, 10), HeadBranch: payload.PullRequest.Head.Ref, HeadCommitID: payload.PullRequest.Head.SHA, RepositoryID: repositoryID, ResourceID: strconv.FormatInt(payload.PullRequest.Number, 10)}
 	switch {
-	case request.Headers["X-Github-Event"] == "pull_request_review" && payload.Action == "submitted":
+	case eventHeader == "pull_request_review" && payload.Action == "submitted":
 		if payload.Review.ID <= 0 {
-			return "", nil, problem.ErrInvalid
+			return nil, problem.ErrInvalid
 		}
 		event.Type, event.Key, event.OccurredAt = ReviewSubmitted, reviewEventKey(payload.Review.ID), payload.Review.SubmittedAt
-	case request.Headers["X-Github-Event"] == "pull_request" && payload.Action == "closed" && payload.PullRequest.Merged:
+	case eventHeader == "pull_request" && payload.Action == "closed" && payload.PullRequest.Merged:
 		event.Type, event.Key, event.OccurredAt = PullRequestMerged, mergedEventKey(event.RepositoryID, event.ResourceID), payload.PullRequest.MergedAt
-	case request.Headers["X-Github-Event"] == "pull_request" && (payload.Action == "opened" || payload.Action == "reopened" || payload.Action == "synchronize"):
+	case eventHeader == "pull_request" && (payload.Action == "opened" || payload.Action == "reopened" || payload.Action == "synchronize"):
 		event.Type, event.Key, event.OccurredAt = "pull_request.discovered", discoveredEventKey(event.RepositoryID, event.ResourceID, payload.PullRequest.Head.SHA, payload.PullRequest.UpdatedAt), payload.PullRequest.UpdatedAt
 	default:
-		return deliveryID, nil, nil
+		return nil, nil
 	}
 	if payload.PullRequest.Number <= 0 || event.OccurredAt.IsZero() {
-		return "", nil, problem.ErrInvalid
+		return nil, problem.ErrInvalid
 	}
 	if !repositoryName.MatchString(payload.Repository.FullName) {
-		return "", nil, problem.ErrInvalid
+		return nil, problem.ErrInvalid
 	}
 	event.ReferenceURL = "https://github.com/" + payload.Repository.FullName + "/pull/" + event.ResourceID
-	return deliveryID, []trigger.Event{event}, nil
+	return []trigger.Event{event}, nil
 }
