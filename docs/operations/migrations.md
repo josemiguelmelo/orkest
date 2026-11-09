@@ -115,12 +115,12 @@ Documented hazards below; SQL is the complete inventory.
   containers. Export selections before rollback; stop affected containers to
   revoke their host access.
 
-## Task trigger integrations and event context (0040–0041)
+## Task trigger integrations and event context (0041–0042)
 
-0040 adds workspace-scoped trigger integrations, rules, explicit resource links,
+0041 adds workspace-scoped trigger integrations, rules, explicit resource links,
 and a durable delivery inbox. Composite foreign keys prevent cross-workspace
 rules/links. Referenced workflow stages cannot be removed until their trigger
-rules are removed. 0041 adds default-empty startup context to workflow events;
+rules are removed. 0042 adds default-empty startup context to workflow events;
 already persisted events/commands retain their previous meaning. Neither migration
 changes runtime/session formats or restarts independent agentctl workers.
 

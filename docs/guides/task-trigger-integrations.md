@@ -147,5 +147,5 @@ retry; failed or uncertain agent execution never automatically retries.
 
 This feature is under development and has no existing association data. Configure
 GitHub integrations with `repositoryIds`; earlier development configuration and
-observation formats are not supported. Migration 0042 defines association,
+observation formats are not supported. Migration 0043 defines association,
 suppression and reconciliation storage. Runtime/model fingerprints are unchanged.

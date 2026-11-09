@@ -63,7 +63,7 @@ and [migration operations](operations/migrations.md#workflow-delivery-claims).
   run. Automated entry starts retain the existing new-session behavior; this does
   not establish credentialed session restoration or provider continuation.
 - Migration and mixed-version precautions are documented under
-  [trigger migration operations](operations/migrations.md#task-trigger-integrations-and-event-context-00400041).
+  [trigger migration operations](operations/migrations.md#task-trigger-integrations-and-event-context-00410042).
 
 
 ### 2026-11-07: structured user questions

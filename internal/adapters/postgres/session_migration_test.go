@@ -75,7 +75,7 @@ func testWorkflowMigrationRoundTrip(t *testing.T, ctx context.Context, pool *pgx
 		t.Fatal(err)
 	}
 	// Remove later workflow dependants before exercising the historical rollback.
-	for _, name := range []string{"0042_automatic_pr_links.sql", "0041_workflow_event_context.sql", "0040_task_trigger_integrations.sql"} {
+	for _, name := range []string{"0043_automatic_pr_links.sql", "0042_workflow_event_context.sql", "0041_task_trigger_integrations.sql"} {
 		source, e := migrations.FS.ReadFile(name)
 		if e != nil {
 			t.Fatal(e)

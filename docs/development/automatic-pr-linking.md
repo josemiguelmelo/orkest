@@ -44,7 +44,7 @@ branch deletion and subsequent reviews. GitHub polling recovers missed webhook
 notifications using each repository's own workspace coding credentials, with
 bounded pagination and a 24-hour recovery horizon.
 
-The schema is defined by migration 0042. There is no separate configuration
+The schema is defined by migration 0043. There is no separate configuration
 conversion migration. Runtime/model/session configuration is unchanged. Unrelated
 runtime session compatibility and restoration remain supported.
 
