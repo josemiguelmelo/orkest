@@ -54,6 +54,8 @@ func TestSessionMigrations(t *testing.T) {
 		t.Fatal("session scope constraint missing", err)
 	}
 	t.Run("delivery claim rollback guard", func(t *testing.T) { testDeliveryClaimMigrationRollback(t, ctx, pool) })
+	t.Run("reconciliation table repair", func(t *testing.T) { testPullRequestReconciliationRepair(t, ctx, pool) })
+	t.Run("trigger rule actions repair", func(t *testing.T) { testTaskTriggerRuleActionsRepair(t, ctx, pool) })
 	t.Run("workflow migration round trip", func(t *testing.T) { testWorkflowMigrationRoundTrip(t, ctx, pool) })
 }
 

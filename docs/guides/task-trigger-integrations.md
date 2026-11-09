@@ -44,6 +44,13 @@ is no implicit all-PRs-merged gate. GitHub Cloud is the initial adapter.
 
 ## Behavior and access
 
+On startup, migration 0045 repairs early databases that recorded migration 0041
+before rule actions and prompts were added. Existing rules keep their move action
+and receive an empty prompt; existing action/prompt configuration is preserved.
+Restart the updated server to apply the repair before retrying a failed integration
+save reporting a missing `action` or `prompt_text` column. The repair rollback
+retains these columns and their configuration.
+
 - Workspace administrators and inherited organization administrators configure
   integrations and may unlink automatic associations. Workspace readers may inspect configuration and activity;
   secrets are encrypted and never returned. Empty update secrets preserve the
