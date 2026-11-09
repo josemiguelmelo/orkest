@@ -3332,20 +3332,6 @@ export declare const zListTaskTriggerResourceLinksResponse: z.ZodArray<z.ZodObje
     repositoryId: z.ZodString;
     resourceId: z.ZodString;
 }, z.core.$strip>>;
-export declare const zLinkTaskTriggerResourceBody: z.ZodObject<{
-    taskId: z.ZodString;
-    repositoryId: z.ZodString;
-    resourceId: z.ZodString;
-}, z.core.$strip>;
-export declare const zLinkTaskTriggerResourcePath: z.ZodObject<{
-    orgID: z.ZodString;
-    workspaceID: z.ZodString;
-    integrationID: z.ZodString;
-}, z.core.$strip>;
-/**
- * Success
- */
-export declare const zLinkTaskTriggerResourceResponse: z.ZodVoid;
 export declare const zListTaskTriggerDeliveriesPath: z.ZodObject<{
     orgID: z.ZodString;
     workspaceID: z.ZodString;

@@ -11,18 +11,12 @@ const (
 	resolutionRetryDelay = 5 * time.Second
 )
 
-type (
-	ResourceOwner struct {
-		TaskID    string
-		CreatedAt time.Time
-	}
-	TaskState struct {
-		TaskID             string
-		RepositorySelected bool
-		StageVersion       int64
-		StageEnteredAt     time.Time
-	}
-)
+type TaskState struct {
+	TaskID             string
+	RepositorySelected bool
+	StageVersion       int64
+	StageEnteredAt     time.Time
+}
 
 type ResolutionSnapshot struct {
 	AvailableAt    time.Time
@@ -30,7 +24,6 @@ type ResolutionSnapshot struct {
 	Delivery       trigger.Delivery
 	Suppressed     bool
 	ExistingTaskID string
-	Owners         []ResourceOwner
 	Candidates     []Candidate
 	Tasks          []TaskState
 }
@@ -58,19 +51,6 @@ func PlanResolution(s ResolutionSnapshot, now time.Time) Resolution {
 	}
 	event := s.Delivery.Event
 	taskID := s.ExistingTaskID
-	// Existing manual ownership is usable only if it predates the event. Confirmed
-	// automatic ownership can resolve deliveries that arrived before branch evidence.
-	if taskID == "" {
-		for _, owner := range s.Owners {
-			if owner.CreatedAt.After(event.OccurredAt) {
-				continue
-			}
-			if taskID != "" && taskID != owner.TaskID {
-				return Resolution{Status: "blocked", Diagnostic: "conflicting_pull_request_ownership"}
-			}
-			taskID = owner.TaskID
-		}
-	}
 	if taskID == "" {
 		var diagnostic string
 		taskID, diagnostic = Match(PullRequest{RepositoryID: event.RepositoryID, HeadRepositoryID: event.HeadRepositoryID, Branch: event.HeadBranch, CommitID: event.HeadCommitID}, s.Candidates)
@@ -82,11 +62,6 @@ func PlanResolution(s ResolutionSnapshot, now time.Time) Resolution {
 				return Resolution{Status: "ignored", Diagnostic: "association_expired"}
 			}
 			return Resolution{Status: "awaiting_link", Diagnostic: diagnostic, RetryAt: now.Add(resolutionRetryDelay)}
-		}
-	}
-	for _, owner := range s.Owners {
-		if owner.TaskID != taskID {
-			return Resolution{Status: "blocked", Diagnostic: "conflicting_pull_request_ownership"}
 		}
 	}
 	var state TaskState

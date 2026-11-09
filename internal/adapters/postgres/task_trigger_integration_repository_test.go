@@ -3,12 +3,16 @@ package postgres
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"reflect"
 	"sync"
 	"testing"
 	"time"
 
+	"github.com/josemiguelmelo/orkest/internal/adapters/postgres/sqlc"
+	problem "github.com/josemiguelmelo/orkest/internal/contracts/problem"
 	"github.com/josemiguelmelo/orkest/internal/platform/ids"
+	"github.com/josemiguelmelo/orkest/internal/server/pullrequestlink"
 	taskmodel "github.com/josemiguelmelo/orkest/internal/server/task/model"
 	trigger "github.com/josemiguelmelo/orkest/internal/server/tasktriggerintegration"
 	"github.com/josemiguelmelo/orkest/internal/server/workflowautomation"
@@ -30,12 +34,20 @@ func testTaskTriggerIntegrations(t *testing.T, db *PostgresDatabase, org, worksp
 		t.Fatal(err)
 	}
 	repo := NewTaskTriggerIntegrationPostgresRepository(db)
-	integration, err := saveTestTriggerConfiguration(ctx, repo, trigger.Integration{ID: newID(), WorkspaceID: workspace, OrganizationID: org, Name: "Review hooks", Provider: "github", Config: json.RawMessage(`{"repositoryId":"123"}`), Enabled: true, ConfiguredBy: actor, EncryptedSecret: "encrypted", Rules: []trigger.Rule{{ID: "review", Event: "pull_request.review_submitted", WorkflowID: workspace, SourceStageID: "todo", TargetStageID: "in_review", Action: "move_task"}}}, true)
+	integration, err := saveTestTriggerConfiguration(ctx, repo, trigger.Integration{ID: newID(), WorkspaceID: workspace, OrganizationID: org, Name: "Review hooks", Provider: "github", Config: json.RawMessage(`{"repositoryIds":["123"]}`), Enabled: true, ConfiguredBy: actor, EncryptedSecret: "encrypted", Rules: []trigger.Rule{{ID: "review", Event: "pull_request.review_submitted", WorkflowID: workspace, SourceStageID: "todo", TargetStageID: "in_review", Action: "move_task"}}}, true)
 	if err != nil {
 		t.Fatal(err)
 	}
+	stale := integration
+	stale.Version--
+	if err := ingestTestTriggerEvents(ctx, repo, stale, "stale-config", []trigger.Event{{Key: "stale-config"}}); !errors.Is(err, problem.ErrConflict) {
+		t.Fatalf("stale configuration accepted: %v", err)
+	}
+	if deliveries, err := repo.Deliveries(ctx, integration.ID); err != nil || len(deliveries) != 0 {
+		t.Fatalf("stale ingestion left deliveries: %v %v", deliveries, err)
+	}
 	// Cross-workspace and unselected repositories cannot establish links.
-	if err = writeTestTriggerLink(ctx, repo, integration.ID, false, trigger.ResourceLink{TaskID: taskID, RepositoryID: "123", ResourceID: "4"}); err == nil {
+	if err = seedAutomaticPullRequestLink(ctx, repo, integration.ID, trigger.ResourceLink{TaskID: taskID, RepositoryID: "123", ResourceID: "4"}); err == nil {
 		t.Fatal("linked unselected repository")
 	}
 
@@ -46,7 +58,7 @@ func testTaskTriggerIntegrations(t *testing.T, db *PostgresDatabase, org, worksp
 	if _, err = db.pool.Exec(ctx, `INSERT INTO task_repositories(workspace_id,task_id,repository_id) VALUES($1,$2,$3)`, workspace, taskID, repositoryID); err != nil {
 		t.Fatal(err)
 	}
-	if err = writeTestTriggerLink(ctx, repo, integration.ID, false, trigger.ResourceLink{TaskID: taskID, RepositoryID: "123", ResourceID: "4"}); err != nil {
+	if err = seedAutomaticPullRequestLink(ctx, repo, integration.ID, trigger.ResourceLink{TaskID: taskID, RepositoryID: "123", ResourceID: "4"}); err != nil {
 		t.Fatal(err)
 	}
 	event := trigger.Event{Key: "review:1", Type: "pull_request.review_submitted", RepositoryID: "123", ResourceID: "4", OccurredAt: time.Now().Add(time.Second)}
@@ -54,6 +66,15 @@ func testTaskTriggerIntegrations(t *testing.T, db *PostgresDatabase, org, worksp
 		t.Fatal(err)
 	}
 	if err = ingestTestTriggerEvents(ctx, repo, integration, "delivery-2", []trigger.Event{event}); err != nil {
+		t.Fatal(err)
+	}
+	// An existing link must not let ingestion bypass association/stage guards.
+	if _, found, err := repo.NextProcessing(ctx); err != nil || found {
+		t.Fatalf("ingestion bypassed resolution: %v %v", found, err)
+	}
+	// Every event now passes through the association service before processing.
+	resolver := pullrequestlink.NewPullRequestLinkService(NewPullRequestLinkRepository(db))
+	if err := resolver.ResolveEvent(ctx, integration.ID, event.Key); err != nil {
 		t.Fatal(err)
 	}
 	deliveries, err := repo.Deliveries(ctx, integration.ID)
@@ -150,20 +171,38 @@ func testTriggerDecision(t *testing.T, s trigger.ProcessingSnapshot, actor, stat
 	return trigger.ProcessingResult{Status: status, Effects: &effects}
 }
 
-func writeTestTriggerLink(ctx context.Context, repo *TaskTriggerIntegrationPostgresRepository, id string, remove bool, link trigger.ResourceLink) error {
-	snapshot, err := repo.ResourceLinkSnapshot(ctx, id, link)
+func unlinkTestTriggerResource(ctx context.Context, repo *TaskTriggerIntegrationPostgresRepository, id string, link trigger.ResourceLink) error {
+	snapshot, err := repo.UnlinkSnapshot(ctx, id, link)
 	if err != nil {
 		return err
 	}
-	change, err := trigger.PlanResourceLink(snapshot, remove)
+	return repo.CommitUnlink(ctx, snapshot)
+}
+
+func seedAutomaticPullRequestLink(ctx context.Context, repo *TaskTriggerIntegrationPostgresRepository, id string, link trigger.ResourceLink) error {
+	integration, err := repo.Get(ctx, id)
 	if err != nil {
 		return err
 	}
-	return repo.CommitResourceLink(ctx, snapshot, change)
+	count, err := repo.queries.PutTaskTriggerResourceLink(ctx, sqlc.PutTaskTriggerResourceLinkParams{IntegrationID: id, WorkspaceID: integration.WorkspaceID, TaskID: link.TaskID, RepositoryID: link.RepositoryID, ResourceID: link.ResourceID, Provider: integration.Provider})
+	if err != nil {
+		return err
+	}
+	if count != 1 {
+		return problem.ErrConflict
+	}
+	count, err = repo.queries.AssociatePullRequest(ctx, sqlc.AssociatePullRequestParams{WorkspaceID: integration.WorkspaceID, Provider: integration.Provider, RepositoryID: link.RepositoryID, ResourceID: link.ResourceID, TaskID: link.TaskID, HeadRepositoryID: link.RepositoryID, HeadBranch: "fixture/task"})
+	if err != nil {
+		return err
+	}
+	if count != 1 {
+		return problem.ErrConflict
+	}
+	return nil
 }
 
 func ingestTestTriggerEvents(ctx context.Context, repo *TaskTriggerIntegrationPostgresRepository, i trigger.Integration, delivery string, events []trigger.Event) error {
-	service, err := trigger.NewTaskTriggerIntegrationService(repo, nil, nil)
+	service, err := trigger.NewTaskTriggerIntegrationService(repo, nil, nil, nil)
 	if err != nil {
 		return err
 	}

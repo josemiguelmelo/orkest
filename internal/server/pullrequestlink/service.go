@@ -6,22 +6,24 @@ import (
 	"context"
 	"log/slog"
 	"time"
+
+	problem "github.com/josemiguelmelo/orkest/internal/contracts/problem"
 )
 
 type Candidate struct {
-	DefaultBranch    string
-	Baseline         bool
-	Diagnostic       string
-	TaskID           string
-	RepositoryID     string
-	HeadRepositoryID string
-	Branch           string
-	CommitID         string
+	DefaultBranch      string
+	EligibleForLinking bool
+	Diagnostic         string
+	TaskID             string
+	RepositoryID       string
+	HeadRepositoryID   string
+	Branch             string
+	CommitID           string
 }
 
 // CanAssociate interprets raw observation facts independently of persistence.
 func (c Candidate) CanAssociate() bool {
-	return !c.Baseline && c.Diagnostic == "" && c.Branch != "" && c.Branch != c.DefaultBranch
+	return c.EligibleForLinking && c.Diagnostic == "" && c.Branch != "" && c.Branch != c.DefaultBranch
 }
 
 type PullRequest struct {
@@ -56,6 +58,7 @@ func Match(pr PullRequest, candidates []Candidate) (string, string) {
 }
 
 type PullRequestLinkRepository interface {
+	EventResolution(context.Context, string, string) (ResolutionSnapshot, bool, error)
 	NextResolution(context.Context) (ResolutionSnapshot, bool, error)
 	CommitResolution(context.Context, ResolutionSnapshot, Resolution) (bool, error)
 }
@@ -92,4 +95,23 @@ func (s *PullRequestLinkService) Run(ctx context.Context, logger *slog.Logger) {
 		case <-ticker.C:
 		}
 	}
+}
+
+// ResolveEvent associates the exact durable delivery received by the webhook.
+// Missing evidence stays in the inbox for the background recovery worker.
+func (s *PullRequestLinkService) ResolveEvent(ctx context.Context, integrationID, eventKey string) error {
+	for attempt := 0; attempt < 3; attempt++ {
+		snapshot, found, err := s.repository.EventResolution(ctx, integrationID, eventKey)
+		if err != nil || !found {
+			return err
+		}
+		applied, err := s.repository.CommitResolution(ctx, snapshot, PlanResolution(snapshot, time.Now().UTC()))
+		if err != nil {
+			return err
+		}
+		if applied {
+			return nil
+		}
+	}
+	return problem.ErrConflict
 }

@@ -28,11 +28,10 @@ type TaskTriggerIntegrationRepository interface {
 	RuleWorkflows(context.Context, string, []Rule) ([]workflowmodel.Definition, error)
 	Save(context.Context, ConfigurationPlan) (Integration, error)
 	Delete(context.Context, string, string) error
-	ResourceLinkSnapshot(context.Context, string, ResourceLink) (ResourceLinkSnapshot, error)
-	CommitResourceLink(context.Context, ResourceLinkSnapshot, ResourceLinkChange) error
+	UnlinkSnapshot(context.Context, string, ResourceLink) (UnlinkSnapshot, error)
+	CommitUnlink(context.Context, UnlinkSnapshot) error
 	Links(context.Context, string) ([]ResourceLink, error)
-	IngestionSnapshot(context.Context, string, Event) (IngestionSnapshot, error)
-	CommitIngestion(context.Context, IngestionSnapshot, string, IngestionDecision) error
+	EnqueueEvents(context.Context, string, int64, string, []Event, string) error
 	Deliveries(context.Context, string) ([]Delivery, error)
 	NextProcessing(context.Context) (ProcessingSnapshot, bool, error)
 	CommitProcessing(context.Context, ProcessingSnapshot, ProcessingResult) (bool, error)

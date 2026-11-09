@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -27,20 +28,25 @@ type Discovery struct {
 }
 
 func (d Discovery) Discover(ctx context.Context, workspaceID string, raw json.RawMessage, since time.Time, repositories []pullrequestlink.DiscoveryRepository) ([]trigger.Event, error) {
-	var config configuration
-	if json.Unmarshal(raw, &config) != nil || !positiveID(config.RepositoryID) {
-		return nil, errors.New("invalid discovery configuration")
+	config, err := decodeConfiguration(raw)
+	if err != nil {
+		return nil, err
 	}
-	var repository *pullrequestlink.DiscoveryRepository
-	for i := range repositories {
-		if repositories[i].ProviderRepositoryID == config.RepositoryID {
-			repository = &repositories[i]
-			break
+	var events []trigger.Event
+	for _, repository := range repositories {
+		if !slices.Contains(config.RepositoryIDs, repository.ProviderRepositoryID) {
+			continue
 		}
+		discovered, err := d.discoverRepository(ctx, workspaceID, since, repository)
+		if err != nil {
+			return nil, err
+		}
+		events = append(events, discovered...)
 	}
-	if repository == nil {
-		return nil, nil
-	}
+	return events, nil
+}
+
+func (d Discovery) discoverRepository(ctx context.Context, workspaceID string, since time.Time, repository pullrequestlink.DiscoveryRepository) ([]trigger.Event, error) {
 	if d.Credentials == nil || repository.IntegrationID == "" {
 		return nil, errors.New("discovery credentials unavailable")
 	}
@@ -56,7 +62,7 @@ func (d Discovery) Discover(ctx context.Context, workspaceID string, raw json.Ra
 	if err != nil {
 		return nil, errors.New("discovery client unavailable")
 	}
-	repositoryID, _ := strconv.ParseInt(config.RepositoryID, 10, 64)
+	repositoryID, _ := strconv.ParseInt(repository.ProviderRepositoryID, 10, 64)
 	remote, _, err := client.Repositories.GetByID(ctx, repositoryID)
 	if err != nil {
 		return nil, errors.New("repository discovery failed")
@@ -91,12 +97,12 @@ func (d Discovery) Discover(ctx context.Context, workspaceID string, raw json.Ra
 				continue
 			}
 			resourceID := strconv.Itoa(pr.GetNumber())
-			event := trigger.Event{Type: "pull_request.discovered", Key: "discovered:" + config.RepositoryID + ":" + resourceID + ":" + head.GetSHA() + ":" + pr.GetUpdatedAt().Format(time.RFC3339Nano), RepositoryID: config.RepositoryID, ResourceID: resourceID, ReferenceURL: pr.GetHTMLURL(), OccurredAt: pr.GetUpdatedAt().Time, HeadRepositoryID: strconv.FormatInt(head.GetRepo().GetID(), 10), HeadBranch: head.GetRef(), HeadCommitID: head.GetSHA()}
+			event := trigger.Event{Type: "pull_request.discovered", Key: "discovered:" + repository.ProviderRepositoryID + ":" + resourceID + ":" + head.GetSHA() + ":" + pr.GetUpdatedAt().Format(time.RFC3339Nano), RepositoryID: repository.ProviderRepositoryID, ResourceID: resourceID, ReferenceURL: pr.GetHTMLURL(), OccurredAt: pr.GetUpdatedAt().Time, HeadRepositoryID: strconv.FormatInt(head.GetRepo().GetID(), 10), HeadBranch: head.GetRef(), HeadCommitID: head.GetSHA()}
 			events = append(events, event)
 			if !pr.GetMergedAt().IsZero() {
 				merged := event
 				merged.Type = PullRequestMerged
-				merged.Key = "merged:" + config.RepositoryID + ":" + resourceID
+				merged.Key = "merged:" + repository.ProviderRepositoryID + ":" + resourceID
 				merged.OccurredAt = pr.GetMergedAt().Time
 				events = append(events, merged)
 			}

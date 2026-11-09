@@ -13,15 +13,14 @@ type Checkout struct {
 }
 
 type Branch struct {
-	Name      string `json:"name"`
-	CommitID  string `json:"commitId"`
-	Candidate bool   `json:"candidate,omitempty"`
+	Name               string `json:"name"`
+	CommitID           string `json:"commitId"`
+	EligibleForLinking bool   `json:"eligibleForLinking,omitempty"`
 }
 
 // Snapshot includes all local refs, allowing deletion and restore reconciliation.
 type Snapshot struct {
 	Checkout   Checkout `json:"checkout"`
 	Branches   []Branch `json:"branches"`
-	Baseline   bool     `json:"baseline,omitempty"`
 	Diagnostic string   `json:"diagnostic,omitempty"`
 }

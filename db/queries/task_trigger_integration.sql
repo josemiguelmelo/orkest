@@ -27,8 +27,8 @@ SELECT * FROM task_trigger_resource_links WHERE integration_id=$1 ORDER BY repos
 -- name: DeleteTaskTriggerResourceLink :exec
 DELETE FROM task_trigger_resource_links WHERE integration_id=$1 AND repository_id=$2 AND resource_id=$3;
 -- name: InsertTaskTriggerDelivery :exec
-INSERT INTO task_trigger_deliveries(id,integration_id,delivery_id,event_key,event,task_id,stage_version,status)
-VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT DO NOTHING;
+INSERT INTO task_trigger_deliveries(id,integration_id,delivery_id,event_key,event,status)
+VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING;
 -- name: NextTaskTriggerDelivery :one
 SELECT * FROM task_trigger_deliveries WHERE status='pending' ORDER BY received_at,id LIMIT 1 FOR UPDATE SKIP LOCKED;
 -- name: FinishTaskTriggerDelivery :exec
@@ -46,14 +46,5 @@ SELECT EXISTS(
 
 -- name: SuppressTaskTriggerLink :exec
 INSERT INTO task_pull_request_suppressions(integration_id,repository_id,resource_id) VALUES($1,$2,$3) ON CONFLICT DO NOTHING;
--- name: UnsuppressTaskTriggerLink :exec
-DELETE FROM task_pull_request_suppressions WHERE integration_id=$1 AND repository_id=$2 AND resource_id=$3;
-
 -- name: LockTaskTriggerDelivery :one
 SELECT * FROM task_trigger_deliveries WHERE id=$1 FOR UPDATE;
-
--- name: TaskTriggerIngestionLink :one
-SELECT l.task_id,l.created_at,t.stage_version,
- (SELECT max(e.occurred_at) FROM workflow_events e WHERE e.workspace_id=t.workspace_id AND e.task_id=t.id AND e.event_type='stage_entered' AND e.stage_version=t.stage_version)::timestamptz AS stage_entered_at
-FROM task_trigger_resource_links l JOIN tasks t ON t.workspace_id=l.workspace_id AND t.id=l.task_id
-WHERE l.integration_id=$1 AND l.repository_id=$2 AND l.resource_id=$3;

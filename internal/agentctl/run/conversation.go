@@ -24,9 +24,10 @@ type conversationSnapshot struct {
 // conversation owns prompt execution, pending permissions, and activity
 // for one bound runtime session. It does not launch or close the runtime session.
 type conversation struct {
-	repositoryScanner          repositoryobserver.Scanner
-	repositoryObserver         *repositoryobserver.Observer
-	repositoryObservationStore *repositoryObservationStore
+	repositoryScanner               repositoryobserver.Scanner
+	repositoryObservationState      *repositoryobserver.State
+	repositoryObservationDiagnostic string
+	repositoryObservationStore      *repositoryObservationStore
 	// mu protects durable state, transient execution state, and work admission.
 	// Status and stop need only mu.
 	mu    sync.RWMutex

@@ -669,7 +669,6 @@ components:
       type: object
       required: [checkout, branches]
       properties:
-        baseline: {type: boolean}
         diagnostic: {type: string}
         checkout:
           type: object
@@ -689,4 +688,4 @@ components:
             properties:
               name: {type: string}
               commitId: {type: string}
-              candidate: {type: boolean}
+              eligibleForLinking: {type: boolean}

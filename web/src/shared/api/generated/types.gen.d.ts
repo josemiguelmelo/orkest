@@ -4814,50 +4814,6 @@ export type ListTaskTriggerResourceLinksResponses = {
     200: Array<TaskTriggerResourceLink>;
 };
 export type ListTaskTriggerResourceLinksResponse = ListTaskTriggerResourceLinksResponses[keyof ListTaskTriggerResourceLinksResponses];
-export type LinkTaskTriggerResourceData = {
-    body: TaskTriggerResourceLink;
-    path: {
-        orgID: string;
-        workspaceID: string;
-        integrationID: string;
-    };
-    query?: never;
-    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/task-trigger-integrations/{integrationID}/links';
-};
-export type LinkTaskTriggerResourceErrors = {
-    /**
-     * BadRequest
-     */
-    400: Error;
-    /**
-     * Unauthorized
-     */
-    401: Error;
-    /**
-     * Forbidden
-     */
-    403: Error;
-    /**
-     * NotFound
-     */
-    404: Error;
-    /**
-     * Conflict
-     */
-    409: Error;
-    /**
-     * InternalServerError
-     */
-    500: Error;
-};
-export type LinkTaskTriggerResourceError = LinkTaskTriggerResourceErrors[keyof LinkTaskTriggerResourceErrors];
-export type LinkTaskTriggerResourceResponses = {
-    /**
-     * Success
-     */
-    204: void;
-};
-export type LinkTaskTriggerResourceResponse = LinkTaskTriggerResourceResponses[keyof LinkTaskTriggerResourceResponses];
 export type ListTaskTriggerDeliveriesData = {
     body?: never;
     path: {

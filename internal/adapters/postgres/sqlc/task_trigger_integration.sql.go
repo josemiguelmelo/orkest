@@ -7,8 +7,6 @@ package sqlc
 
 import (
 	"context"
-
-	"github.com/jackc/pgx/v5/pgtype"
 )
 
 const createTaskTriggerIntegration = `-- name: CreateTaskTriggerIntegration :exec
@@ -131,8 +129,8 @@ func (q *Queries) GetTaskTriggerIntegration(ctx context.Context, id string) (Get
 }
 
 const insertTaskTriggerDelivery = `-- name: InsertTaskTriggerDelivery :exec
-INSERT INTO task_trigger_deliveries(id,integration_id,delivery_id,event_key,event,task_id,stage_version,status)
-VALUES($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT DO NOTHING
+INSERT INTO task_trigger_deliveries(id,integration_id,delivery_id,event_key,event,status)
+VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING
 `
 
 type InsertTaskTriggerDeliveryParams struct {
@@ -141,8 +139,6 @@ type InsertTaskTriggerDeliveryParams struct {
 	DeliveryID    string `json:"delivery_id"`
 	EventKey      string `json:"event_key"`
 	Event         []byte `json:"event"`
-	TaskID        string `json:"task_id"`
-	StageVersion  int64  `json:"stage_version"`
 	Status        string `json:"status"`
 }
 
@@ -153,8 +149,6 @@ func (q *Queries) InsertTaskTriggerDelivery(ctx context.Context, arg InsertTaskT
 		arg.DeliveryID,
 		arg.EventKey,
 		arg.Event,
-		arg.TaskID,
-		arg.StageVersion,
 		arg.Status,
 	)
 	return err
@@ -468,38 +462,6 @@ func (q *Queries) SuppressTaskTriggerLink(ctx context.Context, arg SuppressTaskT
 	return err
 }
 
-const taskTriggerIngestionLink = `-- name: TaskTriggerIngestionLink :one
-SELECT l.task_id,l.created_at,t.stage_version,
- (SELECT max(e.occurred_at) FROM workflow_events e WHERE e.workspace_id=t.workspace_id AND e.task_id=t.id AND e.event_type='stage_entered' AND e.stage_version=t.stage_version)::timestamptz AS stage_entered_at
-FROM task_trigger_resource_links l JOIN tasks t ON t.workspace_id=l.workspace_id AND t.id=l.task_id
-WHERE l.integration_id=$1 AND l.repository_id=$2 AND l.resource_id=$3
-`
-
-type TaskTriggerIngestionLinkParams struct {
-	IntegrationID string `json:"integration_id"`
-	RepositoryID  string `json:"repository_id"`
-	ResourceID    string `json:"resource_id"`
-}
-
-type TaskTriggerIngestionLinkRow struct {
-	TaskID         string             `json:"task_id"`
-	CreatedAt      pgtype.Timestamptz `json:"created_at"`
-	StageVersion   int64              `json:"stage_version"`
-	StageEnteredAt pgtype.Timestamptz `json:"stage_entered_at"`
-}
-
-func (q *Queries) TaskTriggerIngestionLink(ctx context.Context, arg TaskTriggerIngestionLinkParams) (TaskTriggerIngestionLinkRow, error) {
-	row := q.db.QueryRow(ctx, taskTriggerIngestionLink, arg.IntegrationID, arg.RepositoryID, arg.ResourceID)
-	var i TaskTriggerIngestionLinkRow
-	err := row.Scan(
-		&i.TaskID,
-		&i.CreatedAt,
-		&i.StageVersion,
-		&i.StageEnteredAt,
-	)
-	return i, err
-}
-
 const taskTriggerLinkActive = `-- name: TaskTriggerLinkActive :one
 SELECT EXISTS(
  SELECT 1 FROM task_trigger_resource_links l
@@ -529,21 +491,6 @@ func (q *Queries) TaskTriggerLinkActive(ctx context.Context, arg TaskTriggerLink
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
-}
-
-const unsuppressTaskTriggerLink = `-- name: UnsuppressTaskTriggerLink :exec
-DELETE FROM task_pull_request_suppressions WHERE integration_id=$1 AND repository_id=$2 AND resource_id=$3
-`
-
-type UnsuppressTaskTriggerLinkParams struct {
-	IntegrationID string `json:"integration_id"`
-	RepositoryID  string `json:"repository_id"`
-	ResourceID    string `json:"resource_id"`
-}
-
-func (q *Queries) UnsuppressTaskTriggerLink(ctx context.Context, arg UnsuppressTaskTriggerLinkParams) error {
-	_, err := q.db.Exec(ctx, unsuppressTaskTriggerLink, arg.IntegrationID, arg.RepositoryID, arg.ResourceID)
-	return err
 }
 
 const updateTaskTriggerIntegration = `-- name: UpdateTaskTriggerIntegration :execrows

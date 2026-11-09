@@ -22,15 +22,20 @@ type WorkspaceAccess interface {
 	GetWorkspace(context.Context, string, string, string) (workspacemodel.Workspace, error)
 }
 
+type EventResolver interface {
+	ResolveEvent(context.Context, string, string) error
+}
+
 type TaskTriggerIntegrationService struct {
+	resolver   EventResolver
 	repository TaskTriggerIntegrationRepository
 	access     WorkspaceAccess
 	box        *secretbox.Box
 	providers  map[string]TaskTriggerProvider
 }
 
-func NewTaskTriggerIntegrationService(repository TaskTriggerIntegrationRepository, access WorkspaceAccess, box *secretbox.Box, providers ...TaskTriggerProvider) (*TaskTriggerIntegrationService, error) {
-	s := &TaskTriggerIntegrationService{repository: repository, access: access, box: box, providers: map[string]TaskTriggerProvider{}}
+func NewTaskTriggerIntegrationService(repository TaskTriggerIntegrationRepository, access WorkspaceAccess, box *secretbox.Box, resolver EventResolver, providers ...TaskTriggerProvider) (*TaskTriggerIntegrationService, error) {
+	s := &TaskTriggerIntegrationService{resolver: resolver, repository: repository, access: access, box: box, providers: map[string]TaskTriggerProvider{}}
 	for _, p := range providers {
 		id := p.Descriptor().ID
 		if id == "" || s.providers[id] != nil {
@@ -162,35 +167,6 @@ func (s *TaskTriggerIntegrationService) Delete(ctx context.Context, user, org, w
 	return s.repository.Delete(ctx, workspace, id)
 }
 
-func (s *TaskTriggerIntegrationService) Link(ctx context.Context, user, org, workspace, id string, link ResourceLink) error {
-	i, err := s.scoped(ctx, user, org, workspace, id, true)
-	if err != nil {
-		return err
-	}
-	p := s.providers[i.Provider]
-	if p == nil {
-		return problem.ErrInvalid
-	}
-	if link.TaskID == "" {
-		return problem.ErrInvalid
-	}
-	if err = p.ValidateResource(i.Config, link); err != nil {
-		return err
-	}
-	snapshot, err := s.repository.ResourceLinkSnapshot(ctx, i.ID, link)
-	if err != nil {
-		return err
-	}
-	if snapshot.Integration.Version != i.Version {
-		return problem.ErrConflict
-	}
-	change, err := PlanResourceLink(snapshot, false)
-	if err != nil {
-		return err
-	}
-	return s.repository.CommitResourceLink(ctx, snapshot, change)
-}
-
 func (s *TaskTriggerIntegrationService) Links(ctx context.Context, user, org, workspace, id string) ([]ResourceLink, error) {
 	if _, err := s.scoped(ctx, user, org, workspace, id, false); err != nil {
 		return nil, err
@@ -202,15 +178,11 @@ func (s *TaskTriggerIntegrationService) Unlink(ctx context.Context, user, org, w
 	if _, err := s.scoped(ctx, user, org, workspace, id, true); err != nil {
 		return err
 	}
-	snapshot, err := s.repository.ResourceLinkSnapshot(ctx, id, link)
+	snapshot, err := s.repository.UnlinkSnapshot(ctx, id, link)
 	if err != nil {
 		return err
 	}
-	change, err := PlanResourceLink(snapshot, true)
-	if err != nil {
-		return err
-	}
-	return s.repository.CommitResourceLink(ctx, snapshot, change)
+	return s.repository.CommitUnlink(ctx, snapshot)
 }
 
 func (s *TaskTriggerIntegrationService) Deliveries(ctx context.Context, user, org, workspace, id string) ([]Delivery, error) {
@@ -221,6 +193,9 @@ func (s *TaskTriggerIntegrationService) Deliveries(ctx context.Context, user, or
 }
 
 func (s *TaskTriggerIntegrationService) Receive(ctx context.Context, id string, request WebhookRequest) error {
+	if s.resolver == nil {
+		return errors.New("webhook event resolver is not configured")
+	}
 	if len(request.Body) > 2<<20 {
 		return problem.ErrInvalid
 	}
@@ -243,7 +218,15 @@ func (s *TaskTriggerIntegrationService) Receive(ctx context.Context, id string, 
 	if err != nil {
 		return err
 	}
-	return s.Ingest(ctx, i, delivery, events)
+	if err := s.Ingest(ctx, i, delivery, events); err != nil {
+		return err
+	}
+	for _, event := range events {
+		if err := s.resolver.ResolveEvent(ctx, i.ID, event.Key); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *TaskTriggerIntegrationService) planProcessing(snapshot ProcessingSnapshot) (ProcessingResult, error) {
