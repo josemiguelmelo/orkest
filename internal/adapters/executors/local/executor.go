@@ -32,6 +32,7 @@ type Config struct {
 	AgentctlBinary           string
 	CodexAuthFile            string
 	ProviderEnv              []string
+	Environment              map[string]string
 	CodingProviders          []coderepository.CodingProvider
 	CodingCredentialResolver checkout.CredentialResolver
 }
@@ -119,6 +120,13 @@ func (e *Executor) StartAgentctl(ctx context.Context, config orchestrationmodel.
 	args := []string{"-listen", fmt.Sprintf("127.0.0.1:%d", port), "-runtime", string(config.Runtime), "-work-dir", workDir, "-state-dir", stateDir, "-run-id", config.RunID}
 	pathGranted := false
 	envNames := make(map[string]bool, len(e.config.ProviderEnv)+2)
+	for name := range e.config.Environment {
+		envNames[name] = true
+		if name == "PATH" {
+			pathGranted = true
+		}
+		args = append(args, "-env", name)
+	}
 	for _, name := range e.config.ProviderEnv {
 		name = strings.TrimSpace(name)
 		if name == "" || strings.ContainsAny(name, "=\x00") {
@@ -141,6 +149,9 @@ func (e *Executor) StartAgentctl(ctx context.Context, config orchestrationmodel.
 		args = append(args, "-env", "PATH")
 	}
 	cmdEnv := localEnvironment(e.config.ProviderEnv)
+	for name, value := range e.config.Environment {
+		cmdEnv = setEnvironment(cmdEnv, name, value)
+	}
 	if config.Runtime == "codex" && e.config.CodexAuthFile != "" {
 		args = append(args, "-env", codexAuthFileEnvironment)
 		cmdEnv = setEnvironment(cmdEnv, codexAuthFileEnvironment, e.config.CodexAuthFile)

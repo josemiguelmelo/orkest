@@ -74,7 +74,9 @@ Rules for the terms in the [glossary](glossary.md).
 - Imported prompts use the external reference plus the Orkest ID for traceability.
 - Agents create/update PRs within permissions. New checkouts use discovered default
   branches; base-branch overrides and further PR policy remain open.
-- Commit as `Orkest Agent <agent@orkest.local>`. Exclude checkout/push credentials
+- Commit with application-wide author/committer identity configured through
+  `ORKEST_GIT_AUTHOR_NAME` and `ORKEST_GIT_AUTHOR_EMAIL`, defaulting to
+  `Orkest Agent <agent@orkest.local>`. Exclude checkout/push credentials
   from repository configuration and plaintext checkpoints. See [credential handling](guides/integrations.md#coding-integrations).
 - Task runs receive workspace coding integration credentials for HTTPS Git operations
   even with no linked repositories. Authentication is scoped to the matching provider

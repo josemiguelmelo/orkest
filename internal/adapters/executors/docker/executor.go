@@ -58,6 +58,7 @@ type Config struct {
 	ContainerUser            string
 	CodexAuthFile            string
 	ProviderEnv              []string
+	Environment              map[string]string
 	CodingProviders          []coderepository.CodingProvider
 	CodingCredentialResolver checkout.CredentialResolver
 }
@@ -284,6 +285,10 @@ func (e *Executor) prepareRepositories(ctx context.Context, workDir string, conf
 func (e *Executor) providerEnvironment() []string {
 	values := make([]string, 0, len(e.config.ProviderEnv))
 	seen := make(map[string]struct{}, len(e.config.ProviderEnv))
+	for name, value := range e.config.Environment {
+		values = append(values, name+"="+value)
+		seen[name] = struct{}{}
+	}
 	for _, name := range e.config.ProviderEnv {
 		name = strings.TrimSpace(name)
 		if name == "" {

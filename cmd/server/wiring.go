@@ -175,6 +175,7 @@ func runServer(ctx context.Context, logger *slog.Logger) error {
 		AgentctlBinary:           config.AgentctlBinary,
 		DockerImages:             profileImages,
 		ProviderEnv:              splitEnvironmentNames(config.AgentProviderEnv),
+		Environment:              map[string]string{"ORKEST_GIT_AUTHOR_NAME": config.GitAuthorName, "ORKEST_GIT_AUTHOR_EMAIL": config.GitAuthorEmail},
 		CodingProviders:          providers,
 		CodingCredentialResolver: codeRepositories,
 		Kubernetes: kubernetesexecutor.Config{
