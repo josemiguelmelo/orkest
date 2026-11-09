@@ -31,6 +31,7 @@ export declare const zTaskTriggerIntegrationInput: z.ZodObject<{
     }, z.core.$strip>>;
 }, z.core.$strip>;
 export declare const zTaskTriggerIntegration: z.ZodObject<{
+    discoveryDiagnostic: z.ZodOptional<z.ZodString>;
     name: z.ZodString;
     provider: z.ZodString;
     config: z.ZodRecord<z.ZodString, z.ZodUnknown>;
@@ -63,6 +64,9 @@ export declare const zTaskTriggerProvider: z.ZodObject<{
     events: z.ZodArray<z.ZodString>;
 }, z.core.$strip>;
 export declare const zTaskTriggerEvent: z.ZodObject<{
+    headRepositoryId: z.ZodOptional<z.ZodString>;
+    headBranch: z.ZodOptional<z.ZodString>;
+    headCommitId: z.ZodOptional<z.ZodString>;
     key: z.ZodString;
     type: z.ZodString;
     repositoryId: z.ZodString;
@@ -71,9 +75,13 @@ export declare const zTaskTriggerEvent: z.ZodObject<{
     referenceUrl: z.ZodURL;
 }, z.core.$strip>;
 export declare const zTaskTriggerDelivery: z.ZodObject<{
+    diagnostic: z.ZodOptional<z.ZodString>;
     id: z.ZodString;
     integrationId: z.ZodString;
     event: z.ZodObject<{
+        headRepositoryId: z.ZodOptional<z.ZodString>;
+        headBranch: z.ZodOptional<z.ZodString>;
+        headCommitId: z.ZodOptional<z.ZodString>;
         key: z.ZodString;
         type: z.ZodString;
         repositoryId: z.ZodString;
@@ -82,6 +90,7 @@ export declare const zTaskTriggerDelivery: z.ZodObject<{
         referenceUrl: z.ZodURL;
     }, z.core.$strip>;
     status: z.ZodEnum<{
+        awaiting_link: "awaiting_link";
         pending: "pending";
         processed: "processed";
         ignored: "ignored";
@@ -3167,6 +3176,7 @@ export declare const zListTaskTriggerIntegrationsPath: z.ZodObject<{
  * Success
  */
 export declare const zListTaskTriggerIntegrationsResponse: z.ZodArray<z.ZodObject<{
+    discoveryDiagnostic: z.ZodOptional<z.ZodString>;
     name: z.ZodString;
     provider: z.ZodString;
     config: z.ZodRecord<z.ZodString, z.ZodUnknown>;
@@ -3215,6 +3225,7 @@ export declare const zCreateTaskTriggerIntegrationPath: z.ZodObject<{
  * Success
  */
 export declare const zCreateTaskTriggerIntegrationResponse: z.ZodObject<{
+    discoveryDiagnostic: z.ZodOptional<z.ZodString>;
     name: z.ZodString;
     provider: z.ZodString;
     config: z.ZodRecord<z.ZodString, z.ZodUnknown>;
@@ -3273,6 +3284,7 @@ export declare const zUpdateTaskTriggerIntegrationPath: z.ZodObject<{
  * Success
  */
 export declare const zUpdateTaskTriggerIntegrationResponse: z.ZodObject<{
+    discoveryDiagnostic: z.ZodOptional<z.ZodString>;
     name: z.ZodString;
     provider: z.ZodString;
     config: z.ZodRecord<z.ZodString, z.ZodUnknown>;
@@ -3343,9 +3355,13 @@ export declare const zListTaskTriggerDeliveriesPath: z.ZodObject<{
  * Success
  */
 export declare const zListTaskTriggerDeliveriesResponse: z.ZodArray<z.ZodObject<{
+    diagnostic: z.ZodOptional<z.ZodString>;
     id: z.ZodString;
     integrationId: z.ZodString;
     event: z.ZodObject<{
+        headRepositoryId: z.ZodOptional<z.ZodString>;
+        headBranch: z.ZodOptional<z.ZodString>;
+        headCommitId: z.ZodOptional<z.ZodString>;
         key: z.ZodString;
         type: z.ZodString;
         repositoryId: z.ZodString;
@@ -3354,6 +3370,7 @@ export declare const zListTaskTriggerDeliveriesResponse: z.ZodArray<z.ZodObject<
         referenceUrl: z.ZodURL;
     }, z.core.$strip>;
     status: z.ZodEnum<{
+        awaiting_link: "awaiting_link";
         pending: "pending";
         processed: "processed";
         ignored: "ignored";

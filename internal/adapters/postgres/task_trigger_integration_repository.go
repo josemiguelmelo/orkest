@@ -4,16 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"sort"
+	"reflect"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/josemiguelmelo/orkest/internal/adapters/postgres/sqlc"
 	problem "github.com/josemiguelmelo/orkest/internal/contracts/problem"
-	"github.com/josemiguelmelo/orkest/internal/platform/ids"
-	"github.com/josemiguelmelo/orkest/internal/server/task"
-	taskmodel "github.com/josemiguelmelo/orkest/internal/server/task/model"
 	trigger "github.com/josemiguelmelo/orkest/internal/server/tasktriggerintegration"
 )
 
@@ -30,6 +26,11 @@ var _ trigger.TaskTriggerIntegrationRepository = (*TaskTriggerIntegrationPostgre
 
 func triggerIntegration(ctx context.Context, q *sqlc.Queries, row sqlc.GetTaskTriggerIntegrationRow) (trigger.Integration, error) {
 	i := trigger.Integration{ID: row.ID, WorkspaceID: row.WorkspaceID, OrganizationID: row.OrganizationID, Name: row.Name, Provider: row.Provider, Config: row.Config, Enabled: row.Enabled, Version: row.Version, ConfiguredBy: row.ConfiguredBy, EncryptedSecret: row.EncryptedSecret, Rules: []trigger.Rule{}}
+	diagnostic, err := q.PullRequestDiscoveryDiagnostic(ctx, row.ID)
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return i, err
+	}
+	i.DiscoveryDiagnostic = diagnostic
 	rules, err := q.ListTaskTriggerRules(ctx, row.ID)
 	if err != nil {
 		return i, err
@@ -80,7 +81,8 @@ func (r *TaskTriggerIntegrationPostgresRepository) Get(ctx context.Context, id s
 	return i, tx.Commit(ctx)
 }
 
-func (r *TaskTriggerIntegrationPostgresRepository) Save(ctx context.Context, i trigger.Integration, create bool) (trigger.Integration, error) {
+func (r *TaskTriggerIntegrationPostgresRepository) Save(ctx context.Context, plan trigger.ConfigurationPlan) (trigger.Integration, error) {
+	i, create := plan.Integration, plan.Create
 	tx, err := r.pool.Begin(ctx)
 	if err != nil {
 		return i, err
@@ -102,31 +104,27 @@ func (r *TaskTriggerIntegrationPostgresRepository) Save(ctx context.Context, i t
 	if err = q.DeleteTaskTriggerRules(ctx, i.ID); err != nil {
 		return i, err
 	}
-	workflowIDs := make([]string, 0, len(i.Rules))
-	for _, rule := range i.Rules {
-		workflowIDs = append(workflowIDs, rule.WorkflowID)
-	}
-	sort.Strings(workflowIDs)
-	for _, workflowID := range workflowIDs {
-		row, e := q.LockWorkflow(ctx, sqlc.LockWorkflowParams{WorkspaceID: i.WorkspaceID, ID: workflowID})
-		if e != nil {
-			return i, mapError(e, problem.ErrInvalid, problem.ErrConflict)
+	for _, expected := range plan.Workflows {
+		row, err := q.LockWorkflow(ctx, sqlc.LockWorkflowParams{WorkspaceID: i.WorkspaceID, ID: expected.ID})
+		if err != nil {
+			return i, mapError(err, problem.ErrInvalid, problem.ErrConflict)
 		}
-		definition, e := workflowDefinition(ctx, q, row)
-		if e != nil {
-			return i, e
+		current, err := workflowDefinition(ctx, q, row)
+		if err != nil {
+			return i, err
 		}
-		for _, rule := range i.Rules {
-			if rule.WorkflowID == workflowID {
-				if e = trigger.ValidateRuleWorkflow(rule, definition); e != nil {
-					return i, e
-				}
-			}
+		if !reflect.DeepEqual(current, expected) {
+			return i, problem.ErrConflict
 		}
 	}
 	for _, rule := range i.Rules {
 		if err = q.InsertTaskTriggerRule(ctx, sqlc.InsertTaskTriggerRuleParams{IntegrationID: i.ID, WorkspaceID: i.WorkspaceID, ID: rule.ID, EventType: rule.Event, WorkflowID: rule.WorkflowID, SourceStageID: rule.SourceStageID, TargetStageID: rule.TargetStageID, Action: rule.Action, PromptText: rule.PromptText}); err != nil {
 			return i, mapError(err, problem.ErrInvalid, problem.ErrConflict)
+		}
+	}
+	if plan.ResetDiscovery {
+		if err = q.ResetPullRequestDiscovery(ctx, i.ID); err != nil {
+			return i, err
 		}
 	}
 	if err = tx.Commit(ctx); err != nil {
@@ -145,17 +143,6 @@ func (r *TaskTriggerIntegrationPostgresRepository) Delete(ctx context.Context, w
 	return err
 }
 
-func (r *TaskTriggerIntegrationPostgresRepository) Link(ctx context.Context, i trigger.Integration, link trigger.ResourceLink) error {
-	count, err := r.queries.PutTaskTriggerResourceLink(ctx, sqlc.PutTaskTriggerResourceLinkParams{IntegrationID: i.ID, WorkspaceID: i.WorkspaceID, TaskID: link.TaskID, RepositoryID: link.RepositoryID, ResourceID: link.ResourceID, Provider: i.Provider})
-	if err != nil {
-		return mapError(err, problem.ErrInvalid, problem.ErrConflict)
-	}
-	if count != 1 {
-		return problem.ErrConflict
-	}
-	return nil
-}
-
 func (r *TaskTriggerIntegrationPostgresRepository) Links(ctx context.Context, id string) ([]trigger.ResourceLink, error) {
 	rows, err := r.queries.ListTaskTriggerResourceLinks(ctx, id)
 	if err != nil {
@@ -168,55 +155,8 @@ func (r *TaskTriggerIntegrationPostgresRepository) Links(ctx context.Context, id
 	return result, nil
 }
 
-func (r *TaskTriggerIntegrationPostgresRepository) Unlink(ctx context.Context, id string, link trigger.ResourceLink) error {
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	q := r.queries.WithTx(tx)
-	if _, err = q.LockTaskTriggerIntegration(ctx, id); err != nil {
-		return err
-	}
-	if err = q.DeleteTaskTriggerResourceLink(ctx, sqlc.DeleteTaskTriggerResourceLinkParams{IntegrationID: id, RepositoryID: link.RepositoryID, ResourceID: link.ResourceID}); err != nil {
-		return err
-	}
-	return tx.Commit(ctx)
-}
-
-func (r *TaskTriggerIntegrationPostgresRepository) Ingest(ctx context.Context, i trigger.Integration, delivery string, events []trigger.Event) error {
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	q := r.queries.WithTx(tx)
-	current, err := q.LockTaskTriggerIntegration(ctx, i.ID)
-	if err != nil {
-		return err
-	}
-	// Configuration/secret rotation during verification must not accept old credentials.
-	if current.Version != i.Version {
-		return problem.ErrConflict
-	}
-	for _, event := range events {
-		id, e := ids.NewUUID()
-		if e != nil {
-			return e
-		}
-		body, e := json.Marshal(event)
-		if e != nil {
-			return e
-		}
-		if err = q.InsertTaskTriggerDelivery(ctx, sqlc.InsertTaskTriggerDeliveryParams{ID: id, IntegrationID: i.ID, DeliveryID: delivery, EventKey: event.Key, Event: body, RepositoryID: event.RepositoryID, ResourceID: event.ResourceID, OccurredAt: pgtype.Timestamptz{Time: event.OccurredAt, Valid: true}}); err != nil {
-			return err
-		}
-	}
-	return tx.Commit(ctx)
-}
-
 func triggerDelivery(row sqlc.TaskTriggerDelivery) (trigger.Delivery, error) {
-	d := trigger.Delivery{ID: row.ID, IntegrationID: row.IntegrationID, Status: row.Status, ReceivedAt: row.ReceivedAt.Time}
+	d := trigger.Delivery{ID: row.ID, IntegrationID: row.IntegrationID, Status: row.Status, Diagnostic: row.Diagnostic, ReceivedAt: row.ReceivedAt.Time}
 	err := json.Unmarshal(row.Event, &d.Event)
 	return d, err
 }
@@ -235,64 +175,4 @@ func (r *TaskTriggerIntegrationPostgresRepository) Deliveries(ctx context.Contex
 		result = append(result, d)
 	}
 	return result, nil
-}
-
-func (r *TaskTriggerIntegrationPostgresRepository) ProcessNext(ctx context.Context, decide func(context.Context, trigger.ProcessingSnapshot) (trigger.ProcessingResult, error)) (bool, error) {
-	tx, err := r.pool.Begin(ctx)
-	if err != nil {
-		return false, err
-	}
-	defer func() { _ = tx.Rollback(ctx) }()
-	q := r.queries.WithTx(tx)
-	row, err := q.NextTaskTriggerDelivery(ctx)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	config, err := q.LockTaskTriggerIntegration(ctx, row.IntegrationID)
-	if err != nil {
-		return false, err
-	}
-	i, err := triggerIntegration(ctx, q, sqlc.GetTaskTriggerIntegrationRow(config))
-	if err != nil {
-		return false, err
-	}
-	d, err := triggerDelivery(row)
-	if err != nil {
-		return false, err
-	}
-	actor, err := q.GetWorkspace(ctx, sqlc.GetWorkspaceParams{OrganizationID: i.OrganizationID, ID: i.WorkspaceID, UserID: i.ConfiguredBy})
-	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
-		return false, err
-	}
-	outcome := "ignored"
-	err = applyTaskChange(ctx, q, i.ConfiguredBy, i.OrganizationID, i.WorkspaceID, row.TaskID, row.ID, func(t task.TaskWorkflowSnapshot) (task.TaskWorkflowEffects, *taskmodel.TaskInput, error) {
-		linked, e := q.TaskTriggerLinkActive(ctx, sqlc.TaskTriggerLinkActiveParams{IntegrationID: i.ID, TaskID: row.TaskID, RepositoryID: d.Event.RepositoryID, ResourceID: d.Event.ResourceID, ProviderName: i.Provider})
-		if e != nil {
-			return task.TaskWorkflowEffects{}, nil, e
-		}
-		if !linked {
-			return task.TaskWorkflowEffects{Replay: true}, nil, nil
-		}
-		result, e := decide(ctx, trigger.ProcessingSnapshot{ActorRole: actor.Role, Integration: i, Delivery: d, StageVersion: row.StageVersion, Task: t})
-		if e != nil {
-			return task.TaskWorkflowEffects{}, nil, e
-		}
-		outcome = result.Status
-		if result.Effects == nil {
-			return task.TaskWorkflowEffects{Replay: true}, nil, nil
-		}
-		return *result.Effects, nil, nil
-	})
-	if errors.Is(err, problem.ErrNotFound) {
-		outcome = "ignored"
-	} else if err != nil {
-		return false, err
-	}
-	if err = q.FinishTaskTriggerDelivery(ctx, sqlc.FinishTaskTriggerDeliveryParams{ID: row.ID, Status: outcome}); err != nil {
-		return false, err
-	}
-	return true, tx.Commit(ctx)
 }

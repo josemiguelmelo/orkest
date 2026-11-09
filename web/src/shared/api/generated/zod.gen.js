@@ -18,6 +18,7 @@ export const zTaskTriggerIntegrationInput = z.object({
     rules: z.array(zTaskTriggerRule).max(200)
 });
 export const zTaskTriggerIntegration = z.object({
+    discoveryDiagnostic: z.string().optional(),
     name: z.string().min(1).max(200),
     provider: z.string(),
     config: z.record(z.string(), z.unknown()),
@@ -39,6 +40,9 @@ export const zTaskTriggerProvider = z.object({
     events: z.array(z.string())
 });
 export const zTaskTriggerEvent = z.object({
+    headRepositoryId: z.string().optional(),
+    headBranch: z.string().optional(),
+    headCommitId: z.string().optional(),
     key: z.string(),
     type: z.string(),
     repositoryId: z.string(),
@@ -47,10 +51,12 @@ export const zTaskTriggerEvent = z.object({
     referenceUrl: z.url()
 });
 export const zTaskTriggerDelivery = z.object({
+    diagnostic: z.string().optional(),
     id: z.string(),
     integrationId: z.string(),
     event: zTaskTriggerEvent,
     status: z.enum([
+        'awaiting_link',
         'pending',
         'processed',
         'ignored',

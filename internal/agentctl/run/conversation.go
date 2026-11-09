@@ -6,6 +6,7 @@ import (
 	"sync"
 
 	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
+	"github.com/josemiguelmelo/orkest/internal/agentctl/repositoryobserver"
 	runmodel "github.com/josemiguelmelo/orkest/internal/agentctl/run/model"
 	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
 )
@@ -23,6 +24,9 @@ type conversationSnapshot struct {
 // conversation owns prompt execution, pending permissions, and activity
 // for one bound runtime session. It does not launch or close the runtime session.
 type conversation struct {
+	repositoryScanner          repositoryobserver.Scanner
+	repositoryObserver         *repositoryobserver.Observer
+	repositoryObservationStore *repositoryObservationStore
 	// mu protects durable state, transient execution state, and work admission.
 	// Status and stop need only mu.
 	mu    sync.RWMutex

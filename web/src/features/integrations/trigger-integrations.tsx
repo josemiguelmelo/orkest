@@ -515,6 +515,7 @@ function TriggerCard({
             </form>
           )}
           <h4>Recent deliveries</h4>
+          {item.discoveryDiagnostic ? <p role="status">PR discovery: {item.discoveryDiagnostic}</p> : null}
           {deliveries.isError ? (
             <ErrorState error={deliveries.error} />
           ) : (
@@ -522,6 +523,7 @@ function TriggerCard({
               {deliveries.data?.map((d) => (
                 <li key={d.id}>
                   {d.event.type} · PR {d.event.resourceId} · {d.status}
+                  {d.diagnostic ? ` · ${d.diagnostic}` : null}
                 </li>
               ))}
             </ul>

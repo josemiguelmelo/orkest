@@ -8,17 +8,18 @@ import (
 	"time"
 
 	"github.com/josemiguelmelo/orkest/internal/adapters/http/agentctl"
+	"github.com/josemiguelmelo/orkest/internal/agentctl/repositoryobserver"
 	agentrun "github.com/josemiguelmelo/orkest/internal/agentctl/run"
 	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
 	"github.com/josemiguelmelo/orkest/internal/platform/httpserver"
 )
 
 // RunAgentctl owns a standalone control server, independent of the platform.
-func RunAgentctl(ctx context.Context, logger *slog.Logger, address string, host agentruntime.RuntimeHost, stateDir string, expectedRunID string) error {
+func RunAgentctl(ctx context.Context, logger *slog.Logger, address string, host agentruntime.RuntimeHost, stateDir string, expectedRunID string, scanners ...repositoryobserver.Scanner) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	controller := agentrun.NewRunController(ctx, host, stateDir, logger)
+	controller := agentrun.NewRunController(ctx, host, stateDir, logger, scanners...)
 	var supervisor sync.WaitGroup
 	defer func() { cancel(); supervisor.Wait(); _ = controller.Close() }()
 	if err := controller.RecoverFromCheckpoint(expectedRunID); err != nil {

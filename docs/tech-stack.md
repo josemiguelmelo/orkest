@@ -48,6 +48,9 @@ The platform and agentctl share one Go module. The UI is a React application.
 - PostgreSQL adapters own locks, transactions, consistency enforcement and row→domain mapping.
   Domain planners supply business effects. Workflow dispatch uses short claim and
   acknowledgement transactions with external delivery in the use case.
+- Task trigger/link processing uses explicit snapshot reads, pure domain plans,
+  and guarded atomic commits. PostgreSQL rechecks locked facts before writing;
+  repositories do not invoke policy callbacks or choose business outcomes.
 - Composition lives in `cmd/server` and `cmd/agentctl`; `bin/orkest` remains the
   platform binary. [Architecture](architecture.md) defines server/worker, adapter,
   transport-contract and platform utility boundaries.

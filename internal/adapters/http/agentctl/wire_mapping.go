@@ -74,6 +74,7 @@ func toWireEvent(value interaction.Event) wire.Event {
 	}
 	result.StopReason = value.StopReason
 	result.Error = value.Error
+	result.RepositoryObservation = value.RepositoryObservation
 	return result
 }
 

@@ -3,13 +3,12 @@ package postgres
 import (
 	"context"
 	"encoding/json"
-	"errors"
+	"reflect"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/josemiguelmelo/orkest/internal/platform/ids"
-	"github.com/josemiguelmelo/orkest/internal/server/task"
 	taskmodel "github.com/josemiguelmelo/orkest/internal/server/task/model"
 	trigger "github.com/josemiguelmelo/orkest/internal/server/tasktriggerintegration"
 	"github.com/josemiguelmelo/orkest/internal/server/workflowautomation"
@@ -31,12 +30,12 @@ func testTaskTriggerIntegrations(t *testing.T, db *PostgresDatabase, org, worksp
 		t.Fatal(err)
 	}
 	repo := NewTaskTriggerIntegrationPostgresRepository(db)
-	integration, err := repo.Save(ctx, trigger.Integration{ID: newID(), WorkspaceID: workspace, OrganizationID: org, Name: "Review hooks", Provider: "github", Config: json.RawMessage(`{"repositoryId":"123"}`), Enabled: true, ConfiguredBy: actor, EncryptedSecret: "encrypted", Rules: []trigger.Rule{{ID: "review", Event: "pull_request.review_submitted", WorkflowID: workspace, SourceStageID: "todo", TargetStageID: "in_review", Action: "move_task"}}}, true)
+	integration, err := saveTestTriggerConfiguration(ctx, repo, trigger.Integration{ID: newID(), WorkspaceID: workspace, OrganizationID: org, Name: "Review hooks", Provider: "github", Config: json.RawMessage(`{"repositoryId":"123"}`), Enabled: true, ConfiguredBy: actor, EncryptedSecret: "encrypted", Rules: []trigger.Rule{{ID: "review", Event: "pull_request.review_submitted", WorkflowID: workspace, SourceStageID: "todo", TargetStageID: "in_review", Action: "move_task"}}}, true)
 	if err != nil {
 		t.Fatal(err)
 	}
 	// Cross-workspace and unselected repositories cannot establish links.
-	if err = repo.Link(ctx, integration, trigger.ResourceLink{TaskID: taskID, RepositoryID: "123", ResourceID: "4"}); err == nil {
+	if err = writeTestTriggerLink(ctx, repo, integration.ID, false, trigger.ResourceLink{TaskID: taskID, RepositoryID: "123", ResourceID: "4"}); err == nil {
 		t.Fatal("linked unselected repository")
 	}
 
@@ -47,31 +46,43 @@ func testTaskTriggerIntegrations(t *testing.T, db *PostgresDatabase, org, worksp
 	if _, err = db.pool.Exec(ctx, `INSERT INTO task_repositories(workspace_id,task_id,repository_id) VALUES($1,$2,$3)`, workspace, taskID, repositoryID); err != nil {
 		t.Fatal(err)
 	}
-	if err = repo.Link(ctx, integration, trigger.ResourceLink{TaskID: taskID, RepositoryID: "123", ResourceID: "4"}); err != nil {
+	if err = writeTestTriggerLink(ctx, repo, integration.ID, false, trigger.ResourceLink{TaskID: taskID, RepositoryID: "123", ResourceID: "4"}); err != nil {
 		t.Fatal(err)
 	}
 	event := trigger.Event{Key: "review:1", Type: "pull_request.review_submitted", RepositoryID: "123", ResourceID: "4", OccurredAt: time.Now().Add(time.Second)}
-	if err = repo.Ingest(ctx, integration, "delivery-1", []trigger.Event{event}); err != nil {
+	if err = ingestTestTriggerEvents(ctx, repo, integration, "delivery-1", []trigger.Event{event}); err != nil {
 		t.Fatal(err)
 	}
-	if err = repo.Ingest(ctx, integration, "delivery-2", []trigger.Event{event}); err != nil {
+	if err = ingestTestTriggerEvents(ctx, repo, integration, "delivery-2", []trigger.Event{event}); err != nil {
 		t.Fatal(err)
 	}
 	deliveries, err := repo.Deliveries(ctx, integration.ID)
 	if err != nil || len(deliveries) != 1 {
 		t.Fatalf("duplicate deliveries: %d %v", len(deliveries), err)
 	}
-	sentinel := errors.New("rollback after planning")
 	// Force acknowledgement failure after planning a real movement: neither
 	// the movement nor its outbox event may survive the transaction rollback.
-	decide := func(ctx context.Context, s trigger.ProcessingSnapshot) (trigger.ProcessingResult, error) {
-		result, e := workflowautomation.PlanTaskTransition(workflowautomation.TransitionSnapshot{Workflow: s.Task.Workflow, Task: s.Task.Task, ActorID: actor}, workflowautomation.TransitionCommand{Input: workflowautomation.TransitionRequest{Action: "move", StageID: "in_review", StageVersion: s.StageVersion, CommandID: s.Delivery.ID}})
-		if e != nil {
-			return trigger.ProcessingResult{}, e
-		}
-		return trigger.ProcessingResult{Status: "invalid-status", Effects: &task.TaskWorkflowEffects{Command: task.WorkflowCommand(result.Input), Persistence: result.Persistence, StageID: result.Plan.StageID, AssigneeAgentID: result.Plan.AssigneeAgentID, Moved: result.Moved, StageVersion: result.StageVersion}}, nil
+	snapshot, found, err := repo.NextProcessing(ctx)
+	if err != nil || !found {
+		t.Fatalf("snapshot: %v %v", found, err)
 	}
-	if _, err = repo.ProcessNext(ctx, decide); err == nil {
+	again, found, err := repo.NextProcessing(ctx)
+	if err != nil || !found || !reflect.DeepEqual(snapshot, again) {
+		t.Fatal("snapshot read changed or consumed delivery", err)
+	}
+	result := testTriggerDecision(t, snapshot, actor, "invalid-status")
+	if _, err = db.pool.Exec(ctx, `UPDATE task_trigger_deliveries SET diagnostic='changed while planning' WHERE id=$1`, snapshot.Delivery.ID); err != nil {
+		t.Fatal(err)
+	}
+	if committed, err := repo.CommitProcessing(ctx, snapshot, result); err != nil || committed {
+		t.Fatalf("stale snapshot applied: %v %v", committed, err)
+	}
+	snapshot, found, err = repo.NextProcessing(ctx)
+	if err != nil || !found {
+		t.Fatal(err)
+	}
+	result = testTriggerDecision(t, snapshot, actor, "invalid-status")
+	if _, err = repo.CommitProcessing(ctx, snapshot, result); err == nil {
 		t.Fatal("expected status constraint rollback")
 	}
 	loaded, err := tasks.Task(ctx, org, workspace, taskID)
@@ -82,21 +93,16 @@ func testTaskTriggerIntegrations(t *testing.T, db *PostgresDatabase, org, worksp
 	if err != nil || deliveries[0].Status != "pending" {
 		t.Fatalf("ack survived rollback: %+v %v", deliveries, err)
 	}
-	if _, err = repo.ProcessNext(ctx, func(context.Context, trigger.ProcessingSnapshot) (trigger.ProcessingResult, error) {
-		return trigger.ProcessingResult{}, sentinel
-	}); !errors.Is(err, sentinel) {
-		t.Fatal(err)
-	}
 	var workers sync.WaitGroup
 	results := make(chan bool, 2)
 	failures := make(chan error, 2)
 	for range 2 {
 		workers.Go(func() {
-			found, e := repo.ProcessNext(ctx, func(ctx context.Context, s trigger.ProcessingSnapshot) (trigger.ProcessingResult, error) {
-				result, e := decide(ctx, s)
-				result.Status = "processed"
-				return result, e
-			})
+			snapshot, found, e := repo.NextProcessing(ctx)
+			if e == nil && found {
+				result := testTriggerDecision(t, snapshot, actor, "processed")
+				found, e = repo.CommitProcessing(ctx, snapshot, result)
+			}
 			results <- found
 			failures <- e
 		})
@@ -126,10 +132,52 @@ func testTaskTriggerIntegrations(t *testing.T, db *PostgresDatabase, org, worksp
 	if err != nil || deliveries[0].Status != "processed" {
 		t.Fatalf("not acknowledged: %+v %v", deliveries, err)
 	}
-	if err = repo.Ingest(ctx, integration, "delivery-3", []trigger.Event{event}); err != nil {
+	if err = ingestTestTriggerEvents(ctx, repo, integration, "delivery-3", []trigger.Event{event}); err != nil {
 		t.Fatal(err)
 	}
-	if found, e := repo.ProcessNext(ctx, decide); e != nil || found {
+	if _, found, e := repo.NextProcessing(ctx); e != nil || found {
 		t.Fatalf("replay processed: %v %v", found, e)
 	}
+}
+
+func testTriggerDecision(t *testing.T, s trigger.ProcessingSnapshot, actor, status string) trigger.ProcessingResult {
+	t.Helper()
+	result, err := workflowautomation.PlanTaskTransition(workflowautomation.TransitionSnapshot{Workflow: s.Task.Workflow, Task: s.Task.Task, ActorID: actor}, workflowautomation.TransitionCommand{Input: workflowautomation.TransitionRequest{Action: "move", StageID: "in_review", StageVersion: s.StageVersion, CommandID: s.Delivery.ID}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	effects := result.TaskWorkflowEffects()
+	return trigger.ProcessingResult{Status: status, Effects: &effects}
+}
+
+func writeTestTriggerLink(ctx context.Context, repo *TaskTriggerIntegrationPostgresRepository, id string, remove bool, link trigger.ResourceLink) error {
+	snapshot, err := repo.ResourceLinkSnapshot(ctx, id, link)
+	if err != nil {
+		return err
+	}
+	change, err := trigger.PlanResourceLink(snapshot, remove)
+	if err != nil {
+		return err
+	}
+	return repo.CommitResourceLink(ctx, snapshot, change)
+}
+
+func ingestTestTriggerEvents(ctx context.Context, repo *TaskTriggerIntegrationPostgresRepository, i trigger.Integration, delivery string, events []trigger.Event) error {
+	service, err := trigger.NewTaskTriggerIntegrationService(repo, nil, nil)
+	if err != nil {
+		return err
+	}
+	return service.Ingest(ctx, i, delivery, events)
+}
+
+func saveTestTriggerConfiguration(ctx context.Context, repo *TaskTriggerIntegrationPostgresRepository, i trigger.Integration, create bool) (trigger.Integration, error) {
+	workflows, err := repo.RuleWorkflows(ctx, i.WorkspaceID, i.Rules)
+	if err != nil {
+		return trigger.Integration{}, err
+	}
+	plan, err := trigger.PlanConfiguration(i, create, workflows)
+	if err != nil {
+		return trigger.Integration{}, err
+	}
+	return repo.Save(ctx, plan)
 }

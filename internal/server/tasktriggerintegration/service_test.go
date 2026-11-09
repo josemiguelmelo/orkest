@@ -31,10 +31,13 @@ type repository struct {
 	result   trigger.ProcessingResult
 }
 
-func (r *repository) ProcessNext(ctx context.Context, decide func(context.Context, trigger.ProcessingSnapshot) (trigger.ProcessingResult, error)) (bool, error) {
-	var err error
-	r.result, err = decide(ctx, r.snapshot)
-	return true, err
+func (r *repository) NextProcessing(context.Context) (trigger.ProcessingSnapshot, bool, error) {
+	return r.snapshot, true, nil
+}
+
+func (r *repository) CommitProcessing(_ context.Context, _ trigger.ProcessingSnapshot, result trigger.ProcessingResult) (bool, error) {
+	r.result = result
+	return true, nil
 }
 
 func TestProcessingPolicy(t *testing.T) {
@@ -55,7 +58,7 @@ func TestProcessingPolicy(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			definition := workflowmodel.DefaultDefinition("Default")
 			definition.ID = "workflow"
-			r := &repository{snapshot: trigger.ProcessingSnapshot{Integration: trigger.Integration{ID: "integration", Provider: "github", Config: json.RawMessage(`{"repositoryId":"123"}`), Enabled: true, ConfiguredBy: "admin", Rules: []trigger.Rule{{ID: "rule", Event: githubtrigger.ReviewSubmitted, WorkflowID: "workflow", SourceStageID: "in_review", TargetStageID: "in_progress"}}}, Delivery: trigger.Delivery{ID: "event-id", Event: trigger.Event{Type: githubtrigger.ReviewSubmitted, RepositoryID: "123", ResourceID: "4", ReferenceURL: "https://github.com/owner/repo/pull/4"}}, StageVersion: 2, Task: task.TaskWorkflowSnapshot{Workflow: definition, Task: taskmodel.Task{ID: "task", WorkflowID: "workflow", Status: "in_review", StageVersion: 2, StageWorkState: taskmodel.WorkStateIdle}}}}
+			r := &repository{snapshot: trigger.ProcessingSnapshot{TaskFound: true, LinkActive: true, Integration: trigger.Integration{ID: "integration", Provider: "github", Config: json.RawMessage(`{"repositoryId":"123"}`), Enabled: true, ConfiguredBy: "admin", Rules: []trigger.Rule{{ID: "rule", Event: githubtrigger.ReviewSubmitted, WorkflowID: "workflow", SourceStageID: "in_review", TargetStageID: "in_progress"}}}, Delivery: trigger.Delivery{ID: "event-id", Event: trigger.Event{Type: githubtrigger.ReviewSubmitted, RepositoryID: "123", ResourceID: "4", ReferenceURL: "https://github.com/owner/repo/pull/4"}}, StageVersion: 2, Task: task.TaskWorkflowSnapshot{Workflow: definition, Task: taskmodel.Task{ID: "task", WorkflowID: "workflow", Status: "in_review", StageVersion: 2, StageWorkState: taskmodel.WorkStateIdle}}}}
 			r.snapshot.ActorRole = tc.role
 			tc.mutate(&r.snapshot)
 			service, err := trigger.NewTaskTriggerIntegrationService(r, access{role: tc.role}, nil, githubtrigger.NewGitHubProvider())
@@ -85,6 +88,7 @@ func TestReviewStartRuleStartsAssignedAgentInSameStage(t *testing.T) {
 	definition.ID = "workflow"
 	prompt := "Read review comments and reply with the fix."
 	r := &repository{snapshot: trigger.ProcessingSnapshot{
+		TaskFound: true, LinkActive: true,
 		Integration:  trigger.Integration{ID: "integration", Provider: "github", Config: json.RawMessage(`{"repositoryId":"123"}`), Enabled: true, ConfiguredBy: "admin", Rules: []trigger.Rule{{ID: "rule", Event: githubtrigger.ReviewSubmitted, WorkflowID: "workflow", SourceStageID: "in_review", TargetStageID: "in_review", Action: "start_work", PromptText: prompt}}},
 		Delivery:     trigger.Delivery{ID: "event-id", Event: trigger.Event{Type: githubtrigger.ReviewSubmitted, RepositoryID: "123", ResourceID: "4", ReferenceURL: "https://github.com/owner/repo/pull/4"}},
 		StageVersion: 2,
@@ -121,5 +125,35 @@ func TestViewersCannotConfigure(t *testing.T) {
 func TestDuplicateProvidersRejected(t *testing.T) {
 	if _, err := trigger.NewTaskTriggerIntegrationService(nil, nil, nil, githubtrigger.NewGitHubProvider(), githubtrigger.NewGitHubProvider()); err == nil {
 		t.Fatal("expected duplicate provider error")
+	}
+}
+
+type resourceLinkRepository struct {
+	trigger.TaskTriggerIntegrationRepository
+	committed bool
+}
+
+func (r *resourceLinkRepository) Get(context.Context, string) (trigger.Integration, error) {
+	return trigger.Integration{ID: "integration", WorkspaceID: "workspace", Provider: "github", Config: json.RawMessage(`{"repositoryId":"123"}`), Version: 1}, nil
+}
+
+func (r *resourceLinkRepository) ResourceLinkSnapshot(context.Context, string, trigger.ResourceLink) (trigger.ResourceLinkSnapshot, error) {
+	return trigger.ResourceLinkSnapshot{Integration: trigger.Integration{Version: 2}, RepositorySelected: true}, nil
+}
+
+func (r *resourceLinkRepository) CommitResourceLink(context.Context, trigger.ResourceLinkSnapshot, trigger.ResourceLinkChange) error {
+	r.committed = true
+	return nil
+}
+
+func TestResourceValidationCannotApplyToChangedConfiguration(t *testing.T) {
+	repo := &resourceLinkRepository{}
+	service, err := trigger.NewTaskTriggerIntegrationService(repo, access{role: "admin"}, nil, githubtrigger.NewGitHubProvider())
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = service.Link(context.Background(), "user", "org", "workspace", "integration", trigger.ResourceLink{TaskID: "task", RepositoryID: "123", ResourceID: "4"})
+	if !errors.Is(err, problem.ErrConflict) || repo.committed {
+		t.Fatalf("stale provider validation committed: %v %v", repo.committed, err)
 	}
 }

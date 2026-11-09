@@ -21,6 +21,7 @@ export type TaskTriggerIntegrationInput = {
     rules: Array<TaskTriggerRule>;
 };
 export type TaskTriggerIntegration = {
+    discoveryDiagnostic?: string;
     name: string;
     provider: string;
     config: {
@@ -46,6 +47,9 @@ export type TaskTriggerProvider = {
     events: Array<string>;
 };
 export type TaskTriggerEvent = {
+    headRepositoryId?: string;
+    headBranch?: string;
+    headCommitId?: string;
     key: string;
     type: string;
     repositoryId: string;
@@ -54,10 +58,11 @@ export type TaskTriggerEvent = {
     referenceUrl: string;
 };
 export type TaskTriggerDelivery = {
+    diagnostic?: string;
     id: string;
     integrationId: string;
     event: TaskTriggerEvent;
-    status: 'pending' | 'processed' | 'ignored' | 'blocked' | 'failed';
+    status: 'awaiting_link' | 'pending' | 'processed' | 'ignored' | 'blocked' | 'failed';
     receivedAt: string;
 };
 export type SkillInput = {

@@ -44,6 +44,7 @@ func (c *RunController) RestoreSession() error {
 		case <-c.session.Done():
 			oldConversation = c.conversation
 			c.conversation = newConversation(c.ctx, c.stateDir, c.logger)
+			c.conversation.repositoryScanner = oldConversation.repositoryScanner
 			c.session = nil
 		default:
 			c.mu.Unlock()

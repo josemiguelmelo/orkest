@@ -104,5 +104,10 @@ func (s *WorkflowAutomationService) PlanStageChange(snapshot task.TaskWorkflowSn
 	if err != nil {
 		return task.TaskWorkflowEffects{}, err
 	}
-	return task.TaskWorkflowEffects{Command: task.WorkflowCommand(effects.Input), Persistence: effects.Persistence, Replay: effects.Replay, StageID: effects.Plan.StageID, AssigneeAgentID: effects.Plan.AssigneeAgentID, Start: effects.Plan.Start, Completed: effects.CompleteStage, Moved: effects.Moved, StageVersion: effects.StageVersion}, nil
+	return effects.TaskWorkflowEffects(), nil
+}
+
+// TaskWorkflowEffects maps the complete decision for every transition consumer.
+func (effects TransitionEffects) TaskWorkflowEffects() task.TaskWorkflowEffects {
+	return task.TaskWorkflowEffects{Command: task.WorkflowCommand(effects.Input), Persistence: effects.Persistence, Replay: effects.Replay, StageID: effects.Plan.StageID, AssigneeAgentID: effects.Plan.AssigneeAgentID, Start: effects.Plan.Start, Completed: effects.CompleteStage, Moved: effects.Moved, StageVersion: effects.StageVersion}
 }

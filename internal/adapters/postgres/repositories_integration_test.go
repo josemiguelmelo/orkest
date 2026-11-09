@@ -22,7 +22,7 @@ func TestPostgresRepositories(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx := context.Background()
-	database, err := initialize(ctx, dsn)
+	database, err := isolatedRepositoryDatabase(t, ctx, dsn)
 	if err != nil {
 		t.Fatalf("open PostgreSQL database: %v", err)
 	}
@@ -176,6 +176,7 @@ func TestPostgresRepositories(t *testing.T) {
 	}
 	t.Run("bounded task listing", func(t *testing.T) { testTaskListingUsesBoundedScopedQueries(t, database, org.ID, workspaceID, taskID) })
 	t.Run("workflow delivery claims", func(t *testing.T) { testWorkflowDeliveryClaims(t, database, org.ID, workspaceID, owner.ID, worker.ID) })
+	t.Run("automatic pull request links", func(t *testing.T) { testAutomaticPullRequestLinks(t, database, org.ID, workspaceID, owner.ID) })
 	t.Run("task trigger integrations", func(t *testing.T) { testTaskTriggerIntegrations(t, database, org.ID, workspaceID, owner.ID) })
 	t.Run("workspace workflow transitions", func(t *testing.T) { testWorkspaceWorkflow(t, database, org.ID, owner.ID, worker.ID) })
 	t.Run("task artifacts", func(t *testing.T) { testTaskArtifacts(t, database, org.ID, workspaceID, taskID, owner.ID) })

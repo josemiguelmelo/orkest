@@ -34,24 +34,37 @@ func withTaskChange(ctx context.Context, pool *pgxpool.Pool, queries *sqlc.Queri
 
 // applyTaskChange allows inbox acknowledgement and workflow effects to share one transaction.
 func applyTaskChange(ctx context.Context, q *sqlc.Queries, userID, orgID, workspaceID, id, commandID string, decide func(task.TaskWorkflowSnapshot) (task.TaskWorkflowEffects, *taskmodel.TaskInput, error)) error {
+	snapshot, err := loadTaskChangeSnapshot(ctx, q, userID, orgID, workspaceID, id, commandID)
+	if err != nil {
+		return err
+	}
+	decision, content, err := decide(snapshot)
+	if err != nil {
+		return err
+	}
+	return persistTaskChange(ctx, q, userID, orgID, workspaceID, id, snapshot, decision, content)
+}
+
+// loadTaskChangeSnapshot locks workflow/task rows and returns facts without deciding effects.
+func loadTaskChangeSnapshot(ctx context.Context, q *sqlc.Queries, userID, orgID, workspaceID, id, commandID string) (task.TaskWorkflowSnapshot, error) {
 	entry, err := q.TaskWorkflowState(ctx, sqlc.TaskWorkflowStateParams{WorkspaceID: workspaceID, ID: id})
 	if err != nil {
-		return mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
+		return task.TaskWorkflowSnapshot{}, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
 	}
 	data, err := q.LockWorkflow(ctx, sqlc.LockWorkflowParams{WorkspaceID: workspaceID, ID: entry.WorkflowID})
 	if err != nil {
-		return err
+		return task.TaskWorkflowSnapshot{}, err
 	}
 	d, err := workflowDefinition(ctx, q, data)
 	if err != nil {
-		return err
+		return task.TaskWorkflowSnapshot{}, err
 	}
 	state, err := q.LockWorkflowTask(ctx, sqlc.LockWorkflowTaskParams{WorkspaceID: workspaceID, ID: id})
 	if err != nil {
-		return mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
+		return task.TaskWorkflowSnapshot{}, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
 	}
 	if state.WorkflowID != entry.WorkflowID {
-		return modelerrors.ErrConflict
+		return task.TaskWorkflowSnapshot{}, modelerrors.ErrConflict
 	}
 	var previous *task.WorkflowCommand
 	if commandID != "" {
@@ -59,28 +72,29 @@ func applyTaskChange(ctx context.Context, q *sqlc.Queries, userID, orgID, worksp
 		if e == nil {
 			previous = new(task.WorkflowCommand)
 			if e = json.Unmarshal(row.Options, previous); e != nil {
-				return e
+				return task.TaskWorkflowSnapshot{}, e
 			}
 		} else if !errors.Is(e, pgx.ErrNoRows) {
-			return e
+			return task.TaskWorkflowSnapshot{}, e
 		}
 	}
 	row, err := q.GetTask(ctx, sqlc.GetTaskParams{OrganizationID: orgID, WorkspaceID: workspaceID, ID: id})
 	if err != nil {
-		return mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
+		return task.TaskWorkflowSnapshot{}, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
 	}
 	active := false
 	if previous == nil {
 		if _, e := q.ActiveTaskLaunch(ctx, sqlc.ActiveTaskLaunchParams{WorkspaceID: workspaceID, TaskID: id}); e == nil {
 			active = true
 		} else if !errors.Is(e, pgx.ErrNoRows) {
-			return e
+			return task.TaskWorkflowSnapshot{}, e
 		}
 	}
-	decision, content, err := decide(task.TaskWorkflowSnapshot{Workflow: d, Task: taskFromRow(row), ActiveLaunch: active, RecordedCommand: previous != nil, RecordedInput: previous, ActorID: userID, RunID: state.WorkflowRunID})
-	if err != nil {
-		return err
-	}
+	return task.TaskWorkflowSnapshot{Workflow: d, Task: taskFromRow(row), ActiveLaunch: active, RecordedCommand: previous != nil, RecordedInput: previous, ActorID: userID, RunID: state.WorkflowRunID}, nil
+}
+
+func persistTaskChange(ctx context.Context, q *sqlc.Queries, userID, orgID, workspaceID, id string, snapshot task.TaskWorkflowSnapshot, decision task.TaskWorkflowEffects, content *taskmodel.TaskInput) error {
+	var err error
 	if decision.Replay {
 		return nil
 	}
@@ -99,7 +113,7 @@ func applyTaskChange(ctx context.Context, q *sqlc.Queries, userID, orgID, worksp
 				return mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
 			}
 		}
-	} else if err = q.MoveWorkflowTask(ctx, sqlc.MoveWorkflowTaskParams{WorkspaceID: workspaceID, ID: id, StageVersion: state.StageVersion, Status: plan.StageID, Column5: plan.AssigneeAgentID}); err != nil {
+	} else if err = q.MoveWorkflowTask(ctx, sqlc.MoveWorkflowTaskParams{WorkspaceID: workspaceID, ID: id, StageVersion: snapshot.Task.StageVersion, Status: plan.StageID, Column5: plan.AssigneeAgentID}); err != nil {
 		return err
 	}
 	if err = persistStageEffects(ctx, q, workspaceID, id, userID, decision.Persistence); err != nil {

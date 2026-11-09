@@ -270,6 +270,31 @@ type TaskIntegration struct {
 	WorkflowID          string             `json:"workflow_id"`
 }
 
+type TaskPullRequestLink struct {
+	WorkspaceID      string             `json:"workspace_id"`
+	Provider         string             `json:"provider"`
+	RepositoryID     string             `json:"repository_id"`
+	ResourceID       string             `json:"resource_id"`
+	TaskID           string             `json:"task_id"`
+	HeadRepositoryID string             `json:"head_repository_id"`
+	HeadBranch       string             `json:"head_branch"`
+	CreatedAt        pgtype.Timestamptz `json:"created_at"`
+}
+
+type TaskPullRequestReconciliation struct {
+	IntegrationID        string             `json:"integration_id"`
+	NextAttempt          pgtype.Timestamptz `json:"next_attempt"`
+	ActivatedAt          pgtype.Timestamptz `json:"activated_at"`
+	ConfigurationVersion int64              `json:"configuration_version"`
+	Diagnostic           string             `json:"diagnostic"`
+}
+
+type TaskPullRequestSuppression struct {
+	IntegrationID string `json:"integration_id"`
+	RepositoryID  string `json:"repository_id"`
+	ResourceID    string `json:"resource_id"`
+}
+
 type TaskRepository struct {
 	WorkspaceID  string `json:"workspace_id"`
 	TaskID       string `json:"task_id"`
@@ -287,15 +312,17 @@ type TaskStageHistory struct {
 }
 
 type TaskTriggerDelivery struct {
-	ID            string             `json:"id"`
-	IntegrationID string             `json:"integration_id"`
-	DeliveryID    string             `json:"delivery_id"`
-	EventKey      string             `json:"event_key"`
-	Event         []byte             `json:"event"`
-	TaskID        string             `json:"task_id"`
-	StageVersion  int64              `json:"stage_version"`
-	Status        string             `json:"status"`
-	ReceivedAt    pgtype.Timestamptz `json:"received_at"`
+	ID              string             `json:"id"`
+	IntegrationID   string             `json:"integration_id"`
+	DeliveryID      string             `json:"delivery_id"`
+	EventKey        string             `json:"event_key"`
+	Event           []byte             `json:"event"`
+	TaskID          string             `json:"task_id"`
+	StageVersion    int64              `json:"stage_version"`
+	Status          string             `json:"status"`
+	ReceivedAt      pgtype.Timestamptz `json:"received_at"`
+	ResolutionAfter pgtype.Timestamptz `json:"resolution_after"`
+	Diagnostic      string             `json:"diagnostic"`
 }
 
 type TaskTriggerIntegration struct {

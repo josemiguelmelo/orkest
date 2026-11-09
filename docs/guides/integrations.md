@@ -68,7 +68,8 @@ Credentials:
 | Incomplete discovery | Pagination, filters, token visibility |
 | Sync failure | Sanitized error and platform→source connectivity before manual retry |
 
-Outbound comments/status and PR webhooks are out of scope. Live private-repository
+Outbound comments/status remain out of scope for source synchronization. PR
+webhooks use [task trigger integrations](task-trigger-integrations.md). Live private-repository
 access/source sync need credentials. See [status](../status.md), [testing](../development/testing.md),
 and [migrations](../operations/migrations.md).
 

@@ -41,6 +41,7 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/server/mcpserver"
 	"github.com/josemiguelmelo/orkest/internal/server/orchestration"
 	"github.com/josemiguelmelo/orkest/internal/server/organization"
+	"github.com/josemiguelmelo/orkest/internal/server/pullrequestlink"
 	"github.com/josemiguelmelo/orkest/internal/server/skill"
 	"github.com/josemiguelmelo/orkest/internal/server/task"
 	"github.com/josemiguelmelo/orkest/internal/server/taskintegration"
@@ -320,6 +321,13 @@ func runServer(ctx context.Context, logger *slog.Logger) error {
 	go func() { defer runnerWG.Done(); integrations.Run(runnerCtx) }()
 	runnerWG.Add(1)
 	go func() { defer runnerWG.Done(); triggerIntegrations.Run(runnerCtx, logger) }()
+	prLinkRepository := postgres.NewPullRequestLinkRepository(database)
+	prLinks := pullrequestlink.NewPullRequestLinkService(prLinkRepository)
+	prReconciliation := pullrequestlink.NewReconciler(prLinkRepository, triggerIntegrations, map[string]pullrequestlink.Discoverer{"github": githubtrigger.Discovery{Credentials: codeRepositories}})
+	runnerWG.Add(1)
+	go func() { defer runnerWG.Done(); prReconciliation.Run(runnerCtx, logger) }()
+	runnerWG.Add(1)
+	go func() { defer runnerWG.Done(); prLinks.Run(runnerCtx, logger) }()
 	execution := workflowautomation.NewWorkflowExecutionService(postgres.NewExecutionCommandPostgresRepository(database), tasks, dispatcher, logger)
 	worker := workflowautomation.NewWorkflowAutomationWorker(taskWorkflows, execution, logger)
 	runnerWG.Add(1)

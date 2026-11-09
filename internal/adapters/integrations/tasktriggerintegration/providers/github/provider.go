@@ -77,6 +77,14 @@ func (*GitHubProvider) VerifyAndDecode(ctx context.Context, request trigger.Webh
 			FullName string `json:"full_name"`
 		} `json:"repository"`
 		PullRequest struct {
+			UpdatedAt time.Time `json:"updated_at"`
+			Head      struct {
+				Ref  string `json:"ref"`
+				SHA  string `json:"sha"`
+				Repo struct {
+					ID int64 `json:"id"`
+				} `json:"repo"`
+			} `json:"head"`
 			Number   int64     `json:"number"`
 			Merged   bool      `json:"merged"`
 			MergedAt time.Time `json:"merged_at"`
@@ -99,7 +107,7 @@ func (*GitHubProvider) VerifyAndDecode(ctx context.Context, request trigger.Webh
 	if strconv.FormatInt(payload.Repository.ID, 10) != config.RepositoryID {
 		return "", nil, problem.ErrForbidden
 	}
-	event := trigger.Event{RepositoryID: config.RepositoryID, ResourceID: strconv.FormatInt(payload.PullRequest.Number, 10)}
+	event := trigger.Event{HeadRepositoryID: strconv.FormatInt(payload.PullRequest.Head.Repo.ID, 10), HeadBranch: payload.PullRequest.Head.Ref, HeadCommitID: payload.PullRequest.Head.SHA, RepositoryID: config.RepositoryID, ResourceID: strconv.FormatInt(payload.PullRequest.Number, 10)}
 	switch {
 	case request.Headers["X-Github-Event"] == "pull_request_review" && payload.Action == "submitted":
 		if payload.Review.ID <= 0 {
@@ -108,6 +116,8 @@ func (*GitHubProvider) VerifyAndDecode(ctx context.Context, request trigger.Webh
 		event.Type, event.Key, event.OccurredAt = ReviewSubmitted, "review:"+strconv.FormatInt(payload.Review.ID, 10), payload.Review.SubmittedAt
 	case request.Headers["X-Github-Event"] == "pull_request" && payload.Action == "closed" && payload.PullRequest.Merged:
 		event.Type, event.Key, event.OccurredAt = PullRequestMerged, "merged:"+event.RepositoryID+":"+event.ResourceID, payload.PullRequest.MergedAt
+	case request.Headers["X-Github-Event"] == "pull_request" && (payload.Action == "opened" || payload.Action == "reopened" || payload.Action == "synchronize"):
+		event.Type, event.Key, event.OccurredAt = "pull_request.discovered", "discovered:"+event.RepositoryID+":"+event.ResourceID+":"+payload.PullRequest.Head.SHA+":"+payload.PullRequest.UpdatedAt.Format(time.RFC3339Nano), payload.PullRequest.UpdatedAt
 	default:
 		return deliveryID, nil, nil
 	}

@@ -2,11 +2,15 @@ package checkout
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
+
+	observation "github.com/josemiguelmelo/orkest/internal/contracts/repositoryobservation"
+	"github.com/josemiguelmelo/orkest/internal/platform/durablefile"
 
 	coderepositorymodel "github.com/josemiguelmelo/orkest/internal/server/coderepository/model"
 	orchestrationmodel "github.com/josemiguelmelo/orkest/internal/server/orchestration/model"
@@ -38,7 +42,15 @@ func (p Preparer) Prepare(ctx context.Context, workDir, workspaceID string, repo
 			return err
 		}
 	}
-	return nil
+	manifest := make([]observation.Checkout, 0, len(repositories))
+	for _, repository := range repositories {
+		manifest = append(manifest, observation.Checkout{RepositoryID: repository.ID, Provider: repository.ProviderName, ProviderRepositoryID: repository.ProviderRepositoryID, Path: filepath.Join("repositories", repository.ProviderName, repository.ID), DefaultBranch: repository.DefaultBranch, RepositoryURL: repository.URL})
+	}
+	data, err := json.Marshal(manifest)
+	if err != nil {
+		return fmt.Errorf("encode checkout manifest: %w", err)
+	}
+	return durablefile.Write(filepath.Join(workDir, observation.ManifestName), data)
 }
 
 func (p Preparer) prepare(ctx context.Context, workDir, workspaceID string, repository orchestrationmodel.WorkspaceRepository) error {

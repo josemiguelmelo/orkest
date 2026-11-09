@@ -43,7 +43,8 @@ Example:
 PR artifacts use `kind: "pull_request"`, `content.url`, and optional provider,
 repository, PR number/head commit metadata. Links are unverified references, never
 fetched snapshots. Publishing neither approves/merges PRs nor completes tasks.
-Provider validation, PR webhooks, and external-state automation remain deferred.
+Artifact publication itself does not establish PR ownership. PR association and
+webhook automation use [task trigger integrations](task-trigger-integrations.md).
 
 ## Stage handoffs
 

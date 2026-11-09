@@ -9,6 +9,7 @@ import (
 	"strings"
 	"syscall"
 
+	"github.com/josemiguelmelo/orkest/internal/adapters/gitobserver"
 	"github.com/josemiguelmelo/orkest/internal/adapters/gitprovider"
 	sharedacp "github.com/josemiguelmelo/orkest/internal/adapters/runtime/acp"
 	"github.com/josemiguelmelo/orkest/internal/adapters/runtime/runtimehost"
@@ -52,7 +53,7 @@ func main() {
 		os.Exit(2)
 	}
 	host := runtimehost.NewWithPreparation(profile, sharedacp.Factory{}, hostEnvironment, preparation, gitprovider.DefaultCLIAuthAdapters()...)
-	if err := RunAgentctl(ctx, logger, *address, host, *stateDir, *runID); err != nil {
+	if err := RunAgentctl(ctx, logger, *address, host, *stateDir, *runID, gitobserver.Scanner{Root: *workDir}); err != nil {
 		logger.Error("agentctl stopped", "error", err)
 		os.Exit(1)
 	}
