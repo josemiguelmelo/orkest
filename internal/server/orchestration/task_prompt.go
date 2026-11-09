@@ -3,6 +3,7 @@ package orchestration
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	orchestrationmodel "github.com/josemiguelmelo/orkest/internal/server/orchestration/model"
@@ -18,16 +19,14 @@ type taskPromptRepository struct {
 }
 
 type taskPromptSnapshot struct {
-	StageName        string                 `json:"stageName,omitempty"`
-	StageDescription string                 `json:"stageDescription,omitempty"`
-	ID               string                 `json:"id"`
-	PlatformTaskID   string                 `json:"platformTaskId"`
-	SourceProvider   string                 `json:"sourceProvider,omitempty"`
-	SourceID         string                 `json:"sourceId,omitempty"`
-	Title            string                 `json:"title"`
-	Description      string                 `json:"description"`
-	Labels           []string               `json:"labels"`
-	Repositories     []taskPromptRepository `json:"repositories"`
+	ID             string                 `json:"id"`
+	PlatformTaskID string                 `json:"platformTaskId"`
+	SourceProvider string                 `json:"sourceProvider,omitempty"`
+	SourceID       string                 `json:"sourceId,omitempty"`
+	Title          string                 `json:"title"`
+	Description    string                 `json:"description"`
+	Labels         []string               `json:"labels"`
+	Repositories   []taskPromptRepository `json:"repositories"`
 }
 
 func taskPrompt(value taskmodel.Task, repositories []orchestrationmodel.WorkspaceRepository) (string, error) {
@@ -35,10 +34,13 @@ func taskPrompt(value taskmodel.Task, repositories []orchestrationmodel.Workspac
 	if strings.TrimSpace(value.SourceID) != "" {
 		taskID = value.SourceID
 	}
-	snapshot := taskPromptSnapshot{StageName: value.StageName, StageDescription: value.StageDescription, ID: taskID, PlatformTaskID: value.ID, SourceProvider: value.SourceProvider, SourceID: value.SourceID, Title: value.Title, Description: value.Description, Labels: value.Labels}
+	snapshot := taskPromptSnapshot{ID: taskID, PlatformTaskID: value.ID, SourceProvider: value.SourceProvider, SourceID: value.SourceID, Title: value.Title, Description: value.Description, Labels: value.Labels}
 	for _, repository := range repositories {
 		snapshot.Repositories = append(snapshot.Repositories, taskPromptRepository{ID: repository.ID, ProviderName: repository.ProviderName, Name: repository.Name, URL: repository.URL, Path: "repositories/" + repository.ProviderName + "/" + repository.ID})
 	}
+	sort.Slice(snapshot.Repositories, func(i, j int) bool { return snapshot.Repositories[i].ID < snapshot.Repositories[j].ID })
+	snapshot.Labels = append([]string(nil), snapshot.Labels...)
+	sort.Strings(snapshot.Labels)
 	encoded, err := json.MarshalIndent(snapshot, "", "  ")
 	if err != nil {
 		return "", fmt.Errorf("encode task context: %w", err)

@@ -151,20 +151,14 @@ func (d *TaskDispatcher) StartTask(ctx context.Context, userID, organizationID s
 			return err
 		}
 	}
-	prompt, err := taskPrompt(value, config.Repositories)
-	if err != nil {
-		return err
-	}
-	if value.StageCustomPrompt != "" {
-		prompt += "\n\nStage instructions:\n" + value.StageCustomPrompt
-	}
-	if command.PromptText != "" {
-		prompt += "\n\nUser startup message:\n" + command.PromptText
-	}
 	if err = d.refreshOrkestMCPServer(userID, organizationID, value.WorkspaceID, value.ID, &config); err != nil {
 		return err
 	}
-	prompt, err = d.artifactPrompt(ctx, userID, organizationID, value, &config, prompt)
+	artifact, err := d.artifactContext(ctx, userID, organizationID, value, &config)
+	if err != nil {
+		return err
+	}
+	prompt, err := composeTaskPrompt(value, &config, artifact, command.PromptText)
 	if err != nil {
 		return err
 	}
