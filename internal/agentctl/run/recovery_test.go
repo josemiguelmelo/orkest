@@ -102,7 +102,7 @@ func waitRecoveryEvent(t *testing.T, events <-chan interaction.Event, kind inter
 
 func TestQueueFIFOAndRunCompletion(t *testing.T) {
 	process := newRecoverySession()
-	controller := NewRunController(context.Background(), recoveryRuntimeHost{process}, t.TempDir(), nil)
+	controller := NewRunController(context.Background(), recoveryRuntimeHost{process}, t.TempDir(), nil, nil)
 	defer func() { _ = controller.Close() }()
 	if err := controller.Configure(recoveryConfig()); err != nil {
 		t.Fatal(err)
@@ -151,7 +151,7 @@ func TestRestoreQueuedAndUncertainCommands(t *testing.T) {
 			history = append(history, promptAcceptedEvent("two", "next"))
 			recordRecoveryHistory(t, dir, history...)
 			process := newRecoverySession()
-			controller := NewRunController(context.Background(), recoveryRuntimeHost{process}, dir, nil)
+			controller := NewRunController(context.Background(), recoveryRuntimeHost{process}, dir, nil, nil)
 			defer func() { _ = controller.Close() }()
 			if err := controller.Configure(recoveryConfig()); err != nil {
 				t.Fatal(err)
@@ -200,7 +200,7 @@ func TestRestoreSafeContinuation(t *testing.T) {
 	recordRecoveryHistory(t, dir, promptAcceptedEvent("one", "original"), interaction.Event{Type: interaction.EventPromptStarted, CommandID: "one"})
 	process := newRecoverySession()
 	process.safe = true
-	controller := NewRunController(context.Background(), recoveryRuntimeHost{process}, dir, nil)
+	controller := NewRunController(context.Background(), recoveryRuntimeHost{process}, dir, nil, nil)
 	defer func() { _ = controller.Close() }()
 	if err := controller.Configure(recoveryConfig()); err != nil {
 		t.Fatal(err)
@@ -262,7 +262,7 @@ func TestRestoreJournalTailAndCorruption(t *testing.T) {
 func TestQueueFailurePausesAndDiscardDoesNotSucceed(t *testing.T) {
 	process := newRecoverySession()
 	process.fail = true
-	controller := NewRunController(context.Background(), recoveryRuntimeHost{process}, t.TempDir(), nil)
+	controller := NewRunController(context.Background(), recoveryRuntimeHost{process}, t.TempDir(), nil, nil)
 	defer func() { _ = controller.Close() }()
 	if err := controller.Configure(recoveryConfig()); err != nil {
 		t.Fatal(err)
@@ -351,7 +351,7 @@ func TestRestoreReconciliationAllowsStatusAndShutdown(t *testing.T) {
 	dir := t.TempDir()
 	recordRecoveryHistory(t, dir, promptAcceptedEvent("one", "original"), interaction.Event{Type: interaction.EventPromptStarted, CommandID: "one"})
 	process := &blockingReconciliation{recoveryRuntimeSession: newRecoverySession(), entered: make(chan struct{})}
-	controller := NewRunController(context.Background(), conversationRuntimeHost{process: process}, dir, nil)
+	controller := NewRunController(context.Background(), conversationRuntimeHost{process: process}, dir, nil, nil)
 	defer func() { _ = controller.Close() }()
 	if err := controller.Configure(recoveryConfig()); err != nil {
 		t.Fatal(err)

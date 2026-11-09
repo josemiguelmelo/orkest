@@ -10,7 +10,7 @@ import (
 )
 
 func TestLaunchRequiresConfiguration(t *testing.T) {
-	service := agentrun.NewRunController(context.Background(), nil, "", nil)
+	service := agentrun.NewRunController(context.Background(), nil, "", nil, nil)
 	api, err := NewServer(context.Background(), service)
 	if err != nil {
 		t.Fatal(err)

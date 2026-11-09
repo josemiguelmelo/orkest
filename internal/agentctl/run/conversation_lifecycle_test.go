@@ -75,7 +75,7 @@ func (p delayedLaunchHost) Launch(context.Context, configmodel.RuntimeConfig) (a
 func TestControllerShutdownDuringConversationBinding(t *testing.T) {
 	session := &fakeRuntimeSession{done: make(chan struct{})}
 	provider := delayedLaunchHost{started: make(chan struct{}), release: make(chan struct{}), session: session}
-	controller := NewRunController(context.Background(), provider, t.TempDir(), nil)
+	controller := NewRunController(context.Background(), provider, t.TempDir(), nil, nil)
 	defer func() { _ = controller.Close() }()
 	if err := controller.Configure(runConfig()); err != nil {
 		t.Fatal(err)

@@ -52,7 +52,7 @@ func (p *fakeRuntimeSession) Close() error { p.once.Do(func() { close(p.done) })
 
 func TestProviderLaunchOwnership(t *testing.T) {
 	p := &fakeRuntimeHost{process: &fakeRuntimeSession{done: make(chan struct{})}}
-	service := NewRunController(context.Background(), p, "", nil)
+	service := NewRunController(context.Background(), p, "", nil, nil)
 	defer func() { _ = service.Close() }()
 	if err := service.Launch(); !errors.Is(err, ErrNotConfigured) {
 		t.Fatal(err)
@@ -89,7 +89,7 @@ func TestProviderLaunchOwnership(t *testing.T) {
 
 func TestLaunchFailureDoesNotRetry(t *testing.T) {
 	p := &fakeRuntimeHost{err: errors.New("launch failed")}
-	service := NewRunController(context.Background(), p, "", nil)
+	service := NewRunController(context.Background(), p, "", nil, nil)
 	defer func() { _ = service.Close() }()
 	config := runConfig()
 	config.Runtime = coreruntime.OpenCode
@@ -109,7 +109,7 @@ func TestLaunchFailureDoesNotRetry(t *testing.T) {
 
 func TestUnexpectedProcessExitIsFailed(t *testing.T) {
 	process := &fakeRuntimeSession{done: make(chan struct{}), exitErr: errors.New("runtime exited")}
-	controller := NewRunController(context.Background(), &fakeRuntimeHost{process: process}, "", nil)
+	controller := NewRunController(context.Background(), &fakeRuntimeHost{process: process}, "", nil, nil)
 	defer func() { _ = controller.Close() }()
 	config := runConfig()
 	config.Runtime = coreruntime.OpenCode
@@ -149,7 +149,7 @@ func TestStartupPersistenceFailureClosesSessionAndBlocksRecovery(t *testing.T) {
 				t.Fatal(err)
 			}
 			session := &fakeRuntimeSession{done: make(chan struct{})}
-			controller := NewRunController(context.Background(), &fakeRuntimeHost{process: session}, dir, nil)
+			controller := NewRunController(context.Background(), &fakeRuntimeHost{process: session}, dir, nil, nil)
 			defer func() { _ = controller.Close() }()
 			if err := controller.Configure(config); err != nil {
 				t.Fatal(err)

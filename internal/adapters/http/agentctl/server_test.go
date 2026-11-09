@@ -19,7 +19,7 @@ import (
 func TestTransportModulesShareState(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	server, err := NewServer(ctx, agentrun.NewRunController(context.Background(), nil, "", nil))
+	server, err := NewServer(ctx, agentrun.NewRunController(context.Background(), nil, "", nil, nil))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -22,7 +22,7 @@ func newOpenCodeController(t *testing.T) *agentrun.RunController {
 	}
 	state := t.TempDir()
 	environment := runtimehost.Environment{WorkDir: t.TempDir(), StateDir: state, GrantedEnv: []string{"ORKEST_ACP_FIXTURE=1"}}
-	service := agentrun.NewRunController(context.Background(), opencodetest.NewHost(binary, environment), state, nil)
+	service := agentrun.NewRunController(context.Background(), opencodetest.NewHost(binary, environment), state, nil, nil)
 	t.Cleanup(func() { _ = service.Close() })
 	config := configmodel.RunConfig{RuntimeConfig: configmodel.RuntimeConfig{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", RunID: "run", Runtime: "opencode", Model: configmodel.ModelSelection{Provider: "provider", ID: "model"}, Agent: configmodel.AgentDefinition{Name: "Work", Description: "Work", Instructions: "Work"}}}
 	if err := service.Configure(config); err != nil {

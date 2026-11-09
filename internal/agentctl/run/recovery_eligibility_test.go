@@ -44,7 +44,7 @@ func TestRestorationEligibilityExcludesCancelledAndFinishedRuns(t *testing.T) {
 		t.Run(testCase.name, func(t *testing.T) {
 			process := &fakeRuntimeSession{done: make(chan struct{})}
 			host := &fakeRuntimeHost{process: process}
-			controller := NewRunController(context.Background(), host, t.TempDir(), nil)
+			controller := NewRunController(context.Background(), host, t.TempDir(), nil, nil)
 			defer func() { _ = controller.Close() }()
 			config := runConfig()
 			config.Runtime = coreruntime.OpenCode
@@ -79,7 +79,7 @@ func TestRecoverDoesNotRestoreFinishedRun(t *testing.T) {
 	}
 	recordRecoveryHistory(t, dir, interaction.Event{Type: interaction.EventRunCompleted})
 	host := &countingRuntimeHost{}
-	controller := NewRunController(context.Background(), host, dir, nil)
+	controller := NewRunController(context.Background(), host, dir, nil, nil)
 	defer func() { _ = controller.Close() }()
 	if err := controller.RecoverFromCheckpoint(""); err != nil {
 		t.Fatal(err)
