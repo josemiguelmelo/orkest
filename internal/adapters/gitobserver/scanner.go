@@ -38,9 +38,21 @@ func (s Scanner) Scan(ctx context.Context) ([]observation.Snapshot, error) {
 	for _, checkout := range checkouts {
 		known[filepath.Clean(checkout.Path)] = checkout
 	}
+	paths, err := discoverCheckoutPaths(ctx, root, known)
+	if err != nil {
+		return nil, err
+	}
+	var result []observation.Snapshot
+	for path, checkout := range paths {
+		result = append(result, inspectCheckout(ctx, root, path, checkout, checkouts))
+	}
+	return result, nil
+}
+
+func discoverCheckoutPaths(ctx context.Context, root string, known map[string]observation.Checkout) (map[string]observation.Checkout, error) {
 	paths := make(map[string]observation.Checkout)
 	visited := 0
-	err = filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
+	err := filepath.WalkDir(root, func(path string, entry fs.DirEntry, walkErr error) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
@@ -79,65 +91,62 @@ func (s Scanner) Scan(ctx context.Context) ([]observation.Snapshot, error) {
 			paths[absolute] = checkout
 		}
 	}
-	var result []observation.Snapshot
-	for path, checkout := range paths {
-		snapshot := observation.Snapshot{Checkout: checkout}
-		resolved, err := filepath.EvalSymlinks(path)
-		if err != nil || !contained(root, resolved) {
-			snapshot.Diagnostic = "checkout_unavailable"
-			result = append(result, snapshot)
-			continue
+	return paths, nil
+}
+
+func inspectCheckout(ctx context.Context, root, path string, checkout observation.Checkout, checkouts []observation.Checkout) observation.Snapshot {
+	snapshot := observation.Snapshot{Checkout: checkout}
+	resolved, err := filepath.EvalSymlinks(path)
+	if err != nil || !contained(root, resolved) {
+		snapshot.Diagnostic = "checkout_unavailable"
+		return snapshot
+	}
+	gitDir, err := git(ctx, path, "rev-parse", "--absolute-git-dir")
+	resolvedGit, resolveErr := filepath.EvalSymlinks(strings.TrimSpace(gitDir))
+	if err != nil || resolveErr != nil || !contained(root, resolvedGit) {
+		snapshot.Diagnostic = "git_directory_outside_task_or_unavailable"
+		return snapshot
+	}
+	remote, _ := git(ctx, path, "config", "--get", "remote.origin.url")
+	// Do not put arbitrary remote URLs (which may contain credentials) on the wire.
+	if checkout.RepositoryID == "" {
+		for _, candidate := range checkouts {
+			if strings.TrimSuffix(strings.TrimSpace(remote), ".git") == strings.TrimSuffix(candidate.RepositoryURL, ".git") {
+				checkout = candidate
+				checkout.Path, _ = filepath.Rel(root, path)
+				snapshot.Checkout = checkout
+				break
+			}
 		}
-		gitDir, err := git(ctx, path, "rev-parse", "--absolute-git-dir")
-		resolvedGit, resolveErr := filepath.EvalSymlinks(strings.TrimSpace(gitDir))
-		if err != nil || resolveErr != nil || !contained(root, resolvedGit) {
-			snapshot.Diagnostic = "git_directory_outside_task_or_unavailable"
-			result = append(result, snapshot)
-			continue
-		}
-		remote, _ := git(ctx, path, "config", "--get", "remote.origin.url")
-		// Do not put arbitrary remote URLs (which may contain credentials) on the wire.
-		if checkout.RepositoryID == "" {
+	}
+	if snapshot.Checkout.RepositoryID == "" {
+		common, commonErr := git(ctx, path, "rev-parse", "--path-format=absolute", "--git-common-dir")
+		if commonErr == nil {
 			for _, candidate := range checkouts {
-				if strings.TrimSuffix(strings.TrimSpace(remote), ".git") == strings.TrimSuffix(candidate.RepositoryURL, ".git") {
-					checkout = candidate
-					checkout.Path, _ = filepath.Rel(root, path)
-					snapshot.Checkout = checkout
+				expected := filepath.Join(root, candidate.Path, ".git")
+				if resolvedExpected, e := filepath.EvalSymlinks(expected); e == nil && filepath.Clean(strings.TrimSpace(common)) == resolvedExpected {
+					candidate.Path, _ = filepath.Rel(root, path)
+					snapshot.Checkout = candidate
 					break
 				}
 			}
 		}
-		if snapshot.Checkout.RepositoryID == "" {
-			common, commonErr := git(ctx, path, "rev-parse", "--path-format=absolute", "--git-common-dir")
-			if commonErr == nil {
-				for _, candidate := range checkouts {
-					expected := filepath.Join(root, candidate.Path, ".git")
-					if resolvedExpected, e := filepath.EvalSymlinks(expected); e == nil && filepath.Clean(strings.TrimSpace(common)) == resolvedExpected {
-						candidate.Path, _ = filepath.Rel(root, path)
-						snapshot.Checkout = candidate
-						break
-					}
-				}
-			}
-		}
-		if snapshot.Checkout.RepositoryID == "" {
-			snapshot.Diagnostic = "unregistered_repository"
-		}
-		refs, err := git(ctx, path, "for-each-ref", "--format=%(refname:lstrip=2) %(objectname)", "refs/heads/")
-		if err != nil {
-			snapshot.Diagnostic = "git_inspection_failed"
-			result = append(result, snapshot)
-			continue
-		}
-		for _, line := range strings.Split(strings.TrimSpace(refs), "\n") {
-			fields := strings.Fields(line)
-			if len(fields) == 2 {
-				snapshot.Branches = append(snapshot.Branches, observation.Branch{Name: fields[0], CommitID: fields[1]})
-			}
-		}
-		result = append(result, snapshot)
 	}
-	return result, nil
+	if snapshot.Checkout.RepositoryID == "" {
+		snapshot.Diagnostic = "unregistered_repository"
+	}
+	refs, err := git(ctx, path, "for-each-ref", "--format=%(refname:lstrip=2) %(objectname)", "refs/heads/")
+	if err != nil {
+		snapshot.Diagnostic = "git_inspection_failed"
+		return snapshot
+	}
+	for _, line := range strings.Split(strings.TrimSpace(refs), "\n") {
+		fields := strings.Fields(line)
+		if len(fields) == 2 {
+			snapshot.Branches = append(snapshot.Branches, observation.Branch{Name: fields[0], CommitID: fields[1]})
+		}
+	}
+	return snapshot
 }
 
 func contained(root, path string) bool {
