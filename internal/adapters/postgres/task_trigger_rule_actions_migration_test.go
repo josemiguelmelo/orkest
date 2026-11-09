@@ -15,7 +15,7 @@ func testTaskTriggerRuleActionsRepair(t *testing.T, ctx context.Context, pool *p
 	if _, err := pool.Exec(ctx, `
 ALTER TABLE task_trigger_rules DROP COLUMN action, DROP COLUMN prompt_text;
 ALTER TABLE task_trigger_rules ADD CONSTRAINT task_trigger_rules_check CHECK(source_stage_id<>target_stage_id);
-DELETE FROM goose_db_version WHERE version_id=45;
+DELETE FROM goose_db_version WHERE version_id>=45;
 INSERT INTO organizations(id,name) VALUES('rule-repair-org','Repair');
 INSERT INTO workspaces(id,organization_id,name) VALUES('rule-repair-workspace','rule-repair-org','Repair');
 INSERT INTO task_trigger_integrations(id,workspace_id,name,provider,config,enabled,configured_by,encrypted_secret)
@@ -43,7 +43,7 @@ VALUES('rule-repair-integration','rule-repair-workspace','existing','pull_reques
 		t.Fatal("save same-stage start after repair", err)
 	}
 	// Reapplying the repair to the current schema must preserve configured actions.
-	if _, err := pool.Exec(ctx, `DELETE FROM goose_db_version WHERE version_id=45`); err != nil {
+	if _, err := pool.Exec(ctx, `DELETE FROM goose_db_version WHERE version_id>=45`); err != nil {
 		t.Fatal(err)
 	}
 	if err := runMigrations(ctx, pool); err != nil {

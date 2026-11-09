@@ -130,3 +130,15 @@ workflow edits. Drain pending trigger deliveries and workflow events before a
 rollback. Down migrations delete trigger configuration, links, audit history and
 workflow-event context; export those records first. They do not stop agents or
 release execution ownership.
+
+## Early development schema repairs (0044–0046)
+
+Some development databases recorded earlier migration contents before the trigger
+migrations were sequenced after host mounts. Startup applies additive repairs:
+0044 creates missing PR reconciliation storage, 0045 adds missing trigger rule
+actions/prompts and permits same-stage starts, and 0046 creates missing workspace
+host-mount storage. Existing configuration is preserved. A missing host-mount
+table prevents task dispatch even when a workspace has no configured mounts.
+Restart the updated server before explicitly retrying a failed start. These
+repairs do not start tasks or alter persisted session configurations. Their down
+migrations retain configuration; the original migrations own table removal.
