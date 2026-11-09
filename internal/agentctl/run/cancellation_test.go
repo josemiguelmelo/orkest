@@ -60,7 +60,7 @@ func TestCancellationAllowsStatusAndUpdates(t *testing.T) {
 		cancelRelease: make(chan struct{}), finish: make(chan struct{}),
 		cancelError: errors.New("delivery uncertain"),
 	}
-	service := NewRunController(context.Background(), conversationRuntimeHost{p}, t.TempDir(), nil)
+	service := NewRunController(context.Background(), conversationRuntimeHost{p}, t.TempDir(), nil, nil)
 	defer func() { _ = service.Close() }()
 	if err := service.Configure(runConfig()); err != nil {
 		t.Fatal(err)
@@ -125,7 +125,7 @@ func TestCancellationAllowsStatusAndUpdates(t *testing.T) {
 
 func TestPromptLimitsPreserveDeduplication(t *testing.T) {
 	p := &chatRuntimeSession{fakeRuntimeSession: fakeRuntimeSession{done: make(chan struct{})}, calls: make(chan struct{}, 1), release: make(chan struct{})}
-	service := NewRunController(context.Background(), chatRuntimeHost{p}, t.TempDir(), nil)
+	service := NewRunController(context.Background(), chatRuntimeHost{p}, t.TempDir(), nil, nil)
 	defer func() { _ = service.Close() }()
 	if err := service.Configure(runConfig()); err != nil {
 		t.Fatal(err)

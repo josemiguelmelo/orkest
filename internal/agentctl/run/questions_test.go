@@ -162,7 +162,7 @@ func TestRestoreNeverReplaysAQuestionInvocationWithoutEvidence(t *testing.T) {
 		interaction.Event{Type: interaction.EventQuestionRequested, CommandID: "command", RequestID: "question-1", Question: &testQuestion})
 	process := newRecoverySession()
 	process.safe = true // Generic history coverage does not prove question delivery.
-	controller := NewRunController(context.Background(), recoveryRuntimeHost{process}, dir, nil)
+	controller := NewRunController(context.Background(), recoveryRuntimeHost{process}, dir, nil, nil)
 	defer func() { _ = controller.Close() }()
 	if err := controller.Configure(recoveryConfig()); err != nil {
 		t.Fatal(err)

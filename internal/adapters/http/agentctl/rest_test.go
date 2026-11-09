@@ -17,7 +17,7 @@ const validConfig = `{"organizationId":"org","workspaceId":"workspace","taskId":
 
 func setupRESTServer(t *testing.T) *Server {
 	t.Helper()
-	server, err := NewServer(context.Background(), agentrun.NewRunController(context.Background(), nil, "", nil))
+	server, err := NewServer(context.Background(), agentrun.NewRunController(context.Background(), nil, "", nil, nil))
 	if err != nil {
 		t.Fatal(err)
 	}

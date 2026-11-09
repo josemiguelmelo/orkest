@@ -19,7 +19,7 @@ func mutableRunConfig() configmodel.RunConfig {
 }
 
 func TestConfigureOwnsMutableInputs(t *testing.T) {
-	controller := NewRunController(context.Background(), nil, "", nil)
+	controller := NewRunController(context.Background(), nil, "", nil, nil)
 	defer func() { _ = controller.Close() }()
 	config := mutableRunConfig()
 	original := config.Clone()

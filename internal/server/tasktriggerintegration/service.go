@@ -116,21 +116,41 @@ func (s *TaskTriggerIntegrationService) Save(ctx context.Context, user, org, wor
 	if err := p.ValidateConfig(in.Config); err != nil {
 		return Integration{}, err
 	}
-	seen := map[string]bool{}
+	type ruleSource struct {
+		event, workflowID, stageID string
+	}
+	seenSources := make(map[ruleSource]bool)
+	seenRuleIDs := make(map[string]bool)
 	for index := range in.Rules {
 		r := &in.Rules[index]
+		if r.ID == "" || r.WorkflowID == "" || r.SourceStageID == "" {
+			return Integration{}, problem.ErrInvalid
+		}
+		if len(r.ID) > 100 || len(r.PromptText) > 32768 {
+			return Integration{}, problem.ErrInvalid
+		}
+		if !slices.Contains(p.Descriptor().Events, r.Event) {
+			return Integration{}, problem.ErrInvalid
+		}
 		if r.Action == "" {
 			r.Action = "move_task"
 		}
-		if r.Action == "start_work" {
+		switch r.Action {
+		case "move_task":
+			if r.TargetStageID == "" || r.SourceStageID == r.TargetStageID {
+				return Integration{}, problem.ErrInvalid
+			}
+		case "start_work":
 			r.TargetStageID = r.SourceStageID
-		}
-		key := r.Event + ":" + r.WorkflowID + ":" + r.SourceStageID
-		if r.ID == "" || len(r.ID) > 100 || !slices.Contains(p.Descriptor().Events, r.Event) || r.WorkflowID == "" || r.SourceStageID == "" || r.TargetStageID == "" || (r.Action != "move_task" && r.Action != "start_work") || (r.Action == "move_task" && r.SourceStageID == r.TargetStageID) || len(r.PromptText) > 32768 || seen[key] || seen["id:"+r.ID] {
+		default:
 			return Integration{}, problem.ErrInvalid
 		}
-		seen[key] = true
-		seen["id:"+r.ID] = true
+		source := ruleSource{event: r.Event, workflowID: r.WorkflowID, stageID: r.SourceStageID}
+		if seenSources[source] || seenRuleIDs[r.ID] {
+			return Integration{}, problem.ErrInvalid
+		}
+		seenSources[source] = true
+		seenRuleIDs[r.ID] = true
 	}
 	if in.WebhookSecret != "" {
 		if len(in.WebhookSecret) < 32 || len(in.WebhookSecret) > 4096 {

@@ -50,14 +50,10 @@ type RunController struct {
 }
 
 // NewRunController wires the runtime and durable storage at the application boundary.
-func NewRunController(ctx context.Context, host agentruntime.RuntimeHost, stateDir string, logger *slog.Logger, scanners ...repositoryobserver.Scanner) *RunController {
+func NewRunController(ctx context.Context, host agentruntime.RuntimeHost, stateDir string, logger *slog.Logger, scanner repositoryobserver.Scanner) *RunController {
 	ctx, cancel := context.WithCancel(ctx)
 	if logger == nil {
 		logger = slog.Default()
-	}
-	var scanner repositoryobserver.Scanner
-	if len(scanners) > 0 {
-		scanner = scanners[0]
 	}
 	conversation := newConversation(ctx, stateDir, logger)
 	conversation.repositoryScanner = scanner

@@ -36,7 +36,7 @@ func TestConfigurationValidation(t *testing.T) {
 			case "runtime":
 				config.Runtime = ""
 			}
-			service := NewRunController(context.Background(), nil, "", nil)
+			service := NewRunController(context.Background(), nil, "", nil, nil)
 			var validation *configmodel.ValidationError
 			if err := service.Configure(config); !errors.As(err, &validation) {
 				t.Fatalf("expected field validation error, got %v", err)
@@ -57,7 +57,7 @@ func TestConfigurationValidation(t *testing.T) {
 }
 
 func TestRunBinding(t *testing.T) {
-	service := NewRunController(context.Background(), nil, "", nil)
+	service := NewRunController(context.Background(), nil, "", nil, nil)
 	if service.Status().Configured {
 		t.Fatal("new service is configured")
 	}
@@ -80,7 +80,7 @@ func TestRunBinding(t *testing.T) {
 }
 
 func TestConcurrentConfiguration(t *testing.T) {
-	service := NewRunController(context.Background(), nil, "", nil)
+	service := NewRunController(context.Background(), nil, "", nil, nil)
 	var wg sync.WaitGroup
 	results := make(chan error, 20)
 	for i := range 20 {

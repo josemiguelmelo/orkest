@@ -15,11 +15,11 @@ import (
 )
 
 // RunAgentctl owns a standalone control server, independent of the platform.
-func RunAgentctl(ctx context.Context, logger *slog.Logger, address string, host agentruntime.RuntimeHost, stateDir string, expectedRunID string, scanners ...repositoryobserver.Scanner) error {
+func RunAgentctl(ctx context.Context, logger *slog.Logger, address string, host agentruntime.RuntimeHost, stateDir string, expectedRunID string, scanner repositoryobserver.Scanner) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	controller := agentrun.NewRunController(ctx, host, stateDir, logger, scanners...)
+	controller := agentrun.NewRunController(ctx, host, stateDir, logger, scanner)
 	var supervisor sync.WaitGroup
 	defer func() { cancel(); supervisor.Wait(); _ = controller.Close() }()
 	if err := controller.RecoverFromCheckpoint(expectedRunID); err != nil {

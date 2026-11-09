@@ -9,6 +9,8 @@ import (
 const (
 	resolutionLifetime   = 24 * time.Hour
 	resolutionRetryDelay = 5 * time.Second
+	// Provider timestamps can have coarser precision than persisted stage entries.
+	stageEntryTimestampTolerance = time.Second
 )
 
 type TaskState struct {
@@ -75,7 +77,7 @@ func PlanResolution(s ResolutionSnapshot, now time.Time) Resolution {
 		return Resolution{Status: "blocked", Diagnostic: "repository_not_selected_or_link_conflict"}
 	}
 	result.TaskID, result.StageVersion, result.Associate = taskID, state.StageVersion, true
-	if event.OccurredAt.Add(time.Second).Before(state.StageEnteredAt) {
+	if event.OccurredAt.Add(stageEntryTimestampTolerance).Before(state.StageEnteredAt) {
 		result.Diagnostic = "stale_stage_entry"
 		return result
 	}

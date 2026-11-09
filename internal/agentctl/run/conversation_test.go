@@ -47,7 +47,7 @@ func (p chatRuntimeHost) Launch(context.Context, configmodel.RuntimeConfig) (age
 func TestJournalBeforeDeliveryAndSlowSubscriber(t *testing.T) {
 	stateDir := t.TempDir()
 	session := &chatRuntimeSession{fakeRuntimeSession: fakeRuntimeSession{done: make(chan struct{})}, calls: make(chan struct{}, 1), release: make(chan struct{})}
-	service := NewRunController(context.Background(), chatRuntimeHost{session}, stateDir, nil)
+	service := NewRunController(context.Background(), chatRuntimeHost{session}, stateDir, nil, nil)
 	defer func() { _ = service.Close() }()
 	if err := service.Configure(runConfig()); err != nil {
 		t.Fatal(err)
@@ -121,7 +121,7 @@ func indexNewline(data []byte) int {
 
 func TestJournalFailurePreventsProviderPrompt(t *testing.T) {
 	session := &chatRuntimeSession{fakeRuntimeSession: fakeRuntimeSession{done: make(chan struct{})}, calls: make(chan struct{}, 1), release: make(chan struct{})}
-	service := NewRunController(context.Background(), chatRuntimeHost{session}, t.TempDir(), nil)
+	service := NewRunController(context.Background(), chatRuntimeHost{session}, t.TempDir(), nil, nil)
 	defer func() { _ = service.Close() }()
 	if err := service.Configure(runConfig()); err != nil {
 		t.Fatal(err)

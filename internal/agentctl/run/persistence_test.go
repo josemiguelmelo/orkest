@@ -27,7 +27,7 @@ func (f *blockedFile) Sync() error {
 
 func TestStorageCommitAllowsStatusAndShutdownAdmission(t *testing.T) {
 	process := &chatRuntimeSession{fakeRuntimeSession: fakeRuntimeSession{done: make(chan struct{})}, calls: make(chan struct{}, 1), release: make(chan struct{})}
-	controller := NewRunController(context.Background(), chatRuntimeHost{process}, t.TempDir(), nil)
+	controller := NewRunController(context.Background(), chatRuntimeHost{process}, t.TempDir(), nil, nil)
 	defer func() { _ = controller.Close() }()
 	if err := controller.Configure(runConfig()); err != nil {
 		t.Fatal(err)

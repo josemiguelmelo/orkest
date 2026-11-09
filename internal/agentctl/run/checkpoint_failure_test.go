@@ -20,7 +20,7 @@ func TestUnreadableCheckpointBlocksReplacementAndCanRetrySavedState(t *testing.T
 		t.Fatal(err)
 	}
 	session := newRecoverySession()
-	controller := NewRunController(context.Background(), recoveryRuntimeHost{process: session}, dir, nil)
+	controller := NewRunController(context.Background(), recoveryRuntimeHost{process: session}, dir, nil, nil)
 	defer func() { _ = controller.Close() }()
 	if err := controller.RecoverFromCheckpoint("run"); !errors.Is(err, ErrJournal) {
 		t.Fatal(err)
