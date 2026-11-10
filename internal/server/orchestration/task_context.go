@@ -36,16 +36,17 @@ func composeTaskPrompt(value taskmodel.Task, config *orchestrationmodel.RunConfi
 		fingerprints[key] = hex.EncodeToString(sum[:])
 	}
 	newSession := !config.RestoreSession
-	full := newSession || config.TaskContext == nil || config.TaskContext.Version != taskContextVersion
 	parts := make([]string, 0, 4)
-	if full {
+	if newSession {
+		contextParts := []string{task, sections["stage"]}
+		if artifact != "" {
+			contextParts = append(contextParts, artifact)
+		}
+		config.Agent.Instructions = strings.TrimSpace(config.Agent.Instructions + "\n\nTask session context:\n" + strings.Join(contextParts, "\n\n"))
+	} else if config.TaskContext == nil || config.TaskContext.Version != taskContextVersion {
 		parts = append(parts, task, sections["stage"])
 		if artifact != "" {
 			parts = append(parts, artifact)
-		}
-		if newSession {
-			config.Agent.Instructions = strings.TrimSpace(config.Agent.Instructions + "\n\nTask session context:\n" + strings.Join(parts, "\n\n"))
-			parts = parts[:0]
 		}
 	} else {
 		for _, key := range []string{"task", "stage", "artifacts"} {

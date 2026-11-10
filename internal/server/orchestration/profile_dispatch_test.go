@@ -97,10 +97,8 @@ func TestTaskContextIsSentOnceAndStageChangesAreFocused(t *testing.T) {
 			t.Fatal(err)
 		}
 		config := repo.reserved[len(repo.reserved)-1]
-		for _, want := range []string{"Focus on correctness"} {
-			if !strings.Contains(config.InitialPrompt, want) {
-				t.Fatalf("missing %q in startup prompt", want)
-			}
+		if !strings.Contains(config.InitialPrompt, "Focus on correctness") {
+			t.Fatal("missing startup message", config.InitialPrompt)
 		}
 		if i == 0 && (config.InitialPrompt != "Focus on correctness" || !strings.Contains(config.Agent.Instructions, "Task details") || !strings.Contains(config.Agent.Instructions, instruction)) {
 			t.Fatal("first run did not keep context out of the user prompt and initialize runtime instructions", config)
