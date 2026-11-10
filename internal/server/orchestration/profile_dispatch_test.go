@@ -81,7 +81,7 @@ func TestNextRunAdoptsUpdatedProfileAndRetainsSession(t *testing.T) {
 	}
 }
 
-func TestStageInstructionsComposeAtEachWorkStart(t *testing.T) {
+func TestTaskContextIsSentOnceAndStageChangesAreFocused(t *testing.T) {
 	repo := &profileSessionRepo{launchRepoFake: &launchRepoFake{}}
 	getter := &profileAgentGetter{}
 	dispatcher, err := NewTaskDispatcher(TaskDispatcherDependencies{Agents: getter, Launches: &LaunchService{repo: repo}, Sessions: repo})
@@ -90,31 +90,42 @@ func TestStageInstructionsComposeAtEachWorkStart(t *testing.T) {
 	}
 	dispatcher.profiles = &profileImageResolver{image: "registry/image@sha256:a"}
 	value := taskmodel.Task{ID: "task", WorkspaceID: "workspace", AssigneeAgentID: "agent", Title: "Task details", StageCustomPrompt: "Create a detailed plan"}
-	for _, instruction := range []string{"Create a detailed plan", "Implement the plan"} {
+	for i, instruction := range []string{"Create a detailed plan", "Implement the plan"} {
 		value.StageCustomPrompt = instruction
 		err = dispatcher.StartTask(context.Background(), "user", "org", taskmodel.StartCommand{Task: value, PromptText: "Focus on correctness"})
 		if !errors.Is(err, errReservedForTest) {
 			t.Fatal(err)
 		}
 		config := repo.reserved[len(repo.reserved)-1]
-		for _, want := range []string{"Task details", "Stage instructions:\n" + instruction, "User startup message:\nFocus on correctness"} {
-			if !strings.Contains(config.InitialPrompt, want) {
-				t.Fatalf("missing %q in startup prompt", want)
-			}
+		if !strings.Contains(config.InitialPrompt, "Focus on correctness") {
+			t.Fatal("missing startup message", config.InitialPrompt)
+		}
+		if i == 0 && (config.InitialPrompt != "Focus on correctness" || !strings.Contains(config.Agent.Instructions, "Task details") || !strings.Contains(config.Agent.Instructions, instruction)) {
+			t.Fatal("first run did not keep context out of the user prompt and initialize runtime instructions", config)
+		}
+		if i == 1 && (strings.Contains(config.InitialPrompt, "Task details") || !strings.Contains(config.InitialPrompt, "Task context update (stage):")) {
+			t.Fatal("continuation repeated unchanged context or omitted stage update", config.InitialPrompt)
 		}
 		repo.current, repo.exists = config, true
 	}
 	if !repo.reserved[1].RestoreSession || getter.calls != 1 {
 		t.Fatal("continuation did not retain configuration")
 	}
-	if !strings.Contains(repo.reserved[0].InitialPrompt, "Create a detailed plan") {
-		t.Fatal("saved prompt changed")
+	if !strings.Contains(repo.reserved[0].Agent.Instructions, "Create a detailed plan") {
+		t.Fatal("saved runtime instructions lost task context")
+	}
+	value.StageCustomPrompt = "Implement the plan"
+	if err = dispatcher.StartTask(context.Background(), "user", "org", taskmodel.StartCommand{Task: value, PromptText: "Only the next message"}); !errors.Is(err, errReservedForTest) {
+		t.Fatal(err)
+	}
+	if got := repo.reserved[2].InitialPrompt; got != "Only the next message" {
+		t.Fatalf("unchanged context was appended to follow-up: %q", got)
 	}
 	value.StageCustomPrompt = strings.Repeat("x", orchestrationmodel.MaxPromptBytes)
 	if err = dispatcher.StartTask(context.Background(), "user", "org", taskmodel.StartCommand{Task: value}); !errors.Is(err, orchestrationmodel.ErrCommand) {
 		t.Fatal("oversized composed prompt accepted", err)
 	}
-	if len(repo.reserved) != 2 {
+	if len(repo.reserved) != 3 {
 		t.Fatal("oversized prompt reserved a run")
 	}
 }

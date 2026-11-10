@@ -43,6 +43,12 @@ limits are listed in [runtime setup](../reference/runtimes/README.md).
 
 - Re-resolve MCP headers by server ID; apply [environment continuation rules](agent-configuration.md#environment-and-session-changes).
 - Incompatibility fails visibly, retaining state; no silent model/conversation substitution.
+- Task context is included in the runtime instructions when a session starts, so
+  it does not appear as a user chat message. Follow-ups send only the submitted
+  message while that context is unchanged. Changed task, stage, or artifact context
+  is sent as a focused update; older sessions without a context baseline receive
+  one full refresh before follow-ups are minimized. Starting a new session always
+  receives the current full context.
 
 ## Queue and completion
 

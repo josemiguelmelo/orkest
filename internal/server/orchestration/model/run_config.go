@@ -25,6 +25,14 @@ type RunConfig struct {
 	ReservedRun      bool                  `json:"-"`
 	InitialCommandID string                `json:"-"`
 	InitialPrompt    string                `json:"-"`
+	TaskContext      *TaskContextBaseline  `json:"taskContext,omitempty"`
+}
+
+// TaskContextBaseline records which task context was included in the session prompt.
+// It is platform-only metadata and is excluded from RuntimeConfig/ForRuntime.
+type TaskContextBaseline struct {
+	Version      int               `json:"version"`
+	Fingerprints map[string]string `json:"fingerprints"`
 }
 
 // WorkspaceRepository identifies a registered workspace repository for the
@@ -61,6 +69,14 @@ func (c RunConfig) Clone() RunConfig {
 	c.ArtifactRevisionIDs = slices.Clone(c.ArtifactRevisionIDs)
 	c.Repositories = slices.Clone(c.Repositories)
 	c.HostMounts = slices.Clone(c.HostMounts)
+	if c.TaskContext != nil {
+		baseline := *c.TaskContext
+		baseline.Fingerprints = make(map[string]string, len(c.TaskContext.Fingerprints))
+		for key, value := range c.TaskContext.Fingerprints {
+			baseline.Fingerprints[key] = value
+		}
+		c.TaskContext = &baseline
+	}
 	return c
 }
 
