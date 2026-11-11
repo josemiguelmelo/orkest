@@ -155,7 +155,7 @@ func Run(version string) {
 						data, err = os.ReadFile(filepath.Join(os.Getenv("HOME"), ".aws", "config"))
 					case "probe:git-identity":
 						data = []byte(strings.Join([]string{os.Getenv("GIT_AUTHOR_NAME"), os.Getenv("GIT_AUTHOR_EMAIL"), os.Getenv("GIT_COMMITTER_NAME"), os.Getenv("GIT_COMMITTER_EMAIL")}, "|"))
-					case "probe:http-mcp":
+					case "probe:http-mcp", "probe:stdio-mcp":
 						if optionsFixture {
 							data, err = fixtureMCPConfig()
 						} else {

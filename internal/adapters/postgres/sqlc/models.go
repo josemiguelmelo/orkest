@@ -150,13 +150,17 @@ type ExecutionProfileBuild struct {
 }
 
 type McpServer struct {
-	ID               string             `json:"id"`
-	WorkspaceID      string             `json:"workspace_id"`
-	Name             string             `json:"name"`
-	Url              string             `json:"url"`
-	EncryptedHeaders string             `json:"encrypted_headers"`
-	CreatedAt        pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt        pgtype.Timestamptz `json:"updated_at"`
+	ID                   string             `json:"id"`
+	WorkspaceID          string             `json:"workspace_id"`
+	Name                 string             `json:"name"`
+	Url                  string             `json:"url"`
+	EncryptedHeaders     string             `json:"encrypted_headers"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
+	Transport            string             `json:"transport"`
+	Command              string             `json:"command"`
+	Args                 []string           `json:"args"`
+	EncryptedEnvironment string             `json:"encrypted_environment"`
 }
 
 type Organization struct {

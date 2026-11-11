@@ -9,6 +9,8 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/josemiguelmelo/orkest/internal/contracts/configvalidation"
+	"github.com/josemiguelmelo/orkest/internal/contracts/mcptransport"
 	modelerrors "github.com/josemiguelmelo/orkest/internal/contracts/problem"
 	"github.com/josemiguelmelo/orkest/internal/platform/ids"
 	"github.com/josemiguelmelo/orkest/internal/platform/secretbox"
@@ -47,7 +49,7 @@ func (s *MCPServerService) Create(ctx context.Context, userID, orgID, workspaceI
 	if err != nil {
 		return mcpservermodel.Server{}, err
 	}
-	sealed, err := s.seal(in.Headers)
+	sealed, err := s.seal(credentials(in))
 	if err != nil {
 		return mcpservermodel.Server{}, err
 	}
@@ -55,7 +57,7 @@ func (s *MCPServerService) Create(ctx context.Context, userID, orgID, workspaceI
 	if err != nil {
 		return mcpservermodel.Server{}, err
 	}
-	return s.repository.Create(ctx, id, workspaceID, in.Name, in.URL, string(sealed))
+	return s.repository.Create(ctx, catalogServer(id, workspaceID, in), string(sealed))
 }
 
 func (s *MCPServerService) Update(ctx context.Context, userID, orgID, workspaceID, serverID string, in mcpservermodel.Input) (mcpservermodel.Server, error) {
@@ -72,18 +74,27 @@ func (s *MCPServerService) Update(ctx context.Context, userID, orgID, workspaceI
 	if strings.TrimSpace(in.URL) == "" {
 		in.URL = old.URL
 	}
+	if in.Transport != old.Transport {
+		return mcpservermodel.Server{}, modelerrors.ErrInvalid
+	}
+	if in.Command == "" {
+		in.Command = old.Command
+	}
+	if in.Args == nil {
+		in.Args = old.Args
+	}
 	in, err = normalize(in)
 	if err != nil {
 		return mcpservermodel.Server{}, err
 	}
-	if in.Headers == nil {
-		return s.repository.Update(ctx, workspaceID, serverID, in.Name, in.URL, encrypted)
+	if credentials(in) == nil {
+		return s.repository.Update(ctx, catalogServer(serverID, workspaceID, in), encrypted)
 	}
-	sealed, err := s.seal(in.Headers)
+	sealed, err := s.seal(credentials(in))
 	if err != nil {
 		return mcpservermodel.Server{}, err
 	}
-	return s.repository.Update(ctx, workspaceID, serverID, in.Name, in.URL, string(sealed))
+	return s.repository.Update(ctx, catalogServer(serverID, workspaceID, in), string(sealed))
 }
 
 func (s *MCPServerService) seal(headers map[string]string) (string, error) {
@@ -99,7 +110,7 @@ func (s *MCPServerService) seal(headers map[string]string) (string, error) {
 	}
 	sealed, err := s.box.Seal(string(encoded))
 	if err != nil {
-		return "", fmt.Errorf("encrypt MCP headers: %w", err)
+		return "", fmt.Errorf("encrypt MCP credentials: %w", err)
 	}
 	return string(sealed), nil
 }
@@ -122,7 +133,13 @@ func (s *MCPServerService) Resolve(ctx context.Context, workspaceID string, serv
 		if err != nil {
 			return nil, err
 		}
-		result = append(result, mcpservermodel.RuntimeServer{ID: server.ID, Name: server.Name, URL: server.URL, Headers: headers})
+		runtime := mcpservermodel.RuntimeServer{ID: server.ID, Name: server.Name, URL: server.URL, Transport: server.Transport, Command: server.Command, Args: server.Args}
+		if server.Transport == mcptransport.Stdio {
+			runtime.Environment = headers
+		} else {
+			runtime.Headers = headers
+		}
+		result = append(result, runtime)
 	}
 	return result, nil
 }
@@ -167,11 +184,11 @@ func (s *MCPServerService) decrypt(encrypted string) (map[string]string, error) 
 	}
 	plain, err := s.box.Open([]byte(encrypted))
 	if err != nil {
-		return nil, errors.New("decrypt MCP headers")
+		return nil, errors.New("decrypt MCP credentials")
 	}
 	var headers map[string]string
 	if err = json.Unmarshal([]byte(plain), &headers); err != nil {
-		return nil, errors.New("decode MCP headers")
+		return nil, errors.New("decode MCP credentials")
 	}
 	return headers, nil
 }
@@ -179,8 +196,11 @@ func (s *MCPServerService) decrypt(encrypted string) (map[string]string, error) 
 func normalize(in mcpservermodel.Input) (mcpservermodel.Input, error) {
 	in.Name = strings.TrimSpace(in.Name)
 	in.URL = strings.TrimSpace(in.URL)
-	u, err := url.Parse(in.URL)
-	if in.Name == "" || len(in.Name) > 200 || err != nil || u == nil || (u.Scheme != "https" && u.Scheme != "http") || u.Host == "" || u.User != nil || u.Fragment != "" {
+	endpoint, err := url.Parse(in.URL)
+	if err != nil || endpoint.Fragment != "" {
+		return mcpservermodel.Input{}, modelerrors.ErrInvalid
+	}
+	if len(in.Name) > 200 || configvalidation.MCPConnection("catalog", in.Name, in.Transport, in.URL, in.Command, in.Args, in.Headers, in.Environment) != nil {
 		return mcpservermodel.Input{}, modelerrors.ErrInvalid
 	}
 	for key, value := range in.Headers {
@@ -192,4 +212,15 @@ func normalize(in mcpservermodel.Input) (mcpservermodel.Input, error) {
 		return mcpservermodel.Input{}, modelerrors.ErrInvalid
 	}
 	return in, nil
+}
+
+func credentials(in mcpservermodel.Input) map[string]string {
+	if in.Transport == mcptransport.Stdio {
+		return in.Environment
+	}
+	return in.Headers
+}
+
+func catalogServer(id, workspaceID string, in mcpservermodel.Input) mcpservermodel.Server {
+	return mcpservermodel.Server{ID: id, WorkspaceID: workspaceID, Name: in.Name, Transport: in.Transport, URL: in.URL, Command: in.Command, Args: in.Args}
 }

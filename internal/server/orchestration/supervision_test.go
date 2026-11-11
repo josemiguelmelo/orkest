@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/josemiguelmelo/orkest/internal/contracts/mcptransport"
 	mcpservermodel "github.com/josemiguelmelo/orkest/internal/server/mcpserver/model"
 	orchestrationmodel "github.com/josemiguelmelo/orkest/internal/server/orchestration/model"
 )
@@ -181,15 +182,15 @@ func TestReconcileBatchBoundsConcurrentAttempts(t *testing.T) {
 }
 
 func TestRefreshMCPHeadersIsAtomicAndPreservesSavedSettings(t *testing.T) {
-	saved := []orchestrationmodel.MCPServer{{ID: "one", URL: "https://saved", Headers: map[string]string{"token": "old"}}, {ID: "two"}}
-	resolved := []mcpservermodel.RuntimeServer{{ID: "one", URL: "https://changed", Headers: map[string]string{"token": "fresh"}}}
+	saved := []orchestrationmodel.MCPServer{{ID: "one", URL: "https://saved", Headers: map[string]string{"token": "old"}, Transport: mcptransport.HTTP}, {ID: "two", Transport: mcptransport.HTTP}}
+	resolved := []mcpservermodel.RuntimeServer{{ID: "one", URL: "https://changed", Headers: map[string]string{"token": "fresh"}, Transport: mcptransport.HTTP}}
 	if _, err := refreshSessionMCPHeaders(saved, resolved); err == nil {
 		t.Fatal("missing server accepted")
 	}
 	if saved[0].Headers["token"] != "old" {
 		t.Fatal("partially changed saved headers")
 	}
-	resolved = append(resolved, mcpservermodel.RuntimeServer{ID: "two"})
+	resolved = append(resolved, mcpservermodel.RuntimeServer{ID: "two", Transport: mcptransport.HTTP})
 	updated, err := refreshSessionMCPHeaders(saved, resolved)
 	if err != nil {
 		t.Fatal(err)

@@ -5,6 +5,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/josemiguelmelo/orkest/internal/contracts/mcptransport"
 	mcpmodel "github.com/josemiguelmelo/orkest/internal/server/mcpserver/model"
 	runmodel "github.com/josemiguelmelo/orkest/internal/server/orchestration/model"
 )
@@ -16,14 +17,14 @@ func (f sessionToolResolver) RuntimeServerForRun(userID, orgID, workspaceID, tas
 }
 
 func TestRefreshOrkestMCPServerPreservesExternalServersAndOrder(t *testing.T) {
-	external := runmodel.MCPServer{ID: "external", Name: "External", URL: "https://saved.test", Headers: map[string]string{"Authorization": "external-token"}}
-	old := runmodel.MCPServer{ID: runmodel.OrkestMCPServerID, Name: "Old tools", URL: "https://old.test"}
-	replacement := runmodel.MCPServer{ID: runmodel.OrkestMCPServerID, Name: "Tools", URL: "https://tools.test", Headers: map[string]string{"Authorization": "run-token"}}
+	external := runmodel.MCPServer{ID: "external", Name: "External", URL: "https://saved.test", Headers: map[string]string{"Authorization": "external-token"}, Transport: mcptransport.HTTP}
+	old := runmodel.MCPServer{ID: runmodel.OrkestMCPServerID, Name: "Old tools", URL: "https://old.test", Transport: mcptransport.HTTP}
+	replacement := runmodel.MCPServer{ID: runmodel.OrkestMCPServerID, Name: "Tools", URL: "https://tools.test", Headers: map[string]string{"Authorization": "run-token"}, Transport: mcptransport.HTTP}
 	dispatcher := &TaskDispatcher{agentTools: sessionToolResolver(func(userID, orgID, workspaceID, taskID, runID string) (mcpmodel.RuntimeServer, error) {
 		if userID != "user" || orgID != "org" || workspaceID != "workspace" || taskID != "task" || runID != "run" {
 			t.Fatal("tool credentials requested for an incorrect scope")
 		}
-		return mcpmodel.RuntimeServer{ID: replacement.ID, Name: replacement.Name, URL: replacement.URL, Headers: replacement.Headers}, nil
+		return mcpmodel.RuntimeServer{ID: replacement.ID, Name: replacement.Name, URL: replacement.URL, Headers: replacement.Headers, Transport: mcptransport.HTTP}, nil
 	})}
 	for _, test := range []struct {
 		name        string
@@ -51,7 +52,7 @@ func TestRefreshOrkestMCPServerPreservesExternalServersAndOrder(t *testing.T) {
 }
 
 func TestRefreshOrkestMCPServerFailurePreservesConfiguration(t *testing.T) {
-	config := runmodel.RunConfig{RuntimeConfig: runmodel.RuntimeConfig{MCPServers: []runmodel.MCPServer{{ID: runmodel.OrkestMCPServerID, URL: "https://saved.test"}}}}
+	config := runmodel.RunConfig{RuntimeConfig: runmodel.RuntimeConfig{MCPServers: []runmodel.MCPServer{{ID: runmodel.OrkestMCPServerID, URL: "https://saved.test", Transport: mcptransport.HTTP}}}}
 	snapshot := config.Clone()
 	cause := errors.New("tool credentials unavailable")
 	dispatcher := &TaskDispatcher{agentTools: sessionToolResolver(func(string, string, string, string, string) (mcpmodel.RuntimeServer, error) {
@@ -62,5 +63,38 @@ func TestRefreshOrkestMCPServerFailurePreservesConfiguration(t *testing.T) {
 	}
 	if !reflect.DeepEqual(config, snapshot) {
 		t.Fatal("failed tool refresh changed saved configuration")
+	}
+}
+
+func TestRefreshStdioCredentialsPreservesPinnedCommandAndNames(t *testing.T) {
+	saved := []runmodel.MCPServer{{ID: "stdio", Name: "Tools", Transport: mcptransport.Stdio, Command: "/original/server", Args: []string{"--original"}, Environment: map[string]string{"TOKEN": ""}}}
+	resolved := []mcpmodel.RuntimeServer{{ID: "stdio", Transport: mcptransport.Stdio, Command: "/changed/server", Args: []string{"--changed"}, Environment: map[string]string{"TOKEN": "rotated", "NEW": "new-session-only"}}}
+	updated, err := refreshSessionMCPHeaders(saved, resolved)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated[0].Command != "/original/server" || updated[0].Args[0] != "--original" || updated[0].Environment["TOKEN"] != "rotated" || len(updated[0].Environment) != 1 || saved[0].Environment["TOKEN"] != "" {
+		t.Fatal("continued session configuration changed")
+	}
+	delete(resolved[0].Environment, "TOKEN")
+	if _, err := refreshSessionMCPHeaders(saved, resolved); err == nil {
+		t.Fatal("missing pinned environment variable accepted")
+	}
+	resolved[0].Transport = "http"
+	if _, err := refreshSessionMCPHeaders(saved, resolved); err == nil {
+		t.Fatal("transport change accepted")
+	}
+}
+
+func TestSessionMCPRefreshRejectsMissingTransport(t *testing.T) {
+	saved := []runmodel.MCPServer{{ID: "server", Transport: mcptransport.HTTP, Name: "Tools", URL: "https://example.test"}}
+	resolved := []mcpmodel.RuntimeServer{{ID: "server", Name: "Tools", URL: "https://example.test"}}
+	if _, err := refreshSessionMCPHeaders(saved, resolved); err == nil {
+		t.Fatal("missing resolved transport accepted")
+	}
+	resolved[0].Transport = "http"
+	saved[0].Transport = ""
+	if _, err := refreshSessionMCPHeaders(saved, resolved); err == nil {
+		t.Fatal("missing saved transport accepted")
 	}
 }

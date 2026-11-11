@@ -360,8 +360,12 @@ export const zMcpServer = z.object({
     id: z.string(),
     workspaceId: z.string(),
     name: z.string(),
-    url: z.url(),
-    hasHeaders: z.boolean()
+    transport: z.enum(['http', 'stdio']),
+    url: z.string(),
+    command: z.string().optional(),
+    args: z.array(z.string()).optional(),
+    hasHeaders: z.boolean(),
+    hasEnvironment: z.boolean()
 });
 export const zCodeRepository = z.object({
     id: z.string(),
@@ -557,10 +561,17 @@ export const zAgentDefinition = z.object({
     skillIds: z.array(z.string()).optional(),
     configuration: z.record(z.string(), z.string()).optional()
 });
+/**
+ * Transport is required and immutable; use http or stdio. HTTP requires a URL; stdio requires an absolute executable. Transport-specific fields cannot be mixed.
+ */
 export const zMcpServerInput = z.object({
     name: z.string().min(1).max(200),
-    url: z.url(),
-    headers: z.record(z.string(), z.string()).optional()
+    transport: z.enum(['http', 'stdio']),
+    url: z.url().optional(),
+    command: z.string().max(4096).regex(/^\//).optional(),
+    args: z.array(z.string().max(8192)).max(100).optional(),
+    headers: z.record(z.string(), z.string()).optional(),
+    environment: z.record(z.string(), z.string()).optional()
 });
 export const zCodeRepositoryCreate2 = zCodeRepositoryCreate;
 export const zTaskIntegration2 = zTaskIntegrationInputWritable;

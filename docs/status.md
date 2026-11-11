@@ -65,3 +65,37 @@ and [migration operations](operations/migrations.md#workflow-delivery-claims).
   discovery, human-duration waits, or interrupted invocation continuation.
 - Deploy matching platform/UI and worker builds; new fallback sessions use native
   manifest v4. [Compatibility and rollout](development/user-questions.md#persistence-compatibility-and-deployment).
+
+## Stdio MCP support
+
+The workspace catalog, APIs/UI, encrypted environment storage, worker contracts,
+ACP mapping and OpenCode native provisioning support stdio alongside HTTP.
+Continuation pins command/arguments/environment names, refreshes credential values,
+and requires an explicit `http` or `stdio` transport. No empty-transport
+fallback or fingerprint normalization remains; saved MCP configurations without
+a transport fail visibly and preserve their saved state. Runtime fixture probes
+cover configuration before and after restore for all five profiles. On 2026-11-11 the pinned local
+OpenCode v2.1.4 passed a real stdio MCP handshake, session restore with credential
+rotation, and graceful MCP subprocess shutdown after both sessions. This test
+makes no model request and does not establish model-driven tool calls, approval
+behavior, interrupted effects, container cleanup, or live behavior of other profiles.
+Those need `make qualify-runtime` with provisioned executables and explicit
+models/credentials. No runtime pin changed.
+
+Verification: `make check` (lint, Go tests, generated client, frontend lint/tests,
+types and builds), `make test-runtime-conformance` (race detection), real OpenCode
+HTTP/stdio handshake tests, and PostgreSQL repositories/migrations in a temporary
+schema passed. Migration coverage includes HTTP defaults, stdio persistence,
+workspace isolation, mixed-field constraints and guarded rollback/reapply. The
+local application's migration history is newer than this checkout, so fresh-schema
+verification was used rather than changing that schema.
+
+The additive `0041` migration retains HTTP rows. Upgrade platform and workers before
+using stdio; older workers cannot execute it. Rollback refuses while stdio catalog
+rows exist. Do not downgrade workers owning persisted stdio sessions.
+
+MCP transport uses one shared Go enum (`internal/contracts/mcptransport`) in catalog,
+server/worker models, wire DTOs, validation and adapters. Persistence converts only
+at the generated SQL boundary. The historical alternative credential-fingerprint
+fallback has been removed: sessions requiring it fail visibly without replacing or
+rewriting their saved state; exact supported manifest fingerprints still restore.

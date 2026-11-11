@@ -8,11 +8,12 @@ import (
 	"testing"
 
 	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
+	"github.com/josemiguelmelo/orkest/internal/contracts/mcptransport"
 )
 
 func mutableRunConfig() configmodel.RunConfig {
 	config := runConfig()
-	config.MCPServers = []configmodel.MCPServer{{ID: "mcp", Name: "MCP", URL: "https://example.com/mcp", Headers: map[string]string{"Authorization": "private-header"}}}
+	config.MCPServers = []configmodel.MCPServer{{ID: "mcp", Name: "MCP", URL: "https://example.com/mcp", Headers: map[string]string{"Authorization": "private-header"}, Transport: mcptransport.HTTP}}
 	config.Skills = []configmodel.Skill{{ID: "work", SkillMD: "Work instructions"}}
 	config.Repositories = []configmodel.WorkspaceRepository{{ID: "repo", ProviderName: "github", URL: "https://example.com/repo"}}
 	return config
@@ -79,6 +80,7 @@ func TestValidationExplainsInvalidSettingsWithoutValues(t *testing.T) {
 	}{
 		{"required", "model.id", "is required", func(c *configmodel.RunConfig) { c.Model.ID = "" }},
 		{"runtime", "runtime", "is unsupported", func(c *configmodel.RunConfig) { c.Runtime = "private-runtime" }},
+		{"transport", "mcpServers.transport", "must be http or stdio", func(c *configmodel.RunConfig) { c.MCPServers[0].Transport = "" }},
 		{"URL", "mcpServers", "must use HTTP or HTTPS URLs without user information", func(c *configmodel.RunConfig) { c.MCPServers[0].URL = "https://secret:password@example.com" }},
 		{"headers", "mcpServers.headers", "must have nonempty names and no line breaks", func(c *configmodel.RunConfig) { c.MCPServers[0].Headers["Authorization"] = "secret\r\nvalue" }},
 		{"skill ID", "skills", "must use lowercase alphanumeric IDs separated by single hyphens", func(c *configmodel.RunConfig) { c.Skills[0].ID = "INVALID" }},

@@ -11,6 +11,7 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/adapters/runtime/questiontool"
 	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
 	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
+	"github.com/josemiguelmelo/orkest/internal/contracts/mcptransport"
 	"github.com/josemiguelmelo/orkest/internal/platform/durablefile"
 )
 
@@ -64,7 +65,7 @@ func addQuestionTool(settings *agentruntime.ResolvedRuntimeSettings, tool *quest
 			return errors.New("MCP server conflicts with reserved Orkest question tool")
 		}
 	}
-	settings.MCPServers = append(settings.MCPServers, configmodel.MCPServer{ID: "orkest-questions", Name: "orkest_questions", URL: tool.URL(), Headers: map[string]string{"Authorization": "Bearer " + token}})
+	settings.MCPServers = append(settings.MCPServers, configmodel.MCPServer{ID: "orkest-questions", Name: "orkest_questions", URL: tool.URL(), Headers: map[string]string{"Authorization": "Bearer " + token}, Transport: mcptransport.HTTP})
 	settings.Agent.Instructions += questionInstructionsV1
 	return nil
 }

@@ -196,7 +196,7 @@ func (d *TaskDispatcher) resolveAgentCapabilities(ctx context.Context, organizat
 			return fmt.Errorf("resolve agent MCP servers: %w", resolveErr)
 		}
 		for _, server := range servers {
-			config.MCPServers = append(config.MCPServers, orchestrationmodel.MCPServer{ID: server.ID, Name: server.Name, URL: server.URL, Headers: server.Headers})
+			config.MCPServers = append(config.MCPServers, orchestrationmodel.MCPServer{ID: server.ID, Name: server.Name, URL: server.URL, Headers: server.Headers, Transport: server.Transport, Command: server.Command, Args: server.Args, Environment: server.Environment})
 		}
 	}
 	return nil

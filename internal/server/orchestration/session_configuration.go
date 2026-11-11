@@ -7,6 +7,7 @@ import (
 	"maps"
 	"slices"
 
+	"github.com/josemiguelmelo/orkest/internal/contracts/mcptransport"
 	mcpservermodel "github.com/josemiguelmelo/orkest/internal/server/mcpserver/model"
 	orchestrationmodel "github.com/josemiguelmelo/orkest/internal/server/orchestration/model"
 )
@@ -46,7 +47,7 @@ func (d *TaskDispatcher) refreshOrkestMCPServer(userID, organizationID, workspac
 	if err != nil {
 		return fmt.Errorf("configure Orkest agent tools: %w", err)
 	}
-	replacement := orchestrationmodel.MCPServer{ID: server.ID, Name: server.Name, URL: server.URL, Headers: server.Headers}
+	replacement := orchestrationmodel.MCPServer{ID: server.ID, Name: server.Name, URL: server.URL, Headers: server.Headers, Transport: mcptransport.HTTP}
 	servers := make([]orchestrationmodel.MCPServer, 0, len(config.MCPServers)+1)
 	found := false
 	for _, existing := range config.MCPServers {
@@ -84,7 +85,22 @@ func refreshSessionMCPHeaders(saved []orchestrationmodel.MCPServer, resolved []m
 		if !found {
 			return nil, errors.New("session MCP server is unavailable")
 		}
-		updated[i].Headers = maps.Clone(server.Headers)
+		if updated[i].Transport != server.Transport || !server.Transport.Valid() {
+			return nil, errors.New("session MCP transport is incompatible")
+		}
+		if updated[i].Transport == mcptransport.Stdio {
+			env := make(map[string]string, len(updated[i].Environment))
+			for name := range updated[i].Environment {
+				value, exists := server.Environment[name]
+				if !exists {
+					return nil, errors.New("session MCP environment variable is unavailable")
+				}
+				env[name] = value
+			}
+			updated[i].Environment = env
+		} else {
+			updated[i].Headers = maps.Clone(server.Headers)
+		}
 	}
 	return updated, nil
 }

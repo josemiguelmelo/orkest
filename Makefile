@@ -163,7 +163,7 @@ test-recovery-unit:
 
 test-recovery: test-recovery-unit
 	@{ test -n "$$ORKEST_OPENCODE_BINARY" && test -n "$$ORKEST_TEST_MODEL_PROVIDER" && test -n "$$ORKEST_TEST_MODEL_ID"; } || (echo "Set ORKEST_OPENCODE_BINARY, ORKEST_TEST_MODEL_PROVIDER, ORKEST_TEST_MODEL_ID and grant credentials with ORKEST_TEST_PROVIDER_ENV; real continuation is unverified without them"; exit 1)
-	go test -tags=integration ./tests/integration -run 'TestOpenCodeHandshake|TestOpenCodeContinuation' -count=1 -timeout=5m -v
+	go test -tags=integration ./tests/integration -run 'TestOpenCodeHandshake|TestOpenCodeStdioMCPHandshake|TestOpenCodeContinuation' -count=1 -timeout=5m -v
 
 .PHONY: test-runtime-conformance qualify-runtime
 test-runtime-conformance:

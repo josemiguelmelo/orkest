@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/josemiguelmelo/orkest/internal/contracts/mcptransport"
 	orchestrationmodel "github.com/josemiguelmelo/orkest/internal/server/orchestration/model"
 )
 
@@ -32,5 +33,13 @@ func TestWireConfigurationMatchesV1Fixture(t *testing.T) {
 	}
 	if !reflect.DeepEqual(actual, previous) {
 		t.Fatalf("wire configuration changed: %s", got)
+	}
+}
+
+func TestStdioMCPWireConfiguration(t *testing.T) {
+	server := orchestrationmodel.MCPServer{ID: "local", Name: "Local", Transport: mcptransport.Stdio, Command: "/server", Args: []string{"literal space"}, Environment: map[string]string{"TOKEN": "private"}}
+	got := toWireMCPServer(server)
+	if got.Transport != mcptransport.Stdio || got.Command != "/server" || len(got.Args) != 1 || got.Args[0] != "literal space" || got.Environment["TOKEN"] != "private" || got.URL != "" || len(got.Headers) != 0 {
+		t.Fatal("stdio configuration lost on platform wire mapping")
 	}
 }

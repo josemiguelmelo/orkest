@@ -30,7 +30,7 @@ provides monitoring, chat, approvals, and recovery through agentctl and ACP.
   [executor reference](reference/executors/kubernetes.md).
 - agentctl bridges the platform and runtime ACP sessions.
 - Task chat, approvals, cancellation, and interruption recovery; see §7.
-- HTTP MCP servers; stdio MCP excluded.
+- HTTP and stdio MCP servers.
 - Configurable ordered stages, seeded with todo, in progress, in review, done.
 - Multiple registered workspace repositories per task.
 
@@ -115,11 +115,21 @@ Rules for the terms in the [glossary](glossary.md).
 
 ### 3.6 MCP Server
 
-- Workspace fields: name, HTTP(S) URL, optional encrypted/write-only headers.
+- Workspace fields: name and required immutable transport (`http` or `stdio`);
+  omitted or empty transport is rejected. HTTP uses an
+  HTTP(S) URL and optional encrypted/write-only headers. Stdio uses an absolute
+  executable path, literal argument array, and optional encrypted/write-only environment.
 - Agents select same-workspace servers. Deleting a server removes selections.
-- Header updates: omitted preserves; empty map clears.
-- Active processes retain startup settings; later runs resolve headers again by ID.
-- Stdio MCP and OAuth setup are deferred.
+- Header/environment updates: omitted preserves; empty map clears. Arguments omitted
+  preserve existing arguments; an empty array clears them. Credentials belong in headers
+  or environment, never command arguments.
+- Active processes retain startup settings. Continued sessions pin transport, endpoint
+  or command/arguments, and stdio environment names; resolve current credential values
+  by ID. Missing required names fail visibly. New sessions use current catalog settings.
+- Runtimes launch stdio servers inside the execution environment using its existing
+  task working directory. Install pinned server dependencies in execution images;
+  automatic package installation and custom MCP working directories are excluded.
+- OAuth setup remains deferred.
 
 ### 3.7 Agent Definition
 

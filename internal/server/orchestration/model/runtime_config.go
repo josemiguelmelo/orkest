@@ -7,6 +7,7 @@ import (
 	"slices"
 
 	"github.com/josemiguelmelo/orkest/internal/contracts/configvalidation"
+	"github.com/josemiguelmelo/orkest/internal/contracts/mcptransport"
 	coreruntime "github.com/josemiguelmelo/orkest/internal/contracts/runtimecatalog"
 )
 
@@ -29,12 +30,16 @@ type ModelSelection struct {
 	ID       string `json:"id"`
 }
 
-// MCPServer is an HTTP MCP endpoint resolved for this run. Headers are sensitive.
+// MCPServer is a resolved MCP connection. Headers and environment values are sensitive.
 type MCPServer struct {
-	ID      string            `json:"id"`
-	Name    string            `json:"name"`
-	URL     string            `json:"url"`
-	Headers map[string]string `json:"headers,omitempty"`
+	Transport   mcptransport.Transport `json:"transport"`
+	Command     string                 `json:"command,omitempty"`
+	Args        []string               `json:"args,omitempty"`
+	Environment map[string]string      `json:"environment,omitempty"`
+	ID          string                 `json:"id"`
+	Name        string                 `json:"name"`
+	URL         string                 `json:"url"`
+	Headers     map[string]string      `json:"headers,omitempty"`
 }
 
 const OrkestMCPServerID = "orkest-agent-tools"
@@ -90,6 +95,8 @@ func (c RuntimeConfig) Clone() RuntimeConfig {
 	c.MCPServers = slices.Clone(c.MCPServers)
 	for i := range c.MCPServers {
 		c.MCPServers[i].Headers = maps.Clone(c.MCPServers[i].Headers)
+		c.MCPServers[i].Args = slices.Clone(c.MCPServers[i].Args)
+		c.MCPServers[i].Environment = maps.Clone(c.MCPServers[i].Environment)
 	}
 	c.Skills = slices.Clone(c.Skills)
 	c.Environment = maps.Clone(c.Environment)
@@ -118,7 +125,7 @@ func (c RuntimeConfig) Validate() error {
 		return validationError(issue)
 	}
 	for _, server := range c.MCPServers {
-		if issue := configvalidation.MCPServer(server.ID, server.Name, server.URL, server.Headers); issue != nil {
+		if issue := configvalidation.MCPConnection(server.ID, server.Name, server.Transport, server.URL, server.Command, server.Args, server.Headers, server.Environment); issue != nil {
 			return validationError(issue)
 		}
 	}

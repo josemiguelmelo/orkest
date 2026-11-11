@@ -2,6 +2,8 @@ package agentctlv1
 
 import (
 	"encoding/json"
+
+	"github.com/josemiguelmelo/orkest/internal/contracts/mcptransport"
 )
 
 type AgentDefinition struct {
@@ -17,10 +19,14 @@ type ModelSelection struct {
 }
 
 type MCPServer struct {
-	ID      string            `json:"id"`
-	Name    string            `json:"name"`
-	URL     string            `json:"url"`
-	Headers map[string]string `json:"headers,omitempty"`
+	Transport   mcptransport.Transport `json:"transport"`
+	Command     string                 `json:"command,omitempty"`
+	Args        []string               `json:"args,omitempty"`
+	Environment map[string]string      `json:"environment,omitempty"`
+	ID          string                 `json:"id"`
+	Name        string                 `json:"name"`
+	URL         string                 `json:"url"`
+	Headers     map[string]string      `json:"headers,omitempty"`
 }
 
 type Skill struct {

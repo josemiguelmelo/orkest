@@ -17,6 +17,7 @@ import (
 	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
 	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
+	"github.com/josemiguelmelo/orkest/internal/contracts/mcptransport"
 	"github.com/josemiguelmelo/orkest/internal/platform/sessionpath"
 )
 
@@ -27,6 +28,7 @@ func TestRestoreSessionAcrossRuns(t *testing.T) {
 	}
 	environment := runtimehost.Environment{WorkDir: t.TempDir(), StateDir: t.TempDir(), GrantedEnv: []string{"ORKEST_ACP_FIXTURE=1"}}
 	config := configmodel.RunConfig{RuntimeConfig: configmodel.RuntimeConfig{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", TaskSessionID: "conversation", RunID: "first", Runtime: "opencode", Model: configmodel.ModelSelection{Provider: "provider", ID: "model"}, Agent: configmodel.AgentDefinition{Name: "Work", Instructions: "Work"}}}
+	config.MCPServers = []configmodel.MCPServer{{ID: "http", Name: "HTTP", URL: "https://example.test/mcp", Transport: mcptransport.HTTP}}
 	home := sessionpath.Home(environment.StateDir, config.OrganizationID, config.WorkspaceID, config.TaskID, config.TaskSessionID)
 	if err := os.MkdirAll(filepath.Join(home, ".aws"), 0o700); err != nil {
 		t.Fatal(err)

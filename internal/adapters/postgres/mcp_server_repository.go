@@ -3,7 +3,8 @@ package postgres
 import (
 	"context"
 
-	"github.com/jackc/pgx/v5"
+	"github.com/josemiguelmelo/orkest/internal/adapters/postgres/sqlc"
+	"github.com/josemiguelmelo/orkest/internal/contracts/mcptransport"
 	modelerrors "github.com/josemiguelmelo/orkest/internal/contracts/problem"
 	"github.com/josemiguelmelo/orkest/internal/server/mcpserver"
 	mcpservermodel "github.com/josemiguelmelo/orkest/internal/server/mcpserver/model"
@@ -17,59 +18,63 @@ func NewMCPServerPostgresRepository(database *PostgresDatabase) *MCPServerPostgr
 
 var _ mcpserver.MCPServerRepository = (*MCPServerPostgresRepository)(nil)
 
-func (r *MCPServerPostgresRepository) Create(ctx context.Context, id, workspaceID, name, endpoint, encrypted string) (mcpservermodel.Server, error) {
-	return scanMCPServer(r.database.pool.QueryRow(ctx, `INSERT INTO mcp_servers(id, workspace_id, name, url, encrypted_headers) VALUES($1,$2,$3,$4,$5) RETURNING id, workspace_id, name, url, encrypted_headers <> ''`, id, workspaceID, name, endpoint, encrypted))
+func mcpCredentials(server mcpservermodel.Server, encrypted string) (string, string) {
+	if server.Transport == mcptransport.Stdio {
+		return "", encrypted
+	}
+	return encrypted, ""
 }
 
-func (r *MCPServerPostgresRepository) Update(ctx context.Context, workspaceID, id, name, endpoint, encrypted string) (mcpservermodel.Server, error) {
-	server, err := scanMCPServer(r.database.pool.QueryRow(ctx, `UPDATE mcp_servers SET name=$3,url=$4,encrypted_headers=$5,updated_at=now() WHERE workspace_id=$1 AND id=$2 RETURNING id,workspace_id,name,url,encrypted_headers <> ''`, workspaceID, id, name, endpoint, encrypted))
+func (r *MCPServerPostgresRepository) Create(ctx context.Context, server mcpservermodel.Server, encrypted string) (mcpservermodel.Server, error) {
+	headers, environment := mcpCredentials(server, encrypted)
+	row, err := sqlc.New(r.database.pool).CreateMCPServer(ctx, sqlc.CreateMCPServerParams{ID: server.ID, WorkspaceID: server.WorkspaceID, Name: server.Name, Url: server.URL, Transport: string(server.Transport), Command: server.Command, Args: append([]string{}, server.Args...), EncryptedHeaders: headers, EncryptedEnvironment: environment})
 	if err != nil {
 		return mcpservermodel.Server{}, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
 	}
-	return server, nil
+	return mcpServerFromRow(row), nil
+}
+
+func (r *MCPServerPostgresRepository) Update(ctx context.Context, server mcpservermodel.Server, encrypted string) (mcpservermodel.Server, error) {
+	headers, environment := mcpCredentials(server, encrypted)
+	row, err := sqlc.New(r.database.pool).UpdateMCPServer(ctx, sqlc.UpdateMCPServerParams{ID: server.ID, WorkspaceID: server.WorkspaceID, Name: server.Name, Url: server.URL, Transport: string(server.Transport), Command: server.Command, Args: append([]string{}, server.Args...), EncryptedHeaders: headers, EncryptedEnvironment: environment})
+	if err != nil {
+		return mcpservermodel.Server{}, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
+	}
+	return mcpServerFromRow(row), nil
 }
 
 func (r *MCPServerPostgresRepository) Delete(ctx context.Context, workspaceID, id string) error {
-	tag, err := r.database.pool.Exec(ctx, `DELETE FROM mcp_servers WHERE workspace_id=$1 AND id=$2`, workspaceID, id)
-	if err == nil && tag.RowsAffected() == 0 {
+	count, err := sqlc.New(r.database.pool).DeleteMCPServer(ctx, sqlc.DeleteMCPServerParams{WorkspaceID: workspaceID, ID: id})
+	if err == nil && count == 0 {
 		return modelerrors.ErrNotFound
 	}
 	return err
 }
 
 func (r *MCPServerPostgresRepository) Get(ctx context.Context, workspaceID, id string) (mcpservermodel.Server, string, error) {
-	var server mcpservermodel.Server
-	var encrypted string
-	err := r.database.pool.QueryRow(ctx, `SELECT id,workspace_id,name,url,encrypted_headers FROM mcp_servers WHERE workspace_id=$1 AND id=$2`, workspaceID, id).Scan(&server.ID, &server.WorkspaceID, &server.Name, &server.URL, &encrypted)
+	row, err := sqlc.New(r.database.pool).GetMCPServer(ctx, sqlc.GetMCPServerParams{WorkspaceID: workspaceID, ID: id})
 	if err != nil {
 		return mcpservermodel.Server{}, "", mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
 	}
-	server.HasHeaders = encrypted != ""
-	return server, encrypted, nil
+	secret := row.EncryptedHeaders
+	if mcptransport.Transport(row.Transport) == mcptransport.Stdio {
+		secret = row.EncryptedEnvironment
+	}
+	return mcpServerFromRow(row), secret, nil
 }
 
 func (r *MCPServerPostgresRepository) List(ctx context.Context, workspaceID string) ([]mcpservermodel.Server, error) {
-	rows, err := r.database.pool.Query(ctx, `SELECT id,workspace_id,name,url,encrypted_headers <> '' FROM mcp_servers WHERE workspace_id=$1 ORDER BY name,id`, workspaceID)
+	rows, err := sqlc.New(r.database.pool).ListMCPServers(ctx, workspaceID)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-	servers := make([]mcpservermodel.Server, 0)
-	for rows.Next() {
-		var server mcpservermodel.Server
-		if err = rows.Scan(&server.ID, &server.WorkspaceID, &server.Name, &server.URL, &server.HasHeaders); err != nil {
-			return nil, err
-		}
-		servers = append(servers, server)
+	servers := make([]mcpservermodel.Server, 0, len(rows))
+	for _, row := range rows {
+		servers = append(servers, mcpServerFromRow(row))
 	}
-	return servers, rows.Err()
+	return servers, nil
 }
 
-func scanMCPServer(row pgx.Row) (mcpservermodel.Server, error) {
-	var server mcpservermodel.Server
-	err := row.Scan(&server.ID, &server.WorkspaceID, &server.Name, &server.URL, &server.HasHeaders)
-	if err != nil {
-		return mcpservermodel.Server{}, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
-	}
-	return server, nil
+func mcpServerFromRow(row sqlc.McpServer) mcpservermodel.Server {
+	return mcpservermodel.Server{ID: row.ID, WorkspaceID: row.WorkspaceID, Name: row.Name, Transport: mcptransport.Transport(row.Transport), URL: row.Url, Command: row.Command, Args: row.Args, HasHeaders: row.EncryptedHeaders != "", HasEnvironment: row.EncryptedEnvironment != ""}
 }

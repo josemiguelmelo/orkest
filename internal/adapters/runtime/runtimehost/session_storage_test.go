@@ -1,13 +1,19 @@
 package runtimehost
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
+	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
+	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
+	"github.com/josemiguelmelo/orkest/internal/contracts/mcptransport"
 )
 
 func TestV1SessionCompatibility(t *testing.T) {
@@ -44,7 +50,10 @@ func TestV1SessionCompatibility(t *testing.T) {
 }
 
 func TestSessionIdentityIgnoresOnlyRunAndCredentials(t *testing.T) {
-	config := configmodel.RuntimeConfig{RunID: "first", MCPServers: []configmodel.MCPServer{{ID: "mcp", URL: "https://example.test", Headers: map[string]string{"Authorization": "first"}}}}
+	config := configmodel.RuntimeConfig{RunID: "first", MCPServers: []configmodel.MCPServer{{ID: "mcp", URL: "https://example.test", Headers: map[string]string{"Authorization": "first"}, Transport: mcptransport.HTTP}}}
+	if fingerprintableConfiguration(config).MCPServers[0].Transport != mcptransport.HTTP {
+		t.Fatal("explicit HTTP transport was removed from fingerprint configuration")
+	}
 	first := configurationFingerprint(config)
 	config.RunID = "second"
 	config.MCPServers[0].Headers["Authorization"] = "second"
@@ -101,5 +110,69 @@ func TestRestoredSessionQuestionToolCompatibility(t *testing.T) {
 				t.Fatal("restore changed saved manifest", err)
 			}
 		})
+	}
+}
+
+func TestStdioFingerprintPinsCommandArgumentsAndEnvironmentNames(t *testing.T) {
+	config := configmodel.RuntimeConfig{MCPServers: []configmodel.MCPServer{{ID: "stdio", Name: "Tools", Transport: mcptransport.Stdio, Command: "/server", Args: []string{"--original"}, Environment: map[string]string{"TOKEN": "first"}}}}
+	before := sessionConfigurationFingerprint(config)
+	config.MCPServers[0].Environment["TOKEN"] = "rotated"
+	if got := sessionConfigurationFingerprint(config); got != before || config.MCPServers[0].Environment["TOKEN"] != "rotated" {
+		t.Fatal("credential rotation changed identity or mutated configuration")
+	}
+	for _, change := range []func(*configmodel.MCPServer){
+		func(server *configmodel.MCPServer) { server.Command = "/other" },
+		func(server *configmodel.MCPServer) { server.Args[0] = "--other" },
+		func(server *configmodel.MCPServer) { server.Environment["NEW"] = "value" },
+	} {
+		changed := config.Clone()
+		change(&changed.MCPServers[0])
+		if sessionConfigurationFingerprint(changed) == before {
+			t.Fatal("stdio settings excluded from compatibility")
+		}
+	}
+}
+
+func TestStdioSecretsAreRedactedFromRuntimeActivity(t *testing.T) {
+	config := configmodel.RuntimeConfig{MCPServers: []configmodel.MCPServer{{Transport: mcptransport.Stdio, Environment: map[string]string{"TOKEN": "private-stdio-value"}}}}
+	var output string
+	session := &Session{callbacks: &sessionCallbacks{observer: &agentruntime.PromptObserver{Update: func(update interaction.Update) error { output = update.Text; return nil }}}}
+	host := &Host{}
+	host.registerSessionSecrets(session, config, preparedRuntime{})
+	if err := session.callbacks.Update(interaction.Update{Kind: "text", Text: "token=private-stdio-value"}); err != nil {
+		t.Fatal(err)
+	}
+	if output != "token=[redacted]" {
+		t.Fatal("stdio secret exposed in runtime activity")
+	}
+}
+
+func TestRemovedLegacyCredentialFingerprintFailsWithoutChangingState(t *testing.T) {
+	config := configmodel.RuntimeConfig{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", GitCredentials: []configmodel.GitCredential{{ProviderName: "github", RepositoryURL: "https://github.com/example/repo.git", Token: "fixture-token"}}}
+	store := sessionStorage{StateDir: t.TempDir(), WorkDir: t.TempDir(), RuntimeVersion: "pinned"}
+	if err := store.reserveCreation(config); err != nil {
+		t.Fatal(err)
+	}
+	// The removed fallback included Git credentials in older configuration hashes.
+	previous, err := json.Marshal(config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	manifest := sessionManifest{Version: 1, RuntimeVersion: store.RuntimeVersion, WorkDir: store.WorkDir, Configuration: fmt.Sprintf("%x", sha256.Sum256(previous)), SessionID: "original-session"}
+	raw, err := json.Marshal(manifest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(store.Root(config), "session.json")
+	if err := os.WriteFile(path, raw, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var mismatch *sessionManifestCompatibilityError
+	if _, err := store.load(config); !errors.As(err, &mismatch) || !slices.Contains(mismatch.Mismatches, "configuration_mismatch") {
+		t.Fatal("obsolete fingerprint fallback was accepted", err)
+	}
+	saved, err := os.ReadFile(path)
+	if err != nil || string(saved) != string(raw) {
+		t.Fatal("failed restore modified saved state", err)
 	}
 }

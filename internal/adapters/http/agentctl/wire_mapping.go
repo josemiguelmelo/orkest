@@ -115,6 +115,10 @@ func fromWireMCPServer(value wire.MCPServer) configmodel.MCPServer {
 	result.Name = value.Name
 	result.URL = value.URL
 	result.Headers = value.Headers
+	result.Transport = value.Transport
+	result.Command = value.Command
+	result.Args = value.Args
+	result.Environment = value.Environment
 	return result
 }
 

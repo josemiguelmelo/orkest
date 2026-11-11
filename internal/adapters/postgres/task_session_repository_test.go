@@ -7,6 +7,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/josemiguelmelo/orkest/internal/contracts/mcptransport"
 	"github.com/josemiguelmelo/orkest/internal/platform/ids"
 	"github.com/josemiguelmelo/orkest/internal/platform/secretbox"
 	"github.com/josemiguelmelo/orkest/internal/server/orchestration"
@@ -33,7 +34,7 @@ func testTaskSessions(t *testing.T, database *PostgresDatabase, orgID, workspace
 		{RuntimeConfig: orchestrationmodel.RuntimeConfig{
 			OrganizationID: orgID, WorkspaceID: workspaceID, TaskID: taskID, TaskSessionID: newID(), RunID: newID(), Runtime: "opencode",
 			Agent: orchestrationmodel.AgentDefinition{Name: "original", Instructions: "original"}, Model: orchestrationmodel.ModelSelection{Provider: "test", ID: "model"},
-			MCPServers:  []orchestrationmodel.MCPServer{{ID: "mcp", Name: "mcp", URL: "https://example.test/mcp", Headers: map[string]string{"Authorization": "private"}}},
+			MCPServers:  []orchestrationmodel.MCPServer{{ID: "mcp", Name: "mcp", URL: "https://example.test/mcp", Headers: map[string]string{"Authorization": "private"}, Transport: mcptransport.HTTP}},
 			Environment: map[string]string{"TOKEN": "environment-secret"},
 		}, HostMounts: []mountmodel.Mount{{Source: "/srv/input", Target: "/mnt/host/input", ReadOnly: true}}, InitialCommandID: "initial", InitialPrompt: "hello"},
 	}

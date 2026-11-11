@@ -490,8 +490,15 @@ export declare const zMcpServer: z.ZodObject<{
     id: z.ZodString;
     workspaceId: z.ZodString;
     name: z.ZodString;
-    url: z.ZodURL;
+    transport: z.ZodEnum<{
+        http: "http";
+        stdio: "stdio";
+    }>;
+    url: z.ZodString;
+    command: z.ZodOptional<z.ZodString>;
+    args: z.ZodOptional<z.ZodArray<z.ZodString>>;
     hasHeaders: z.ZodBoolean;
+    hasEnvironment: z.ZodBoolean;
 }, z.core.$strip>;
 export declare const zCodeRepository: z.ZodObject<{
     id: z.ZodString;
@@ -720,10 +727,20 @@ export declare const zAgentDefinition: z.ZodObject<{
     skillIds: z.ZodOptional<z.ZodArray<z.ZodString>>;
     configuration: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
 }, z.core.$strip>;
+/**
+ * Transport is required and immutable; use http or stdio. HTTP requires a URL; stdio requires an absolute executable. Transport-specific fields cannot be mixed.
+ */
 export declare const zMcpServerInput: z.ZodObject<{
     name: z.ZodString;
-    url: z.ZodURL;
+    transport: z.ZodEnum<{
+        http: "http";
+        stdio: "stdio";
+    }>;
+    url: z.ZodOptional<z.ZodURL>;
+    command: z.ZodOptional<z.ZodString>;
+    args: z.ZodOptional<z.ZodArray<z.ZodString>>;
     headers: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
+    environment: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
 }, z.core.$strip>;
 export declare const zCodeRepositoryCreate2: z.ZodObject<{
     integrationId: z.ZodString;
@@ -1718,13 +1735,27 @@ export declare const zListMcpServersResponse: z.ZodArray<z.ZodObject<{
     id: z.ZodString;
     workspaceId: z.ZodString;
     name: z.ZodString;
-    url: z.ZodURL;
+    transport: z.ZodEnum<{
+        http: "http";
+        stdio: "stdio";
+    }>;
+    url: z.ZodString;
+    command: z.ZodOptional<z.ZodString>;
+    args: z.ZodOptional<z.ZodArray<z.ZodString>>;
     hasHeaders: z.ZodBoolean;
+    hasEnvironment: z.ZodBoolean;
 }, z.core.$strip>>;
 export declare const zCreateMcpServerBody: z.ZodObject<{
     name: z.ZodString;
-    url: z.ZodURL;
+    transport: z.ZodEnum<{
+        http: "http";
+        stdio: "stdio";
+    }>;
+    url: z.ZodOptional<z.ZodURL>;
+    command: z.ZodOptional<z.ZodString>;
+    args: z.ZodOptional<z.ZodArray<z.ZodString>>;
     headers: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
+    environment: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
 }, z.core.$strip>;
 export declare const zCreateMcpServerPath: z.ZodObject<{
     orgID: z.ZodString;
@@ -1737,8 +1768,15 @@ export declare const zCreateMcpServerResponse: z.ZodObject<{
     id: z.ZodString;
     workspaceId: z.ZodString;
     name: z.ZodString;
-    url: z.ZodURL;
+    transport: z.ZodEnum<{
+        http: "http";
+        stdio: "stdio";
+    }>;
+    url: z.ZodString;
+    command: z.ZodOptional<z.ZodString>;
+    args: z.ZodOptional<z.ZodArray<z.ZodString>>;
     hasHeaders: z.ZodBoolean;
+    hasEnvironment: z.ZodBoolean;
 }, z.core.$strip>;
 export declare const zDeleteMcpServerPath: z.ZodObject<{
     orgID: z.ZodString;
@@ -1751,8 +1789,15 @@ export declare const zDeleteMcpServerPath: z.ZodObject<{
 export declare const zDeleteMcpServerResponse: z.ZodVoid;
 export declare const zUpdateMcpServerBody: z.ZodObject<{
     name: z.ZodString;
-    url: z.ZodURL;
+    transport: z.ZodEnum<{
+        http: "http";
+        stdio: "stdio";
+    }>;
+    url: z.ZodOptional<z.ZodURL>;
+    command: z.ZodOptional<z.ZodString>;
+    args: z.ZodOptional<z.ZodArray<z.ZodString>>;
     headers: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
+    environment: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
 }, z.core.$strip>;
 export declare const zUpdateMcpServerPath: z.ZodObject<{
     orgID: z.ZodString;
@@ -1766,8 +1811,15 @@ export declare const zUpdateMcpServerResponse: z.ZodObject<{
     id: z.ZodString;
     workspaceId: z.ZodString;
     name: z.ZodString;
-    url: z.ZodURL;
+    transport: z.ZodEnum<{
+        http: "http";
+        stdio: "stdio";
+    }>;
+    url: z.ZodString;
+    command: z.ZodOptional<z.ZodString>;
+    args: z.ZodOptional<z.ZodArray<z.ZodString>>;
     hasHeaders: z.ZodBoolean;
+    hasEnvironment: z.ZodBoolean;
 }, z.core.$strip>;
 export declare const zListAgentsPath: z.ZodObject<{
     orgID: z.ZodString;

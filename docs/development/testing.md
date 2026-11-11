@@ -78,6 +78,12 @@ matters. Do not report handshake success or a skipped continuation as inference
 qualification. Live continuation may incur provider costs; no paid/default model
 is selected implicitly.
 
+The real `TestOpenCodeStdioMCPHandshake` integration test uses the test executable
+as a small MCP server. With `ORKEST_OPENCODE_BINARY` set to the pinned executable,
+it checks stdio initialization, literal arguments/environment delivery, restored
+session identity after credential rotation, and graceful subprocess shutdown.
+It makes no model request and does not qualify model-driven tool calls.
+
 ## Runtime qualification
 
 Select one profile with `make qualify-runtime QUALIFY_RUNTIME=<runtime>`.
@@ -97,7 +103,13 @@ For local qualification, set the shared `ORKEST_TEST_MODEL_PROVIDER` and
 also requires `ORKEST_TEST_APPROVAL_PROMPT`, `ORKEST_TEST_RECOVERY_PROMPT`,
 `ORKEST_TEST_CANCELLATION_PROMPT`, `ORKEST_TEST_QUESTION_PROMPT`,
 `ORKEST_TEST_QUESTION_EXPECTED`, `ORKEST_TEST_MCP_URL`, `ORKEST_TEST_MCP_PROMPT`
-and `ORKEST_TEST_MCP_EXPECTED`. Missing prerequisites fail rather than substitute
+and `ORKEST_TEST_MCP_EXPECTED`. Stdio qualification also requires
+`ORKEST_TEST_STDIO_MCP_COMMAND` (absolute executable), `ORKEST_TEST_STDIO_MCP_ARGS`
+(JSON string array, including `[]`), `ORKEST_TEST_STDIO_MCP_ENV` (JSON string map,
+including `{}`), `ORKEST_TEST_STDIO_MCP_PROMPT` and `ORKEST_TEST_STDIO_MCP_EXPECTED`.
+Provision that executable and pinned dependencies in the qualification environment.
+MCP probes run before and after restore. Deterministic stdio probes verify configuration
+propagation, not a real server connection. Missing prerequisites fail rather than substitute
 fixture evidence. Exact requirements are in the [conformance tests](../../internal/agentctl/runtime/conformance_test.go).
 
 Verify the real response/model, instructions/skills, MCP headers, bound approval

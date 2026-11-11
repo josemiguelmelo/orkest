@@ -127,27 +127,19 @@ func fingerprintableConfiguration(config configmodel.RuntimeConfig) configmodel.
 	config.MCPServers = append([]configmodel.MCPServer(nil), config.MCPServers...)
 	for i := range config.MCPServers {
 		config.MCPServers[i].Headers = nil
+		// Credential rotation must not invalidate the session. Names remain pinned;
+		// values are supplied separately and must not enter compatibility fingerprints.
+		if config.MCPServers[i].Environment != nil {
+			names := make(map[string]string, len(config.MCPServers[i].Environment))
+			for name := range config.MCPServers[i].Environment {
+				names[name] = ""
+			}
+			config.MCPServers[i].Environment = names
+		}
 	}
 	config.GitCredentials = nil
 	config.GitCredentialsRequired = false
 	return config
-}
-
-func legacyConfigurationFingerprints(config configmodel.RuntimeConfig) []string {
-	config.RunID = ""
-	config.MCPServers = append([]configmodel.MCPServer(nil), config.MCPServers...)
-	for i := range config.MCPServers {
-		config.MCPServers[i].Headers = nil
-	}
-	values := []configmodel.RuntimeConfig{config, config}
-	values[1].GitCredentials = nil
-	values[1].GitCredentialsRequired = false
-	fingerprints := make([]string, 0, len(values))
-	for _, value := range values {
-		data, _ := json.Marshal(value)
-		fingerprints = append(fingerprints, fmt.Sprintf("%x", sha256.Sum256(data)))
-	}
-	return fingerprints
 }
 
 func (s sessionStorage) acquire(config configmodel.RuntimeConfig) (*os.File, error) {
@@ -202,9 +194,6 @@ func (s sessionStorage) load(config configmodel.RuntimeConfig) (restoredSession,
 		compatibleConfiguration = manifest.Configuration == sessionConfigurationFingerprint(config)
 	} else {
 		compatibleConfiguration = manifest.Configuration == configurationFingerprint(config)
-		for _, fingerprint := range legacyConfigurationFingerprints(config) {
-			compatibleConfiguration = compatibleConfiguration || manifest.Configuration == fingerprint
-		}
 	}
 	var mismatches []string
 	var configurationFields []string

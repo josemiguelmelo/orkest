@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
+	"github.com/josemiguelmelo/orkest/internal/contracts/mcptransport"
 
 	wire "github.com/josemiguelmelo/orkest/internal/contracts/agentctl/v1"
 )
@@ -46,5 +47,12 @@ func TestPreviousPermissionEventWireShape(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("permission identity or wire optionality changed: %s", encoded)
+	}
+}
+
+func TestStdioMCPConfigurationAccepted(t *testing.T) {
+	server := fromWireMCPServer(wire.MCPServer{ID: "local", Name: "Local", Transport: mcptransport.Stdio, Command: "/server", Args: []string{"literal space"}, Environment: map[string]string{"TOKEN": "private"}})
+	if server.Transport != mcptransport.Stdio || server.Command != "/server" || len(server.Args) != 1 || server.Args[0] != "literal space" || server.Environment["TOKEN"] != "private" || server.URL != "" || len(server.Headers) != 0 {
+		t.Fatal("stdio configuration lost on worker wire mapping")
 	}
 }
