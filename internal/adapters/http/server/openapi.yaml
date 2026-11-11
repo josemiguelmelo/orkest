@@ -1674,9 +1674,9 @@ components:
         application/json:
           schema:
             type: object
-            required: [name]
+            required: [name, transport]
             additionalProperties: false
-            description: Transport is immutable. Omitted transport defaults to HTTP on creation and preserves the existing transport on update. HTTP requires a URL; stdio requires an absolute executable. Transport-specific fields cannot be mixed.
+            description: Transport is required and immutable; use http or stdio. HTTP requires a URL; stdio requires an absolute executable. Transport-specific fields cannot be mixed.
             properties:
               name: {type: string, minLength: 1, maxLength: 200}
               transport: {type: string, enum: [http, stdio]}

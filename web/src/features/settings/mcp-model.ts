@@ -51,7 +51,7 @@ export function argumentInput(text: string): string[] {
 export const mcpSchema = z
   .object({
     name: z.string().trim().min(1).max(200),
-    transport: z.enum(['http', 'stdio']).default('http'),
+    transport: z.enum(['http', 'stdio']),
     url: z.string(),
     command: z.string().default(''),
     args: z.string().default('[]'),

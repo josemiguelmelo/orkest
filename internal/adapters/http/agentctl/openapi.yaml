@@ -414,8 +414,8 @@ components:
           items:
             type: object
             additionalProperties: false
-            required: [id, name, url]
-            description: Omitted transport means HTTP. HTTP requires URL and accepts headers; stdio requires an absolute executable and accepts literal arguments and environment. The runtime launches stdio servers inside the execution environment.
+            required: [id, name, transport, url]
+            description: Transport is required; use http or stdio. HTTP requires URL and accepts headers; stdio requires an absolute executable and accepts literal arguments and environment. The runtime launches stdio servers inside the execution environment.
             properties:
               id: {type: string}
               name: {type: string}

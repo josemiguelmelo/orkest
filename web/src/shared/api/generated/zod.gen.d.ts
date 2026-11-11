@@ -728,14 +728,14 @@ export declare const zAgentDefinition: z.ZodObject<{
     configuration: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodString>>;
 }, z.core.$strip>;
 /**
- * Transport is immutable. Omitted transport defaults to HTTP on creation and preserves the existing transport on update. HTTP requires a URL; stdio requires an absolute executable. Transport-specific fields cannot be mixed.
+ * Transport is required and immutable; use http or stdio. HTTP requires a URL; stdio requires an absolute executable. Transport-specific fields cannot be mixed.
  */
 export declare const zMcpServerInput: z.ZodObject<{
     name: z.ZodString;
-    transport: z.ZodOptional<z.ZodEnum<{
+    transport: z.ZodEnum<{
         http: "http";
         stdio: "stdio";
-    }>>;
+    }>;
     url: z.ZodOptional<z.ZodURL>;
     command: z.ZodOptional<z.ZodString>;
     args: z.ZodOptional<z.ZodArray<z.ZodString>>;
@@ -1747,10 +1747,10 @@ export declare const zListMcpServersResponse: z.ZodArray<z.ZodObject<{
 }, z.core.$strip>>;
 export declare const zCreateMcpServerBody: z.ZodObject<{
     name: z.ZodString;
-    transport: z.ZodOptional<z.ZodEnum<{
+    transport: z.ZodEnum<{
         http: "http";
         stdio: "stdio";
-    }>>;
+    }>;
     url: z.ZodOptional<z.ZodURL>;
     command: z.ZodOptional<z.ZodString>;
     args: z.ZodOptional<z.ZodArray<z.ZodString>>;
@@ -1789,10 +1789,10 @@ export declare const zDeleteMcpServerPath: z.ZodObject<{
 export declare const zDeleteMcpServerResponse: z.ZodVoid;
 export declare const zUpdateMcpServerBody: z.ZodObject<{
     name: z.ZodString;
-    transport: z.ZodOptional<z.ZodEnum<{
+    transport: z.ZodEnum<{
         http: "http";
         stdio: "stdio";
-    }>>;
+    }>;
     url: z.ZodOptional<z.ZodURL>;
     command: z.ZodOptional<z.ZodString>;
     args: z.ZodOptional<z.ZodArray<z.ZodString>>;

@@ -13,6 +13,7 @@ describe('write-only MCP headers', () => {
     expect(
       mcpSchema.safeParse({
         name: 'MCP',
+        transport: 'http',
         url: 'https://example.test/mcp',
         mode: 'replace',
         headers: '{"Authorization":5}',
@@ -21,9 +22,10 @@ describe('write-only MCP headers', () => {
   });
   it('rejects credentials and executable URL schemes', () => {
     for (const url of ['javascript:alert(1)', 'https://user:secret@example.test/mcp'])
-      expect(mcpSchema.safeParse({ name: 'MCP', url, mode: 'preserve', headers: '' }).success).toBe(
-        false,
-      );
+      expect(
+        mcpSchema.safeParse({ name: 'MCP', transport: 'http', url, mode: 'preserve', headers: '' })
+          .success,
+      ).toBe(false);
   });
 });
 
@@ -67,4 +69,11 @@ describe('stdio MCP configuration', () => {
     });
     expect(argumentInput('["literal space", "$TOKEN"]')).toEqual(['literal space', '$TOKEN']);
   });
+});
+
+it('requires an explicit MCP transport', () => {
+  const values = { name: 'Tools', url: 'https://example.test', mode: 'preserve', headers: '' };
+  expect(mcpSchema.safeParse(values).success).toBe(false);
+  expect(mcpSchema.safeParse({ ...values, transport: '' }).success).toBe(false);
+  expect(mcpSchema.safeParse({ ...values, transport: 'http' }).success).toBe(true);
 });

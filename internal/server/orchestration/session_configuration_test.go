@@ -16,14 +16,14 @@ func (f sessionToolResolver) RuntimeServerForRun(userID, orgID, workspaceID, tas
 }
 
 func TestRefreshOrkestMCPServerPreservesExternalServersAndOrder(t *testing.T) {
-	external := runmodel.MCPServer{ID: "external", Name: "External", URL: "https://saved.test", Headers: map[string]string{"Authorization": "external-token"}}
-	old := runmodel.MCPServer{ID: runmodel.OrkestMCPServerID, Name: "Old tools", URL: "https://old.test"}
-	replacement := runmodel.MCPServer{ID: runmodel.OrkestMCPServerID, Name: "Tools", URL: "https://tools.test", Headers: map[string]string{"Authorization": "run-token"}}
+	external := runmodel.MCPServer{ID: "external", Name: "External", URL: "https://saved.test", Headers: map[string]string{"Authorization": "external-token"}, Transport: "http"}
+	old := runmodel.MCPServer{ID: runmodel.OrkestMCPServerID, Name: "Old tools", URL: "https://old.test", Transport: "http"}
+	replacement := runmodel.MCPServer{ID: runmodel.OrkestMCPServerID, Name: "Tools", URL: "https://tools.test", Headers: map[string]string{"Authorization": "run-token"}, Transport: "http"}
 	dispatcher := &TaskDispatcher{agentTools: sessionToolResolver(func(userID, orgID, workspaceID, taskID, runID string) (mcpmodel.RuntimeServer, error) {
 		if userID != "user" || orgID != "org" || workspaceID != "workspace" || taskID != "task" || runID != "run" {
 			t.Fatal("tool credentials requested for an incorrect scope")
 		}
-		return mcpmodel.RuntimeServer{ID: replacement.ID, Name: replacement.Name, URL: replacement.URL, Headers: replacement.Headers}, nil
+		return mcpmodel.RuntimeServer{ID: replacement.ID, Name: replacement.Name, URL: replacement.URL, Headers: replacement.Headers, Transport: "http"}, nil
 	})}
 	for _, test := range []struct {
 		name        string
@@ -51,7 +51,7 @@ func TestRefreshOrkestMCPServerPreservesExternalServersAndOrder(t *testing.T) {
 }
 
 func TestRefreshOrkestMCPServerFailurePreservesConfiguration(t *testing.T) {
-	config := runmodel.RunConfig{RuntimeConfig: runmodel.RuntimeConfig{MCPServers: []runmodel.MCPServer{{ID: runmodel.OrkestMCPServerID, URL: "https://saved.test"}}}}
+	config := runmodel.RunConfig{RuntimeConfig: runmodel.RuntimeConfig{MCPServers: []runmodel.MCPServer{{ID: runmodel.OrkestMCPServerID, URL: "https://saved.test", Transport: "http"}}}}
 	snapshot := config.Clone()
 	cause := errors.New("tool credentials unavailable")
 	dispatcher := &TaskDispatcher{agentTools: sessionToolResolver(func(string, string, string, string, string) (mcpmodel.RuntimeServer, error) {
@@ -82,5 +82,18 @@ func TestRefreshStdioCredentialsPreservesPinnedCommandAndNames(t *testing.T) {
 	resolved[0].Transport = "http"
 	if _, err := refreshSessionMCPHeaders(saved, resolved); err == nil {
 		t.Fatal("transport change accepted")
+	}
+}
+
+func TestSessionMCPRefreshRejectsMissingTransport(t *testing.T) {
+	saved := []runmodel.MCPServer{{ID: "server", Transport: "http", Name: "Tools", URL: "https://example.test"}}
+	resolved := []mcpmodel.RuntimeServer{{ID: "server", Name: "Tools", URL: "https://example.test"}}
+	if _, err := refreshSessionMCPHeaders(saved, resolved); err == nil {
+		t.Fatal("missing resolved transport accepted")
+	}
+	resolved[0].Transport = "http"
+	saved[0].Transport = ""
+	if _, err := refreshSessionMCPHeaders(saved, resolved); err == nil {
+		t.Fatal("missing saved transport accepted")
 	}
 }

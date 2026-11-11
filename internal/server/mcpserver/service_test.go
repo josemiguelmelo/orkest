@@ -50,7 +50,7 @@ func TestCreateEncryptsHeadersAndResolveDecryptsThem(t *testing.T) {
 	}
 	repository := &repositoryStub{}
 	service := NewMCPServerService(repository, box, workspaceStub{role: "member"})
-	created, err := service.Create(context.Background(), "user", "org", "workspace", mcpservermodel.Input{Name: "Remote", URL: "https://example.test/mcp", Headers: map[string]string{"Authorization": "Bearer private"}})
+	created, err := service.Create(context.Background(), "user", "org", "workspace", mcpservermodel.Input{Name: "Remote", URL: "https://example.test/mcp", Headers: map[string]string{"Authorization": "Bearer private"}, Transport: "http"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,11 +68,11 @@ func TestCreateEncryptsHeadersAndResolveDecryptsThem(t *testing.T) {
 
 func TestUpdatePreservesOmittedHeadersAndRejectsUnsafeValues(t *testing.T) {
 	box, _ := secretbox.New("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
-	repository := &repositoryStub{server: mcpservermodel.Server{ID: "server", WorkspaceID: "workspace", Name: "Remote", URL: "https://example.test/mcp"}}
+	repository := &repositoryStub{server: mcpservermodel.Server{ID: "server", WorkspaceID: "workspace", Name: "Remote", URL: "https://example.test/mcp", Transport: "http"}}
 	sealed, _ := box.Seal(`{"Authorization":"Bearer private"}`)
 	repository.secret = string(sealed)
 	service := NewMCPServerService(repository, box, workspaceStub{role: "admin"})
-	if _, err := service.Update(context.Background(), "user", "org", "workspace", "server", mcpservermodel.Input{}); err != nil {
+	if _, err := service.Update(context.Background(), "user", "org", "workspace", "server", mcpservermodel.Input{Transport: "http"}); err != nil {
 		t.Fatal(err)
 	}
 	resolved, err := service.Resolve(context.Background(), "workspace", []string{"server"})
@@ -80,9 +80,9 @@ func TestUpdatePreservesOmittedHeadersAndRejectsUnsafeValues(t *testing.T) {
 		t.Fatalf("omitted headers were not preserved: %#v %v", resolved, err)
 	}
 	for _, in := range []mcpservermodel.Input{
-		{Name: "bad", URL: "file:///etc/passwd"},
-		{Name: "bad", URL: "https://example.test/mcp", Headers: map[string]string{"Bad Header": "value"}},
-		{Name: "bad", URL: "https://example.test/mcp", Headers: map[string]string{"X-Test": "one\r\ntwo"}},
+		{Name: "bad", URL: "file:///etc/passwd", Transport: "http"},
+		{Name: "bad", URL: "https://example.test/mcp", Headers: map[string]string{"Bad Header": "value"}, Transport: "http"},
+		{Name: "bad", URL: "https://example.test/mcp", Headers: map[string]string{"X-Test": "one\r\ntwo"}, Transport: "http"},
 	} {
 		if _, err := service.Create(context.Background(), "user", "org", "workspace", in); err == nil {
 			t.Fatal("invalid MCP configuration accepted")
@@ -91,7 +91,7 @@ func TestUpdatePreservesOmittedHeadersAndRejectsUnsafeValues(t *testing.T) {
 }
 
 func TestMutationRequiresWorkspacePermissionAndEncryptionKey(t *testing.T) {
-	input := mcpservermodel.Input{Name: "Remote", URL: "https://example.test/mcp"}
+	input := mcpservermodel.Input{Name: "Remote", URL: "https://example.test/mcp", Transport: "http"}
 	if _, err := NewMCPServerService(&repositoryStub{}, nil, workspaceStub{role: "viewer"}).Create(context.Background(), "user", "org", "workspace", input); err == nil {
 		t.Fatal("viewer mutation accepted")
 	}
@@ -117,7 +117,7 @@ func TestStdioCredentialsAndUpdates(t *testing.T) {
 	if !created.HasEnvironment || created.HasHeaders || strings.Contains(repo.secret, "private-token") {
 		t.Fatal("stdio credentials were not encrypted separately")
 	}
-	if _, err := service.Update(ctx, "user", "org", "workspace", created.ID, mcpservermodel.Input{Name: "Renamed"}); err != nil {
+	if _, err := service.Update(ctx, "user", "org", "workspace", created.ID, mcpservermodel.Input{Name: "Renamed", Transport: "stdio"}); err != nil {
 		t.Fatal(err)
 	}
 	resolved, err := service.Resolve(ctx, "workspace", []string{created.ID})
@@ -127,7 +127,7 @@ func TestStdioCredentialsAndUpdates(t *testing.T) {
 	if _, err := service.Update(ctx, "user", "org", "workspace", created.ID, mcpservermodel.Input{Transport: "http", URL: "https://example.test"}); err == nil {
 		t.Fatal("transport changed")
 	}
-	if _, err := service.Update(ctx, "user", "org", "workspace", created.ID, mcpservermodel.Input{Args: []string{}, Environment: map[string]string{}}); err != nil {
+	if _, err := service.Update(ctx, "user", "org", "workspace", created.ID, mcpservermodel.Input{Transport: "stdio", Args: []string{}, Environment: map[string]string{}}); err != nil {
 		t.Fatal(err)
 	}
 	if repo.secret != "" || len(repo.server.Args) != 0 || repo.server.HasEnvironment {
@@ -144,8 +144,8 @@ func TestRejectsInvalidStdioConfiguration(t *testing.T) {
 		{Name: "Tools", Transport: "stdio", Command: "/server", Headers: map[string]string{"Token": "value"}},
 		{Name: "Tools", Transport: "stdio", Command: "/server", Args: []string{"bad\x00argument"}},
 		{Name: "Tools", Transport: "stdio", Command: "/server", Environment: map[string]string{"BAD-NAME": "value"}},
-		{Name: "Tools", URL: "https://example.test", Command: "/server"},
-		{Name: "Tools", URL: "https://example.test#fragment"},
+		{Name: "Tools", URL: "https://example.test", Command: "/server", Transport: "http"},
+		{Name: "Tools", URL: "https://example.test#fragment", Transport: "http"},
 	} {
 		if _, err := service.Create(context.Background(), "user", "org", "workspace", input); err == nil {
 			t.Fatal("invalid configuration accepted")
@@ -157,5 +157,17 @@ func TestRejectsInvalidStdioConfiguration(t *testing.T) {
 	}
 	if _, err := NewMCPServerService(&repositoryStub{}, nil, workspaceStub{role: "viewer"}).Create(context.Background(), "user", "org", "workspace", input); err == nil {
 		t.Fatal("viewer registered an executable")
+	}
+}
+
+func TestMissingTransportIsRejected(t *testing.T) {
+	repo := &repositoryStub{server: mcpservermodel.Server{ID: "server", Name: "Tools", Transport: "http", URL: "https://example.test"}}
+	service := NewMCPServerService(repo, nil, workspaceStub{role: "member"})
+	input := mcpservermodel.Input{Name: "Tools", URL: "https://example.test"}
+	if _, err := service.Create(context.Background(), "user", "org", "workspace", input); err == nil {
+		t.Fatal("missing transport accepted on create")
+	}
+	if _, err := service.Update(context.Background(), "user", "org", "workspace", "server", input); err == nil {
+		t.Fatal("missing transport accepted on update")
 	}
 }

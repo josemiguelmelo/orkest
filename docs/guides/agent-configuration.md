@@ -67,10 +67,12 @@ settings are overrides, not a separate credential sandbox. Only select trusted s
 Catalog edits apply to new sessions. Continued sessions keep their original command,
 arguments and environment names, refreshing values for those names. Adding a variable
 requires a new session; removing a required variable blocks continuation. Transport
-changes require registering a new server. Existing HTTP selections remain compatible.
+changes require registering a new server. Both API contracts require an explicit
+`http` or `stdio` transport.
 
 Upgrade both platform and agentctl binaries/images before selecting stdio servers;
-older workers do not understand the transport. Existing HTTP sessions retain their
-legacy fingerprints. Migration `0041` preserves HTTP rows and adds stdio columns.
+older workers do not understand the transport. Saved MCP configurations without an
+explicit transport cannot continue; restoration fails visibly and preserves their
+session and working state. Migration `0041` preserves HTTP rows and adds stdio columns.
 Rollback refuses while stdio rows exist: explicitly remove those registrations first.
 Never downgrade workers responsible for stdio sessions; keep their durable state.

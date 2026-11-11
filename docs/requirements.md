@@ -115,7 +115,8 @@ Rules for the terms in the [glossary](glossary.md).
 
 ### 3.6 MCP Server
 
-- Workspace fields: name and immutable transport (`http` or `stdio`). HTTP uses an
+- Workspace fields: name and required immutable transport (`http` or `stdio`);
+  omitted or empty transport is rejected. HTTP uses an
   HTTP(S) URL and optional encrypted/write-only headers. Stdio uses an absolute
   executable path, literal argument array, and optional encrypted/write-only environment.
 - Agents select same-workspace servers. Deleting a server removes selections.

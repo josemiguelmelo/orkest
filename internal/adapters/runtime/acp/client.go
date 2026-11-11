@@ -44,7 +44,11 @@ func (c *client) Initialize(ctx context.Context) (agentruntime.NegotiatedCapabil
 }
 
 func (c *client) NewSession(ctx context.Context, workDir string, options agentruntime.ProtocolSessionOptions) (string, error) {
-	response, err := sdk.SendRequest[sdk.NewSessionResponse](c.connection, ctx, "session/new", sdk.NewSessionRequest{Cwd: workDir, McpServers: mcpServers(options.MCPServers), Meta: options.Metadata})
+	servers, err := mcpServers(options.MCPServers)
+	if err != nil {
+		return "", err
+	}
+	response, err := sdk.SendRequest[sdk.NewSessionResponse](c.connection, ctx, "session/new", sdk.NewSessionRequest{Cwd: workDir, McpServers: servers, Meta: options.Metadata})
 	if err != nil {
 		return "", c.protocolError("create ACP session failed", err)
 	}
@@ -55,17 +59,21 @@ func (c *client) NewSession(ctx context.Context, workDir string, options agentru
 }
 
 func (c *client) LoadSession(ctx context.Context, id string, workDir string, options agentruntime.ProtocolSessionOptions) error {
+	servers, err := mcpServers(options.MCPServers)
+	if err != nil {
+		return err
+	}
 	c.mu.Lock()
 	c.sessionID = id
 	c.mu.Unlock()
-	_, err := sdk.SendRequest[sdk.LoadSessionResponse](c.connection, ctx, "session/load", sdk.LoadSessionRequest{SessionId: sdk.SessionId(id), Cwd: workDir, McpServers: mcpServers(options.MCPServers), Meta: options.Metadata})
+	_, err = sdk.SendRequest[sdk.LoadSessionResponse](c.connection, ctx, "session/load", sdk.LoadSessionRequest{SessionId: sdk.SessionId(id), Cwd: workDir, McpServers: servers, Meta: options.Metadata})
 	if err != nil {
 		return c.protocolError("load ACP session failed", err)
 	}
 	return nil
 }
 
-func mcpServers(servers []configmodel.MCPServer) []sdk.McpServer {
+func mcpServers(servers []configmodel.MCPServer) ([]sdk.McpServer, error) {
 	result := make([]sdk.McpServer, 0, len(servers))
 	for _, server := range servers {
 		if server.Transport == "stdio" {
@@ -78,13 +86,16 @@ func mcpServers(servers []configmodel.MCPServer) []sdk.McpServer {
 			result = append(result, sdk.McpServer{Stdio: &sdk.McpServerStdio{Name: server.Name, Command: server.Command, Args: args, Env: env}})
 			continue
 		}
+		if server.Transport != "http" {
+			return nil, errors.New("unsupported MCP transport")
+		}
 		headers := make([]sdk.HttpHeader, 0, len(server.Headers))
 		for name, value := range server.Headers {
 			headers = append(headers, sdk.HttpHeader{Name: name, Value: value})
 		}
 		result = append(result, sdk.McpServer{Http: &sdk.McpServerHttpInline{Type: "http", Name: server.Name, Url: server.URL, Headers: headers}})
 	}
-	return result
+	return result, nil
 }
 
 func (c *client) SetSessionModel(ctx context.Context, id, model string) error {

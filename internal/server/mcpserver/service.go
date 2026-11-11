@@ -73,17 +73,7 @@ func (s *MCPServerService) Update(ctx context.Context, userID, orgID, workspaceI
 	if strings.TrimSpace(in.URL) == "" {
 		in.URL = old.URL
 	}
-	if in.Transport == "" {
-		in.Transport = old.Transport
-	}
-	if in.Transport == "" {
-		in.Transport = "http"
-	}
-	oldTransport := old.Transport
-	if oldTransport == "" {
-		oldTransport = "http"
-	}
-	if in.Transport != oldTransport {
+	if in.Transport != old.Transport {
 		return mcpservermodel.Server{}, modelerrors.ErrInvalid
 	}
 	if in.Command == "" {
@@ -205,9 +195,6 @@ func (s *MCPServerService) decrypt(encrypted string) (map[string]string, error) 
 func normalize(in mcpservermodel.Input) (mcpservermodel.Input, error) {
 	in.Name = strings.TrimSpace(in.Name)
 	in.URL = strings.TrimSpace(in.URL)
-	if in.Transport == "" {
-		in.Transport = "http"
-	}
 	endpoint, err := url.Parse(in.URL)
 	if err != nil || endpoint.Fragment != "" {
 		return mcpservermodel.Input{}, modelerrors.ErrInvalid

@@ -562,11 +562,11 @@ export const zAgentDefinition = z.object({
     configuration: z.record(z.string(), z.string()).optional()
 });
 /**
- * Transport is immutable. Omitted transport defaults to HTTP on creation and preserves the existing transport on update. HTTP requires a URL; stdio requires an absolute executable. Transport-specific fields cannot be mixed.
+ * Transport is required and immutable; use http or stdio. HTTP requires a URL; stdio requires an absolute executable. Transport-specific fields cannot be mixed.
  */
 export const zMcpServerInput = z.object({
     name: z.string().min(1).max(200),
-    transport: z.enum(['http', 'stdio']).optional(),
+    transport: z.enum(['http', 'stdio']),
     url: z.url().optional(),
     command: z.string().max(4096).regex(/^\//).optional(),
     args: z.array(z.string().max(8192)).max(100).optional(),

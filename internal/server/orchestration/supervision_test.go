@@ -181,15 +181,15 @@ func TestReconcileBatchBoundsConcurrentAttempts(t *testing.T) {
 }
 
 func TestRefreshMCPHeadersIsAtomicAndPreservesSavedSettings(t *testing.T) {
-	saved := []orchestrationmodel.MCPServer{{ID: "one", URL: "https://saved", Headers: map[string]string{"token": "old"}}, {ID: "two"}}
-	resolved := []mcpservermodel.RuntimeServer{{ID: "one", URL: "https://changed", Headers: map[string]string{"token": "fresh"}}}
+	saved := []orchestrationmodel.MCPServer{{ID: "one", URL: "https://saved", Headers: map[string]string{"token": "old"}, Transport: "http"}, {ID: "two", Transport: "http"}}
+	resolved := []mcpservermodel.RuntimeServer{{ID: "one", URL: "https://changed", Headers: map[string]string{"token": "fresh"}, Transport: "http"}}
 	if _, err := refreshSessionMCPHeaders(saved, resolved); err == nil {
 		t.Fatal("missing server accepted")
 	}
 	if saved[0].Headers["token"] != "old" {
 		t.Fatal("partially changed saved headers")
 	}
-	resolved = append(resolved, mcpservermodel.RuntimeServer{ID: "two"})
+	resolved = append(resolved, mcpservermodel.RuntimeServer{ID: "two", Transport: "http"})
 	updated, err := refreshSessionMCPHeaders(saved, resolved)
 	if err != nil {
 		t.Fatal(err)

@@ -64,7 +64,7 @@ func addQuestionTool(settings *agentruntime.ResolvedRuntimeSettings, tool *quest
 			return errors.New("MCP server conflicts with reserved Orkest question tool")
 		}
 	}
-	settings.MCPServers = append(settings.MCPServers, configmodel.MCPServer{ID: "orkest-questions", Name: "orkest_questions", URL: tool.URL(), Headers: map[string]string{"Authorization": "Bearer " + token}})
+	settings.MCPServers = append(settings.MCPServers, configmodel.MCPServer{ID: "orkest-questions", Name: "orkest_questions", URL: tool.URL(), Headers: map[string]string{"Authorization": "Bearer " + token}, Transport: "http"})
 	settings.Agent.Instructions += questionInstructionsV1
 	return nil
 }

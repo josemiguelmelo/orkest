@@ -102,7 +102,7 @@ function McpEditor({ item, onClose }: { item: McpServer | null; onClose: () => v
     defaultValues: {
       name: item?.name ?? '',
       url: item?.url ?? '',
-      transport: item?.transport ?? 'http',
+      transport: item ? item.transport : 'http',
       command: item?.command ?? '',
       args: JSON.stringify(item?.args ?? []),
       mode: 'preserve' as z.infer<typeof mcpSchema>['mode'],
@@ -161,10 +161,14 @@ function McpEditor({ item, onClose }: { item: McpServer | null; onClose: () => v
               : 'Select how the agent connects to this server.'
           }
         >
-          <select {...form.register('transport')} disabled={!!item}>
-            <option value="http">HTTP</option>
-            <option value="stdio">Stdio</option>
-          </select>
+          {item ? (
+            <input {...form.register('transport')} readOnly />
+          ) : (
+            <select {...form.register('transport')}>
+              <option value="http">HTTP</option>
+              <option value="stdio">Stdio</option>
+            </select>
+          )}
         </Field>
         {form.watch('transport') === 'stdio' ? (
           <>

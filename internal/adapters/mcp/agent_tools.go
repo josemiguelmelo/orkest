@@ -116,7 +116,7 @@ func (s *AgentTools) RuntimeServerForRun(userID, orgID, workspaceID, taskID, run
 	encoded := base64.RawURLEncoding.EncodeToString(payload)
 	mac := hmac.New(sha256.New, s.key)
 	_, _ = mac.Write([]byte(encoded))
-	return mcpservermodel.RuntimeServer{ID: orchestrationmodel.OrkestMCPServerID, Name: "Orkest", URL: s.endpoint, Headers: map[string]string{"Authorization": "Bearer " + encoded + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil))}}, nil
+	return mcpservermodel.RuntimeServer{ID: orchestrationmodel.OrkestMCPServerID, Name: "Orkest", URL: s.endpoint, Headers: map[string]string{"Authorization": "Bearer " + encoded + "." + base64.RawURLEncoding.EncodeToString(mac.Sum(nil))}, Transport: "http"}, nil
 }
 
 func (s *AgentTools) Handler() http.Handler {

@@ -46,7 +46,7 @@ func (d *TaskDispatcher) refreshOrkestMCPServer(userID, organizationID, workspac
 	if err != nil {
 		return fmt.Errorf("configure Orkest agent tools: %w", err)
 	}
-	replacement := orchestrationmodel.MCPServer{ID: server.ID, Name: server.Name, URL: server.URL, Headers: server.Headers}
+	replacement := orchestrationmodel.MCPServer{ID: server.ID, Name: server.Name, URL: server.URL, Headers: server.Headers, Transport: "http"}
 	servers := make([]orchestrationmodel.MCPServer, 0, len(config.MCPServers)+1)
 	found := false
 	for _, existing := range config.MCPServers {
@@ -84,17 +84,10 @@ func refreshSessionMCPHeaders(saved []orchestrationmodel.MCPServer, resolved []m
 		if !found {
 			return nil, errors.New("session MCP server is unavailable")
 		}
-		savedTransport, currentTransport := updated[i].Transport, server.Transport
-		if savedTransport == "" {
-			savedTransport = "http"
-		}
-		if currentTransport == "" {
-			currentTransport = "http"
-		}
-		if savedTransport != currentTransport {
+		if updated[i].Transport != server.Transport || (server.Transport != "http" && server.Transport != "stdio") {
 			return nil, errors.New("session MCP transport is incompatible")
 		}
-		if savedTransport == "stdio" {
+		if updated[i].Transport == "stdio" {
 			env := make(map[string]string, len(updated[i].Environment))
 			for name := range updated[i].Environment {
 				value, exists := server.Environment[name]

@@ -138,7 +138,7 @@ func buildMCPConfiguration(servers []configmodel.MCPServer) (*runtimeMCPConfig, 
 			return nil, errors.New("duplicate MCP server name")
 		}
 		switch server.Transport {
-		case "", "http":
+		case "http":
 			configured[name] = runtimeMCP{Type: "remote", URL: server.URL, OAuth: &noOAuth, Headers: server.Headers}
 		case "stdio":
 			configured[name] = runtimeMCP{Type: "local", Command: append([]string{server.Command}, server.Args...), Environment: server.Environment}

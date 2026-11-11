@@ -71,8 +71,10 @@ and [migration operations](operations/migrations.md#workflow-delivery-claims).
 The workspace catalog, APIs/UI, encrypted environment storage, worker contracts,
 ACP mapping and OpenCode native provisioning support stdio alongside HTTP.
 Continuation pins command/arguments/environment names, refreshes credential values,
-and preserves legacy HTTP fingerprints. Runtime fixture probes cover configuration
-before and after restore for all five profiles. On 2026-11-11 the pinned local
+and requires an explicit `http` or `stdio` transport. No empty-transport
+fallback or fingerprint normalization remains; saved MCP configurations without
+a transport fail visibly and preserve their saved state. Runtime fixture probes
+cover configuration before and after restore for all five profiles. On 2026-11-11 the pinned local
 OpenCode v2.1.4 passed a real stdio MCP handshake, session restore with credential
 rotation, and graceful MCP subprocess shutdown after both sessions. This test
 makes no model request and does not establish model-driven tool calls, approval

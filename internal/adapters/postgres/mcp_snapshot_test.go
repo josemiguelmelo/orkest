@@ -10,7 +10,7 @@ import (
 
 func TestSessionSnapshotStripsMCPCredentialsAndRetainsStdioSettings(t *testing.T) {
 	config := orchestrationmodel.RunConfig{RuntimeConfig: orchestrationmodel.RuntimeConfig{MCPServers: []orchestrationmodel.MCPServer{
-		{ID: "http", URL: "https://example.test", Headers: map[string]string{"Authorization": "http-private"}},
+		{ID: "http", URL: "https://example.test", Headers: map[string]string{"Authorization": "http-private"}, Transport: "http"},
 		{ID: "stdio", Transport: "stdio", Command: "/server", Args: []string{"--literal"}, Environment: map[string]string{"TOKEN": "stdio-private"}},
 	}}}
 	data, err := (&AgentLaunchPostgresRepository{}).sessionSnapshot(config)

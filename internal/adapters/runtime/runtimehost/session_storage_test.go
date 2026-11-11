@@ -46,7 +46,10 @@ func TestV1SessionCompatibility(t *testing.T) {
 }
 
 func TestSessionIdentityIgnoresOnlyRunAndCredentials(t *testing.T) {
-	config := configmodel.RuntimeConfig{RunID: "first", MCPServers: []configmodel.MCPServer{{ID: "mcp", URL: "https://example.test", Headers: map[string]string{"Authorization": "first"}}}}
+	config := configmodel.RuntimeConfig{RunID: "first", MCPServers: []configmodel.MCPServer{{ID: "mcp", URL: "https://example.test", Headers: map[string]string{"Authorization": "first"}, Transport: "http"}}}
+	if fingerprintableConfiguration(config).MCPServers[0].Transport != "http" {
+		t.Fatal("explicit HTTP transport was removed from fingerprint configuration")
+	}
 	first := configurationFingerprint(config)
 	config.RunID = "second"
 	config.MCPServers[0].Headers["Authorization"] = "second"
@@ -103,15 +106,6 @@ func TestRestoredSessionQuestionToolCompatibility(t *testing.T) {
 				t.Fatal("restore changed saved manifest", err)
 			}
 		})
-	}
-}
-
-func TestHTTPFingerprintRemainsCompatibleWithOriginalRepresentation(t *testing.T) {
-	config := configmodel.RuntimeConfig{MCPServers: []configmodel.MCPServer{{ID: "http", Name: "Remote", URL: "https://example.test"}}}
-	before := sessionConfigurationFingerprint(config)
-	config.MCPServers[0].Transport = "http"
-	if got := sessionConfigurationFingerprint(config); got != before {
-		t.Fatal("explicit HTTP broke legacy fingerprint")
 	}
 }
 

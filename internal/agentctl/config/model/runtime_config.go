@@ -31,7 +31,7 @@ type ModelSelection struct {
 
 // MCPServer is a resolved MCP connection. Headers and environment values are sensitive.
 type MCPServer struct {
-	Transport   string            `json:"transport,omitempty"`
+	Transport   string            `json:"transport"`
 	Command     string            `json:"command,omitempty"`
 	Args        []string          `json:"args,omitempty"`
 	Environment map[string]string `json:"environment,omitempty"`

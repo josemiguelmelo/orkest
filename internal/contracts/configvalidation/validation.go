@@ -137,7 +137,7 @@ func httpURL(value string, httpsOnly bool) bool {
 
 // MCPConnection validates either supported transport without including secret values in errors.
 func MCPConnection(id, name, transport, endpoint, command string, args []string, headers, environment map[string]string) *Issue {
-	if transport == "" || transport == "http" {
+	if transport == "http" {
 		if command != "" || len(args) != 0 || len(environment) != 0 {
 			return &Issue{Field: "mcpServers", Reason: "HTTP connections cannot include stdio fields"}
 		}

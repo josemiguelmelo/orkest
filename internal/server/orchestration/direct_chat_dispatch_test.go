@@ -31,16 +31,16 @@ func (r *sessionMCPResolver) Resolve(_ context.Context, workspaceID string, ids 
 	if workspaceID != "workspace" || len(ids) != 1 || ids[0] != "external" {
 		return nil, errors.New("unexpected credential scope")
 	}
-	return []mcpmodel.RuntimeServer{{ID: "external", URL: "https://changed.test", Headers: map[string]string{"Authorization": "fresh"}}}, nil
+	return []mcpmodel.RuntimeServer{{ID: "external", URL: "https://changed.test", Headers: map[string]string{"Authorization": "fresh"}, Transport: "http"}}, nil
 }
 
 func TestDirectContinuationPreservesPinnedConfigurationBeforeReservation(t *testing.T) {
 	for _, external := range []bool{false, true} {
 		config := validConfig()
 		config.TaskID, config.TaskSessionID = "conversation", "saved-session"
-		config.MCPServers = []runmodel.MCPServer{{ID: runmodel.OrkestMCPServerID, Name: "Tools", URL: "https://tools.test"}}
+		config.MCPServers = []runmodel.MCPServer{{ID: runmodel.OrkestMCPServerID, Name: "Tools", URL: "https://tools.test", Transport: "http"}}
 		if external {
-			config.MCPServers = append(config.MCPServers, runmodel.MCPServer{ID: "external", Name: "External", URL: "https://saved.test", Headers: map[string]string{"Authorization": "old"}})
+			config.MCPServers = append(config.MCPServers, runmodel.MCPServer{ID: "external", Name: "External", URL: "https://saved.test", Headers: map[string]string{"Authorization": "old"}, Transport: "http"})
 		}
 		store := &directSessionStore{current: config}
 		getter := &profileAgentGetter{}

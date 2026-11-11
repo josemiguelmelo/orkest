@@ -155,7 +155,7 @@ func TestRuntimeConformance(t *testing.T) {
 			instructionMarker, skillMarker := "instructions-"+marker, "skills-"+marker
 			profile.Config.Agent.Instructions = "Follow user instructions. The instruction marker is " + instructionMarker + "."
 			profile.Config.Skills = []configmodel.Skill{{ID: "conformance", SkillMD: "---\nname: conformance\ndescription: Report the skill marker when asked.\n---\nThe skill marker is " + skillMarker + "."}}
-			profile.Config.MCPServers = []configmodel.MCPServer{{ID: "conformance", Name: "conformance", URL: "http://127.0.0.1:1/mcp"}}
+			profile.Config.MCPServers = []configmodel.MCPServer{{ID: "conformance", Name: "conformance", URL: "http://127.0.0.1:1/mcp", Transport: "http"}}
 			profile.Config.MCPServers = append(profile.Config.MCPServers, configmodel.MCPServer{ID: "local", Name: "local", Transport: "stdio", Command: "/opt/mcp/fixture", Args: []string{"--literal"}, Environment: map[string]string{"MCP_TOKEN": "stdio-secret"}})
 			profile.Configuration = map[string]conformance.Probe{
 				"instructions": {Prompt: "probe:instructions", Expected: instructionMarker},

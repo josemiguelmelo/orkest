@@ -552,11 +552,11 @@ export type AgentDefinition = {
     };
 };
 /**
- * Transport is immutable. Omitted transport defaults to HTTP on creation and preserves the existing transport on update. HTTP requires a URL; stdio requires an absolute executable. Transport-specific fields cannot be mixed.
+ * Transport is required and immutable; use http or stdio. HTTP requires a URL; stdio requires an absolute executable. Transport-specific fields cannot be mixed.
  */
 export type McpServerInput = {
     name: string;
-    transport?: 'http' | 'stdio';
+    transport: 'http' | 'stdio';
     url?: string;
     command?: string;
     /**

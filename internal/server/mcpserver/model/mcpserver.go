@@ -13,7 +13,7 @@ type Server struct {
 }
 
 type Input struct {
-	Transport   string            `json:"transport,omitempty"`
+	Transport   string            `json:"transport"`
 	Command     string            `json:"command,omitempty"`
 	Args        []string          `json:"args,omitempty"`
 	Environment map[string]string `json:"environment,omitempty"`
@@ -24,7 +24,7 @@ type Input struct {
 
 // RuntimeServer contains credentials and must only be passed to agentctl.
 type RuntimeServer struct {
-	Transport   string            `json:"transport,omitempty"`
+	Transport   string            `json:"transport"`
 	Command     string            `json:"command,omitempty"`
 	Args        []string          `json:"args,omitempty"`
 	Environment map[string]string `json:"environment,omitempty"`
