@@ -6,13 +6,14 @@ import (
 	"testing"
 
 	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
+	"github.com/josemiguelmelo/orkest/internal/contracts/mcptransport"
 )
 
 func TestMCPTransportWireRepresentations(t *testing.T) {
 	servers, err := mcpServers([]configmodel.MCPServer{
-		{Name: "Remote", URL: "https://example.test", Headers: map[string]string{"Authorization": "private"}, Transport: "http"},
-		{Name: "Local", Transport: "stdio", Command: "/opt/mcp/server", Args: []string{"literal space", "$TOKEN"}, Environment: map[string]string{"TOKEN": "private"}},
-		{Name: "Empty", Transport: "stdio", Command: "/empty"},
+		{Name: "Remote", URL: "https://example.test", Headers: map[string]string{"Authorization": "private"}, Transport: mcptransport.HTTP},
+		{Name: "Local", Transport: mcptransport.Stdio, Command: "/opt/mcp/server", Args: []string{"literal space", "$TOKEN"}, Environment: map[string]string{"TOKEN": "private"}},
+		{Name: "Empty", Transport: mcptransport.Stdio, Command: "/empty"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -47,7 +48,7 @@ func mustJSON(t *testing.T, value any) []byte {
 }
 
 func TestMCPRejectsMissingOrUnsupportedTransport(t *testing.T) {
-	for _, transport := range []string{"", "sse"} {
+	for _, transport := range []mcptransport.Transport{"", "sse"} {
 		if _, err := mcpServers([]configmodel.MCPServer{{Name: "Tools", Transport: transport, URL: "https://example.test"}}); err == nil {
 			t.Fatal("invalid transport accepted")
 		}

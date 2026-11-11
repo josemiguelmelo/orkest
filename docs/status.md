@@ -93,3 +93,9 @@ verification was used rather than changing that schema.
 The additive `0041` migration retains HTTP rows. Upgrade platform and workers before
 using stdio; older workers cannot execute it. Rollback refuses while stdio catalog
 rows exist. Do not downgrade workers owning persisted stdio sessions.
+
+MCP transport uses one shared Go enum (`internal/contracts/mcptransport`) in catalog,
+server/worker models, wire DTOs, validation and adapters. Persistence converts only
+at the generated SQL boundary. The historical alternative credential-fingerprint
+fallback has been removed: sessions requiring it fail visibly without replacing or
+rewriting their saved state; exact supported manifest fingerprints still restore.

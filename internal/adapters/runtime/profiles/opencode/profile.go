@@ -8,6 +8,7 @@ import (
 
 	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
 	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
+	"github.com/josemiguelmelo/orkest/internal/contracts/mcptransport"
 	coreruntime "github.com/josemiguelmelo/orkest/internal/contracts/runtimecatalog"
 )
 
@@ -54,8 +55,10 @@ type (
 		URL         string            `json:"url,omitempty"`
 		Command     []string          `json:"command,omitempty"`
 		Environment map[string]string `json:"environment,omitempty"`
-		OAuth       *bool             `json:"oauth,omitempty"`
-		Headers     map[string]string `json:"headers,omitempty"`
+		// OpenCode enables OAuth by default for remote servers. Orkest supplies explicit
+		// headers and does not implement OAuth login, so remote entries disable it.
+		OAuth   *bool             `json:"oauth,omitempty"`
+		Headers map[string]string `json:"headers,omitempty"`
 	}
 )
 
@@ -138,9 +141,9 @@ func buildMCPConfiguration(servers []configmodel.MCPServer) (*runtimeMCPConfig, 
 			return nil, errors.New("duplicate MCP server name")
 		}
 		switch server.Transport {
-		case "http":
+		case mcptransport.HTTP:
 			configured[name] = runtimeMCP{Type: "remote", URL: server.URL, OAuth: &noOAuth, Headers: server.Headers}
-		case "stdio":
+		case mcptransport.Stdio:
 			configured[name] = runtimeMCP{Type: "local", Command: append([]string{server.Command}, server.Args...), Environment: server.Environment}
 		default:
 			return nil, errors.New("unsupported MCP transport")

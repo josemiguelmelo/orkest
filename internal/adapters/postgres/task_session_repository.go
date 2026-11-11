@@ -152,6 +152,8 @@ func (r *AgentLaunchPostgresRepository) sessionSnapshot(config orchestrationmode
 	snapshot.MCPServers = append([]orchestrationmodel.MCPServer(nil), config.MCPServers...)
 	for i := range snapshot.MCPServers {
 		snapshot.MCPServers[i].Headers = nil
+		// This snapshot is plaintext JSON. Preserve the required variable names only;
+		// continuation resolves their values from the encrypted MCP catalog by server ID.
 		if snapshot.MCPServers[i].Environment != nil {
 			names := make(map[string]string, len(snapshot.MCPServers[i].Environment))
 			for name := range snapshot.MCPServers[i].Environment {

@@ -76,3 +76,10 @@ explicit transport cannot continue; restoration fails visibly and preserves thei
 session and working state. Migration `0041` preserves HTTP rows and adds stdio columns.
 Rollback refuses while stdio rows exist: explicitly remove those registrations first.
 Never downgrade workers responsible for stdio sessions; keep their durable state.
+
+Session snapshots retain stdio environment variable names with empty placeholder
+values because those snapshots are plaintext JSON. Credentials remain encrypted in
+the MCP catalog and are resolved by server ID before launch/continuation. The worker
+receives the actual values. Compatibility fingerprints likewise exclude credential
+values so rotation does not invalidate a session, while retaining names to detect
+changes to its required environment.

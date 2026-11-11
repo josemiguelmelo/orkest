@@ -9,6 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/josemiguelmelo/orkest/internal/contracts/mcptransport"
+
 	sharedacp "github.com/josemiguelmelo/orkest/internal/adapters/runtime/acp"
 	"github.com/josemiguelmelo/orkest/internal/adapters/runtime/profiles/opencode"
 	"github.com/josemiguelmelo/orkest/internal/adapters/runtime/runtimehost"
@@ -62,7 +64,7 @@ func TestOpenCodeStdioMCPHandshake(t *testing.T) {
 	}
 	work, state := t.TempDir(), t.TempDir()
 	marker := filepath.Join(work, "stdio-lifecycle")
-	config := configmodel.RuntimeConfig{OrganizationID: "stdio-org", WorkspaceID: "stdio-workspace", TaskID: "stdio-task", TaskSessionID: "stdio-session", RunID: "first", Runtime: "opencode", Agent: configmodel.AgentDefinition{Name: "Integration", Instructions: "You are a test agent."}, Model: configmodel.ModelSelection{Provider: "opencode", ID: "big-pickle"}, MCPServers: []configmodel.MCPServer{{ID: "stdio", Name: "stdio", Transport: "stdio", Command: executable, Args: []string{"literal argument"}, Environment: map[string]string{"ORKEST_TEST_STDIO_CHILD": "1", "ORKEST_TEST_STDIO_MARKER": marker, "MCP_TOKEN": "first-test-token"}}}}
+	config := configmodel.RuntimeConfig{OrganizationID: "stdio-org", WorkspaceID: "stdio-workspace", TaskID: "stdio-task", TaskSessionID: "stdio-session", RunID: "first", Runtime: "opencode", Agent: configmodel.AgentDefinition{Name: "Integration", Instructions: "You are a test agent."}, Model: configmodel.ModelSelection{Provider: "opencode", ID: "big-pickle"}, MCPServers: []configmodel.MCPServer{{ID: "stdio", Name: "stdio", Transport: mcptransport.Stdio, Command: executable, Args: []string{"literal argument"}, Environment: map[string]string{"ORKEST_TEST_STDIO_CHILD": "1", "ORKEST_TEST_STDIO_MARKER": marker, "MCP_TOKEN": "first-test-token"}}}}
 	host := runtimehost.New(opencode.Profile{Binary: binary}, sharedacp.Factory{}, runtimehost.Environment{WorkDir: work, StateDir: state, GrantedEnv: []string{"PATH=" + os.Getenv("PATH")}})
 	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 	defer cancel()

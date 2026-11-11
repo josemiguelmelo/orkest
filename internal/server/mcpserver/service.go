@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/josemiguelmelo/orkest/internal/contracts/configvalidation"
+	"github.com/josemiguelmelo/orkest/internal/contracts/mcptransport"
 	modelerrors "github.com/josemiguelmelo/orkest/internal/contracts/problem"
 	"github.com/josemiguelmelo/orkest/internal/platform/ids"
 	"github.com/josemiguelmelo/orkest/internal/platform/secretbox"
@@ -133,7 +134,7 @@ func (s *MCPServerService) Resolve(ctx context.Context, workspaceID string, serv
 			return nil, err
 		}
 		runtime := mcpservermodel.RuntimeServer{ID: server.ID, Name: server.Name, URL: server.URL, Transport: server.Transport, Command: server.Command, Args: server.Args}
-		if server.Transport == "stdio" {
+		if server.Transport == mcptransport.Stdio {
 			runtime.Environment = headers
 		} else {
 			runtime.Headers = headers
@@ -214,7 +215,7 @@ func normalize(in mcpservermodel.Input) (mcpservermodel.Input, error) {
 }
 
 func credentials(in mcpservermodel.Input) map[string]string {
-	if in.Transport == "stdio" {
+	if in.Transport == mcptransport.Stdio {
 		return in.Environment
 	}
 	return in.Headers

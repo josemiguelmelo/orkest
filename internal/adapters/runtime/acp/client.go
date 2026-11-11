@@ -16,6 +16,7 @@ import (
 	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
 	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
 	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
+	"github.com/josemiguelmelo/orkest/internal/contracts/mcptransport"
 )
 
 type Factory struct{}
@@ -76,7 +77,7 @@ func (c *client) LoadSession(ctx context.Context, id string, workDir string, opt
 func mcpServers(servers []configmodel.MCPServer) ([]sdk.McpServer, error) {
 	result := make([]sdk.McpServer, 0, len(servers))
 	for _, server := range servers {
-		if server.Transport == "stdio" {
+		if server.Transport == mcptransport.Stdio {
 			env := make([]sdk.EnvVariable, 0, len(server.Environment))
 			for name, value := range server.Environment {
 				env = append(env, sdk.EnvVariable{Name: name, Value: value})
@@ -86,7 +87,7 @@ func mcpServers(servers []configmodel.MCPServer) ([]sdk.McpServer, error) {
 			result = append(result, sdk.McpServer{Stdio: &sdk.McpServerStdio{Name: server.Name, Command: server.Command, Args: args, Env: env}})
 			continue
 		}
-		if server.Transport != "http" {
+		if server.Transport != mcptransport.HTTP {
 			return nil, errors.New("unsupported MCP transport")
 		}
 		headers := make([]sdk.HttpHeader, 0, len(server.Headers))

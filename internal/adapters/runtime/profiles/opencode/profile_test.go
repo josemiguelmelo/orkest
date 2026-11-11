@@ -7,12 +7,13 @@ import (
 
 	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
 	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
+	"github.com/josemiguelmelo/orkest/internal/contracts/mcptransport"
 )
 
 func TestPrepareEnvironmentIncludesConfiguredHTTPMCPServers(t *testing.T) {
 	root := t.TempDir()
 	settings := agentruntime.ResolvedRuntimeSettings{
-		MCPServers: []configmodel.MCPServer{{ID: "server-id", Name: "Example MCP", URL: "https://example.test/mcp", Headers: map[string]string{"Authorization": "Bearer private"}, Transport: "http"}},
+		MCPServers: []configmodel.MCPServer{{ID: "server-id", Name: "Example MCP", URL: "https://example.test/mcp", Headers: map[string]string{"Authorization": "Bearer private"}, Transport: mcptransport.HTTP}},
 	}
 	plan, err := (Profile{}).BuildProvisioningPlan(settings, agentruntime.ProvisioningPaths{RuntimeRoot: root, WorkDir: t.TempDir(), ConfigSubdir: "config-run"})
 	if err != nil {
@@ -96,8 +97,8 @@ func TestConfiguredModelIsExplicitForACPAndRuntimeDefaults(t *testing.T) {
 
 func TestMixedMCPConfiguration(t *testing.T) {
 	config, err := buildMCPConfiguration([]configmodel.MCPServer{
-		{ID: "remote", Name: "Remote", URL: "https://example.test", Transport: "http"},
-		{ID: "local", Name: "Local", Transport: "stdio", Command: "/opt/mcp/server", Args: []string{"literal space", "$TOKEN"}, Environment: map[string]string{"TOKEN": "private"}},
+		{ID: "remote", Name: "Remote", URL: "https://example.test", Transport: mcptransport.HTTP},
+		{ID: "local", Name: "Local", Transport: mcptransport.Stdio, Command: "/opt/mcp/server", Args: []string{"literal space", "$TOKEN"}, Environment: map[string]string{"TOKEN": "private"}},
 	})
 	if err != nil {
 		t.Fatal(err)

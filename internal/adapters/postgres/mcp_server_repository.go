@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/josemiguelmelo/orkest/internal/adapters/postgres/sqlc"
+	"github.com/josemiguelmelo/orkest/internal/contracts/mcptransport"
 	modelerrors "github.com/josemiguelmelo/orkest/internal/contracts/problem"
 	"github.com/josemiguelmelo/orkest/internal/server/mcpserver"
 	mcpservermodel "github.com/josemiguelmelo/orkest/internal/server/mcpserver/model"
@@ -18,7 +19,7 @@ func NewMCPServerPostgresRepository(database *PostgresDatabase) *MCPServerPostgr
 var _ mcpserver.MCPServerRepository = (*MCPServerPostgresRepository)(nil)
 
 func mcpCredentials(server mcpservermodel.Server, encrypted string) (string, string) {
-	if server.Transport == "stdio" {
+	if server.Transport == mcptransport.Stdio {
 		return "", encrypted
 	}
 	return encrypted, ""
@@ -26,7 +27,7 @@ func mcpCredentials(server mcpservermodel.Server, encrypted string) (string, str
 
 func (r *MCPServerPostgresRepository) Create(ctx context.Context, server mcpservermodel.Server, encrypted string) (mcpservermodel.Server, error) {
 	headers, environment := mcpCredentials(server, encrypted)
-	row, err := sqlc.New(r.database.pool).CreateMCPServer(ctx, sqlc.CreateMCPServerParams{ID: server.ID, WorkspaceID: server.WorkspaceID, Name: server.Name, Url: server.URL, Transport: server.Transport, Command: server.Command, Args: append([]string{}, server.Args...), EncryptedHeaders: headers, EncryptedEnvironment: environment})
+	row, err := sqlc.New(r.database.pool).CreateMCPServer(ctx, sqlc.CreateMCPServerParams{ID: server.ID, WorkspaceID: server.WorkspaceID, Name: server.Name, Url: server.URL, Transport: string(server.Transport), Command: server.Command, Args: append([]string{}, server.Args...), EncryptedHeaders: headers, EncryptedEnvironment: environment})
 	if err != nil {
 		return mcpservermodel.Server{}, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
 	}
@@ -35,7 +36,7 @@ func (r *MCPServerPostgresRepository) Create(ctx context.Context, server mcpserv
 
 func (r *MCPServerPostgresRepository) Update(ctx context.Context, server mcpservermodel.Server, encrypted string) (mcpservermodel.Server, error) {
 	headers, environment := mcpCredentials(server, encrypted)
-	row, err := sqlc.New(r.database.pool).UpdateMCPServer(ctx, sqlc.UpdateMCPServerParams{ID: server.ID, WorkspaceID: server.WorkspaceID, Name: server.Name, Url: server.URL, Transport: server.Transport, Command: server.Command, Args: append([]string{}, server.Args...), EncryptedHeaders: headers, EncryptedEnvironment: environment})
+	row, err := sqlc.New(r.database.pool).UpdateMCPServer(ctx, sqlc.UpdateMCPServerParams{ID: server.ID, WorkspaceID: server.WorkspaceID, Name: server.Name, Url: server.URL, Transport: string(server.Transport), Command: server.Command, Args: append([]string{}, server.Args...), EncryptedHeaders: headers, EncryptedEnvironment: environment})
 	if err != nil {
 		return mcpservermodel.Server{}, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
 	}
@@ -56,7 +57,7 @@ func (r *MCPServerPostgresRepository) Get(ctx context.Context, workspaceID, id s
 		return mcpservermodel.Server{}, "", mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
 	}
 	secret := row.EncryptedHeaders
-	if row.Transport == "stdio" {
+	if mcptransport.Transport(row.Transport) == mcptransport.Stdio {
 		secret = row.EncryptedEnvironment
 	}
 	return mcpServerFromRow(row), secret, nil
@@ -75,5 +76,5 @@ func (r *MCPServerPostgresRepository) List(ctx context.Context, workspaceID stri
 }
 
 func mcpServerFromRow(row sqlc.McpServer) mcpservermodel.Server {
-	return mcpservermodel.Server{ID: row.ID, WorkspaceID: row.WorkspaceID, Name: row.Name, Transport: row.Transport, URL: row.Url, Command: row.Command, Args: row.Args, HasHeaders: row.EncryptedHeaders != "", HasEnvironment: row.EncryptedEnvironment != ""}
+	return mcpservermodel.Server{ID: row.ID, WorkspaceID: row.WorkspaceID, Name: row.Name, Transport: mcptransport.Transport(row.Transport), URL: row.Url, Command: row.Command, Args: row.Args, HasHeaders: row.EncryptedHeaders != "", HasEnvironment: row.EncryptedEnvironment != ""}
 }

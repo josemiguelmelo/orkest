@@ -6,6 +6,7 @@ import (
 
 	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
 	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
+	"github.com/josemiguelmelo/orkest/internal/contracts/mcptransport"
 	coreruntime "github.com/josemiguelmelo/orkest/internal/contracts/runtimecatalog"
 )
 
@@ -24,7 +25,7 @@ func TestProvisioningCarriesInstructionsSkillsModelAndMCP(t *testing.T) {
 		Agent:      configmodel.AgentDefinition{Instructions: "Do the task"},
 		Model:      configmodel.ModelSelection{Provider: "github-copilot", ID: "gpt-4.1"},
 		Skills:     []configmodel.Skill{{ID: "review", SkillMD: "Review carefully"}},
-		MCPServers: []configmodel.MCPServer{{ID: "tools", Name: "Tools", URL: "https://mcp.example.test", Headers: map[string]string{"Authorization": "secret"}, Transport: "http"}},
+		MCPServers: []configmodel.MCPServer{{ID: "tools", Name: "Tools", URL: "https://mcp.example.test", Headers: map[string]string{"Authorization": "secret"}, Transport: mcptransport.HTTP}},
 	}
 	paths := agentruntime.ProvisioningPaths{RuntimeRoot: "/state", WorkDir: "/work", ConfigSubdir: "run-config"}
 	plan, err := (Profile{}).BuildProvisioningPlan(settings, paths)

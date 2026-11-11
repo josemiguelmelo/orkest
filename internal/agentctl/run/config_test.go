@@ -8,11 +8,12 @@ import (
 	"testing"
 
 	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
+	"github.com/josemiguelmelo/orkest/internal/contracts/mcptransport"
 )
 
 func mutableRunConfig() configmodel.RunConfig {
 	config := runConfig()
-	config.MCPServers = []configmodel.MCPServer{{ID: "mcp", Name: "MCP", URL: "https://example.com/mcp", Headers: map[string]string{"Authorization": "private-header"}, Transport: "http"}}
+	config.MCPServers = []configmodel.MCPServer{{ID: "mcp", Name: "MCP", URL: "https://example.com/mcp", Headers: map[string]string{"Authorization": "private-header"}, Transport: mcptransport.HTTP}}
 	config.Skills = []configmodel.Skill{{ID: "work", SkillMD: "Work instructions"}}
 	config.Repositories = []configmodel.WorkspaceRepository{{ID: "repo", ProviderName: "github", URL: "https://example.com/repo"}}
 	return config

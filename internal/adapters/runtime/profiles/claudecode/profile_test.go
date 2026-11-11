@@ -6,6 +6,7 @@ import (
 
 	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
 	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
+	"github.com/josemiguelmelo/orkest/internal/contracts/mcptransport"
 	coreruntime "github.com/josemiguelmelo/orkest/internal/contracts/runtimecatalog"
 )
 
@@ -24,7 +25,7 @@ func TestProtocolOptionsCarryModelInstructionsSkillsAndMCP(t *testing.T) {
 		Agent:      configmodel.AgentDefinition{Instructions: "Follow the task."},
 		Model:      configmodel.ModelSelection{Provider: "anthropic", ID: "claude-sonnet-test"},
 		Skills:     []configmodel.Skill{{ID: "review", SkillMD: "Review carefully."}},
-		MCPServers: []configmodel.MCPServer{{ID: "mcp-1", Name: "Tracker", URL: "https://mcp.example.test", Headers: map[string]string{"Authorization": "secret"}, Transport: "http"}},
+		MCPServers: []configmodel.MCPServer{{ID: "mcp-1", Name: "Tracker", URL: "https://mcp.example.test", Headers: map[string]string{"Authorization": "secret"}, Transport: mcptransport.HTTP}},
 	}
 	got := (Profile{}).ProtocolSessionOptions(settings, agentruntime.ProvisioningPaths{})
 	if got.Metadata["systemPrompt"] != "Follow the task.\n\n## Skill: review\n\nReview carefully." {

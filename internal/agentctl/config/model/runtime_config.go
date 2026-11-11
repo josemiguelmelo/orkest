@@ -7,6 +7,7 @@ import (
 	"slices"
 
 	"github.com/josemiguelmelo/orkest/internal/contracts/configvalidation"
+	"github.com/josemiguelmelo/orkest/internal/contracts/mcptransport"
 	coreruntime "github.com/josemiguelmelo/orkest/internal/contracts/runtimecatalog"
 )
 
@@ -31,14 +32,14 @@ type ModelSelection struct {
 
 // MCPServer is a resolved MCP connection. Headers and environment values are sensitive.
 type MCPServer struct {
-	Transport   string            `json:"transport"`
-	Command     string            `json:"command,omitempty"`
-	Args        []string          `json:"args,omitempty"`
-	Environment map[string]string `json:"environment,omitempty"`
-	ID          string            `json:"id"`
-	Name        string            `json:"name"`
-	URL         string            `json:"url"`
-	Headers     map[string]string `json:"headers,omitempty"`
+	Transport   mcptransport.Transport `json:"transport"`
+	Command     string                 `json:"command,omitempty"`
+	Args        []string               `json:"args,omitempty"`
+	Environment map[string]string      `json:"environment,omitempty"`
+	ID          string                 `json:"id"`
+	Name        string                 `json:"name"`
+	URL         string                 `json:"url"`
+	Headers     map[string]string      `json:"headers,omitempty"`
 }
 
 const OrkestMCPServerID = "orkest-agent-tools"

@@ -8,6 +8,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/josemiguelmelo/orkest/internal/contracts/mcptransport"
 	runtimecatalog "github.com/josemiguelmelo/orkest/internal/contracts/runtimecatalog"
 )
 
@@ -136,14 +137,14 @@ func httpURL(value string, httpsOnly bool) bool {
 }
 
 // MCPConnection validates either supported transport without including secret values in errors.
-func MCPConnection(id, name, transport, endpoint, command string, args []string, headers, environment map[string]string) *Issue {
-	if transport == "http" {
+func MCPConnection(id, name string, transport mcptransport.Transport, endpoint, command string, args []string, headers, environment map[string]string) *Issue {
+	if transport == mcptransport.HTTP {
 		if command != "" || len(args) != 0 || len(environment) != 0 {
 			return &Issue{Field: "mcpServers", Reason: "HTTP connections cannot include stdio fields"}
 		}
 		return MCPServer(id, name, endpoint, headers)
 	}
-	if transport != "stdio" {
+	if transport != mcptransport.Stdio {
 		return &Issue{Field: "mcpServers.transport", Reason: "must be http or stdio"}
 	}
 	if strings.TrimSpace(id) == "" || strings.TrimSpace(name) == "" {
