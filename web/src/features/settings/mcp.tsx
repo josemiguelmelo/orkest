@@ -22,7 +22,7 @@ import { Button } from '../../shared/ui/button';
 import { Dialog } from '../../shared/ui/dialog';
 import { Field, Form } from '../../shared/ui/form';
 import { useAction } from '../../shared/use-action';
-import { headerInput, mcpSchema } from './mcp-model';
+import { argumentInput, headerInput, stdioInput, mcpSchema } from './mcp-model';
 export function McpPage() {
   const { scope, permissions } = useApp();
   const servers = useQuery(mcpQuery(scope));
@@ -32,7 +32,7 @@ export function McpPage() {
     <>
       <PageHeader
         title="MCP servers"
-        description="HTTP capabilities your agents can use in future runs."
+        description="HTTP and stdio tools your agents can use in new sessions."
       >
         {permissions.editWorkspace && (
           <CreateButton onClick={() => setEditing(null)}>New MCP server</CreateButton>
@@ -48,10 +48,13 @@ export function McpPage() {
             <article className="resource-card" key={item.id}>
               <div className="split">
                 <Network size={22} className="card-icon" />
-                <Badge>{item.hasHeaders ? 'Headers configured' : 'No headers'}</Badge>
+                <Badge>
+                  {item.transport === 'stdio' ? 'Stdio' : 'HTTP'}
+                  {item.hasHeaders || item.hasEnvironment ? ' · Credentials configured' : ''}
+                </Badge>
               </div>
               <h3>{item.name}</h3>
-              <p className="muted">{item.url}</p>
+              <p className="muted">{item.transport === 'stdio' ? item.command : item.url}</p>
               {permissions.editWorkspace && (
                 <div className="actions">
                   <Button variant="outline" size="sm" onClick={() => setEditing(item)}>
@@ -77,7 +80,7 @@ export function McpPage() {
         </div>
       ) : (
         <Empty title="No MCP servers yet">
-          Register an HTTP server, then select it on an agent definition.
+          Register an HTTP or stdio server, then select it on an agent definition.
         </Empty>
       )}
       {editing !== undefined && (
@@ -99,6 +102,9 @@ function McpEditor({ item, onClose }: { item: McpServer | null; onClose: () => v
     defaultValues: {
       name: item?.name ?? '',
       url: item?.url ?? '',
+      transport: item?.transport ?? 'http',
+      command: item?.command ?? '',
+      args: JSON.stringify(item?.args ?? []),
       mode: 'preserve' as z.infer<typeof mcpSchema>['mode'],
       headers: '',
     },
@@ -114,13 +120,20 @@ function McpEditor({ item, onClose }: { item: McpServer | null; onClose: () => v
       <Form
         form={form}
         error={action.error}
-        onSubmit={async (values) => {
+        onSubmit={async (rawValues) => {
+          const values = mcpSchema.parse(rawValues);
           if (
             await action.run(async () => {
               const body = {
                 name: values.name,
-                url: values.url,
-                ...headerInput(values.mode, values.headers),
+                transport: values.transport,
+                ...(values.transport === 'stdio'
+                  ? {
+                      command: values.command,
+                      args: argumentInput(values.args),
+                      ...stdioInput(values.mode, values.headers),
+                    }
+                  : { url: values.url, ...headerInput(values.mode, values.headers) }),
               };
               if (item)
                 await data(
@@ -140,23 +153,66 @@ function McpEditor({ item, onClose }: { item: McpServer | null; onClose: () => v
         <Field label="Name" error={form.formState.errors.name?.message}>
           <input {...form.register('name')} />
         </Field>
-        <Field label="Endpoint URL" error={form.formState.errors.url?.message}>
-          <input {...form.register('url')} placeholder="https://example.com/mcp" />
+        <Field
+          label="Transport"
+          hint={
+            item
+              ? 'Transport cannot be changed after creation.'
+              : 'Select how the agent connects to this server.'
+          }
+        >
+          <select {...form.register('transport')} disabled={!!item}>
+            <option value="http">HTTP</option>
+            <option value="stdio">Stdio</option>
+          </select>
         </Field>
-        <Field label="Request headers" hint="Stored values are write-only and cannot be read back.">
+        {form.watch('transport') === 'stdio' ? (
+          <>
+            <Field
+              label="Executable"
+              error={form.formState.errors.command?.message}
+              hint="Absolute path inside the agent execution environment. Install the server in its execution image. The trusted local executor runs it on the host."
+            >
+              <input {...form.register('command')} placeholder="/opt/mcp/server" />
+            </Field>
+            <Field
+              label="Arguments (JSON array)"
+              error={form.formState.errors.args?.message}
+              hint="Literal arguments, without shell expansion. Put credentials in environment variables."
+            >
+              <textarea
+                {...form.register('args')}
+                spellCheck={false}
+                placeholder={'["--root", "/workspace"]'}
+              />
+            </Field>
+          </>
+        ) : (
+          <Field label="Endpoint URL" error={form.formState.errors.url?.message}>
+            <input {...form.register('url')} placeholder="https://example.com/mcp" />
+          </Field>
+        )}
+        <Field
+          label={form.watch('transport') === 'stdio' ? 'Environment variables' : 'Request headers'}
+          hint="Stored values are encrypted and write-only."
+        >
           <select {...form.register('mode')}>
-            <option value="preserve">{item ? 'Keep stored headers' : 'No headers'}</option>
-            <option value="replace">Replace headers</option>
-            <option value="clear">Clear all headers</option>
+            <option value="preserve">{item ? 'Keep stored values' : 'No values'}</option>
+            <option value="replace">Replace values</option>
+            <option value="clear">Clear all values</option>
           </select>
         </Field>
         {form.watch('mode') === 'replace' && (
-          <Field label="New headers (JSON object)" error={form.formState.errors.headers?.message}>
+          <Field label="New values (JSON object)" error={form.formState.errors.headers?.message}>
             <textarea
               {...form.register('headers')}
               autoComplete="off"
               spellCheck={false}
-              placeholder={'{"Authorization":"Bearer …"}'}
+              placeholder={
+                form.watch('transport') === 'stdio'
+                  ? '{"API_TOKEN":"…"}'
+                  : '{"Authorization":"Bearer …"}'
+              }
             />
           </Field>
         )}

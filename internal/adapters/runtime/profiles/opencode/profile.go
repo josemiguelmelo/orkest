@@ -50,10 +50,12 @@ type (
 		Servers map[string]runtimeMCP `json:"servers"`
 	}
 	runtimeMCP struct {
-		Type    string            `json:"type"`
-		URL     string            `json:"url"`
-		OAuth   *bool             `json:"oauth,omitempty"`
-		Headers map[string]string `json:"headers,omitempty"`
+		Type        string            `json:"type"`
+		URL         string            `json:"url,omitempty"`
+		Command     []string          `json:"command,omitempty"`
+		Environment map[string]string `json:"environment,omitempty"`
+		OAuth       *bool             `json:"oauth,omitempty"`
+		Headers     map[string]string `json:"headers,omitempty"`
 	}
 )
 
@@ -135,7 +137,14 @@ func buildMCPConfiguration(servers []configmodel.MCPServer) (*runtimeMCPConfig, 
 		if _, exists := configured[name]; exists {
 			return nil, errors.New("duplicate MCP server name")
 		}
-		configured[name] = runtimeMCP{Type: "remote", URL: server.URL, OAuth: &noOAuth, Headers: server.Headers}
+		switch server.Transport {
+		case "", "http":
+			configured[name] = runtimeMCP{Type: "remote", URL: server.URL, OAuth: &noOAuth, Headers: server.Headers}
+		case "stdio":
+			configured[name] = runtimeMCP{Type: "local", Command: append([]string{server.Command}, server.Args...), Environment: server.Environment}
+		default:
+			return nil, errors.New("unsupported MCP transport")
+		}
 	}
 	return &runtimeMCPConfig{Servers: configured}, nil
 }

@@ -3,6 +3,7 @@ package mcpserver
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/josemiguelmelo/orkest/internal/platform/secretbox"
@@ -15,16 +16,15 @@ type repositoryStub struct {
 	secret string
 }
 
-func (r *repositoryStub) Create(_ context.Context, id, workspaceID, name, endpoint, secret string) (mcpservermodel.Server, error) {
-	r.server = mcpservermodel.Server{ID: id, WorkspaceID: workspaceID, Name: name, URL: endpoint, HasHeaders: secret != ""}
-	r.secret = secret
-	return r.server, nil
+func (r *repositoryStub) Create(_ context.Context, server mcpservermodel.Server, secret string) (mcpservermodel.Server, error) {
+	server.HasHeaders = server.Transport != "stdio" && secret != ""
+	server.HasEnvironment = server.Transport == "stdio" && secret != ""
+	r.server, r.secret = server, secret
+	return server, nil
 }
 
-func (r *repositoryStub) Update(_ context.Context, workspaceID, id, name, endpoint, secret string) (mcpservermodel.Server, error) {
-	r.server = mcpservermodel.Server{ID: id, WorkspaceID: workspaceID, Name: name, URL: endpoint, HasHeaders: secret != ""}
-	r.secret = secret
-	return r.server, nil
+func (r *repositoryStub) Update(ctx context.Context, server mcpservermodel.Server, secret string) (mcpservermodel.Server, error) {
+	return r.Create(ctx, server, secret)
 }
 
 func (r *repositoryStub) Delete(context.Context, string, string) error { return nil }
@@ -102,5 +102,60 @@ func TestMutationRequiresWorkspacePermissionAndEncryptionKey(t *testing.T) {
 	input.Headers = map[string]string{"Authorization": "Bearer private"}
 	if _, err := service.Create(context.Background(), "user", "org", "workspace", input); !errors.Is(err, secretbox.ErrKeyUnavailable) {
 		t.Fatalf("unexpected key error: %v", err)
+	}
+}
+
+func TestStdioCredentialsAndUpdates(t *testing.T) {
+	box, _ := secretbox.New("0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef")
+	repo := &repositoryStub{}
+	service := NewMCPServerService(repo, box, workspaceStub{role: "member"})
+	ctx := context.Background()
+	created, err := service.Create(ctx, "user", "org", "workspace", mcpservermodel.Input{Name: "Tools", Transport: "stdio", Command: "/opt/mcp/server", Args: []string{"literal space", "$(no expansion)"}, Environment: map[string]string{"API_TOKEN": "private-token"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !created.HasEnvironment || created.HasHeaders || strings.Contains(repo.secret, "private-token") {
+		t.Fatal("stdio credentials were not encrypted separately")
+	}
+	if _, err := service.Update(ctx, "user", "org", "workspace", created.ID, mcpservermodel.Input{Name: "Renamed"}); err != nil {
+		t.Fatal(err)
+	}
+	resolved, err := service.Resolve(ctx, "workspace", []string{created.ID})
+	if err != nil || len(resolved) != 1 || resolved[0].Environment["API_TOKEN"] != "private-token" || resolved[0].Command != "/opt/mcp/server" || len(resolved[0].Args) != 2 {
+		t.Fatal("update lost stdio configuration", err)
+	}
+	if _, err := service.Update(ctx, "user", "org", "workspace", created.ID, mcpservermodel.Input{Transport: "http", URL: "https://example.test"}); err == nil {
+		t.Fatal("transport changed")
+	}
+	if _, err := service.Update(ctx, "user", "org", "workspace", created.ID, mcpservermodel.Input{Args: []string{}, Environment: map[string]string{}}); err != nil {
+		t.Fatal(err)
+	}
+	if repo.secret != "" || len(repo.server.Args) != 0 || repo.server.HasEnvironment {
+		t.Fatal("empty values did not clear credentials and arguments")
+	}
+}
+
+func TestRejectsInvalidStdioConfiguration(t *testing.T) {
+	service := NewMCPServerService(&repositoryStub{}, nil, workspaceStub{role: "member"})
+	for _, input := range []mcpservermodel.Input{
+		{Name: "Tools", Transport: "pipe", Command: "/server"},
+		{Name: "Tools", Transport: "stdio", Command: "server"},
+		{Name: "Tools", Transport: "stdio", Command: "/server", URL: "https://example.test"},
+		{Name: "Tools", Transport: "stdio", Command: "/server", Headers: map[string]string{"Token": "value"}},
+		{Name: "Tools", Transport: "stdio", Command: "/server", Args: []string{"bad\x00argument"}},
+		{Name: "Tools", Transport: "stdio", Command: "/server", Environment: map[string]string{"BAD-NAME": "value"}},
+		{Name: "Tools", URL: "https://example.test", Command: "/server"},
+		{Name: "Tools", URL: "https://example.test#fragment"},
+	} {
+		if _, err := service.Create(context.Background(), "user", "org", "workspace", input); err == nil {
+			t.Fatal("invalid configuration accepted")
+		}
+	}
+	input := mcpservermodel.Input{Name: "Tools", Transport: "stdio", Command: "/server", Environment: map[string]string{"TOKEN": "value"}}
+	if _, err := service.Create(context.Background(), "user", "org", "workspace", input); !errors.Is(err, secretbox.ErrKeyUnavailable) {
+		t.Fatal("missing encryption key accepted", err)
+	}
+	if _, err := NewMCPServerService(&repositoryStub{}, nil, workspaceStub{role: "viewer"}).Create(context.Background(), "user", "org", "workspace", input); err == nil {
+		t.Fatal("viewer registered an executable")
 	}
 }

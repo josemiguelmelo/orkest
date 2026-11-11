@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	configmodel "github.com/josemiguelmelo/orkest/internal/agentctl/config/model"
+	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
+	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
 )
 
 func TestV1SessionCompatibility(t *testing.T) {
@@ -101,5 +103,48 @@ func TestRestoredSessionQuestionToolCompatibility(t *testing.T) {
 				t.Fatal("restore changed saved manifest", err)
 			}
 		})
+	}
+}
+
+func TestHTTPFingerprintRemainsCompatibleWithOriginalRepresentation(t *testing.T) {
+	config := configmodel.RuntimeConfig{MCPServers: []configmodel.MCPServer{{ID: "http", Name: "Remote", URL: "https://example.test"}}}
+	before := sessionConfigurationFingerprint(config)
+	config.MCPServers[0].Transport = "http"
+	if got := sessionConfigurationFingerprint(config); got != before {
+		t.Fatal("explicit HTTP broke legacy fingerprint")
+	}
+}
+
+func TestStdioFingerprintPinsCommandArgumentsAndEnvironmentNames(t *testing.T) {
+	config := configmodel.RuntimeConfig{MCPServers: []configmodel.MCPServer{{ID: "stdio", Name: "Tools", Transport: "stdio", Command: "/server", Args: []string{"--original"}, Environment: map[string]string{"TOKEN": "first"}}}}
+	before := sessionConfigurationFingerprint(config)
+	config.MCPServers[0].Environment["TOKEN"] = "rotated"
+	if got := sessionConfigurationFingerprint(config); got != before || config.MCPServers[0].Environment["TOKEN"] != "rotated" {
+		t.Fatal("credential rotation changed identity or mutated configuration")
+	}
+	for _, change := range []func(*configmodel.MCPServer){
+		func(server *configmodel.MCPServer) { server.Command = "/other" },
+		func(server *configmodel.MCPServer) { server.Args[0] = "--other" },
+		func(server *configmodel.MCPServer) { server.Environment["NEW"] = "value" },
+	} {
+		changed := config.Clone()
+		change(&changed.MCPServers[0])
+		if sessionConfigurationFingerprint(changed) == before {
+			t.Fatal("stdio settings excluded from compatibility")
+		}
+	}
+}
+
+func TestStdioSecretsAreRedactedFromRuntimeActivity(t *testing.T) {
+	config := configmodel.RuntimeConfig{MCPServers: []configmodel.MCPServer{{Transport: "stdio", Environment: map[string]string{"TOKEN": "private-stdio-value"}}}}
+	var output string
+	session := &Session{callbacks: &sessionCallbacks{observer: &agentruntime.PromptObserver{Update: func(update interaction.Update) error { output = update.Text; return nil }}}}
+	host := &Host{}
+	host.registerSessionSecrets(session, config, preparedRuntime{})
+	if err := session.callbacks.Update(interaction.Update{Kind: "text", Text: "token=private-stdio-value"}); err != nil {
+		t.Fatal(err)
+	}
+	if output != "token=[redacted]" {
+		t.Fatal("stdio secret exposed in runtime activity")
 	}
 }

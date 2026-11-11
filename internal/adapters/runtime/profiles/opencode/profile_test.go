@@ -93,3 +93,24 @@ func TestConfiguredModelIsExplicitForACPAndRuntimeDefaults(t *testing.T) {
 	}
 	t.Fatal("runtime configuration missing")
 }
+
+func TestMixedMCPConfiguration(t *testing.T) {
+	config, err := buildMCPConfiguration([]configmodel.MCPServer{
+		{ID: "remote", Name: "Remote", URL: "https://example.test"},
+		{ID: "local", Name: "Local", Transport: "stdio", Command: "/opt/mcp/server", Args: []string{"literal space", "$TOKEN"}, Environment: map[string]string{"TOKEN": "private"}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	local := config.Servers["local-local"]
+	if local.Type != "local" || local.URL != "" || local.OAuth != nil || local.Environment["TOKEN"] != "private" || strings.Join(local.Command, "|") != "/opt/mcp/server|literal space|$TOKEN" {
+		t.Fatal("stdio configuration changed", local)
+	}
+	encoded, err := json.Marshal(local)
+	if err != nil || strings.Contains(string(encoded), `"url"`) || strings.Contains(string(encoded), `"headers"`) || strings.Contains(string(encoded), `"oauth"`) {
+		t.Fatal("HTTP fields leaked into local configuration", string(encoded), err)
+	}
+	if config.Servers["remote-remote"].Type != "remote" {
+		t.Fatal("HTTP server lost")
+	}
+}

@@ -17,10 +17,14 @@ type ModelSelection struct {
 }
 
 type MCPServer struct {
-	ID      string            `json:"id"`
-	Name    string            `json:"name"`
-	URL     string            `json:"url"`
-	Headers map[string]string `json:"headers,omitempty"`
+	Transport   string            `json:"transport,omitempty"`
+	Command     string            `json:"command,omitempty"`
+	Args        []string          `json:"args,omitempty"`
+	Environment map[string]string `json:"environment,omitempty"`
+	ID          string            `json:"id"`
+	Name        string            `json:"name"`
+	URL         string            `json:"url"`
+	Headers     map[string]string `json:"headers,omitempty"`
 }
 
 type Skill struct {

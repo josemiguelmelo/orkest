@@ -19,7 +19,7 @@ The platform and agentctl share one Go module. The UI is a React application.
 | Execution | Docker Engine; Local processes; Kubernetes Pods | Independent agentctl workers |
 | Agent protocol | ACP over stdio | Runtime commands and callbacks |
 | Worker transport | REST, receive-only WebSocket | Commands, status, ordered activity |
-| Tools | Streamable HTTP MCP | Built-in and external tools |
+| Tools | Streamable HTTP and stdio MCP | Built-in HTTP tools; external HTTP or stdio tools |
 | Image builds | BuildKit or Docker CLI | Compose and publish execution profile images |
 
 - Excluded: Redis and message broker. Kubernetes execution is an initial in-cluster

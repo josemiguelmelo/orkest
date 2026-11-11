@@ -84,7 +84,29 @@ func refreshSessionMCPHeaders(saved []orchestrationmodel.MCPServer, resolved []m
 		if !found {
 			return nil, errors.New("session MCP server is unavailable")
 		}
-		updated[i].Headers = maps.Clone(server.Headers)
+		savedTransport, currentTransport := updated[i].Transport, server.Transport
+		if savedTransport == "" {
+			savedTransport = "http"
+		}
+		if currentTransport == "" {
+			currentTransport = "http"
+		}
+		if savedTransport != currentTransport {
+			return nil, errors.New("session MCP transport is incompatible")
+		}
+		if savedTransport == "stdio" {
+			env := make(map[string]string, len(updated[i].Environment))
+			for name := range updated[i].Environment {
+				value, exists := server.Environment[name]
+				if !exists {
+					return nil, errors.New("session MCP environment variable is unavailable")
+				}
+				env[name] = value
+			}
+			updated[i].Environment = env
+		} else {
+			updated[i].Headers = maps.Clone(server.Headers)
+		}
 	}
 	return updated, nil
 }

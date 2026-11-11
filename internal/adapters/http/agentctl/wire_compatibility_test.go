@@ -48,3 +48,10 @@ func TestPreviousPermissionEventWireShape(t *testing.T) {
 		t.Fatalf("permission identity or wire optionality changed: %s", encoded)
 	}
 }
+
+func TestStdioMCPConfigurationAccepted(t *testing.T) {
+	server := fromWireMCPServer(wire.MCPServer{ID: "local", Name: "Local", Transport: "stdio", Command: "/server", Args: []string{"literal space"}, Environment: map[string]string{"TOKEN": "private"}})
+	if server.Transport != "stdio" || server.Command != "/server" || len(server.Args) != 1 || server.Args[0] != "literal space" || server.Environment["TOKEN"] != "private" || server.URL != "" || len(server.Headers) != 0 {
+		t.Fatal("stdio configuration lost on worker wire mapping")
+	}
+}

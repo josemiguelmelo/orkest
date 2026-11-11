@@ -34,3 +34,11 @@ func TestWireConfigurationMatchesV1Fixture(t *testing.T) {
 		t.Fatalf("wire configuration changed: %s", got)
 	}
 }
+
+func TestStdioMCPWireConfiguration(t *testing.T) {
+	server := orchestrationmodel.MCPServer{ID: "local", Name: "Local", Transport: "stdio", Command: "/server", Args: []string{"literal space"}, Environment: map[string]string{"TOKEN": "private"}}
+	got := toWireMCPServer(server)
+	if got.Transport != "stdio" || got.Command != "/server" || len(got.Args) != 1 || got.Args[0] != "literal space" || got.Environment["TOKEN"] != "private" || got.URL != "" || len(got.Headers) != 0 {
+		t.Fatal("stdio configuration lost on platform wire mapping")
+	}
+}

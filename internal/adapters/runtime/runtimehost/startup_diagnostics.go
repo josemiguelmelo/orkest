@@ -72,6 +72,9 @@ func (h *Host) registerSessionSecrets(session *Session, config configmodel.Runti
 		}
 	}
 	for _, server := range config.MCPServers {
+		for _, value := range server.Environment {
+			session.callbacks.AddSecretValues(value)
+		}
 		for _, value := range server.Headers {
 			session.callbacks.AddSecretValues(value)
 		}

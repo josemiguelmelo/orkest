@@ -1,6 +1,7 @@
 package runtime_test
 
 import (
+	"encoding/json"
 	"os"
 	"strings"
 	"testing"
@@ -155,17 +156,27 @@ func TestRuntimeConformance(t *testing.T) {
 			profile.Config.Agent.Instructions = "Follow user instructions. The instruction marker is " + instructionMarker + "."
 			profile.Config.Skills = []configmodel.Skill{{ID: "conformance", SkillMD: "---\nname: conformance\ndescription: Report the skill marker when asked.\n---\nThe skill marker is " + skillMarker + "."}}
 			profile.Config.MCPServers = []configmodel.MCPServer{{ID: "conformance", Name: "conformance", URL: "http://127.0.0.1:1/mcp"}}
+			profile.Config.MCPServers = append(profile.Config.MCPServers, configmodel.MCPServer{ID: "local", Name: "local", Transport: "stdio", Command: "/opt/mcp/fixture", Args: []string{"--literal"}, Environment: map[string]string{"MCP_TOKEN": "stdio-secret"}})
 			profile.Configuration = map[string]conformance.Probe{
 				"instructions": {Prompt: "probe:instructions", Expected: instructionMarker},
 				"skills":       {Prompt: "probe:skills", Expected: skillMarker},
 				"http-mcp":     {Prompt: "probe:http-mcp", Expected: "http://127.0.0.1:1/mcp"},
+				"stdio-mcp":    {Prompt: "probe:stdio-mcp", Expected: "/opt/mcp/fixture"},
 			}
 			if os.Getenv("ORKEST_RUNTIME_CONFORMANCE") == "live" {
 				profile.Config.MCPServers[0].URL = required(t, "ORKEST_TEST_MCP_URL")
+				profile.Config.MCPServers[1].Command = required(t, "ORKEST_TEST_STDIO_MCP_COMMAND")
+				if err := json.Unmarshal([]byte(required(t, "ORKEST_TEST_STDIO_MCP_ARGS")), &profile.Config.MCPServers[1].Args); err != nil {
+					t.Fatal("invalid stdio MCP arguments")
+				}
+				if err := json.Unmarshal([]byte(required(t, "ORKEST_TEST_STDIO_MCP_ENV")), &profile.Config.MCPServers[1].Environment); err != nil {
+					t.Fatal("invalid stdio MCP environment")
+				}
 				profile.Configuration = map[string]conformance.Probe{
 					"instructions": {Prompt: "What instruction marker was given in your agent instructions?", Expected: instructionMarker},
 					"skills":       {Prompt: "Use the conformance skill and report its skill marker.", Expected: skillMarker},
 					"http-mcp":     {Prompt: required(t, "ORKEST_TEST_MCP_PROMPT"), Expected: required(t, "ORKEST_TEST_MCP_EXPECTED")},
+					"stdio-mcp":    {Prompt: required(t, "ORKEST_TEST_STDIO_MCP_PROMPT"), Expected: required(t, "ORKEST_TEST_STDIO_MCP_EXPECTED")},
 				}
 				provider := required(t, "ORKEST_TEST_MODEL_PROVIDER")
 				switch runtime {

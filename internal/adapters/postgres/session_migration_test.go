@@ -53,6 +53,13 @@ func TestSessionMigrations(t *testing.T) {
 	if err := pool.QueryRow(ctx, `SELECT count(*) FROM pg_constraint WHERE conrelid = 'agent_launches'::regclass AND conname = 'agent_launch_session_scope_fk'`).Scan(&constraints); err != nil || constraints != 1 {
 		t.Fatal("session scope constraint missing", err)
 	}
+	t.Run("MCP transports and isolation", func(t *testing.T) {
+		if _, err := pool.Exec(ctx, `INSERT INTO organizations(id,name) VALUES('mcp-org','MCP'); INSERT INTO workspaces(id,organization_id,name) VALUES('mcp-workspace','mcp-org','MCP');`); err != nil {
+			t.Fatal(err)
+		}
+		testMCPServers(t, &PostgresDatabase{pool: pool}, "mcp-workspace")
+		testStdioMCPMigrationRollback(t, ctx, pool)
+	})
 	t.Run("delivery claim rollback guard", func(t *testing.T) { testDeliveryClaimMigrationRollback(t, ctx, pool) })
 	t.Run("workflow migration round trip", func(t *testing.T) { testWorkflowMigrationRoundTrip(t, ctx, pool) })
 }
@@ -159,5 +166,41 @@ func testDeliveryClaimMigrationRollback(t *testing.T, ctx context.Context, pool 
 	var options string
 	if err = tx.QueryRow(ctx, "SELECT options::text FROM workflow_commands WHERE id='claim-command'").Scan(&options); err != nil || options != "{}" {
 		t.Fatalf("rollback changed command payload: %q %v", options, err)
+	}
+}
+
+func testStdioMCPMigrationRollback(t *testing.T, ctx context.Context, pool *pgxpool.Pool) {
+	t.Helper()
+	source, err := migrations.FS.ReadFile("0041_stdio_mcp.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	up, down, ok := strings.Cut(string(source), "-- +goose Down")
+	if !ok {
+		t.Fatal("missing stdio rollback")
+	}
+	tx, err := pool.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err := tx.Exec(ctx, `INSERT INTO mcp_servers(id,workspace_id,name,url) VALUES('rollback-http','mcp-workspace','Rollback HTTP','https://example.test'); INSERT INTO mcp_servers(id,workspace_id,name,url,transport,command) VALUES('rollback-stdio','mcp-workspace','Rollback stdio','','stdio','/server'); SAVEPOINT rollback_guard;`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(ctx, down); err == nil {
+		t.Fatal("rollback discarded stdio configuration")
+	}
+	if _, err := tx.Exec(ctx, `ROLLBACK TO SAVEPOINT rollback_guard; DELETE FROM mcp_servers WHERE id='rollback-stdio';`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(ctx, down); err != nil {
+		t.Fatal("HTTP-only rollback failed", err)
+	}
+	if _, err := tx.Exec(ctx, up); err != nil {
+		t.Fatal("reapply stdio migration", err)
+	}
+	var transport string
+	if err := tx.QueryRow(ctx, `SELECT transport FROM mcp_servers WHERE id='rollback-http'`).Scan(&transport); err != nil || transport != "http" {
+		t.Fatal("migration lost original HTTP registration", err)
 	}
 }

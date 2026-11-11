@@ -1674,12 +1674,17 @@ components:
         application/json:
           schema:
             type: object
-            required: [name, url]
+            required: [name]
             additionalProperties: false
+            description: Transport is immutable. Omitted transport defaults to HTTP on creation and preserves the existing transport on update. HTTP requires a URL; stdio requires an absolute executable. Transport-specific fields cannot be mixed.
             properties:
               name: {type: string, minLength: 1, maxLength: 200}
+              transport: {type: string, enum: [http, stdio]}
               url: {type: string, format: uri}
-              headers: {type: object, additionalProperties: {type: string}, writeOnly: true}
+              command: {type: string, pattern: '^/', maxLength: 4096}
+              args: {type: array, maxItems: 100, items: {type: string, maxLength: 8192}, description: Literal arguments; never include credentials. Omitted preserves existing arguments; an empty array clears them.}
+              headers: {type: object, additionalProperties: {type: string}, writeOnly: true, description: HTTP only. Omitted preserves; an empty object clears.}
+              environment: {type: object, additionalProperties: {type: string}, writeOnly: true, description: Stdio only. Encrypted and write-only. Omitted preserves; an empty object clears.}
     CodeRepositoryCreate:
       required: true
       content:
@@ -2102,13 +2107,17 @@ components:
         sensitive: {type: boolean}
     MCPServer:
       type: object
-      required: [id, workspaceId, name, url, hasHeaders]
+      required: [id, workspaceId, name, transport, url, hasHeaders, hasEnvironment]
       properties:
         id: {type: string}
         workspaceId: {type: string}
         name: {type: string}
-        url: {type: string, format: uri}
+        transport: {type: string, enum: [http, stdio]}
+        url: {type: string, description: HTTP endpoint; empty for stdio.}
+        command: {type: string}
+        args: {type: array, items: {type: string}}
         hasHeaders: {type: boolean}
+        hasEnvironment: {type: boolean}
     CodeRepository:
       type: object
       required: [id, workspaceId, providerName, url, defaultBranch, private]

@@ -4,6 +4,7 @@ package configvalidation
 import (
 	"encoding/json"
 	"net/url"
+	"path"
 	"regexp"
 	"strings"
 
@@ -132,4 +133,40 @@ func httpURL(value string, httpsOnly bool) bool {
 		return false
 	}
 	return parsed.Scheme == "https" || (!httpsOnly && parsed.Scheme == "http")
+}
+
+// MCPConnection validates either supported transport without including secret values in errors.
+func MCPConnection(id, name, transport, endpoint, command string, args []string, headers, environment map[string]string) *Issue {
+	if transport == "" || transport == "http" {
+		if command != "" || len(args) != 0 || len(environment) != 0 {
+			return &Issue{Field: "mcpServers", Reason: "HTTP connections cannot include stdio fields"}
+		}
+		return MCPServer(id, name, endpoint, headers)
+	}
+	if transport != "stdio" {
+		return &Issue{Field: "mcpServers.transport", Reason: "must be http or stdio"}
+	}
+	if strings.TrimSpace(id) == "" || strings.TrimSpace(name) == "" {
+		return &Issue{Field: "mcpServers", Reason: "must include an ID and name"}
+	}
+	if endpoint != "" || len(headers) != 0 {
+		return &Issue{Field: "mcpServers", Reason: "stdio connections cannot include HTTP fields"}
+	}
+	if !path.IsAbs(command) || strings.ContainsAny(command, "\x00\r\n") || len(command) > 4096 || len(args) > 100 {
+		return &Issue{Field: "mcpServers.command", Reason: "must name an absolute executable path and at most 100 arguments"}
+	}
+	for _, arg := range args {
+		if strings.ContainsRune(arg, '\x00') || len(arg) > 8192 {
+			return &Issue{Field: "mcpServers.args", Reason: "contains an invalid argument"}
+		}
+	}
+	if len(environment) > 50 {
+		return &Issue{Field: "mcpServers.environment", Reason: "must contain at most 50 variables"}
+	}
+	for key, value := range environment {
+		if !environmentNamePattern.MatchString(key) || len(key) > 256 || len(value) > 8192 || strings.ContainsRune(value, '\x00') {
+			return &Issue{Field: "mcpServers.environment", Reason: "contains an invalid name or value"}
+		}
+	}
+	return nil
 }

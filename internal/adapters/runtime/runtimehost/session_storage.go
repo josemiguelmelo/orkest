@@ -127,6 +127,17 @@ func fingerprintableConfiguration(config configmodel.RuntimeConfig) configmodel.
 	config.MCPServers = append([]configmodel.MCPServer(nil), config.MCPServers...)
 	for i := range config.MCPServers {
 		config.MCPServers[i].Headers = nil
+		// Explicit HTTP and the original implicit HTTP representation are identical.
+		if config.MCPServers[i].Transport == "http" {
+			config.MCPServers[i].Transport = ""
+		}
+		if config.MCPServers[i].Environment != nil {
+			names := make(map[string]string, len(config.MCPServers[i].Environment))
+			for name := range config.MCPServers[i].Environment {
+				names[name] = ""
+			}
+			config.MCPServers[i].Environment = names
+		}
 	}
 	config.GitCredentials = nil
 	config.GitCredentialsRequired = false
@@ -138,6 +149,17 @@ func legacyConfigurationFingerprints(config configmodel.RuntimeConfig) []string 
 	config.MCPServers = append([]configmodel.MCPServer(nil), config.MCPServers...)
 	for i := range config.MCPServers {
 		config.MCPServers[i].Headers = nil
+		// Explicit HTTP and the original implicit HTTP representation are identical.
+		if config.MCPServers[i].Transport == "http" {
+			config.MCPServers[i].Transport = ""
+		}
+		if config.MCPServers[i].Environment != nil {
+			names := make(map[string]string, len(config.MCPServers[i].Environment))
+			for name := range config.MCPServers[i].Environment {
+				names[name] = ""
+			}
+			config.MCPServers[i].Environment = names
+		}
 	}
 	values := []configmodel.RuntimeConfig{config, config}
 	values[1].GitCredentials = nil

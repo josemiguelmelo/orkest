@@ -57,7 +57,7 @@ func Run(t *testing.T, factory Factory, profile Profile) {
 	if _, err = host.Launch(ctx, config); err == nil {
 		t.Fatal("duplicate execution was allowed")
 	}
-	for _, name := range []string{"instructions", "skills", "http-mcp"} {
+	for _, name := range []string{"instructions", "skills", "http-mcp", "stdio-mcp"} {
 		probe, ok := profile.Configuration[name]
 		if !ok || probe.Prompt == "" || probe.Expected == "" {
 			t.Fatalf("missing configuration probe: %s", name)
@@ -106,6 +106,7 @@ func Run(t *testing.T, factory Factory, profile Profile) {
 	if !strings.Contains(output.String(), token) {
 		t.Fatal("restored session lost conversation context")
 	}
+	verifyConfiguration(t, ctx, restored, profile.Configuration, observer, &output)
 	verifyQuestion(t, ctx, restored, "restored-question", profile.Question, observer, &output)
 	if data, err := os.ReadFile(path); err != nil || string(data) != "preserved" {
 		t.Fatal("working files were lost")

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -67,6 +68,16 @@ func (c *client) LoadSession(ctx context.Context, id string, workDir string, opt
 func mcpServers(servers []configmodel.MCPServer) []sdk.McpServer {
 	result := make([]sdk.McpServer, 0, len(servers))
 	for _, server := range servers {
+		if server.Transport == "stdio" {
+			env := make([]sdk.EnvVariable, 0, len(server.Environment))
+			for name, value := range server.Environment {
+				env = append(env, sdk.EnvVariable{Name: name, Value: value})
+			}
+			sort.Slice(env, func(i, j int) bool { return env[i].Name < env[j].Name })
+			args := append([]string{}, server.Args...)
+			result = append(result, sdk.McpServer{Stdio: &sdk.McpServerStdio{Name: server.Name, Command: server.Command, Args: args, Env: env}})
+			continue
+		}
 		headers := make([]sdk.HttpHeader, 0, len(server.Headers))
 		for name, value := range server.Headers {
 			headers = append(headers, sdk.HttpHeader{Name: name, Value: value})

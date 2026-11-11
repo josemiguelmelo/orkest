@@ -13,7 +13,7 @@
 
 ## Shared behavior
 
-- Instructions, selected skills, HTTP MCP; ACP v1 for all profiles.
+- Instructions, selected skills, HTTP and stdio MCP; ACP v1 for all profiles.
 - Structured user questions: shared ACP form elicitation for OpenCode, Codex, and
   Claude Code; private Orkest MCP fallback for new Copilot/Kiro sessions. See
   [question behavior, compatibility, and qualification limits](../../development/user-questions.md).
@@ -30,7 +30,7 @@
 ## Verification and recovery
 
 - [Qualify](../../development/testing.md#runtime-qualification) model, instructions/skills,
-  MCP/headers, approvals, cancellation, restore plus follow-up.
+  HTTP MCP/headers and stdio MCP/environment, approvals, cancellation, restore plus follow-up.
 - Fixtures/loading alone do not qualify live continuation. Existing sessions keep
   model/configuration; incompatible restore fails visibly, preserving state.
 - [Sessions](../../guides/sessions.md): behavior; [dated verification](../../status.md#verification-record):

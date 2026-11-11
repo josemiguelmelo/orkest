@@ -27,6 +27,7 @@ func TestRestoreSessionAcrossRuns(t *testing.T) {
 	}
 	environment := runtimehost.Environment{WorkDir: t.TempDir(), StateDir: t.TempDir(), GrantedEnv: []string{"ORKEST_ACP_FIXTURE=1"}}
 	config := configmodel.RunConfig{RuntimeConfig: configmodel.RuntimeConfig{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task", TaskSessionID: "conversation", RunID: "first", Runtime: "opencode", Model: configmodel.ModelSelection{Provider: "provider", ID: "model"}, Agent: configmodel.AgentDefinition{Name: "Work", Instructions: "Work"}}}
+	config.MCPServers = []configmodel.MCPServer{{ID: "http", Name: "HTTP", URL: "https://example.test/mcp"}}
 	home := sessionpath.Home(environment.StateDir, config.OrganizationID, config.WorkspaceID, config.TaskID, config.TaskSessionID)
 	if err := os.MkdirAll(filepath.Join(home, ".aws"), 0o700); err != nil {
 		t.Fatal(err)
@@ -45,6 +46,7 @@ func TestRestoreSessionAcrossRuns(t *testing.T) {
 	}
 	_ = first.Close()
 	config.RunID = "second"
+	config.MCPServers[0].Transport = "http"
 	environment.GrantedEnv = append(environment.GrantedEnv, "ORKEST_GIT_AUTHOR_NAME=Restored Agent", "ORKEST_GIT_AUTHOR_EMAIL=restored@example.com")
 	restored, err := opencodetest.NewHost(binary, environment).Restore(ctx, config.ForRuntime())
 	if err != nil {

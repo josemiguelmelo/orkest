@@ -152,6 +152,13 @@ func (r *AgentLaunchPostgresRepository) sessionSnapshot(config orchestrationmode
 	snapshot.MCPServers = append([]orchestrationmodel.MCPServer(nil), config.MCPServers...)
 	for i := range snapshot.MCPServers {
 		snapshot.MCPServers[i].Headers = nil
+		if snapshot.MCPServers[i].Environment != nil {
+			names := make(map[string]string, len(snapshot.MCPServers[i].Environment))
+			for name := range snapshot.MCPServers[i].Environment {
+				names[name] = ""
+			}
+			snapshot.MCPServers[i].Environment = names
+		}
 	}
 	if len(snapshot.Environment) > 0 || len(snapshot.GitCredentials) > 0 {
 		if r.secretBox == nil {

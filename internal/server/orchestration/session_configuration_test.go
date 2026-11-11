@@ -64,3 +64,23 @@ func TestRefreshOrkestMCPServerFailurePreservesConfiguration(t *testing.T) {
 		t.Fatal("failed tool refresh changed saved configuration")
 	}
 }
+
+func TestRefreshStdioCredentialsPreservesPinnedCommandAndNames(t *testing.T) {
+	saved := []runmodel.MCPServer{{ID: "stdio", Name: "Tools", Transport: "stdio", Command: "/original/server", Args: []string{"--original"}, Environment: map[string]string{"TOKEN": ""}}}
+	resolved := []mcpmodel.RuntimeServer{{ID: "stdio", Transport: "stdio", Command: "/changed/server", Args: []string{"--changed"}, Environment: map[string]string{"TOKEN": "rotated", "NEW": "new-session-only"}}}
+	updated, err := refreshSessionMCPHeaders(saved, resolved)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated[0].Command != "/original/server" || updated[0].Args[0] != "--original" || updated[0].Environment["TOKEN"] != "rotated" || len(updated[0].Environment) != 1 || saved[0].Environment["TOKEN"] != "" {
+		t.Fatal("continued session configuration changed")
+	}
+	delete(resolved[0].Environment, "TOKEN")
+	if _, err := refreshSessionMCPHeaders(saved, resolved); err == nil {
+		t.Fatal("missing pinned environment variable accepted")
+	}
+	resolved[0].Transport = "http"
+	if _, err := refreshSessionMCPHeaders(saved, resolved); err == nil {
+		t.Fatal("transport change accepted")
+	}
+}

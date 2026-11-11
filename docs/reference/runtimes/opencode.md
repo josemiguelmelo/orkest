@@ -27,3 +27,14 @@ See [test configuration](../../development/testing.md#real-continuation) and
 [dated results](../../status.md#verification-record). A passing handshake qualifies
 neither inference nor credentials.
 See [shared verification/recovery](README.md#verification-and-recovery).
+
+## Stdio MCP
+
+The profile writes native `mcp.servers` entries using `type: "local"`, a command
+array containing the executable and arguments, and `environment` overrides. Other
+profiles receive stdio configuration through ACP on both creation and load. The
+runtime owns the subprocess and protocol; the platform does not launch MCP servers.
+See [configuration](../../guides/agent-configuration.md#stdio-mcp-servers) and the
+live qualification limits in [status](../../status.md). The no-model
+`TestOpenCodeStdioMCPHandshake` integration test checks real initialization, restore
+with credential rotation, and graceful MCP shutdown; it does not qualify tool use.

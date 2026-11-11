@@ -352,8 +352,15 @@ export type McpServer = {
     id: string;
     workspaceId: string;
     name: string;
+    transport: 'http' | 'stdio';
+    /**
+     * HTTP endpoint; empty for stdio.
+     */
     url: string;
+    command?: string;
+    args?: Array<string>;
     hasHeaders: boolean;
+    hasEnvironment: boolean;
 };
 export type CodeRepository = {
     id: string;
@@ -544,10 +551,28 @@ export type AgentDefinition = {
         [key: string]: string;
     };
 };
+/**
+ * Transport is immutable. Omitted transport defaults to HTTP on creation and preserves the existing transport on update. HTTP requires a URL; stdio requires an absolute executable. Transport-specific fields cannot be mixed.
+ */
 export type McpServerInput = {
     name: string;
-    url: string;
+    transport?: 'http' | 'stdio';
+    url?: string;
+    command?: string;
+    /**
+     * Literal arguments; never include credentials. Omitted preserves existing arguments; an empty array clears them.
+     */
+    args?: Array<string>;
+    /**
+     * HTTP only. Omitted preserves; an empty object clears.
+     */
     headers?: {
+        [key: string]: string;
+    };
+    /**
+     * Stdio only. Encrypted and write-only. Omitted preserves; an empty object clears.
+     */
+    environment?: {
         [key: string]: string;
     };
 };
