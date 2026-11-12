@@ -114,3 +114,25 @@ Documented hazards below; SQL is the complete inventory.
   containers. It does not erase snapshots from session JSON or unmount active
   containers. Export selections before rollback; stop affected containers to
   revoke their host access.
+
+## Workflow stage integrations (0042–0043)
+
+Stop all old platform ingestion and workflow workers before deploying migrations
+0042–0043 and matching platform/UI builds. Older workers cannot interpret the new
+integration rule/event kinds. Independent agentctl processes continue; no worker
+wire protocol or runtime session format is changed. New optional platform session
+metadata records agent-definition identity for guarded integration continuation.
+Legacy manual continuation remains supported; an integration cannot infer missing
+legacy agent identity and fails visibly while preserving saved state.
+
+0042 adds encrypted connection configuration, receipt/semantic deduplication,
+observations and admissions. 0043 extends rules/events and adds scoped connection
+foreign keys. Keep new connections disabled until configured and validated.
+Webhook secrets and coding credentials are distinct; encryption must be configured.
+
+Before rollback, stop ingestion, reconcile all pending/uncertain callback commands,
+and retain an export of integration history/configuration. 0043 refuses rollback while integration rules/events or pending integration commands remain; 0042 refuses
+rollback while integration events or commands are pending.
+Do not remove deduplication history while redelivery remains possible. Dropping
+these tables after explicit history removal loses their diagnostic/audit data.
+Rollback does not cancel, replace or terminate agentctl processes.

@@ -171,6 +171,61 @@ export declare const zWorkflowStage: z.ZodObject<{
     customPrompt: z.ZodOptional<z.ZodString>;
     responsibleAgentId: z.ZodString;
 }, z.core.$strip>;
+export declare const zWorkflowStageIntegrationAction: z.ZodObject<{
+    id: z.ZodString;
+    name: z.ZodString;
+    parametersSchema: z.ZodRecord<z.ZodString, z.ZodUnknown>;
+}, z.core.$strip>;
+export declare const zWorkflowStageIntegrationProvider: z.ZodObject<{
+    provider: z.ZodString;
+    configSchema: z.ZodRecord<z.ZodString, z.ZodUnknown>;
+    actions: z.ZodArray<z.ZodObject<{
+        id: z.ZodString;
+        name: z.ZodString;
+        parametersSchema: z.ZodRecord<z.ZodString, z.ZodUnknown>;
+    }, z.core.$strip>>;
+}, z.core.$strip>;
+export declare const zWorkflowStageIntegration: z.ZodObject<{
+    id: z.ZodString;
+    workspaceId: z.ZodString;
+    provider: z.ZodString;
+    name: z.ZodString;
+    enabled: z.ZodBoolean;
+    codingIntegrationId: z.ZodString;
+    repositoryIds: z.ZodArray<z.ZodString>;
+    config: z.ZodRecord<z.ZodString, z.ZodUnknown>;
+    version: z.ZodCoercedBigInt<unknown>;
+    configuredBy: z.ZodString;
+    updatedAt: z.ZodISODateTime;
+}, z.core.$strip>;
+export declare const zWorkflowStageIntegrationInput: z.ZodObject<{
+    provider: z.ZodString;
+    name: z.ZodString;
+    enabled: z.ZodBoolean;
+    codingIntegrationId: z.ZodString;
+    repositoryIds: z.ZodArray<z.ZodString>;
+    config: z.ZodRecord<z.ZodString, z.ZodUnknown>;
+    version: z.ZodCoercedBigInt<unknown>;
+}, z.core.$strip>;
+export declare const zWorkflowStageIngestionReceipt: z.ZodObject<{
+    duplicate: z.ZodBoolean;
+    ignored: z.ZodBoolean;
+}, z.core.$strip>;
+export declare const zWorkflowStageIntegrationStatus: z.ZodObject<{
+    id: z.ZodString;
+    taskId: z.ZodString;
+    ruleId: z.ZodString;
+    stageVersion: z.ZodCoercedBigInt<unknown>;
+    actionId: z.ZodString;
+    state: z.ZodString;
+    error: z.ZodString;
+    createdAt: z.ZodISODateTime;
+}, z.core.$strip>;
+export declare const zWorkflowIntegrationTrigger: z.ZodObject<{
+    connectionId: z.ZodString;
+    actionId: z.ZodString;
+    parameters: z.ZodRecord<z.ZodString, z.ZodUnknown>;
+}, z.core.$strip>;
 export declare const zWorkflowAutomationRule: z.ZodObject<{
     id: z.ZodString;
     enabled: z.ZodBoolean;
@@ -178,13 +233,25 @@ export declare const zWorkflowAutomationRule: z.ZodObject<{
         stage_entered: "stage_entered";
         run_succeeded: "run_succeeded";
         stage_completed: "stage_completed";
+        integration_action: "integration_action";
     }>;
     sourceStageId: z.ZodString;
     action: z.ZodEnum<{
         move_task: "move_task";
         start_work: "start_work";
+        call_agent: "call_agent";
     }>;
     targetStageId: z.ZodOptional<z.ZodString>;
+    integration: z.ZodOptional<z.ZodObject<{
+        connectionId: z.ZodString;
+        actionId: z.ZodString;
+        parameters: z.ZodRecord<z.ZodString, z.ZodUnknown>;
+    }, z.core.$strip>>;
+    promptText: z.ZodOptional<z.ZodString>;
+    sessionPolicy: z.ZodOptional<z.ZodEnum<{
+        continue_or_create_if_absent: "continue_or_create_if_absent";
+        new: "new";
+    }>>;
 }, z.core.$strip>;
 export declare const zWorkflowInput: z.ZodObject<{
     name: z.ZodString;
@@ -202,13 +269,25 @@ export declare const zWorkspaceWorkflow: z.ZodObject<{
             stage_entered: "stage_entered";
             run_succeeded: "run_succeeded";
             stage_completed: "stage_completed";
+            integration_action: "integration_action";
         }>;
         sourceStageId: z.ZodString;
         action: z.ZodEnum<{
             move_task: "move_task";
             start_work: "start_work";
+            call_agent: "call_agent";
         }>;
         targetStageId: z.ZodOptional<z.ZodString>;
+        integration: z.ZodOptional<z.ZodObject<{
+            connectionId: z.ZodString;
+            actionId: z.ZodString;
+            parameters: z.ZodRecord<z.ZodString, z.ZodUnknown>;
+        }, z.core.$strip>>;
+        promptText: z.ZodOptional<z.ZodString>;
+        sessionPolicy: z.ZodOptional<z.ZodEnum<{
+            continue_or_create_if_absent: "continue_or_create_if_absent";
+            new: "new";
+        }>>;
     }, z.core.$strip>>;
     configuredBy: z.ZodOptional<z.ZodString>;
     stages: z.ZodArray<z.ZodObject<{
@@ -239,16 +318,16 @@ export declare const zTaskTransition: z.ZodObject<{
     }>;
     commandId: z.ZodString;
     sessionMode: z.ZodOptional<z.ZodEnum<{
-        continue: "continue";
         new: "new";
+        continue: "continue";
     }>>;
     promptText: z.ZodOptional<z.ZodString>;
 }, z.core.$strip>;
 export declare const zTaskInput: z.ZodObject<{
     startWork: z.ZodOptional<z.ZodBoolean>;
     sessionMode: z.ZodOptional<z.ZodEnum<{
-        continue: "continue";
         new: "new";
+        continue: "continue";
     }>>;
     promptText: z.ZodOptional<z.ZodString>;
     commandId: z.ZodOptional<z.ZodString>;
@@ -731,6 +810,16 @@ export declare const zCurrentUserWritable: z.ZodObject<{
         }>>;
     }, z.core.$strip>>;
 }, z.core.$strip>;
+export declare const zWorkflowStageIntegrationInputWritable: z.ZodObject<{
+    provider: z.ZodString;
+    name: z.ZodString;
+    enabled: z.ZodBoolean;
+    codingIntegrationId: z.ZodString;
+    repositoryIds: z.ZodArray<z.ZodString>;
+    config: z.ZodRecord<z.ZodString, z.ZodUnknown>;
+    webhookSecret: z.ZodOptional<z.ZodString>;
+    version: z.ZodCoercedBigInt<unknown>;
+}, z.core.$strip>;
 export declare const zAgentRuntimeProfileInputWritable: z.ZodObject<{
     name: z.ZodString;
     runtime: z.ZodEnum<{
@@ -864,6 +953,157 @@ export declare const zTaskIntegration2: z.ZodObject<{
     interval: z.ZodOptional<z.ZodString>;
     credential: z.ZodOptional<z.ZodString>;
 }, z.core.$strip>;
+export declare const zReceiveWorkflowStageCallbackBody: z.ZodRecord<z.ZodString, z.ZodUnknown>;
+export declare const zReceiveWorkflowStageCallbackPath: z.ZodObject<{
+    connectionID: z.ZodString;
+}, z.core.$strip>;
+/**
+ * Duplicate or authenticated ignored event
+ */
+export declare const zReceiveWorkflowStageCallbackResponse: z.ZodObject<{
+    duplicate: z.ZodBoolean;
+    ignored: z.ZodBoolean;
+}, z.core.$strip>;
+/**
+ * Provider and action catalog
+ */
+export declare const zListWorkflowStageIntegrationProvidersResponse: z.ZodArray<z.ZodObject<{
+    provider: z.ZodString;
+    configSchema: z.ZodRecord<z.ZodString, z.ZodUnknown>;
+    actions: z.ZodArray<z.ZodObject<{
+        id: z.ZodString;
+        name: z.ZodString;
+        parametersSchema: z.ZodRecord<z.ZodString, z.ZodUnknown>;
+    }, z.core.$strip>>;
+}, z.core.$strip>>;
+export declare const zListWorkflowStageIntegrationsPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+}, z.core.$strip>;
+/**
+ * Workspace stage integration connections
+ */
+export declare const zListWorkflowStageIntegrationsResponse: z.ZodArray<z.ZodObject<{
+    id: z.ZodString;
+    workspaceId: z.ZodString;
+    provider: z.ZodString;
+    name: z.ZodString;
+    enabled: z.ZodBoolean;
+    codingIntegrationId: z.ZodString;
+    repositoryIds: z.ZodArray<z.ZodString>;
+    config: z.ZodRecord<z.ZodString, z.ZodUnknown>;
+    version: z.ZodCoercedBigInt<unknown>;
+    configuredBy: z.ZodString;
+    updatedAt: z.ZodISODateTime;
+}, z.core.$strip>>;
+export declare const zCreateWorkflowStageIntegrationBody: z.ZodObject<{
+    provider: z.ZodString;
+    name: z.ZodString;
+    enabled: z.ZodBoolean;
+    codingIntegrationId: z.ZodString;
+    repositoryIds: z.ZodArray<z.ZodString>;
+    config: z.ZodRecord<z.ZodString, z.ZodUnknown>;
+    webhookSecret: z.ZodOptional<z.ZodString>;
+    version: z.ZodCoercedBigInt<unknown>;
+}, z.core.$strip>;
+export declare const zCreateWorkflowStageIntegrationPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+}, z.core.$strip>;
+/**
+ * Stage integration created
+ */
+export declare const zCreateWorkflowStageIntegrationResponse: z.ZodObject<{
+    id: z.ZodString;
+    workspaceId: z.ZodString;
+    provider: z.ZodString;
+    name: z.ZodString;
+    enabled: z.ZodBoolean;
+    codingIntegrationId: z.ZodString;
+    repositoryIds: z.ZodArray<z.ZodString>;
+    config: z.ZodRecord<z.ZodString, z.ZodUnknown>;
+    version: z.ZodCoercedBigInt<unknown>;
+    configuredBy: z.ZodString;
+    updatedAt: z.ZodISODateTime;
+}, z.core.$strip>;
+export declare const zDeleteWorkflowStageIntegrationPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+    connectionID: z.ZodString;
+}, z.core.$strip>;
+/**
+ * Stage integration deleted
+ */
+export declare const zDeleteWorkflowStageIntegrationResponse: z.ZodVoid;
+export declare const zUpdateWorkflowStageIntegrationBody: z.ZodObject<{
+    provider: z.ZodString;
+    name: z.ZodString;
+    enabled: z.ZodBoolean;
+    codingIntegrationId: z.ZodString;
+    repositoryIds: z.ZodArray<z.ZodString>;
+    config: z.ZodRecord<z.ZodString, z.ZodUnknown>;
+    webhookSecret: z.ZodOptional<z.ZodString>;
+    version: z.ZodCoercedBigInt<unknown>;
+}, z.core.$strip>;
+export declare const zUpdateWorkflowStageIntegrationPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+    connectionID: z.ZodString;
+}, z.core.$strip>;
+/**
+ * Stage integration updated
+ */
+export declare const zUpdateWorkflowStageIntegrationResponse: z.ZodObject<{
+    id: z.ZodString;
+    workspaceId: z.ZodString;
+    provider: z.ZodString;
+    name: z.ZodString;
+    enabled: z.ZodBoolean;
+    codingIntegrationId: z.ZodString;
+    repositoryIds: z.ZodArray<z.ZodString>;
+    config: z.ZodRecord<z.ZodString, z.ZodUnknown>;
+    version: z.ZodCoercedBigInt<unknown>;
+    configuredBy: z.ZodString;
+    updatedAt: z.ZodISODateTime;
+}, z.core.$strip>;
+export declare const zValidateWorkflowStageIntegrationPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+    connectionID: z.ZodString;
+}, z.core.$strip>;
+/**
+ * Connection validated
+ */
+export declare const zValidateWorkflowStageIntegrationResponse: z.ZodObject<{
+    status: z.ZodString;
+}, z.core.$strip>;
+export declare const zListWorkflowStageIntegrationStatusPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+    connectionID: z.ZodString;
+}, z.core.$strip>;
+/**
+ * Callback and observation diagnostics
+ */
+export declare const zListWorkflowStageIntegrationStatusResponse: z.ZodArray<z.ZodObject<{
+    id: z.ZodString;
+    taskId: z.ZodString;
+    ruleId: z.ZodString;
+    stageVersion: z.ZodCoercedBigInt<unknown>;
+    actionId: z.ZodString;
+    state: z.ZodString;
+    error: z.ZodString;
+    createdAt: z.ZodISODateTime;
+}, z.core.$strip>>;
+export declare const zRetryWorkflowStageIntegrationEventPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+    eventID: z.ZodString;
+}, z.core.$strip>;
+/**
+ * Eligible blocked effect queued for explicit retry
+ */
+export declare const zRetryWorkflowStageIntegrationEventResponse: z.ZodVoid;
 /**
  * Runtime providers and supported environment configuration
  */
@@ -2135,13 +2375,25 @@ export declare const zListWorkspaceWorkflowsResponse: z.ZodArray<z.ZodObject<{
             stage_entered: "stage_entered";
             run_succeeded: "run_succeeded";
             stage_completed: "stage_completed";
+            integration_action: "integration_action";
         }>;
         sourceStageId: z.ZodString;
         action: z.ZodEnum<{
             move_task: "move_task";
             start_work: "start_work";
+            call_agent: "call_agent";
         }>;
         targetStageId: z.ZodOptional<z.ZodString>;
+        integration: z.ZodOptional<z.ZodObject<{
+            connectionId: z.ZodString;
+            actionId: z.ZodString;
+            parameters: z.ZodRecord<z.ZodString, z.ZodUnknown>;
+        }, z.core.$strip>>;
+        promptText: z.ZodOptional<z.ZodString>;
+        sessionPolicy: z.ZodOptional<z.ZodEnum<{
+            continue_or_create_if_absent: "continue_or_create_if_absent";
+            new: "new";
+        }>>;
     }, z.core.$strip>>;
     configuredBy: z.ZodOptional<z.ZodString>;
     stages: z.ZodArray<z.ZodObject<{
@@ -2185,13 +2437,25 @@ export declare const zCreateWorkspaceWorkflowResponse: z.ZodObject<{
             stage_entered: "stage_entered";
             run_succeeded: "run_succeeded";
             stage_completed: "stage_completed";
+            integration_action: "integration_action";
         }>;
         sourceStageId: z.ZodString;
         action: z.ZodEnum<{
             move_task: "move_task";
             start_work: "start_work";
+            call_agent: "call_agent";
         }>;
         targetStageId: z.ZodOptional<z.ZodString>;
+        integration: z.ZodOptional<z.ZodObject<{
+            connectionId: z.ZodString;
+            actionId: z.ZodString;
+            parameters: z.ZodRecord<z.ZodString, z.ZodUnknown>;
+        }, z.core.$strip>>;
+        promptText: z.ZodOptional<z.ZodString>;
+        sessionPolicy: z.ZodOptional<z.ZodEnum<{
+            continue_or_create_if_absent: "continue_or_create_if_absent";
+            new: "new";
+        }>>;
     }, z.core.$strip>>;
     configuredBy: z.ZodOptional<z.ZodString>;
     stages: z.ZodArray<z.ZodObject<{
@@ -2242,13 +2506,25 @@ export declare const zGetWorkspaceWorkflowResponse: z.ZodObject<{
             stage_entered: "stage_entered";
             run_succeeded: "run_succeeded";
             stage_completed: "stage_completed";
+            integration_action: "integration_action";
         }>;
         sourceStageId: z.ZodString;
         action: z.ZodEnum<{
             move_task: "move_task";
             start_work: "start_work";
+            call_agent: "call_agent";
         }>;
         targetStageId: z.ZodOptional<z.ZodString>;
+        integration: z.ZodOptional<z.ZodObject<{
+            connectionId: z.ZodString;
+            actionId: z.ZodString;
+            parameters: z.ZodRecord<z.ZodString, z.ZodUnknown>;
+        }, z.core.$strip>>;
+        promptText: z.ZodOptional<z.ZodString>;
+        sessionPolicy: z.ZodOptional<z.ZodEnum<{
+            continue_or_create_if_absent: "continue_or_create_if_absent";
+            new: "new";
+        }>>;
     }, z.core.$strip>>;
     configuredBy: z.ZodOptional<z.ZodString>;
     stages: z.ZodArray<z.ZodObject<{
@@ -2282,13 +2558,25 @@ export declare const zSaveWorkspaceWorkflowBody: z.ZodObject<{
             stage_entered: "stage_entered";
             run_succeeded: "run_succeeded";
             stage_completed: "stage_completed";
+            integration_action: "integration_action";
         }>;
         sourceStageId: z.ZodString;
         action: z.ZodEnum<{
             move_task: "move_task";
             start_work: "start_work";
+            call_agent: "call_agent";
         }>;
         targetStageId: z.ZodOptional<z.ZodString>;
+        integration: z.ZodOptional<z.ZodObject<{
+            connectionId: z.ZodString;
+            actionId: z.ZodString;
+            parameters: z.ZodRecord<z.ZodString, z.ZodUnknown>;
+        }, z.core.$strip>>;
+        promptText: z.ZodOptional<z.ZodString>;
+        sessionPolicy: z.ZodOptional<z.ZodEnum<{
+            continue_or_create_if_absent: "continue_or_create_if_absent";
+            new: "new";
+        }>>;
     }, z.core.$strip>>;
     configuredBy: z.ZodOptional<z.ZodString>;
     stages: z.ZodArray<z.ZodObject<{
@@ -2330,13 +2618,25 @@ export declare const zSaveWorkspaceWorkflowResponse: z.ZodObject<{
             stage_entered: "stage_entered";
             run_succeeded: "run_succeeded";
             stage_completed: "stage_completed";
+            integration_action: "integration_action";
         }>;
         sourceStageId: z.ZodString;
         action: z.ZodEnum<{
             move_task: "move_task";
             start_work: "start_work";
+            call_agent: "call_agent";
         }>;
         targetStageId: z.ZodOptional<z.ZodString>;
+        integration: z.ZodOptional<z.ZodObject<{
+            connectionId: z.ZodString;
+            actionId: z.ZodString;
+            parameters: z.ZodRecord<z.ZodString, z.ZodUnknown>;
+        }, z.core.$strip>>;
+        promptText: z.ZodOptional<z.ZodString>;
+        sessionPolicy: z.ZodOptional<z.ZodEnum<{
+            continue_or_create_if_absent: "continue_or_create_if_absent";
+            new: "new";
+        }>>;
     }, z.core.$strip>>;
     configuredBy: z.ZodOptional<z.ZodString>;
     stages: z.ZodArray<z.ZodObject<{
@@ -2367,8 +2667,8 @@ export declare const zTransitionTaskBody: z.ZodObject<{
     }>;
     commandId: z.ZodString;
     sessionMode: z.ZodOptional<z.ZodEnum<{
-        continue: "continue";
         new: "new";
+        continue: "continue";
     }>>;
     promptText: z.ZodOptional<z.ZodString>;
 }, z.core.$strip>;
@@ -2452,8 +2752,8 @@ export declare const zListTasksResponse: z.ZodArray<z.ZodObject<{
 export declare const zCreateTaskBody: z.ZodObject<{
     startWork: z.ZodOptional<z.ZodBoolean>;
     sessionMode: z.ZodOptional<z.ZodEnum<{
-        continue: "continue";
         new: "new";
+        continue: "continue";
     }>>;
     promptText: z.ZodOptional<z.ZodString>;
     commandId: z.ZodOptional<z.ZodString>;
@@ -2546,8 +2846,8 @@ export declare const zGetTaskResponse: z.ZodObject<{
 export declare const zUpdateTaskBody: z.ZodObject<{
     startWork: z.ZodOptional<z.ZodBoolean>;
     sessionMode: z.ZodOptional<z.ZodEnum<{
-        continue: "continue";
         new: "new";
+        continue: "continue";
     }>>;
     promptText: z.ZodOptional<z.ZodString>;
     commandId: z.ZodOptional<z.ZodString>;

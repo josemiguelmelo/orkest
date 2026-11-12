@@ -22,7 +22,8 @@ defines intended scope.
 | Execution profile builds | BuildKit and Docker backends | Real composition suite needs daemon, registry, and foundation images |
 | Team-member slot allocation | Unfinished | Task-level run reservation does not establish member capacity enforcement |
 | Platform-to-agentctl authentication | Unfinished | Worker API must stay within a trusted boundary |
-| Browser SSE, PR webhook rules, binary artifacts | Proposed or deferred | No implementation claim |
+| Browser SSE, binary artifacts | Proposed or deferred | No implementation claim |
+| Adapter-based workflow stage integrations | Implemented for GitHub PR review-added and merged events | Deterministic provider, API, workflow, and UI coverage; PostgreSQL/live GitHub qualification recorded per delivery |
 | Complete host/disk loss recovery | Outside MVP guarantee | Durable storage must survive |
 
 - Loading alone proves no safe interrupted continuation. Replay must establish

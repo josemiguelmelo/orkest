@@ -63,7 +63,7 @@ func (s *WorkflowExecutionService) ProcessNextCommand(ctx context.Context) (bool
 			reason = "delivery_uncertain"
 		}
 	} else {
-		delivered, err = s.dispatchCommand(ctx, claim.Command, claim.Token)
+		delivered, reason, err = s.dispatchCommand(ctx, claim.Command, claim.Token)
 	}
 	if err != nil {
 		return true, err
@@ -85,42 +85,52 @@ func (s *WorkflowExecutionService) ProcessNextCommand(ctx context.Context) (bool
 	return true, nil
 }
 
-func (w *WorkflowExecutionService) dispatchCommand(ctx context.Context, c ExecutionCommand, claimToken string) (bool, error) {
+func (w *WorkflowExecutionService) dispatchCommand(ctx context.Context, c ExecutionCommand, claimToken string) (bool, string, error) {
 	accepted, err := w.dispatcher.TaskCommandAccepted(ctx, c.OrganizationID, c.WorkspaceID, c.TaskID, c.ID, "")
 	if err != nil {
-		return false, err
+		return false, "", err
 	}
 	if accepted {
-		return true, nil
+		return true, "", nil
 	}
 	if err = w.tasks.AuthorizeExecution(ctx, c.ActorID, c.OrganizationID, c.WorkspaceID, c.TaskID, true); err != nil {
 		if errors.Is(err, modelerrors.ErrForbidden) || errors.Is(err, modelerrors.ErrNotFound) {
-			return false, nil
+			return false, "authorization_revoked", nil
 		}
-		return false, err
+		return false, "", err
 	}
 	value, err := w.tasks.Get(ctx, c.ActorID, c.OrganizationID, c.WorkspaceID, c.TaskID)
 	if err != nil {
-		return false, err
+		return false, "", err
 	}
 	if value.StageVersion != c.StageVersion {
-		return false, nil
+		return false, "stage_changed", nil
 	}
-	request := taskmodel.StartCommand{Task: value, CommandID: c.ID, DeliveryToken: claimToken, SessionMode: c.Options.SessionMode, PromptText: c.Options.PromptText}
+	if c.Options.GuardAssignment && value.AssigneeAgentID != c.Options.ExpectedAssigneeID {
+		return false, "assignment_changed", nil
+	}
+	request := taskmodel.StartCommand{Task: value, CommandID: c.ID, DeliveryToken: claimToken, SessionMode: c.Options.SessionMode, PromptText: c.Options.PromptText, ExpectedAssigneeID: c.Options.ExpectedAssigneeID, GuardAssignment: c.Options.GuardAssignment, Integration: c.Options.Integration}
 	if err = w.dispatcher.StartTask(ctx, c.ActorID, c.OrganizationID, request); err != nil {
 		if ctx.Err() != nil {
-			return false, ctx.Err()
+			return false, "", ctx.Err()
 		}
-		// Reservation is persisted before any external launch. An accepted command
-		// belongs to launch recovery and must never be dispatched again.
+		// Reservation is persisted before external launch. Accepted commands belong
+		// to launch recovery; a dispatch error cannot authorize a second execution.
 		accepted, checkErr := w.dispatcher.TaskCommandAccepted(ctx, c.OrganizationID, c.WorkspaceID, c.TaskID, c.ID, "")
 		if checkErr != nil {
-			return false, checkErr
+			return false, "", checkErr
 		}
-		w.logger.Warn("workflow start requires attention", "workspace_id", c.WorkspaceID, "task_id", c.TaskID, "command_id", c.ID, "reason", "dispatch_failed")
-		return accepted, nil
+		reason := "dispatch_failed"
+		if errors.Is(err, taskmodel.ErrIntegrationSession) {
+			reason = "session_incompatible"
+		}
+		w.logger.Warn("workflow start requires attention", "workspace_id", c.WorkspaceID, "task_id", c.TaskID, "command_id", c.ID, "reason", reason)
+		if accepted {
+			return true, "", nil
+		}
+		return false, reason, nil
 	}
-	return true, nil
+	return true, "", nil
 }
 
 // TaskAccess supplies current task state and checks execution authorization.

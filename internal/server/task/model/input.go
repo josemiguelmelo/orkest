@@ -1,5 +1,13 @@
 package model
 
+import (
+	"errors"
+
+	workflowmodel "github.com/josemiguelmelo/orkest/internal/server/workflow/model"
+)
+
+var ErrIntegrationSession = errors.New("integration callback cannot continue this conversation; preserve saved state")
+
 type TaskInput struct {
 	StageVersion    int64    `json:"stageVersion,omitempty"`
 	WorkflowID      string   `json:"workflowId"`
@@ -19,7 +27,10 @@ type TaskInput struct {
 
 // StartCommand is an explicit execution request, separate from the task entity.
 type StartCommand struct {
+	Integration                        *workflowmodel.IntegrationEvent
 	Task                               Task
 	CommandID, SessionMode, PromptText string
 	DeliveryToken                      string
+	ExpectedAssigneeID                 string
+	GuardAssignment                    bool
 }

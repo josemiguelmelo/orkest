@@ -18,6 +18,7 @@ func (d *TaskDispatcher) createTaskSession(ctx context.Context, userID, organiza
 	if err != nil {
 		return orchestrationmodel.RunConfig{}, err
 	}
+	config.AgentDefinitionID = value.AssigneeAgentID
 	config.TaskSessionID, err = ids.NewUUID()
 	if err != nil {
 		return orchestrationmodel.RunConfig{}, err

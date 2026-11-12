@@ -23,12 +23,21 @@ type WorkspaceAccess interface {
 }
 
 type WorkflowConfigurationService struct {
-	repository WorkflowDefinitionRepository
-	access     WorkspaceAccess
+	repository   WorkflowDefinitionRepository
+	access       WorkspaceAccess
+	integrations StageIntegrationValidator
 }
 
-func NewWorkflowConfigurationService(repository WorkflowDefinitionRepository, access WorkspaceAccess) *WorkflowConfigurationService {
-	return &WorkflowConfigurationService{repository: repository, access: access}
+type StageIntegrationValidator interface {
+	ValidateBindings(context.Context, string, workflowmodel.Definition) error
+}
+
+func NewWorkflowConfigurationService(repository WorkflowDefinitionRepository, access WorkspaceAccess, integrations ...StageIntegrationValidator) *WorkflowConfigurationService {
+	s := &WorkflowConfigurationService{repository: repository, access: access}
+	if len(integrations) > 0 {
+		s.integrations = integrations[0]
+	}
+	return s
 }
 
 func (s *WorkflowConfigurationService) List(ctx context.Context, userID, orgID, workspaceID string) ([]workflowmodel.Definition, error) {
@@ -76,6 +85,11 @@ func (s *WorkflowConfigurationService) Save(ctx context.Context, userID, orgID, 
 	}
 	d.ConfiguredBy = userID
 	d.ID = workflowID
+	if s.integrations != nil {
+		if err := s.integrations.ValidateBindings(ctx, workspaceID, d); err != nil {
+			return workflowmodel.Definition{}, err
+		}
+	}
 	return s.repository.Save(ctx, workspaceID, d, PlanConfigurationChange)
 }
 

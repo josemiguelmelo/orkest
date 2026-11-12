@@ -23,11 +23,14 @@ type WorkflowExecutionIntent struct {
 }
 
 type WorkflowExecutionOptions struct {
-	Action       string `json:"action"`
-	CommandID    string `json:"commandId"`
-	StageVersion int64  `json:"stageVersion"`
-	SessionMode  string `json:"sessionMode"`
-	PromptText   string `json:"promptText"`
+	Integration        *workflowmodel.IntegrationEvent `json:"integration,omitempty"`
+	Action             string                          `json:"action"`
+	CommandID          string                          `json:"commandId"`
+	StageVersion       int64                           `json:"stageVersion"`
+	SessionMode        string                          `json:"sessionMode"`
+	PromptText         string                          `json:"promptText"`
+	ExpectedAssigneeID string                          `json:"expectedAssigneeId,omitempty"`
+	GuardAssignment    bool                            `json:"guardAssignment,omitempty"`
 }
 
 func PlanWorkflowPersistence(taskID, runID string, effects TaskWorkflowEffects, cause, correlation, candidateID string) (WorkflowPersistenceEffects, error) {
@@ -48,7 +51,7 @@ func PlanWorkflowPersistence(taskID, runID string, effects TaskWorkflowEffects, 
 			return WorkflowPersistenceEffects{}, modelerrors.ErrInvalid
 		}
 
-		out.Execution = &WorkflowExecutionIntent{ID: id, Options: WorkflowExecutionOptions{Action: "start", CommandID: id, StageVersion: in.StageVersion, SessionMode: in.SessionMode, PromptText: in.PromptText}}
+		out.Execution = &WorkflowExecutionIntent{ID: id, Options: WorkflowExecutionOptions{Action: "start", CommandID: id, StageVersion: in.StageVersion, SessionMode: in.SessionMode, PromptText: in.PromptText, ExpectedAssigneeID: in.ExpectedAssigneeID, GuardAssignment: in.GuardAssignment}}
 		out.WorkState = taskmodel.WorkStateQueued
 	} else if effects.Completed {
 		out.WorkState = taskmodel.WorkStateCompleted

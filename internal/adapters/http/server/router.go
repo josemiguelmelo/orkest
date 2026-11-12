@@ -26,6 +26,7 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/server/taskintegration"
 	"github.com/josemiguelmelo/orkest/internal/server/workflow"
 	"github.com/josemiguelmelo/orkest/internal/server/workflowautomation"
+	"github.com/josemiguelmelo/orkest/internal/server/workflowstageintegration"
 	"github.com/josemiguelmelo/orkest/internal/server/workspace"
 	"github.com/josemiguelmelo/orkest/internal/server/workspaceenv"
 	"github.com/josemiguelmelo/orkest/internal/server/workspacemount"
@@ -33,27 +34,28 @@ import (
 
 // RouterDependencies names the services required by platform routes.
 type RouterDependencies struct {
-	ScheduledJobs    *scheduledjob.ScheduledJobService
-	JobDispatcher    *orchestration.JobDispatcher
-	Users            *identity.UserRegistrationService
-	Organizations    *organization.OrganizationService
-	Workspaces       *workspace.WorkspaceService
-	Agents           *agent.AgentDefinitionUseCase
-	CodeRepositories *coderepository.CodeRepositoryService
-	Tasks            *task.TaskService
-	Integrations     *taskintegration.TaskIntegrationService
-	MCPServers       *mcpserver.MCPServerService
-	SkillCatalog     *skill.CatalogService
-	Launches         *orchestration.LaunchService
-	Profiles         *executionprofile.ExecutionProfileService
-	RuntimeProfiles  *agentruntimeprofile.AgentRuntimeProfileService
-	DirectChats      *orchestration.DirectChatService
-	Workflows        *workflow.WorkflowConfigurationService
-	Automation       *workflowautomation.WorkflowAutomationService
-	Environment      *workspaceenv.WorkspaceEnvironmentService
-	HostMounts       *workspacemount.WorkspaceMountService
-	Artifacts        *artifact.ArtifactService
-	AgentTools       *appmcp.AgentTools
+	ScheduledJobs     *scheduledjob.ScheduledJobService
+	JobDispatcher     *orchestration.JobDispatcher
+	Users             *identity.UserRegistrationService
+	Organizations     *organization.OrganizationService
+	Workspaces        *workspace.WorkspaceService
+	Agents            *agent.AgentDefinitionUseCase
+	CodeRepositories  *coderepository.CodeRepositoryService
+	Tasks             *task.TaskService
+	Integrations      *taskintegration.TaskIntegrationService
+	StageIntegrations *workflowstageintegration.WorkflowStageIntegrationService
+	MCPServers        *mcpserver.MCPServerService
+	SkillCatalog      *skill.CatalogService
+	Launches          *orchestration.LaunchService
+	Profiles          *executionprofile.ExecutionProfileService
+	RuntimeProfiles   *agentruntimeprofile.AgentRuntimeProfileService
+	DirectChats       *orchestration.DirectChatService
+	Workflows         *workflow.WorkflowConfigurationService
+	Automation        *workflowautomation.WorkflowAutomationService
+	Environment       *workspaceenv.WorkspaceEnvironmentService
+	HostMounts        *workspacemount.WorkspaceMountService
+	Artifacts         *artifact.ArtifactService
+	AgentTools        *appmcp.AgentTools
 }
 
 // NewRouter validates the served OpenAPI contract before exposing routes.
@@ -104,6 +106,9 @@ func NewRouter(ctx context.Context, deps RouterDependencies) (*chi.Mux, error) {
 	if deps.AgentTools != nil {
 		router.Handle("/mcp/agent-tools", deps.AgentTools.Handler())
 	}
+	if deps.StageIntegrations != nil {
+		router.Post("/callbacks/workflow-stage-integrations/{connectionID}", workflowStageCallbackAPI{ingestor: deps.StageIntegrations}.callback)
+	}
 	router.Group(func(api chi.Router) {
 		api.Use(auth.middleware)
 		api.Route("/api", func(api chi.Router) {
@@ -136,6 +141,9 @@ func NewRouter(ctx context.Context, deps RouterDependencies) (*chi.Mux, error) {
 			directChatAPI{chats: deps.DirectChats, agents: deps.Agents, workspaces: deps.Workspaces}.routes(api)
 			taskIntegrationAPI{service: deps.Integrations}.routes(api)
 			scheduledJobAPI{service: deps.ScheduledJobs, launches: deps.Launches, dispatcher: deps.JobDispatcher}.routes(api)
+			if deps.StageIntegrations != nil {
+				workflowStageIntegrationAPI{service: deps.StageIntegrations}.routes(api)
+			}
 		})
 	})
 	openapi.Enable(router, "Orkest API", OpenAPIContract)

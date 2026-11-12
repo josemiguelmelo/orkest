@@ -139,6 +139,22 @@ func (d *TaskDispatcher) StartTask(ctx context.Context, userID, organizationID s
 	sessions := d.sessions
 	var config orchestrationmodel.RunConfig
 	var continuing bool
+	var expectedSessionID string
+	if command.GuardAssignment {
+		if command.ExpectedAssigneeID == "" || command.ExpectedAssigneeID != value.AssigneeAgentID {
+			return errors.New("integration assignment changed")
+		}
+		current, found, readErr := sessions.CurrentSession(ctx, organizationID, value.WorkspaceID, value.ID)
+		if readErr != nil {
+			return readErr
+		}
+		if found {
+			expectedSessionID = current.TaskSessionID
+			if command.SessionMode != "new" && current.AgentDefinitionID != value.AssigneeAgentID {
+				return taskmodel.ErrIntegrationSession
+			}
+		}
+	}
 	if command.SessionMode != "new" {
 		config, continuing, err = d.continueTaskSession(ctx, userID, organizationID, value, runID)
 		if err != nil {
@@ -150,6 +166,17 @@ func (d *TaskDispatcher) StartTask(ctx context.Context, userID, organizationID s
 		if err != nil {
 			return err
 		}
+	}
+	if command.GuardAssignment {
+		if continuing && config.TaskSessionID != expectedSessionID {
+			return taskmodel.ErrIntegrationSession
+		}
+		config.IntegrationGuard = command.Integration
+		config.IntegrationWorkflowID = value.WorkflowID
+		config.IntegrationActorID = userID
+		config.GuardAssignment = true
+		config.ExpectedAssigneeID = command.ExpectedAssigneeID
+		config.ExpectedSessionID = expectedSessionID
 	}
 	if err = d.refreshOrkestMCPServer(userID, organizationID, value.WorkspaceID, value.ID, &config); err != nil {
 		return err

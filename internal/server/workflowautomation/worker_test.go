@@ -10,6 +10,7 @@ import (
 
 	"github.com/josemiguelmelo/orkest/internal/server/task"
 	taskmodel "github.com/josemiguelmelo/orkest/internal/server/task/model"
+	workflowmodel "github.com/josemiguelmelo/orkest/internal/server/workflow/model"
 	"github.com/josemiguelmelo/orkest/internal/server/workflowautomation"
 	workspacemodel "github.com/josemiguelmelo/orkest/internal/server/workspace/model"
 )
@@ -17,11 +18,12 @@ import (
 type sessionDispatcher struct {
 	received *taskmodel.StartCommand
 	accepted bool
+	startErr error
 }
 
 func (d *sessionDispatcher) StartTask(_ context.Context, _, _ string, value taskmodel.StartCommand) error {
 	d.received = &value
-	return nil
+	return d.startErr
 }
 
 func (d *sessionDispatcher) TaskCommandAccepted(context.Context, string, string, string, string, string) (bool, error) {
@@ -166,5 +168,37 @@ func TestExecutionServiceKeepsAcceptedFailuresVisible(t *testing.T) {
 	repo.healthErr = errors.New("health lookup failed")
 	if _, err := service.ProcessNextCommand(context.Background()); err == nil {
 		t.Fatal("health failure was acknowledged")
+	}
+}
+
+func TestIntegrationDeliveryGuardsAssignmentAndPreservesCallbackContext(t *testing.T) {
+	tasks := testService(&taskRepositoryStub{task: taskmodel.Task{ID: "task", WorkspaceID: "workspace", StageVersion: 2, AssigneeAgentID: "agent"}}, "admin")
+	metadata := &workflowmodel.IntegrationEvent{RuleID: "review", ConnectionID: "github", ConfigurationVersion: 3, ConnectionVersion: 4}
+	command := workflowautomation.ExecutionCommand{ID: "review-command", TaskID: "task", WorkspaceID: "workspace", StageVersion: 2, Options: workflowautomation.StartWorkOptions{SessionMode: workflowmodel.ContinueOrCreateIfAbsent, PromptText: "Address feedback", ExpectedAssigneeID: "old-agent", GuardAssignment: true, Integration: metadata}}
+	repo := &singleExecutionCommandRepository{command: command}
+	dispatcher := &sessionDispatcher{}
+	service := workflowautomation.NewWorkflowExecutionService(repo, tasks, dispatcher, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if _, err := service.ProcessNextCommand(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if dispatcher.received != nil || repo.effects.FailureReason != "assignment_changed" || repo.effects.CommandState != "failed" {
+		t.Fatal("assignment mismatch dispatched", repo.effects)
+	}
+	repo.command.Options.ExpectedAssigneeID = "agent"
+	dispatcher.startErr = taskmodel.ErrIntegrationSession
+	if _, err := service.ProcessNextCommand(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if dispatcher.received == nil || dispatcher.received.Integration != metadata || !dispatcher.received.GuardAssignment || dispatcher.received.PromptText != "Address feedback" || repo.effects.FailureReason != "session_incompatible" || repo.effects.CommandState != "failed" {
+		t.Fatalf("lost callback diagnostics/guards: %+v %+v", dispatcher.received, repo.effects)
+	}
+	// Existing durable acceptance is authoritative even after an ordinary error.
+	dispatcher.accepted = true
+	dispatcher.received = nil
+	if _, err := service.ProcessNextCommand(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if dispatcher.received != nil || repo.effects.CommandState != "delivered" {
+		t.Fatal("accepted callback was dispatched twice")
 	}
 }

@@ -122,13 +122,80 @@ export type WorkflowStage = {
     customPrompt?: string;
     responsibleAgentId: string;
 };
+export type WorkflowStageIntegrationProvider = {
+    provider: string;
+    configSchema: {
+        [key: string]: unknown;
+    };
+    actions: Array<WorkflowStageIntegrationAction>;
+};
+export type WorkflowStageIntegrationAction = {
+    id: string;
+    name: string;
+    parametersSchema: {
+        [key: string]: unknown;
+    };
+};
+export type WorkflowStageIntegration = {
+    id: string;
+    workspaceId: string;
+    provider: string;
+    name: string;
+    enabled: boolean;
+    codingIntegrationId: string;
+    repositoryIds: Array<string>;
+    config: {
+        [key: string]: unknown;
+    };
+    version: number;
+    configuredBy: string;
+    updatedAt: string;
+};
+export type WorkflowStageIntegrationInput = {
+    provider: string;
+    name: string;
+    enabled: boolean;
+    codingIntegrationId: string;
+    repositoryIds: Array<string>;
+    config: {
+        [key: string]: unknown;
+    };
+    /**
+     * Zero on creation; current version required on update.
+     */
+    version: number;
+};
+export type WorkflowStageIngestionReceipt = {
+    duplicate: boolean;
+    ignored: boolean;
+};
+export type WorkflowStageIntegrationStatus = {
+    id: string;
+    taskId: string;
+    ruleId: string;
+    stageVersion: number;
+    actionId: string;
+    state: string;
+    error: string;
+    createdAt: string;
+};
 export type WorkflowAutomationRule = {
     id: string;
     enabled: boolean;
-    event: 'stage_entered' | 'run_succeeded' | 'stage_completed';
+    event: 'stage_entered' | 'run_succeeded' | 'stage_completed' | 'integration_action';
     sourceStageId: string;
-    action: 'move_task' | 'start_work';
+    action: 'move_task' | 'start_work' | 'call_agent';
     targetStageId?: string;
+    integration?: WorkflowIntegrationTrigger;
+    promptText?: string;
+    sessionPolicy?: 'continue_or_create_if_absent' | 'new';
+};
+export type WorkflowIntegrationTrigger = {
+    connectionId: string;
+    actionId: string;
+    parameters: {
+        [key: string]: unknown;
+    };
 };
 export type WorkflowInput = {
     name: string;
@@ -514,6 +581,24 @@ export type CurrentUserWritable = {
     user: User;
     organizations: Array<Organization>;
 };
+export type WorkflowStageIntegrationInputWritable = {
+    provider: string;
+    name: string;
+    enabled: boolean;
+    codingIntegrationId: string;
+    repositoryIds: Array<string>;
+    config: {
+        [key: string]: unknown;
+    };
+    /**
+     * Required on creation; omit to preserve on update.
+     */
+    webhookSecret?: string;
+    /**
+     * Zero on creation; current version required on update.
+     */
+    version: number;
+};
 export type AgentRuntimeProfileInputWritable = {
     name: string;
     runtime: 'opencode' | 'claude-code' | 'codex' | 'github-copilot' | 'kiro';
@@ -625,6 +710,330 @@ export type McpServerInput = {
 };
 export type CodeRepositoryCreate2 = CodeRepositoryCreate;
 export type TaskIntegration2 = TaskIntegrationInputWritable;
+export type ReceiveWorkflowStageCallbackData = {
+    body: {
+        [key: string]: unknown;
+    };
+    path: {
+        connectionID: string;
+    };
+    query?: never;
+    url: '/callbacks/workflow-stage-integrations/{connectionID}';
+};
+export type ReceiveWorkflowStageCallbackErrors = {
+    /**
+     * Request body or role is invalid
+     */
+    400: Error;
+    /**
+     * Missing or invalid credentials
+     */
+    401: Error;
+    /**
+     * Resource is absent or inaccessible
+     */
+    404: Error;
+    /**
+     * Operation conflicts with an existing resource or invariant
+     */
+    409: Error;
+    /**
+     * Callback body too large
+     */
+    413: Error;
+    /**
+     * Callback persistence unavailable
+     */
+    503: Error;
+};
+export type ReceiveWorkflowStageCallbackError = ReceiveWorkflowStageCallbackErrors[keyof ReceiveWorkflowStageCallbackErrors];
+export type ReceiveWorkflowStageCallbackResponses = {
+    /**
+     * Duplicate or authenticated ignored event
+     */
+    200: WorkflowStageIngestionReceipt;
+    /**
+     * Events durably accepted
+     */
+    202: WorkflowStageIngestionReceipt;
+};
+export type ReceiveWorkflowStageCallbackResponse = ReceiveWorkflowStageCallbackResponses[keyof ReceiveWorkflowStageCallbackResponses];
+export type ListWorkflowStageIntegrationProvidersData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/workflow-stage-integration-providers';
+};
+export type ListWorkflowStageIntegrationProvidersErrors = {
+    /**
+     * Missing or invalid credentials
+     */
+    401: Error;
+};
+export type ListWorkflowStageIntegrationProvidersError = ListWorkflowStageIntegrationProvidersErrors[keyof ListWorkflowStageIntegrationProvidersErrors];
+export type ListWorkflowStageIntegrationProvidersResponses = {
+    /**
+     * Provider and action catalog
+     */
+    200: Array<WorkflowStageIntegrationProvider>;
+};
+export type ListWorkflowStageIntegrationProvidersResponse = ListWorkflowStageIntegrationProvidersResponses[keyof ListWorkflowStageIntegrationProvidersResponses];
+export type ListWorkflowStageIntegrationsData = {
+    body?: never;
+    path: {
+        orgID: string;
+        workspaceID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/workflow-stage-integrations';
+};
+export type ListWorkflowStageIntegrationsErrors = {
+    /**
+     * Missing or invalid credentials
+     */
+    401: Error;
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+    /**
+     * Resource is absent or inaccessible
+     */
+    404: Error;
+};
+export type ListWorkflowStageIntegrationsError = ListWorkflowStageIntegrationsErrors[keyof ListWorkflowStageIntegrationsErrors];
+export type ListWorkflowStageIntegrationsResponses = {
+    /**
+     * Workspace stage integration connections
+     */
+    200: Array<WorkflowStageIntegration>;
+};
+export type ListWorkflowStageIntegrationsResponse = ListWorkflowStageIntegrationsResponses[keyof ListWorkflowStageIntegrationsResponses];
+export type CreateWorkflowStageIntegrationData = {
+    body: WorkflowStageIntegrationInputWritable;
+    path: {
+        orgID: string;
+        workspaceID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/workflow-stage-integrations';
+};
+export type CreateWorkflowStageIntegrationErrors = {
+    /**
+     * Request body or role is invalid
+     */
+    400: Error;
+    /**
+     * Missing or invalid credentials
+     */
+    401: Error;
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+    /**
+     * Resource is absent or inaccessible
+     */
+    404: Error;
+    /**
+     * Operation conflicts with an existing resource or invariant
+     */
+    409: Error;
+    /**
+     * Encryption unavailable
+     */
+    503: Error;
+};
+export type CreateWorkflowStageIntegrationError = CreateWorkflowStageIntegrationErrors[keyof CreateWorkflowStageIntegrationErrors];
+export type CreateWorkflowStageIntegrationResponses = {
+    /**
+     * Stage integration created
+     */
+    201: WorkflowStageIntegration;
+};
+export type CreateWorkflowStageIntegrationResponse = CreateWorkflowStageIntegrationResponses[keyof CreateWorkflowStageIntegrationResponses];
+export type DeleteWorkflowStageIntegrationData = {
+    body?: never;
+    path: {
+        orgID: string;
+        workspaceID: string;
+        connectionID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/workflow-stage-integrations/{connectionID}';
+};
+export type DeleteWorkflowStageIntegrationErrors = {
+    /**
+     * Missing or invalid credentials
+     */
+    401: Error;
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+    /**
+     * Resource is absent or inaccessible
+     */
+    404: Error;
+    /**
+     * Operation conflicts with an existing resource or invariant
+     */
+    409: Error;
+};
+export type DeleteWorkflowStageIntegrationError = DeleteWorkflowStageIntegrationErrors[keyof DeleteWorkflowStageIntegrationErrors];
+export type DeleteWorkflowStageIntegrationResponses = {
+    /**
+     * Stage integration deleted
+     */
+    204: void;
+};
+export type DeleteWorkflowStageIntegrationResponse = DeleteWorkflowStageIntegrationResponses[keyof DeleteWorkflowStageIntegrationResponses];
+export type UpdateWorkflowStageIntegrationData = {
+    body: WorkflowStageIntegrationInputWritable;
+    path: {
+        orgID: string;
+        workspaceID: string;
+        connectionID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/workflow-stage-integrations/{connectionID}';
+};
+export type UpdateWorkflowStageIntegrationErrors = {
+    /**
+     * Request body or role is invalid
+     */
+    400: Error;
+    /**
+     * Missing or invalid credentials
+     */
+    401: Error;
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+    /**
+     * Resource is absent or inaccessible
+     */
+    404: Error;
+    /**
+     * Operation conflicts with an existing resource or invariant
+     */
+    409: Error;
+};
+export type UpdateWorkflowStageIntegrationError = UpdateWorkflowStageIntegrationErrors[keyof UpdateWorkflowStageIntegrationErrors];
+export type UpdateWorkflowStageIntegrationResponses = {
+    /**
+     * Stage integration updated
+     */
+    200: WorkflowStageIntegration;
+};
+export type UpdateWorkflowStageIntegrationResponse = UpdateWorkflowStageIntegrationResponses[keyof UpdateWorkflowStageIntegrationResponses];
+export type ValidateWorkflowStageIntegrationData = {
+    body?: never;
+    path: {
+        orgID: string;
+        workspaceID: string;
+        connectionID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/workflow-stage-integrations/{connectionID}/validate';
+};
+export type ValidateWorkflowStageIntegrationErrors = {
+    /**
+     * Request body or role is invalid
+     */
+    400: Error;
+    /**
+     * Missing or invalid credentials
+     */
+    401: Error;
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+    /**
+     * Resource is absent or inaccessible
+     */
+    404: Error;
+};
+export type ValidateWorkflowStageIntegrationError = ValidateWorkflowStageIntegrationErrors[keyof ValidateWorkflowStageIntegrationErrors];
+export type ValidateWorkflowStageIntegrationResponses = {
+    /**
+     * Connection validated
+     */
+    200: {
+        status: string;
+    };
+};
+export type ValidateWorkflowStageIntegrationResponse = ValidateWorkflowStageIntegrationResponses[keyof ValidateWorkflowStageIntegrationResponses];
+export type ListWorkflowStageIntegrationStatusData = {
+    body?: never;
+    path: {
+        orgID: string;
+        workspaceID: string;
+        connectionID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/workflow-stage-integrations/{connectionID}/status';
+};
+export type ListWorkflowStageIntegrationStatusErrors = {
+    /**
+     * Missing or invalid credentials
+     */
+    401: Error;
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+    /**
+     * Resource is absent or inaccessible
+     */
+    404: Error;
+};
+export type ListWorkflowStageIntegrationStatusError = ListWorkflowStageIntegrationStatusErrors[keyof ListWorkflowStageIntegrationStatusErrors];
+export type ListWorkflowStageIntegrationStatusResponses = {
+    /**
+     * Callback and observation diagnostics
+     */
+    200: Array<WorkflowStageIntegrationStatus>;
+};
+export type ListWorkflowStageIntegrationStatusResponse = ListWorkflowStageIntegrationStatusResponses[keyof ListWorkflowStageIntegrationStatusResponses];
+export type RetryWorkflowStageIntegrationEventData = {
+    body?: never;
+    path: {
+        orgID: string;
+        workspaceID: string;
+        eventID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/workflow-stage-integrations/events/{eventID}/retry';
+};
+export type RetryWorkflowStageIntegrationEventErrors = {
+    /**
+     * Missing or invalid credentials
+     */
+    401: Error;
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+    /**
+     * Resource is absent or inaccessible
+     */
+    404: Error;
+    /**
+     * Operation conflicts with an existing resource or invariant
+     */
+    409: Error;
+};
+export type RetryWorkflowStageIntegrationEventError = RetryWorkflowStageIntegrationEventErrors[keyof RetryWorkflowStageIntegrationEventErrors];
+export type RetryWorkflowStageIntegrationEventResponses = {
+    /**
+     * Eligible blocked effect queued for explicit retry
+     */
+    204: void;
+};
+export type RetryWorkflowStageIntegrationEventResponse = RetryWorkflowStageIntegrationEventResponses[keyof RetryWorkflowStageIntegrationEventResponses];
 export type ListRuntimeProvidersData = {
     body?: never;
     path?: never;

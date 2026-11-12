@@ -37,17 +37,23 @@ func (q *Queries) AcknowledgeWorkflowDeliveryClaim(ctx context.Context, arg Ackn
 }
 
 const acknowledgeWorkflowEvent = `-- name: AcknowledgeWorkflowEvent :exec
-UPDATE workflow_events SET processed_at=now(),configuration_version=$2,matched_rule_id=$3 WHERE id=$1
+UPDATE workflow_events SET processed_at=now(),configuration_version=$2,matched_rule_id=$3,processing_error=$4 WHERE id=$1
 `
 
 type AcknowledgeWorkflowEventParams struct {
 	ID                   string      `json:"id"`
 	ConfigurationVersion pgtype.Int8 `json:"configuration_version"`
 	MatchedRuleID        pgtype.Text `json:"matched_rule_id"`
+	ProcessingError      string      `json:"processing_error"`
 }
 
 func (q *Queries) AcknowledgeWorkflowEvent(ctx context.Context, arg AcknowledgeWorkflowEventParams) error {
-	_, err := q.db.Exec(ctx, acknowledgeWorkflowEvent, arg.ID, arg.ConfigurationVersion, arg.MatchedRuleID)
+	_, err := q.db.Exec(ctx, acknowledgeWorkflowEvent,
+		arg.ID,
+		arg.ConfigurationVersion,
+		arg.MatchedRuleID,
+		arg.ProcessingError,
+	)
 	return err
 }
 
@@ -313,8 +319,8 @@ func (q *Queries) ImportedWorkflowTask(ctx context.Context, arg ImportedWorkflow
 }
 
 const insertWorkflowRule = `-- name: InsertWorkflowRule :exec
-INSERT INTO workflow_rules(workspace_id,workflow_id,id,enabled,event_type,source_stage_id,action_type,target_stage_id)
-VALUES($1,$2,$3,$4,$5,$6,$7,NULLIF($8::text,''))
+INSERT INTO workflow_rules(workspace_id,workflow_id,id,enabled,event_type,source_stage_id,action_type,target_stage_id,integration,prompt_text,session_policy)
+VALUES($1,$2,$3,$4,$5,$6,$7,NULLIF($8::text,''),$9,$10,$11)
 `
 
 type InsertWorkflowRuleParams struct {
@@ -326,6 +332,9 @@ type InsertWorkflowRuleParams struct {
 	SourceStageID string `json:"source_stage_id"`
 	ActionType    string `json:"action_type"`
 	TargetStageID string `json:"target_stage_id"`
+	Integration   []byte `json:"integration"`
+	PromptText    string `json:"prompt_text"`
+	SessionPolicy string `json:"session_policy"`
 }
 
 func (q *Queries) InsertWorkflowRule(ctx context.Context, arg InsertWorkflowRuleParams) error {
@@ -338,12 +347,15 @@ func (q *Queries) InsertWorkflowRule(ctx context.Context, arg InsertWorkflowRule
 		arg.SourceStageID,
 		arg.ActionType,
 		arg.TargetStageID,
+		arg.Integration,
+		arg.PromptText,
+		arg.SessionPolicy,
 	)
 	return err
 }
 
 const listWorkflowRules = `-- name: ListWorkflowRules :many
-SELECT workspace_id, workflow_id, id, enabled, event_type, source_stage_id, action_type, target_stage_id FROM workflow_rules WHERE workspace_id=$1 AND workflow_id=$2 ORDER BY id
+SELECT workspace_id, workflow_id, id, enabled, event_type, source_stage_id, action_type, target_stage_id, integration, prompt_text, session_policy, connection_id FROM workflow_rules WHERE workspace_id=$1 AND workflow_id=$2 ORDER BY id
 `
 
 type ListWorkflowRulesParams struct {
@@ -369,6 +381,10 @@ func (q *Queries) ListWorkflowRules(ctx context.Context, arg ListWorkflowRulesPa
 			&i.SourceStageID,
 			&i.ActionType,
 			&i.TargetStageID,
+			&i.Integration,
+			&i.PromptText,
+			&i.SessionPolicy,
+			&i.ConnectionID,
 		); err != nil {
 			return nil, err
 		}
@@ -605,7 +621,7 @@ func (q *Queries) OccupiedWorkflowStages(ctx context.Context, arg OccupiedWorkfl
 }
 
 const pendingWorkflowEvent = `-- name: PendingWorkflowEvent :one
-SELECT id, workspace_id, task_id, stage_version, actor_id, event_type, run_id, causation_id, correlation_id, occurred_at, processed_at, configuration_version, matched_rule_id FROM workflow_events WHERE processed_at IS NULL ORDER BY occurred_at,id LIMIT 1 FOR UPDATE SKIP LOCKED
+SELECT id, workspace_id, task_id, stage_version, actor_id, event_type, run_id, causation_id, correlation_id, occurred_at, processed_at, configuration_version, matched_rule_id, integration, processing_error FROM workflow_events WHERE processed_at IS NULL ORDER BY occurred_at,id LIMIT 1 FOR UPDATE SKIP LOCKED
 `
 
 func (q *Queries) PendingWorkflowEvent(ctx context.Context) (WorkflowEvent, error) {
@@ -625,6 +641,8 @@ func (q *Queries) PendingWorkflowEvent(ctx context.Context) (WorkflowEvent, erro
 		&i.ProcessedAt,
 		&i.ConfigurationVersion,
 		&i.MatchedRuleID,
+		&i.Integration,
+		&i.ProcessingError,
 	)
 	return i, err
 }
@@ -910,4 +928,15 @@ func (q *Queries) WorkflowHasReferences(ctx context.Context, arg WorkflowHasRefe
 	var column_1 pgtype.Bool
 	err := row.Scan(&column_1)
 	return column_1, err
+}
+
+const workflowWorkspaceOrganization = `-- name: WorkflowWorkspaceOrganization :one
+SELECT organization_id FROM workspaces WHERE id=$1
+`
+
+func (q *Queries) WorkflowWorkspaceOrganization(ctx context.Context, id string) (string, error) {
+	row := q.db.QueryRow(ctx, workflowWorkspaceOrganization, id)
+	var organization_id string
+	err := row.Scan(&organization_id)
+	return organization_id, err
 }

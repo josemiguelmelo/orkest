@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 
 	"github.com/jackc/pgx/v5"
@@ -41,6 +42,32 @@ func (r *AutomationEventPostgresRepository) WithAutomationEvent(ctx context.Cont
 	if err != nil {
 		return false, err
 	}
+	var integration *workflowmodel.IntegrationEvent
+	integrationAuthorized := false
+	integrationConfigurationValid := false
+	if e.EventType == string(workflowmodel.IntegrationAction) {
+		if err = json.Unmarshal(e.Integration, &integration); err != nil {
+			return false, err
+		}
+		if integration != nil {
+			connection, connErr := q.LockWorkflowStageIntegration(ctx, integration.ConnectionID)
+			if connErr != nil && !errors.Is(connErr, pgx.ErrNoRows) {
+				return false, connErr
+			}
+			if connErr == nil && connection.WorkspaceID == e.WorkspaceID && connection.Enabled && connection.Version == integration.ConnectionVersion {
+				integrationConfigurationValid = true
+				organizationID, scopeErr := q.WorkflowWorkspaceOrganization(ctx, e.WorkspaceID)
+				if scopeErr != nil {
+					return false, scopeErr
+				}
+				workspace, accessErr := q.GetWorkspace(ctx, sqlc.GetWorkspaceParams{OrganizationID: organizationID, ID: e.WorkspaceID, UserID: e.ActorID})
+				if accessErr != nil && !errors.Is(accessErr, pgx.ErrNoRows) {
+					return false, accessErr
+				}
+				integrationAuthorized = accessErr == nil && (workspace.Role == "owner" || workspace.Role == "admin")
+			}
+		}
+	}
 	state, err := q.LockWorkflowTask(ctx, sqlc.LockWorkflowTaskParams{WorkspaceID: e.WorkspaceID, ID: e.TaskID})
 	if err != nil {
 		return false, err
@@ -52,8 +79,8 @@ func (r *AutomationEventPostgresRepository) WithAutomationEvent(ctx context.Cont
 		return false, err
 	}
 	decision, err := decide(workflowautomation.AutomationEventSnapshot{
-		Workflow: d, Event: workflowautomation.AutomationEvent{ID: e.ID, CorrelationID: e.CorrelationID, WorkspaceID: e.WorkspaceID, TaskID: e.TaskID, Type: workflowmodel.EventType(e.EventType), StageVersion: e.StageVersion, RunID: e.RunID, ActorID: e.ActorID},
-		StageID: state.Status, AssigneeAgentID: state.Assignee, RunID: state.WorkflowRunID, StageVersion: state.StageVersion, WorkState: taskmodel.WorkState(state.StageWorkState), ActiveLaunch: active,
+		Workflow: d, Event: workflowautomation.AutomationEvent{ID: e.ID, CorrelationID: e.CorrelationID, WorkspaceID: e.WorkspaceID, TaskID: e.TaskID, Type: workflowmodel.EventType(e.EventType), StageVersion: e.StageVersion, RunID: e.RunID, ActorID: e.ActorID, Integration: integration},
+		StageID: state.Status, AssigneeAgentID: state.Assignee, RunID: state.WorkflowRunID, StageVersion: state.StageVersion, WorkState: taskmodel.WorkState(state.StageWorkState), ActiveLaunch: active, IntegrationAuthorized: integrationAuthorized, IntegrationConfigurationValid: integrationConfigurationValid,
 	})
 	if err != nil {
 		return false, err
@@ -73,7 +100,7 @@ func (r *AutomationEventPostgresRepository) WithAutomationEvent(ctx context.Cont
 			return false, err
 		}
 	}
-	if err = q.AcknowledgeWorkflowEvent(ctx, sqlc.AcknowledgeWorkflowEventParams{ID: decision.AcknowledgeID, ConfigurationVersion: pgtype.Int8{Int64: decision.ConfigurationVersion, Valid: true}, MatchedRuleID: pgtype.Text{String: decision.RuleID, Valid: decision.RuleID != ""}}); err != nil {
+	if err = q.AcknowledgeWorkflowEvent(ctx, sqlc.AcknowledgeWorkflowEventParams{ID: decision.AcknowledgeID, ConfigurationVersion: pgtype.Int8{Int64: decision.ConfigurationVersion, Valid: true}, MatchedRuleID: pgtype.Text{String: decision.RuleID, Valid: decision.RuleID != ""}, ProcessingError: decision.FailureReason}); err != nil {
 		return false, err
 	}
 	return true, tx.Commit(ctx)

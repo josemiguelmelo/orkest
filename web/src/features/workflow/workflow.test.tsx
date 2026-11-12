@@ -11,6 +11,8 @@ const api = vi.hoisted(() => ({
   deleteWorkspaceWorkflow: vi.fn(),
   saveWorkspaceWorkflow: vi.fn(),
   listAgents: vi.fn(),
+  listWorkflowStageIntegrations: vi.fn(),
+  listWorkflowStageIntegrationProviders: vi.fn(),
 }));
 vi.mock('../../shared/api/generated/sdk.gen', () => api);
 import { WorkflowPage } from './workflow';
@@ -40,6 +42,8 @@ afterEach(() => vi.clearAllMocks());
 function setup(role: 'admin' | 'viewer') {
   api.listWorkspaceWorkflows.mockResolvedValue({ data: [definition] });
   api.listAgents.mockResolvedValue({ data: [] });
+  api.listWorkflowStageIntegrations.mockResolvedValue({ data: [] });
+  api.listWorkflowStageIntegrationProviders.mockResolvedValue({ data: [] });
   api.saveWorkspaceWorkflow.mockResolvedValue({ data: { ...definition, version: 4 } });
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(

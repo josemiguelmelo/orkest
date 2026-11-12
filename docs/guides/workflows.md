@@ -69,3 +69,11 @@ conversations, and review revisions. Ordinary chat does not repeat these instruc
 Changes apply to subsequent starts. Reserved runs retain their composed prompt in
 the durable outbox; recovery reconciles that original command without injecting
 updated instructions or changing the session's pinned runtime/model configuration.
+
+## External stage triggers
+
+Workspace administrators can bind provider actions to stages. GitHub PR reviews
+and merges can move the same task to a configured nonclosed stage or call its
+assigned agent with a custom prompt. Verified named artifact inputs identify which
+PRs belong to that task and stage entry. See [workflow stage integrations](workflow-stage-integrations.md)
+for configuration, session policies, blocked effects and recovery.
