@@ -43,6 +43,16 @@ func (s *LaunchCompletionService) AgentctlRunning(ctx context.Context, launch or
 // HandleEvent durably records terminal intent before stopping the process, so a
 // platform restart can finish cleanup if Docker shutdown was interrupted.
 func (s *LaunchCompletionService) HandleEvent(ctx context.Context, launch orchestrationmodel.Launch, event orchestrationmodel.Event) error {
+	jobOwned := false
+	if owner, ok := s.repo.(interface {
+		IsJobRun(context.Context, string) (bool, error)
+	}); ok && (event.Payload.Type == orchestrationmodel.EventPromptCompleted || event.Payload.Type == orchestrationmodel.EventPromptFailed) {
+		var err error
+		jobOwned, err = owner.IsJobRun(ctx, launch.RunID)
+		if err != nil {
+			return err
+		}
+	}
 	var pendingStatus orchestrationmodel.LaunchStatus
 	switch event.Payload.Type {
 	case orchestrationmodel.EventRunFailed:
@@ -50,12 +60,12 @@ func (s *LaunchCompletionService) HandleEvent(ctx context.Context, launch orches
 	case orchestrationmodel.EventRunCompleted:
 		pendingStatus = orchestrationmodel.LaunchCompletedPendingClose
 	case orchestrationmodel.EventPromptCompleted:
-		if event.Payload.TaskSessionID != "" {
+		if event.Payload.TaskSessionID != "" && !jobOwned {
 			return s.repo.SaveEvent(ctx, event)
 		}
 		pendingStatus = orchestrationmodel.LaunchCompletedPendingClose
 	case orchestrationmodel.EventPromptFailed:
-		if event.Payload.TaskSessionID != "" {
+		if event.Payload.TaskSessionID != "" && !jobOwned {
 			return s.repo.SaveEvent(ctx, event)
 		}
 		pendingStatus = orchestrationmodel.LaunchFailedPendingClose

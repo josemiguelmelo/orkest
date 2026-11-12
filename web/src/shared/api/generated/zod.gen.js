@@ -468,6 +468,55 @@ export const zError = z.object({
 export const zOperationStatus = z.object({
     status: z.string()
 });
+export const zJobSchedule = z.object({
+    frequency: z.enum([
+        'daily',
+        'weekly',
+        'cron'
+    ]),
+    timeZone: z.string(),
+    cronExpression: z.string().max(128).optional(),
+    hour: z.int().gte(0).lte(23),
+    minute: z.int().gte(0).lte(59),
+    weekday: z.int().gte(0).lte(6)
+});
+export const zScheduledJobInput = z.object({
+    name: z.string(),
+    instructions: z.string(),
+    agentId: z.string(),
+    repositoryScope: z.enum([
+        'none',
+        'selected',
+        'all'
+    ]),
+    repositoryIds: z.array(z.string()),
+    schedule: zJobSchedule,
+    enabled: z.boolean(),
+    maxDurationMinutes: z.int().gte(1).lte(1440)
+});
+export const zScheduledJob = zScheduledJobInput.and(z.object({
+    id: z.string(),
+    workspaceId: z.string(),
+    revision: z.int(),
+    authorizedBy: z.string(),
+    nextDueAt: z.iso.datetime(),
+    createdAt: z.iso.datetime()
+}));
+export const zScheduledJobRun = z.object({
+    id: z.string(),
+    jobId: z.string(),
+    workspaceId: z.string(),
+    revision: z.int(),
+    input: zScheduledJobInput,
+    repositoryIds: z.array(z.string()),
+    scheduledFor: z.iso.datetime(),
+    state: z.string(),
+    reason: z.string(),
+    runId: z.string(),
+    commandId: z.string(),
+    createdAt: z.iso.datetime(),
+    cancelRequested: z.boolean()
+});
 export const zCurrentUserWritable = z.object({
     user: zUser,
     organizations: z.array(zOrganization)
@@ -1511,4 +1560,135 @@ export const zRespondDirectAgentConversationQuestionPath = z.object({
     conversationID: z.string(),
     runID: z.string(),
     questionID: z.string()
+});
+export const zListScheduledJobsPath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string()
+});
+/**
+ * Success
+ */
+export const zListScheduledJobsResponse = z.array(zScheduledJob);
+export const zCreateScheduledJobBody = z.object({
+    commandId: z.string(),
+    revision: z.int(),
+    input: zScheduledJobInput
+});
+export const zCreateScheduledJobPath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string()
+});
+/**
+ * Success
+ */
+export const zCreateScheduledJobResponse = zScheduledJob;
+export const zPreviewJobScheduleBody = zJobSchedule;
+export const zPreviewJobSchedulePath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string()
+});
+/**
+ * Success
+ */
+export const zPreviewJobScheduleResponse = z.array(z.iso.datetime());
+export const zGetScheduledJobPath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string(),
+    jobID: z.string()
+});
+/**
+ * Success
+ */
+export const zGetScheduledJobResponse = zScheduledJob;
+export const zUpdateScheduledJobBody = z.object({
+    revision: z.int(),
+    input: zScheduledJobInput
+});
+export const zUpdateScheduledJobPath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string(),
+    jobID: z.string()
+});
+/**
+ * Success
+ */
+export const zUpdateScheduledJobResponse = zScheduledJob;
+export const zListScheduledJobRunsPath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string(),
+    jobID: z.string()
+});
+export const zListScheduledJobRunsQuery = z.object({
+    offset: z.int().gte(0).lte(1000000).optional(),
+    limit: z.int().gte(1).lte(100).optional()
+});
+/**
+ * Success
+ */
+export const zListScheduledJobRunsResponse = z.array(zScheduledJobRun);
+export const zRunScheduledJobBody = z.object({
+    commandId: z.string()
+});
+export const zRunScheduledJobPath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string(),
+    jobID: z.string()
+});
+/**
+ * Success
+ */
+export const zRunScheduledJobResponse = zScheduledJobRun;
+export const zGetScheduledJobRunPath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string(),
+    jobID: z.string(),
+    occurrenceID: z.string()
+});
+/**
+ * Success
+ */
+export const zGetScheduledJobRunResponse = zScheduledJobRun;
+export const zListScheduledJobRunEventsPath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string(),
+    jobID: z.string(),
+    occurrenceID: z.string()
+});
+export const zListScheduledJobRunEventsQuery = z.object({
+    afterSequence: z.int().gte(0).optional()
+});
+/**
+ * Success
+ */
+export const zListScheduledJobRunEventsResponse = z.array(zTaskRunEvent);
+export const zCancelScheduledJobRunPath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string(),
+    jobID: z.string(),
+    occurrenceID: z.string()
+});
+export const zRespondScheduledJobPermissionBody = z.object({
+    requestId: z.string(),
+    sessionId: z.string(),
+    optionId: z.string()
+});
+export const zRespondScheduledJobPermissionPath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string(),
+    jobID: z.string(),
+    occurrenceID: z.string()
+});
+export const zRespondScheduledJobQuestionBody = zQuestionResponseRequest;
+export const zRespondScheduledJobQuestionPath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string(),
+    jobID: z.string(),
+    occurrenceID: z.string(),
+    questionID: z.string()
+});
+/**
+ * Success
+ */
+export const zRespondScheduledJobQuestionResponse = z.object({
+    status: z.string()
 });

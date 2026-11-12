@@ -3,7 +3,10 @@ package postgres
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+
+	"github.com/jackc/pgx/v5"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -109,8 +112,21 @@ func (r *AgentLaunchPostgresRepository) SetLaunchStatus(ctx context.Context, eff
 	if count == 0 {
 		return tx.Commit(ctx)
 	}
+	jobOwned, err := q.IsScheduledJobRun(ctx, runID)
+	if err != nil {
+		return err
+	}
+	if jobOwned {
+		if _, err = q.FinishScheduledJobLaunch(ctx, sqlc.FinishScheduledJobLaunchParams{RunID: runID, Status: string(status)}); err != nil {
+			return err
+		}
+		return tx.Commit(ctx)
+	}
 	if effects.Outcome != nil {
 		run, err := q.RunWorkflowEntry(ctx, runID)
+		if errors.Is(err, pgx.ErrNoRows) {
+			return tx.Commit(ctx)
+		}
 		if err != nil {
 			return err
 		}

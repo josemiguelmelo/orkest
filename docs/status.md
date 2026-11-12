@@ -9,6 +9,7 @@ defines intended scope.
 | --- | --- | --- |
 | Identity, memberships, workspace isolation | Implemented | Unit, PostgreSQL, and browser suites; backend remains authoritative |
 | Task CRUD, workflow rules, artifacts | Implemented | Deterministic and PostgreSQL suites; live multi-stage agents need credentials |
+| Workflow-independent scheduled jobs | Implemented | Daily/weekly/crontab calendars, timezone-aware upcoming-run preview, isolated occurrences, fenced delivery, workspace quota, scoped UI/API and durable activity; live model/email/PR effects require separate qualification |
 | Direct conversations and durable sessions | Implemented | Queue, replay, reservation, outbox and ownership coverage; credential-dependent worker restart requires fresh Git credentials before restore |
 | Structured user questions | Shared ACP forms for OpenCode/Codex/Claude; private MCP fallback for new Copilot/Kiro sessions | Deterministic schema, journal, HTTP/MCP, UI, and restore/follow-up coverage; live question/timeout/container qualification remains unavailable without explicit binaries/models/credentials; [details](development/user-questions.md) |
 | Go architecture and delivery separation | Implemented | Parsed dependency boundaries, independent wire/domain models, legacy continuation fixtures, PostgreSQL claim/fencing/concurrency tests; dated results and live limits recorded below |

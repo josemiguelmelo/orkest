@@ -35,6 +35,8 @@ tags:
     description: Workspace-scoped external task source integrations.
   - name: Tasks
     description: Workspace-scoped tasks, comments, and repository associations.
+  - name: ScheduledJobs
+    description: Repeatable agent jobs independent of task workflows.
 paths:
   /api/runtime-providers:
     get:
@@ -1630,6 +1632,500 @@ paths:
         "401": {$ref: "#/components/responses/Unauthorized"}
         "403": {$ref: "#/components/responses/Forbidden"}
         "409": {$ref: "#/components/responses/Conflict"}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/scheduled-jobs:
+    parameters:
+      - name: orgID
+        in: path
+        required: true
+        schema: &a1
+          type: string
+      - name: workspaceID
+        in: path
+        required: true
+        schema: *a1
+    get:
+      tags:
+        - ScheduledJobs
+      operationId: listScheduledJobs
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ScheduledJob"
+        "400":
+          description: Invalid input
+        "403":
+          description: Forbidden
+        "404":
+          description: Unavailable resource
+        "409":
+          description: Revision or execution conflict
+    post:
+      tags:
+        - ScheduledJobs
+      operationId: createScheduledJob
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - commandId
+                - revision
+                - input
+              properties:
+                commandId: *a1
+                revision: &a2
+                  type: integer
+                input:
+                  $ref: "#/components/schemas/ScheduledJobInput"
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduledJob"
+        "400":
+          description: Invalid input
+        "403":
+          description: Forbidden
+        "404":
+          description: Unavailable resource
+        "409":
+          description: Revision or execution conflict
+  /api/organizations/{orgID}/workspaces/{workspaceID}/scheduled-jobs/preview:
+    parameters:
+      - name: orgID
+        in: path
+        required: true
+        schema: *a1
+      - name: workspaceID
+        in: path
+        required: true
+        schema: *a1
+    post:
+      tags:
+        - ScheduledJobs
+      operationId: previewJobSchedule
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/JobSchedule"
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+                  format: date-time
+        "400":
+          description: Invalid input
+        "403":
+          description: Forbidden
+        "404":
+          description: Unavailable resource
+        "409":
+          description: Revision or execution conflict
+  /api/organizations/{orgID}/workspaces/{workspaceID}/scheduled-jobs/{jobID}:
+    parameters:
+      - name: orgID
+        in: path
+        required: true
+        schema: *a1
+      - name: workspaceID
+        in: path
+        required: true
+        schema: *a1
+      - name: jobID
+        in: path
+        required: true
+        schema: *a1
+    get:
+      tags:
+        - ScheduledJobs
+      operationId: getScheduledJob
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduledJob"
+        "400":
+          description: Invalid input
+        "403":
+          description: Forbidden
+        "404":
+          description: Unavailable resource
+        "409":
+          description: Revision or execution conflict
+    put:
+      tags:
+        - ScheduledJobs
+      operationId: updateScheduledJob
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - revision
+                - input
+              properties:
+                revision: *a2
+                input:
+                  $ref: "#/components/schemas/ScheduledJobInput"
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduledJob"
+        "400":
+          description: Invalid input
+        "403":
+          description: Forbidden
+        "404":
+          description: Unavailable resource
+        "409":
+          description: Revision or execution conflict
+  /api/organizations/{orgID}/workspaces/{workspaceID}/scheduled-jobs/{jobID}/runs:
+    parameters:
+      - name: orgID
+        in: path
+        required: true
+        schema: *a1
+      - name: workspaceID
+        in: path
+        required: true
+        schema: *a1
+      - name: jobID
+        in: path
+        required: true
+        schema: *a1
+    get:
+      tags:
+        - ScheduledJobs
+      operationId: listScheduledJobRuns
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/ScheduledJobRun"
+        "400":
+          description: Invalid input
+        "403":
+          description: Forbidden
+        "404":
+          description: Unavailable resource
+        "409":
+          description: Revision or execution conflict
+      parameters:
+        - name: offset
+          in: query
+          schema: {type: integer, minimum: 0, maximum: 1000000}
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+    post:
+      tags:
+        - ScheduledJobs
+      operationId: runScheduledJob
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - commandId
+              properties:
+                commandId: *a1
+      responses:
+        "202":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduledJobRun"
+        "400":
+          description: Invalid input
+        "403":
+          description: Forbidden
+        "404":
+          description: Unavailable resource
+        "409":
+          description: Revision or execution conflict
+  /api/organizations/{orgID}/workspaces/{workspaceID}/scheduled-jobs/{jobID}/runs/{occurrenceID}:
+    parameters:
+      - name: orgID
+        in: path
+        required: true
+        schema: *a1
+      - name: workspaceID
+        in: path
+        required: true
+        schema: *a1
+      - name: jobID
+        in: path
+        required: true
+        schema: *a1
+      - name: occurrenceID
+        in: path
+        required: true
+        schema: *a1
+    get:
+      tags:
+        - ScheduledJobs
+      operationId: getScheduledJobRun
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ScheduledJobRun"
+        "400":
+          description: Invalid input
+        "403":
+          description: Forbidden
+        "404":
+          description: Unavailable resource
+        "409":
+          description: Revision or execution conflict
+  /api/organizations/{orgID}/workspaces/{workspaceID}/scheduled-jobs/{jobID}/runs/{occurrenceID}/events:
+    parameters:
+      - name: orgID
+        in: path
+        required: true
+        schema: *a1
+      - name: workspaceID
+        in: path
+        required: true
+        schema: *a1
+      - name: jobID
+        in: path
+        required: true
+        schema: *a1
+      - name: occurrenceID
+        in: path
+        required: true
+        schema: *a1
+    get:
+      tags:
+        - ScheduledJobs
+      operationId: listScheduledJobRunEvents
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/TaskRunEvent"
+        "400":
+          description: Invalid input
+        "403":
+          description: Forbidden
+        "404":
+          description: Unavailable resource
+        "409":
+          description: Revision or execution conflict
+      parameters:
+        - name: afterSequence
+          in: query
+          schema:
+            type: integer
+            minimum: 0
+  /api/organizations/{orgID}/workspaces/{workspaceID}/scheduled-jobs/{jobID}/runs/{occurrenceID}/cancel:
+    parameters:
+      - name: orgID
+        in: path
+        required: true
+        schema: *a1
+      - name: workspaceID
+        in: path
+        required: true
+        schema: *a1
+      - name: jobID
+        in: path
+        required: true
+        schema: *a1
+      - name: occurrenceID
+        in: path
+        required: true
+        schema: *a1
+    post:
+      tags:
+        - ScheduledJobs
+      operationId: cancelScheduledJobRun
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      responses:
+        "202":
+          description: Success
+        "400":
+          description: Invalid input
+        "403":
+          description: Forbidden
+        "404":
+          description: Unavailable resource
+        "409":
+          description: Revision or execution conflict
+  /api/organizations/{orgID}/workspaces/{workspaceID}/scheduled-jobs/{jobID}/runs/{occurrenceID}/permissions/respond:
+    parameters:
+      - name: orgID
+        in: path
+        required: true
+        schema: *a1
+      - name: workspaceID
+        in: path
+        required: true
+        schema: *a1
+      - name: jobID
+        in: path
+        required: true
+        schema: *a1
+      - name: occurrenceID
+        in: path
+        required: true
+        schema: *a1
+    post:
+      tags:
+        - ScheduledJobs
+      operationId: respondScheduledJobPermission
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - requestId
+                - sessionId
+                - optionId
+              properties:
+                requestId: *a1
+                sessionId: *a1
+                optionId: *a1
+      responses:
+        "202":
+          description: Success
+        "400":
+          description: Invalid input
+        "403":
+          description: Forbidden
+        "404":
+          description: Unavailable resource
+        "409":
+          description: Revision or execution conflict
+  /api/organizations/{orgID}/workspaces/{workspaceID}/scheduled-jobs/{jobID}/runs/{occurrenceID}/questions/{questionID}/respond:
+    parameters:
+      - name: orgID
+        in: path
+        required: true
+        schema: *a1
+      - name: workspaceID
+        in: path
+        required: true
+        schema: *a1
+      - name: jobID
+        in: path
+        required: true
+        schema: *a1
+      - name: occurrenceID
+        in: path
+        required: true
+        schema: *a1
+      - name: questionID
+        in: path
+        required: true
+        schema: *a1
+    post:
+      tags:
+        - ScheduledJobs
+      operationId: respondScheduledJobQuestion
+      security:
+        - bearerAuth: []
+        - cookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuestionResponseRequest"
+      responses:
+        "200":
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - status
+                properties:
+                  status: *a1
+        "400":
+          description: Invalid input
+        "403":
+          description: Forbidden
+        "404":
+          description: Unavailable resource
+        "409":
+          description: Revision or execution conflict
+
 components:
   requestBodies:
     NamedResource:
@@ -2241,6 +2737,134 @@ components:
       properties:
         status:
           type: string
+    JobSchedule:
+      type: object
+      required:
+        - frequency
+        - timeZone
+        - hour
+        - minute
+        - weekday
+      properties:
+        frequency:
+          type: string
+          enum:
+            - daily
+            - weekly
+            - cron
+          description: Daily, weekly, or standard five-field crontab schedule.
+        timeZone: &a1
+          type: string
+        cronExpression:
+          type: string
+          maxLength: 128
+          description: Required for cron frequency; standard five-field expression interpreted in timeZone.
+        hour:
+          type: integer
+          minimum: 0
+          maximum: 23
+        minute:
+          type: integer
+          minimum: 0
+          maximum: 59
+        weekday:
+          type: integer
+          minimum: 0
+          maximum: 6
+    ScheduledJobInput:
+      type: object
+      required:
+        - name
+        - instructions
+        - agentId
+        - repositoryScope
+        - repositoryIds
+        - schedule
+        - enabled
+        - maxDurationMinutes
+      properties:
+        name: *a1
+        instructions: *a1
+        agentId: *a1
+        repositoryScope:
+          type: string
+          enum:
+            - none
+            - selected
+            - all
+        repositoryIds:
+          type: array
+          items: *a1
+        schedule:
+          $ref: "#/components/schemas/JobSchedule"
+        enabled:
+          type: boolean
+        maxDurationMinutes:
+          type: integer
+          minimum: 1
+          maximum: 1440
+    ScheduledJob:
+      allOf:
+        - $ref: "#/components/schemas/ScheduledJobInput"
+        - type: object
+          required:
+            - id
+            - workspaceId
+            - revision
+            - authorizedBy
+            - nextDueAt
+            - createdAt
+          properties:
+            id: *a1
+            workspaceId: *a1
+            revision: &a2
+              type: integer
+            authorizedBy: *a1
+            nextDueAt:
+              type: string
+              format: date-time
+            createdAt:
+              type: string
+              format: date-time
+    ScheduledJobRun:
+      type: object
+      required:
+        - id
+        - jobId
+        - workspaceId
+        - revision
+        - input
+        - repositoryIds
+        - scheduledFor
+        - state
+        - reason
+        - runId
+        - commandId
+        - createdAt
+        - cancelRequested
+      properties:
+        id: *a1
+        jobId: *a1
+        workspaceId: *a1
+        revision: *a2
+        input:
+          $ref: "#/components/schemas/ScheduledJobInput"
+        repositoryIds:
+          type: array
+          items: *a1
+        scheduledFor:
+          type: string
+          format: date-time
+        state: *a1
+        reason: *a1
+        runId: *a1
+        commandId: *a1
+        createdAt:
+          type: string
+          format: date-time
+        cancelRequested:
+          type: boolean
+
   securitySchemes:
     bearerAuth:
       type: http

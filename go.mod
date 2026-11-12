@@ -18,6 +18,7 @@ require (
 	github.com/moby/moby/api v1.56.1
 	github.com/moby/moby/client v0.6.2
 	github.com/pressly/goose/v3 v3.29.0
+	github.com/robfig/cron/v3 v3.0.1
 	github.com/swaggest/swgui v1.8.9
 	gitlab.com/gitlab-org/api/client-go/v3 v3.44.0
 	go.yaml.in/yaml/v4 v4.0.0-rc.2

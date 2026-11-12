@@ -174,6 +174,7 @@ func TestPostgresRepositories(t *testing.T) {
 	if err = codeRepositoryRepository.DeleteCodeRepository(ctx, org.ID, workspaceID, codeRepositoryID); !errors.Is(err, modelerrors.ErrConflict) {
 		t.Fatalf("expected task-referenced repository deletion conflict, got %v", err)
 	}
+	t.Run("scheduled jobs", func(t *testing.T) { testScheduledJobs(t, database, org.ID, owner.ID, worker.ID, member.ID) })
 	t.Run("bounded task listing", func(t *testing.T) { testTaskListingUsesBoundedScopedQueries(t, database, org.ID, workspaceID, taskID) })
 	t.Run("workflow delivery claims", func(t *testing.T) { testWorkflowDeliveryClaims(t, database, org.ID, workspaceID, owner.ID, worker.ID) })
 	t.Run("workspace workflow transitions", func(t *testing.T) { testWorkspaceWorkflow(t, database, org.ID, owner.ID, worker.ID) })

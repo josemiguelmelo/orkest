@@ -202,6 +202,28 @@ See [workflow behavior](guides/workflows.md) and [transactions](development/work
 - Companion files are deferred. Future support must preserve the primary Markdown
   field's meaning. See [native installation](reference/runtimes/README.md).
 
+### 3.11 Scheduled jobs
+
+Confirmed feature scope:
+
+- A scheduled job is repeatable agent work independent of workflow tasks and stages.
+- Instructions, agent definition, selected resources and calendar determine each invocation.
+- Enabling explicitly authorizes future invocations; assignment alone still does not start board tasks.
+- Each occurrence has an independent durable session/run, activity, approvals and result.
+- Jobs may review repositories, update documentation/open merge requests, or use
+  existing external tools such as an authorized email connector.
+- Workspace scope and existing viewer restrictions apply to definitions, runs and interactions.
+
+Initial implementation choices: daily/weekly calendars plus standard five-field
+crontab expressions in an IANA time zone; explicit/all/absent registered
+repositories; one-hour lateness/capacity grace; no overlap per job; and one active
+scheduled execution per workspace. Cron accepts minute, hour, day-of-month, month,
+and weekday fields with lists, ranges, steps, month/day names, and Sunday as 0 or 7.
+Agent definitions do not represent member slots. Approval waits and uncertain
+ownership retain job capacity. Future occurrences use fresh configuration;
+accepted runs retain compatible snapshots.
+These choices are documented in [scheduled jobs](development/scheduled-jobs.md).
+
 ## 4. Execution and communication
 
 The platform launches independent agentctl workers. Workers own runtime processes

@@ -141,7 +141,11 @@ func (d *TaskDispatcher) resolveWorkspaceGitCredentials(ctx context.Context, use
 }
 
 func (d *TaskDispatcher) freshConfiguration(ctx context.Context, userID, organizationID string, value taskmodel.Task) (orchestrationmodel.RunConfig, agentmodel.Agent, error) {
-	definition, err := d.agents.Get(ctx, userID, organizationID, value.WorkspaceID, value.AssigneeAgentID)
+	return d.freshAgentConfiguration(ctx, userID, organizationID, value.WorkspaceID, value.ID, value.AssigneeAgentID)
+}
+
+func (d *TaskDispatcher) freshAgentConfiguration(ctx context.Context, userID, organizationID, workspaceID, executionID, agentID string) (orchestrationmodel.RunConfig, agentmodel.Agent, error) {
+	definition, err := d.agents.Get(ctx, userID, organizationID, workspaceID, agentID)
 	if err != nil {
 		return orchestrationmodel.RunConfig{}, agentmodel.Agent{}, fmt.Errorf("get assigned agent: %w", err)
 	}
@@ -155,8 +159,8 @@ func (d *TaskDispatcher) freshConfiguration(ctx context.Context, userID, organiz
 	config := orchestrationmodel.RunConfig{
 		RuntimeConfig: orchestrationmodel.RuntimeConfig{
 			OrganizationID: organizationID,
-			WorkspaceID:    value.WorkspaceID,
-			TaskID:         value.ID,
+			WorkspaceID:    workspaceID,
+			TaskID:         executionID,
 
 			Runtime: definition.Runtime,
 			Agent: orchestrationmodel.AgentDefinition{

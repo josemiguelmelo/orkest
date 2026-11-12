@@ -279,6 +279,7 @@ function ShellContent({ session }: { session: CurrentUser }) {
                   </Link>
                 </div>
               )}
+              <Link className="nav-link" to="/organizations/$orgId/workspaces/$workspaceId/scheduled-jobs" params={workspaceParams}><Workflow size={17} />Scheduled jobs</Link>
               <Link
                 className="nav-link"
                 to="/organizations/$orgId/workspaces/$workspaceId/agents"
