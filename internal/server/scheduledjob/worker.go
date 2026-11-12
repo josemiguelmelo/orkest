@@ -54,7 +54,7 @@ func (w *ScheduledJobWorker) Deliver(ctx context.Context) (bool, error) {
 	if !accepted {
 		if run.ClaimAttempt > 1 {
 			state, reason = "delivery_uncertain", "acceptance_not_established"
-		} else if time.Since(run.CreatedAt) > time.Hour {
+		} else if run.DeliveryExpired {
 			state, reason = "missed", "capacity_wait_expired"
 		} else {
 			err = w.access.Authorize(ctx, run.ActorID, run.OrganizationID, run.WorkspaceID, true)

@@ -16,7 +16,7 @@ type ScheduledJobRepository interface {
 	List(context.Context, string, string) ([]jobmodel.Job, error)
 	Get(context.Context, string, string, string) (jobmodel.Job, error)
 	Save(context.Context, string, string, string, string, int64, jobmodel.Input, time.Time) (jobmodel.Job, error)
-	Runs(context.Context, string, string, string, int) ([]jobmodel.Run, error)
+	Runs(context.Context, string, string, string, int, int) ([]jobmodel.Run, error)
 	Run(context.Context, string, string, string, string) (jobmodel.Run, error)
 	Enqueue(context.Context, string, string, string, string, string) (jobmodel.Run, error)
 	CancelPending(context.Context, string, string, string, string) (bool, error)
@@ -128,14 +128,17 @@ func validKey(key string) bool {
 	return true
 }
 
-func (s *ScheduledJobService) Runs(ctx context.Context, user, org, workspace, job string, limit int) ([]jobmodel.Run, error) {
+func (s *ScheduledJobService) Runs(ctx context.Context, user, org, workspace, job string, limit, offset int) ([]jobmodel.Run, error) {
 	if _, err := s.Get(ctx, user, org, workspace, job); err != nil {
 		return nil, err
 	}
 	if limit < 1 || limit > 100 {
 		limit = 50
 	}
-	return s.repository.Runs(ctx, org, workspace, job, limit)
+	if offset < 0 || offset > 1000000 {
+		return nil, modelerrors.ErrInvalid
+	}
+	return s.repository.Runs(ctx, org, workspace, job, limit, offset)
 }
 
 func (s *ScheduledJobService) Run(ctx context.Context, user, org, workspace, job, id string, write bool) (jobmodel.Run, error) {

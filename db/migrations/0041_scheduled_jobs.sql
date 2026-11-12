@@ -27,7 +27,7 @@ CREATE TABLE scheduled_job_runs (
  command_id text NOT NULL UNIQUE, claim_token text NOT NULL DEFAULT '', claim_attempt integer NOT NULL DEFAULT 0,
  claim_until timestamptz, cancel_requested boolean NOT NULL DEFAULT false,
  created_at timestamptz NOT NULL DEFAULT now(),
- FOREIGN KEY(workspace_id,job_id,revision) REFERENCES scheduled_job_revisions(workspace_id,job_id,revision),
+ FOREIGN KEY(workspace_id,job_id,revision) REFERENCES scheduled_job_revisions(workspace_id,job_id,revision) ON DELETE CASCADE,
  UNIQUE(workspace_id,job_id,trigger_key), UNIQUE(workspace_id,id)
 );
 CREATE INDEX scheduled_job_runs_pending ON scheduled_job_runs(created_at,id) WHERE state IN ('pending','starting');

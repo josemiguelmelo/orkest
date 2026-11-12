@@ -26,6 +26,7 @@ Start with [local setup](../README.md).
 - [Session persistence and continuation](development/sessions.md)
 - [Artifact publication and input snapshots](development/artifacts.md)
 - [Workflow transactions and event delivery](development/workflows.md)
+- [Scheduled jobs, execution ownership and rollout](development/scheduled-jobs.md)
 - [Delivery claims, fencing, and recovery](development/workflow-delivery.md)
 - [Image build adapters](development/image-builds.md)
 - [Webapp architecture](development/webapp.md)

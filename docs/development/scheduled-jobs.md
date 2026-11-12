@@ -8,9 +8,9 @@ result activity; recovery retains that occurrence's original identity/configurat
 Implementation plan and progress:
 - [x] Definitions, immutable revisions, timing policy, occurrence identity and claims.
 - [x] Job-owned reservation, existing launch/reconnect, bounded completion and cleanup.
-- [ ] Scoped HTTP/OpenAPI and workspace UI.
-- [ ] Real PostgreSQL races, compatibility, authorization and UI verification.
-- [ ] Full checks, diff review, commit/push and MR.
+- [x] Scoped HTTP/OpenAPI and workspace UI.
+- [x] Real PostgreSQL races, compatibility, authorization and UI verification.
+- [x] Full checks and diff review; commit/push and MR are the delivery steps.
 
 Defaults: daily/weekly IANA calendars; repeated local DST minutes run once and
 nonexistent times are skipped; one-hour lateness/capacity grace; no same-job overlap;
@@ -36,4 +36,22 @@ processes continue. Reconcile pending/uncertain runs before rollback; the down
 migration refuses active ownership and removes completed job history/session
 snapshots, not durable runtime files.
 
-Verification results and live qualification limits will be recorded before delivery.
+Verification:
+- `make check` passes, including Go tests/lint, generated-client consistency,
+  frontend tests/type checks and builds.
+- `make test-postgres` passes against the isolated scheduled-jobs test database,
+  including concurrent materialization/claims, stale fencing, reservation,
+  cancellation, cleanup, authorization revocation and workspace isolation.
+- `go test -race ./internal/server/scheduledjob/... ./internal/server/orchestration
+  ./internal/adapters/postgres` passes with the isolated PostgreSQL database.
+- `make test-recovery` passes its deterministic recovery/race fixtures and
+  restore/follow-up fixture. Its live qualification gate cannot run here because
+  the pinned OpenCode binary, model/provider settings and credentials are absent.
+  No live model, mailbox, or merge-request side effects were qualified.
+
+The one-hour lateness grace and maximum run duration are enforced by the platform
+worker. If the platform is down, it cannot enforce a hard stop at the exact
+duration; ownership remains held until recovery confirms cleanup. Results/activity
+come from the agent's persisted events and summaries, not independent proof that an
+external service accepted an effect. Workspaces without a configured external MCP
+connector cannot use mailbox jobs; this feature does not add mailbox OAuth.

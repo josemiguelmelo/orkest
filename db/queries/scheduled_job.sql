@@ -52,7 +52,7 @@ WHERE w.organization_id=$1 AND r.workspace_id=$2 AND r.job_id=$3 AND r.trigger_k
 -- name: ListScheduledJobRuns :many
 SELECT sqlc.embed(r),w.organization_id FROM scheduled_job_runs r JOIN workspaces w ON w.id=r.workspace_id
 WHERE w.organization_id=$1 AND r.workspace_id=$2 AND r.job_id=$3
-ORDER BY r.created_at DESC,r.id DESC LIMIT $4;
+ORDER BY r.created_at DESC,r.id DESC LIMIT $4 OFFSET $5;
 
 -- name: ScheduledJobOccupied :one
 SELECT EXISTS(SELECT 1 FROM scheduled_job_runs WHERE workspace_id=$1 AND job_id=$2 AND state IN ('pending','starting','running','delivery_uncertain'));
@@ -107,3 +107,11 @@ SELECT EXISTS(SELECT 1 FROM organization_memberships om JOIN workspaces w ON w.o
 -- name: LockScopedScheduledJobRun :one
 SELECT r.id FROM scheduled_job_runs r JOIN workspaces w ON w.id=r.workspace_id
 WHERE w.organization_id=$1 AND r.workspace_id=$2 AND r.job_id=$3 AND r.id=$4 FOR UPDATE OF r;
+
+-- name: ScheduledJobAdmissible :one
+SELECT r.created_at>=now()-interval '1 hour' AND NOT EXISTS(
+ SELECT 1 FROM scheduled_job_runs busy WHERE busy.workspace_id=r.workspace_id AND busy.id<>r.id
+ AND busy.state IN ('starting','running','delivery_uncertain')) FROM scheduled_job_runs r WHERE r.id=$1;
+
+-- name: ScheduledJobAgentExists :one
+SELECT EXISTS(SELECT 1 FROM agents WHERE workspace_id=$1 AND id=$2);

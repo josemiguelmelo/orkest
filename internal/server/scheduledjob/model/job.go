@@ -44,6 +44,7 @@ type Run struct {
 	CommandID       string    `json:"commandId"`
 	CreatedAt       time.Time `json:"createdAt"`
 	ClaimToken      string    `json:"-"`
+	DeliveryExpired bool      `json:"-"`
 	ClaimAttempt    int32     `json:"-"`
 	CancelRequested bool      `json:"cancelRequested"`
 }

@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 	"time"
@@ -103,7 +104,16 @@ func (a scheduledJobAPI) preview(w http.ResponseWriter, r *http.Request) {
 func (a scheduledJobAPI) runs(w http.ResponseWriter, r *http.Request) {
 	org, workspace, _ := scopeParams(r)
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	items, err := a.service.Runs(r.Context(), currentUserID(r), org, workspace, chi.URLParam(r, "jobID"), limit)
+	offset := 0
+	if raw := r.URL.Query().Get("offset"); raw != "" {
+		parsed, e := strconv.Atoi(raw)
+		if e != nil {
+			writeError(w, http.StatusBadRequest, "invalid_request")
+			return
+		}
+		offset = parsed
+	}
+	items, err := a.service.Runs(r.Context(), currentUserID(r), org, workspace, chi.URLParam(r, "jobID"), limit, offset)
 	respond(w, items, err, http.StatusOK)
 }
 
@@ -150,6 +160,9 @@ func (a scheduledJobAPI) events(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	events, err := a.launches.TaskEvents(r.Context(), item.OrganizationID, item.WorkspaceID, item.ID, item.RunID, after)
+	if errors.Is(err, orchestration.ErrTaskRunNotFound) {
+		events, err = []orchestrationmodel.Event{}, nil
+	}
 	respond(w, events, err, http.StatusOK)
 }
 

@@ -73,6 +73,26 @@ func (r *ScheduledJobPostgresRepository) Save(ctx context.Context, user, org, wo
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := r.queries.WithTx(tx)
+	validAgent, err := q.ScheduledJobAgentExists(ctx, sqlc.ScheduledJobAgentExistsParams{WorkspaceID: workspace, ID: in.AgentID})
+	if err != nil {
+		return jobmodel.Job{}, err
+	}
+	if !validAgent {
+		return jobmodel.Job{}, modelerrors.ErrInvalid
+	}
+	available, err := q.ScheduledJobRepositoryIDs(ctx, workspace)
+	if err != nil {
+		return jobmodel.Job{}, err
+	}
+	registered := map[string]bool{}
+	for _, id := range available {
+		registered[id] = true
+	}
+	for _, id := range in.RepositoryIDs {
+		if !registered[id] {
+			return jobmodel.Job{}, modelerrors.ErrInvalid
+		}
+	}
 	if revision == 0 {
 		n, e := q.InsertScheduledJob(ctx, sqlc.InsertScheduledJobParams{ID: id, ID_2: workspace, OrganizationID: org, AuthorizedBy: user, Definition: data, Enabled: in.Enabled, NextDueAt: pgtype.Timestamptz{Time: next, Valid: true}})
 		if e != nil {
@@ -118,8 +138,8 @@ func (r *ScheduledJobPostgresRepository) Save(ctx context.Context, user, org, wo
 	return r.Get(ctx, org, workspace, id)
 }
 
-func (r *ScheduledJobPostgresRepository) Runs(ctx context.Context, org, workspace, job string, limit int) ([]jobmodel.Run, error) {
-	rows, err := r.queries.ListScheduledJobRuns(ctx, sqlc.ListScheduledJobRunsParams{OrganizationID: org, WorkspaceID: workspace, JobID: job, Limit: int32(limit)})
+func (r *ScheduledJobPostgresRepository) Runs(ctx context.Context, org, workspace, job string, limit, offset int) ([]jobmodel.Run, error) {
+	rows, err := r.queries.ListScheduledJobRuns(ctx, sqlc.ListScheduledJobRunsParams{OrganizationID: org, WorkspaceID: workspace, JobID: job, Limit: int32(limit), Offset: int32(offset)})
 	if err != nil {
 		return nil, err
 	}
@@ -295,6 +315,7 @@ func (r *ScheduledJobPostgresRepository) Claim(ctx context.Context, token string
 	}
 	v.State, v.ClaimToken, v.ClaimAttempt = "starting", token, v.ClaimAttempt+1
 	result, err := jobRunFromRow(v, row.OrganizationID)
+	result.DeliveryExpired = row.DatabaseNow.Time.Sub(v.CreatedAt.Time) > time.Hour
 	if err != nil {
 		return jobmodel.Run{}, false, err
 	}
@@ -317,6 +338,17 @@ func (r *ScheduledJobPostgresRepository) CancelPending(ctx context.Context, org,
 	// reservation committed by the previous owner of this row lock.
 	if _, err = q.LockScopedScheduledJobRun(ctx, sqlc.LockScopedScheduledJobRunParams{OrganizationID: org, WorkspaceID: workspace, JobID: job, ID: id}); err != nil {
 		return false, mapError(err, modelerrors.ErrNotFound, modelerrors.ErrConflict)
+	}
+	current, err := q.GetScheduledJobRun(ctx, sqlc.GetScheduledJobRunParams{OrganizationID: org, WorkspaceID: workspace, JobID: job, ID: id})
+	if err != nil {
+		return false, err
+	}
+	switch current.ScheduledJobRun.State {
+	case "cancelled":
+		return true, tx.Commit(ctx)
+	case "pending", "starting", "running", "delivery_uncertain":
+	default:
+		return false, modelerrors.ErrConflict
 	}
 	if _, err = q.CancelPendingScheduledJobRun(ctx, sqlc.CancelPendingScheduledJobRunParams{WorkspaceID: workspace, JobID: job, ID: id}); err != nil {
 		return false, err

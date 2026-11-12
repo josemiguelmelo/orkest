@@ -607,6 +607,106 @@ export declare const zError: z.ZodObject<{
 export declare const zOperationStatus: z.ZodObject<{
     status: z.ZodString;
 }, z.core.$strip>;
+export declare const zJobSchedule: z.ZodObject<{
+    frequency: z.ZodEnum<{
+        daily: "daily";
+        weekly: "weekly";
+    }>;
+    timeZone: z.ZodString;
+    hour: z.ZodInt;
+    minute: z.ZodInt;
+    weekday: z.ZodInt;
+}, z.core.$strip>;
+export declare const zScheduledJobInput: z.ZodObject<{
+    name: z.ZodString;
+    instructions: z.ZodString;
+    agentId: z.ZodString;
+    repositoryScope: z.ZodEnum<{
+        none: "none";
+        selected: "selected";
+        all: "all";
+    }>;
+    repositoryIds: z.ZodArray<z.ZodString>;
+    schedule: z.ZodObject<{
+        frequency: z.ZodEnum<{
+            daily: "daily";
+            weekly: "weekly";
+        }>;
+        timeZone: z.ZodString;
+        hour: z.ZodInt;
+        minute: z.ZodInt;
+        weekday: z.ZodInt;
+    }, z.core.$strip>;
+    enabled: z.ZodBoolean;
+    maxDurationMinutes: z.ZodInt;
+}, z.core.$strip>;
+export declare const zScheduledJob: z.ZodIntersection<z.ZodObject<{
+    name: z.ZodString;
+    instructions: z.ZodString;
+    agentId: z.ZodString;
+    repositoryScope: z.ZodEnum<{
+        none: "none";
+        selected: "selected";
+        all: "all";
+    }>;
+    repositoryIds: z.ZodArray<z.ZodString>;
+    schedule: z.ZodObject<{
+        frequency: z.ZodEnum<{
+            daily: "daily";
+            weekly: "weekly";
+        }>;
+        timeZone: z.ZodString;
+        hour: z.ZodInt;
+        minute: z.ZodInt;
+        weekday: z.ZodInt;
+    }, z.core.$strip>;
+    enabled: z.ZodBoolean;
+    maxDurationMinutes: z.ZodInt;
+}, z.core.$strip>, z.ZodObject<{
+    id: z.ZodString;
+    workspaceId: z.ZodString;
+    revision: z.ZodInt;
+    authorizedBy: z.ZodString;
+    nextDueAt: z.ZodISODateTime;
+    createdAt: z.ZodISODateTime;
+}, z.core.$strip>>;
+export declare const zScheduledJobRun: z.ZodObject<{
+    id: z.ZodString;
+    jobId: z.ZodString;
+    workspaceId: z.ZodString;
+    revision: z.ZodInt;
+    input: z.ZodObject<{
+        name: z.ZodString;
+        instructions: z.ZodString;
+        agentId: z.ZodString;
+        repositoryScope: z.ZodEnum<{
+            none: "none";
+            selected: "selected";
+            all: "all";
+        }>;
+        repositoryIds: z.ZodArray<z.ZodString>;
+        schedule: z.ZodObject<{
+            frequency: z.ZodEnum<{
+                daily: "daily";
+                weekly: "weekly";
+            }>;
+            timeZone: z.ZodString;
+            hour: z.ZodInt;
+            minute: z.ZodInt;
+            weekday: z.ZodInt;
+        }, z.core.$strip>;
+        enabled: z.ZodBoolean;
+        maxDurationMinutes: z.ZodInt;
+    }, z.core.$strip>;
+    repositoryIds: z.ZodArray<z.ZodString>;
+    scheduledFor: z.ZodISODateTime;
+    state: z.ZodString;
+    reason: z.ZodString;
+    runId: z.ZodString;
+    commandId: z.ZodString;
+    createdAt: z.ZodISODateTime;
+    cancelRequested: z.ZodBoolean;
+}, z.core.$strip>;
 export declare const zCurrentUserWritable: z.ZodObject<{
     user: z.ZodObject<{
         id: z.ZodString;
@@ -3099,4 +3199,429 @@ export declare const zRespondDirectAgentConversationQuestionPath: z.ZodObject<{
     conversationID: z.ZodString;
     runID: z.ZodString;
     questionID: z.ZodString;
+}, z.core.$strip>;
+export declare const zListScheduledJobsPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+}, z.core.$strip>;
+/**
+ * Success
+ */
+export declare const zListScheduledJobsResponse: z.ZodArray<z.ZodIntersection<z.ZodObject<{
+    name: z.ZodString;
+    instructions: z.ZodString;
+    agentId: z.ZodString;
+    repositoryScope: z.ZodEnum<{
+        none: "none";
+        selected: "selected";
+        all: "all";
+    }>;
+    repositoryIds: z.ZodArray<z.ZodString>;
+    schedule: z.ZodObject<{
+        frequency: z.ZodEnum<{
+            daily: "daily";
+            weekly: "weekly";
+        }>;
+        timeZone: z.ZodString;
+        hour: z.ZodInt;
+        minute: z.ZodInt;
+        weekday: z.ZodInt;
+    }, z.core.$strip>;
+    enabled: z.ZodBoolean;
+    maxDurationMinutes: z.ZodInt;
+}, z.core.$strip>, z.ZodObject<{
+    id: z.ZodString;
+    workspaceId: z.ZodString;
+    revision: z.ZodInt;
+    authorizedBy: z.ZodString;
+    nextDueAt: z.ZodISODateTime;
+    createdAt: z.ZodISODateTime;
+}, z.core.$strip>>>;
+export declare const zCreateScheduledJobBody: z.ZodObject<{
+    commandId: z.ZodString;
+    revision: z.ZodInt;
+    input: z.ZodObject<{
+        name: z.ZodString;
+        instructions: z.ZodString;
+        agentId: z.ZodString;
+        repositoryScope: z.ZodEnum<{
+            none: "none";
+            selected: "selected";
+            all: "all";
+        }>;
+        repositoryIds: z.ZodArray<z.ZodString>;
+        schedule: z.ZodObject<{
+            frequency: z.ZodEnum<{
+                daily: "daily";
+                weekly: "weekly";
+            }>;
+            timeZone: z.ZodString;
+            hour: z.ZodInt;
+            minute: z.ZodInt;
+            weekday: z.ZodInt;
+        }, z.core.$strip>;
+        enabled: z.ZodBoolean;
+        maxDurationMinutes: z.ZodInt;
+    }, z.core.$strip>;
+}, z.core.$strip>;
+export declare const zCreateScheduledJobPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+}, z.core.$strip>;
+/**
+ * Success
+ */
+export declare const zCreateScheduledJobResponse: z.ZodIntersection<z.ZodObject<{
+    name: z.ZodString;
+    instructions: z.ZodString;
+    agentId: z.ZodString;
+    repositoryScope: z.ZodEnum<{
+        none: "none";
+        selected: "selected";
+        all: "all";
+    }>;
+    repositoryIds: z.ZodArray<z.ZodString>;
+    schedule: z.ZodObject<{
+        frequency: z.ZodEnum<{
+            daily: "daily";
+            weekly: "weekly";
+        }>;
+        timeZone: z.ZodString;
+        hour: z.ZodInt;
+        minute: z.ZodInt;
+        weekday: z.ZodInt;
+    }, z.core.$strip>;
+    enabled: z.ZodBoolean;
+    maxDurationMinutes: z.ZodInt;
+}, z.core.$strip>, z.ZodObject<{
+    id: z.ZodString;
+    workspaceId: z.ZodString;
+    revision: z.ZodInt;
+    authorizedBy: z.ZodString;
+    nextDueAt: z.ZodISODateTime;
+    createdAt: z.ZodISODateTime;
+}, z.core.$strip>>;
+export declare const zPreviewJobScheduleBody: z.ZodObject<{
+    frequency: z.ZodEnum<{
+        daily: "daily";
+        weekly: "weekly";
+    }>;
+    timeZone: z.ZodString;
+    hour: z.ZodInt;
+    minute: z.ZodInt;
+    weekday: z.ZodInt;
+}, z.core.$strip>;
+export declare const zPreviewJobSchedulePath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+}, z.core.$strip>;
+/**
+ * Success
+ */
+export declare const zPreviewJobScheduleResponse: z.ZodArray<z.ZodISODateTime>;
+export declare const zGetScheduledJobPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+    jobID: z.ZodString;
+}, z.core.$strip>;
+/**
+ * Success
+ */
+export declare const zGetScheduledJobResponse: z.ZodIntersection<z.ZodObject<{
+    name: z.ZodString;
+    instructions: z.ZodString;
+    agentId: z.ZodString;
+    repositoryScope: z.ZodEnum<{
+        none: "none";
+        selected: "selected";
+        all: "all";
+    }>;
+    repositoryIds: z.ZodArray<z.ZodString>;
+    schedule: z.ZodObject<{
+        frequency: z.ZodEnum<{
+            daily: "daily";
+            weekly: "weekly";
+        }>;
+        timeZone: z.ZodString;
+        hour: z.ZodInt;
+        minute: z.ZodInt;
+        weekday: z.ZodInt;
+    }, z.core.$strip>;
+    enabled: z.ZodBoolean;
+    maxDurationMinutes: z.ZodInt;
+}, z.core.$strip>, z.ZodObject<{
+    id: z.ZodString;
+    workspaceId: z.ZodString;
+    revision: z.ZodInt;
+    authorizedBy: z.ZodString;
+    nextDueAt: z.ZodISODateTime;
+    createdAt: z.ZodISODateTime;
+}, z.core.$strip>>;
+export declare const zUpdateScheduledJobBody: z.ZodObject<{
+    revision: z.ZodInt;
+    input: z.ZodObject<{
+        name: z.ZodString;
+        instructions: z.ZodString;
+        agentId: z.ZodString;
+        repositoryScope: z.ZodEnum<{
+            none: "none";
+            selected: "selected";
+            all: "all";
+        }>;
+        repositoryIds: z.ZodArray<z.ZodString>;
+        schedule: z.ZodObject<{
+            frequency: z.ZodEnum<{
+                daily: "daily";
+                weekly: "weekly";
+            }>;
+            timeZone: z.ZodString;
+            hour: z.ZodInt;
+            minute: z.ZodInt;
+            weekday: z.ZodInt;
+        }, z.core.$strip>;
+        enabled: z.ZodBoolean;
+        maxDurationMinutes: z.ZodInt;
+    }, z.core.$strip>;
+}, z.core.$strip>;
+export declare const zUpdateScheduledJobPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+    jobID: z.ZodString;
+}, z.core.$strip>;
+/**
+ * Success
+ */
+export declare const zUpdateScheduledJobResponse: z.ZodIntersection<z.ZodObject<{
+    name: z.ZodString;
+    instructions: z.ZodString;
+    agentId: z.ZodString;
+    repositoryScope: z.ZodEnum<{
+        none: "none";
+        selected: "selected";
+        all: "all";
+    }>;
+    repositoryIds: z.ZodArray<z.ZodString>;
+    schedule: z.ZodObject<{
+        frequency: z.ZodEnum<{
+            daily: "daily";
+            weekly: "weekly";
+        }>;
+        timeZone: z.ZodString;
+        hour: z.ZodInt;
+        minute: z.ZodInt;
+        weekday: z.ZodInt;
+    }, z.core.$strip>;
+    enabled: z.ZodBoolean;
+    maxDurationMinutes: z.ZodInt;
+}, z.core.$strip>, z.ZodObject<{
+    id: z.ZodString;
+    workspaceId: z.ZodString;
+    revision: z.ZodInt;
+    authorizedBy: z.ZodString;
+    nextDueAt: z.ZodISODateTime;
+    createdAt: z.ZodISODateTime;
+}, z.core.$strip>>;
+export declare const zListScheduledJobRunsPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+    jobID: z.ZodString;
+}, z.core.$strip>;
+export declare const zListScheduledJobRunsQuery: z.ZodObject<{
+    offset: z.ZodOptional<z.ZodInt>;
+    limit: z.ZodOptional<z.ZodInt>;
+}, z.core.$strip>;
+/**
+ * Success
+ */
+export declare const zListScheduledJobRunsResponse: z.ZodArray<z.ZodObject<{
+    id: z.ZodString;
+    jobId: z.ZodString;
+    workspaceId: z.ZodString;
+    revision: z.ZodInt;
+    input: z.ZodObject<{
+        name: z.ZodString;
+        instructions: z.ZodString;
+        agentId: z.ZodString;
+        repositoryScope: z.ZodEnum<{
+            none: "none";
+            selected: "selected";
+            all: "all";
+        }>;
+        repositoryIds: z.ZodArray<z.ZodString>;
+        schedule: z.ZodObject<{
+            frequency: z.ZodEnum<{
+                daily: "daily";
+                weekly: "weekly";
+            }>;
+            timeZone: z.ZodString;
+            hour: z.ZodInt;
+            minute: z.ZodInt;
+            weekday: z.ZodInt;
+        }, z.core.$strip>;
+        enabled: z.ZodBoolean;
+        maxDurationMinutes: z.ZodInt;
+    }, z.core.$strip>;
+    repositoryIds: z.ZodArray<z.ZodString>;
+    scheduledFor: z.ZodISODateTime;
+    state: z.ZodString;
+    reason: z.ZodString;
+    runId: z.ZodString;
+    commandId: z.ZodString;
+    createdAt: z.ZodISODateTime;
+    cancelRequested: z.ZodBoolean;
+}, z.core.$strip>>;
+export declare const zRunScheduledJobBody: z.ZodObject<{
+    commandId: z.ZodString;
+}, z.core.$strip>;
+export declare const zRunScheduledJobPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+    jobID: z.ZodString;
+}, z.core.$strip>;
+/**
+ * Success
+ */
+export declare const zRunScheduledJobResponse: z.ZodObject<{
+    id: z.ZodString;
+    jobId: z.ZodString;
+    workspaceId: z.ZodString;
+    revision: z.ZodInt;
+    input: z.ZodObject<{
+        name: z.ZodString;
+        instructions: z.ZodString;
+        agentId: z.ZodString;
+        repositoryScope: z.ZodEnum<{
+            none: "none";
+            selected: "selected";
+            all: "all";
+        }>;
+        repositoryIds: z.ZodArray<z.ZodString>;
+        schedule: z.ZodObject<{
+            frequency: z.ZodEnum<{
+                daily: "daily";
+                weekly: "weekly";
+            }>;
+            timeZone: z.ZodString;
+            hour: z.ZodInt;
+            minute: z.ZodInt;
+            weekday: z.ZodInt;
+        }, z.core.$strip>;
+        enabled: z.ZodBoolean;
+        maxDurationMinutes: z.ZodInt;
+    }, z.core.$strip>;
+    repositoryIds: z.ZodArray<z.ZodString>;
+    scheduledFor: z.ZodISODateTime;
+    state: z.ZodString;
+    reason: z.ZodString;
+    runId: z.ZodString;
+    commandId: z.ZodString;
+    createdAt: z.ZodISODateTime;
+    cancelRequested: z.ZodBoolean;
+}, z.core.$strip>;
+export declare const zGetScheduledJobRunPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+    jobID: z.ZodString;
+    occurrenceID: z.ZodString;
+}, z.core.$strip>;
+/**
+ * Success
+ */
+export declare const zGetScheduledJobRunResponse: z.ZodObject<{
+    id: z.ZodString;
+    jobId: z.ZodString;
+    workspaceId: z.ZodString;
+    revision: z.ZodInt;
+    input: z.ZodObject<{
+        name: z.ZodString;
+        instructions: z.ZodString;
+        agentId: z.ZodString;
+        repositoryScope: z.ZodEnum<{
+            none: "none";
+            selected: "selected";
+            all: "all";
+        }>;
+        repositoryIds: z.ZodArray<z.ZodString>;
+        schedule: z.ZodObject<{
+            frequency: z.ZodEnum<{
+                daily: "daily";
+                weekly: "weekly";
+            }>;
+            timeZone: z.ZodString;
+            hour: z.ZodInt;
+            minute: z.ZodInt;
+            weekday: z.ZodInt;
+        }, z.core.$strip>;
+        enabled: z.ZodBoolean;
+        maxDurationMinutes: z.ZodInt;
+    }, z.core.$strip>;
+    repositoryIds: z.ZodArray<z.ZodString>;
+    scheduledFor: z.ZodISODateTime;
+    state: z.ZodString;
+    reason: z.ZodString;
+    runId: z.ZodString;
+    commandId: z.ZodString;
+    createdAt: z.ZodISODateTime;
+    cancelRequested: z.ZodBoolean;
+}, z.core.$strip>;
+export declare const zListScheduledJobRunEventsPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+    jobID: z.ZodString;
+    occurrenceID: z.ZodString;
+}, z.core.$strip>;
+export declare const zListScheduledJobRunEventsQuery: z.ZodObject<{
+    afterSequence: z.ZodOptional<z.ZodInt>;
+}, z.core.$strip>;
+/**
+ * Success
+ */
+export declare const zListScheduledJobRunEventsResponse: z.ZodArray<z.ZodObject<{
+    runId: z.ZodString;
+    sequence: z.ZodInt;
+    payload: z.ZodRecord<z.ZodString, z.ZodUnknown>;
+}, z.core.$strip>>;
+export declare const zCancelScheduledJobRunPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+    jobID: z.ZodString;
+    occurrenceID: z.ZodString;
+}, z.core.$strip>;
+export declare const zRespondScheduledJobPermissionBody: z.ZodObject<{
+    requestId: z.ZodString;
+    sessionId: z.ZodString;
+    optionId: z.ZodString;
+}, z.core.$strip>;
+export declare const zRespondScheduledJobPermissionPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+    jobID: z.ZodString;
+    occurrenceID: z.ZodString;
+}, z.core.$strip>;
+export declare const zRespondScheduledJobQuestionBody: z.ZodObject<{
+    taskSessionId: z.ZodString;
+    sessionId: z.ZodString;
+    commandId: z.ZodString;
+    submissionId: z.ZodString;
+    answer: z.ZodObject<{
+        action: z.ZodEnum<{
+            accept: "accept";
+            decline: "decline";
+            cancel: "cancel";
+        }>;
+        content: z.ZodOptional<z.ZodRecord<z.ZodString, z.ZodUnknown>>;
+    }, z.core.$strip>;
+}, z.core.$strip>;
+export declare const zRespondScheduledJobQuestionPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+    jobID: z.ZodString;
+    occurrenceID: z.ZodString;
+    questionID: z.ZodString;
+}, z.core.$strip>;
+/**
+ * Success
+ */
+export declare const zRespondScheduledJobQuestionResponse: z.ZodObject<{
+    status: z.ZodString;
 }, z.core.$strip>;

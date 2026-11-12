@@ -13,6 +13,7 @@ const Organization = lazy(() =>
 const WorkflowSettings = lazy(() =>
   import('../features/workflow/workflow').then((m) => ({ default: m.WorkflowPage })),
 );
+const ScheduledJobs = lazy(() => import('../features/scheduled-jobs/jobs').then(m => ({ default: m.ScheduledJobsPage })));
 const Tasks = lazy(() => import('../features/tasks/tasks').then((m) => ({ default: m.TasksPage })));
 const Task = lazy(() => import('../features/tasks/tasks').then((m) => ({ default: m.TaskPage })));
 const Profiles = lazy(() =>
@@ -110,6 +111,7 @@ const workspaceIndex = createRoute({
   component: loading(Tasks),
   validateSearch: taskSearchSchema,
 });
+const scheduledJobs = createRoute({ getParentRoute: () => workspace, path: 'scheduled-jobs', component: loading(ScheduledJobs) });
 const agents = createRoute({
   getParentRoute: () => workspace,
   path: 'agents',
@@ -171,6 +173,7 @@ const tree = root.addChildren([
       tasksRoute,
       taskRoute,
       agents,
+      scheduledJobs,
       directChat,
       profiles,
       agentRuntimeProfiles,

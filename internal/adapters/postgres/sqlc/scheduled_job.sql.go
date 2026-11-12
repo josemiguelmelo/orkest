@@ -428,7 +428,7 @@ func (q *Queries) IsScheduledJobRun(ctx context.Context, runID string) (bool, er
 const listScheduledJobRuns = `-- name: ListScheduledJobRuns :many
 SELECT r.id, r.workspace_id, r.job_id, r.revision, r.actor_id, r.definition, r.repository_ids, r.scheduled_for, r.trigger_key, r.state, r.reason, r.run_id, r.session_id, r.command_id, r.claim_token, r.claim_attempt, r.claim_until, r.cancel_requested, r.created_at,w.organization_id FROM scheduled_job_runs r JOIN workspaces w ON w.id=r.workspace_id
 WHERE w.organization_id=$1 AND r.workspace_id=$2 AND r.job_id=$3
-ORDER BY r.created_at DESC,r.id DESC LIMIT $4
+ORDER BY r.created_at DESC,r.id DESC LIMIT $4 OFFSET $5
 `
 
 type ListScheduledJobRunsParams struct {
@@ -436,6 +436,7 @@ type ListScheduledJobRunsParams struct {
 	WorkspaceID    string `json:"workspace_id"`
 	JobID          string `json:"job_id"`
 	Limit          int32  `json:"limit"`
+	Offset         int32  `json:"offset"`
 }
 
 type ListScheduledJobRunsRow struct {
@@ -449,6 +450,7 @@ func (q *Queries) ListScheduledJobRuns(ctx context.Context, arg ListScheduledJob
 		arg.WorkspaceID,
 		arg.JobID,
 		arg.Limit,
+		arg.Offset,
 	)
 	if err != nil {
 		return nil, err
@@ -705,6 +707,35 @@ func (q *Queries) PendingScheduledJobRun(ctx context.Context) (PendingScheduledJ
 		&i.DatabaseNow,
 	)
 	return i, err
+}
+
+const scheduledJobAdmissible = `-- name: ScheduledJobAdmissible :one
+SELECT r.created_at>=now()-interval '1 hour' AND NOT EXISTS(
+ SELECT 1 FROM scheduled_job_runs busy WHERE busy.workspace_id=r.workspace_id AND busy.id<>r.id
+ AND busy.state IN ('starting','running','delivery_uncertain')) FROM scheduled_job_runs r WHERE r.id=$1
+`
+
+func (q *Queries) ScheduledJobAdmissible(ctx context.Context, id string) (pgtype.Bool, error) {
+	row := q.db.QueryRow(ctx, scheduledJobAdmissible, id)
+	var column_1 pgtype.Bool
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const scheduledJobAgentExists = `-- name: ScheduledJobAgentExists :one
+SELECT EXISTS(SELECT 1 FROM agents WHERE workspace_id=$1 AND id=$2)
+`
+
+type ScheduledJobAgentExistsParams struct {
+	WorkspaceID string `json:"workspace_id"`
+	ID          string `json:"id"`
+}
+
+func (q *Queries) ScheduledJobAgentExists(ctx context.Context, arg ScheduledJobAgentExistsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, scheduledJobAgentExists, arg.WorkspaceID, arg.ID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const scheduledJobCanMutate = `-- name: ScheduledJobCanMutate :one

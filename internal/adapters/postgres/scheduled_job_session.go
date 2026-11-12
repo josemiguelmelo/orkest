@@ -37,6 +37,16 @@ func (r *AgentLaunchPostgresRepository) ReserveJobSessionRun(ctx context.Context
 	if claim.CancelRequested || claim.RunID != config.RunID || claim.SessionID != config.TaskSessionID || claim.WorkspaceID != config.WorkspaceID || claim.ID != config.TaskID || claim.CommandID != config.InitialCommandID {
 		return modelerrors.ErrConflict
 	}
+	if _, err = q.LockScheduledJobWorkspace(ctx, claim.WorkspaceID); err != nil {
+		return err
+	}
+	admissible, err := q.ScheduledJobAdmissible(ctx, claim.ID)
+	if err != nil {
+		return err
+	}
+	if !admissible.Valid || !admissible.Bool {
+		return modelerrors.ErrConflict
+	}
 	allowed, err := q.ScheduledJobCanMutate(ctx, sqlc.ScheduledJobCanMutateParams{ID: claim.WorkspaceID, UserID: claim.ActorID})
 	if err != nil {
 		return err

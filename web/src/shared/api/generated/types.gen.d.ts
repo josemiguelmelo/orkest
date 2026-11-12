@@ -463,6 +463,46 @@ export type Error = {
 export type OperationStatus = {
     status: string;
 };
+export type JobSchedule = {
+    frequency: 'daily' | 'weekly';
+    timeZone: string;
+    hour: number;
+    minute: number;
+    weekday: number;
+};
+export type ScheduledJobInput = {
+    name: string;
+    instructions: string;
+    agentId: string;
+    repositoryScope: 'none' | 'selected' | 'all';
+    repositoryIds: Array<string>;
+    schedule: JobSchedule;
+    enabled: boolean;
+    maxDurationMinutes: number;
+};
+export type ScheduledJob = ScheduledJobInput & {
+    id: string;
+    workspaceId: string;
+    revision: number;
+    authorizedBy: string;
+    nextDueAt: string;
+    createdAt: string;
+};
+export type ScheduledJobRun = {
+    id: string;
+    jobId: string;
+    workspaceId: string;
+    revision: number;
+    input: ScheduledJobInput;
+    repositoryIds: Array<string>;
+    scheduledFor: string;
+    state: string;
+    reason: string;
+    runId: string;
+    commandId: string;
+    createdAt: string;
+    cancelRequested: boolean;
+};
 export type CurrentUserWritable = {
     user: User;
     organizations: Array<Organization>;
@@ -4499,3 +4539,444 @@ export type RespondDirectAgentConversationQuestionResponses = {
      */
     200: unknown;
 };
+export type ListScheduledJobsData = {
+    body?: never;
+    path: {
+        orgID: string;
+        workspaceID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/scheduled-jobs';
+};
+export type ListScheduledJobsErrors = {
+    /**
+     * Invalid input
+     */
+    400: unknown;
+    /**
+     * Forbidden
+     */
+    403: unknown;
+    /**
+     * Unavailable resource
+     */
+    404: unknown;
+    /**
+     * Revision or execution conflict
+     */
+    409: unknown;
+};
+export type ListScheduledJobsResponses = {
+    /**
+     * Success
+     */
+    200: Array<ScheduledJob>;
+};
+export type ListScheduledJobsResponse = ListScheduledJobsResponses[keyof ListScheduledJobsResponses];
+export type CreateScheduledJobData = {
+    body: {
+        commandId: string;
+        revision: number;
+        input: ScheduledJobInput;
+    };
+    path: {
+        orgID: string;
+        workspaceID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/scheduled-jobs';
+};
+export type CreateScheduledJobErrors = {
+    /**
+     * Invalid input
+     */
+    400: unknown;
+    /**
+     * Forbidden
+     */
+    403: unknown;
+    /**
+     * Unavailable resource
+     */
+    404: unknown;
+    /**
+     * Revision or execution conflict
+     */
+    409: unknown;
+};
+export type CreateScheduledJobResponses = {
+    /**
+     * Success
+     */
+    200: ScheduledJob;
+};
+export type CreateScheduledJobResponse = CreateScheduledJobResponses[keyof CreateScheduledJobResponses];
+export type PreviewJobScheduleData = {
+    body: JobSchedule;
+    path: {
+        orgID: string;
+        workspaceID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/scheduled-jobs/preview';
+};
+export type PreviewJobScheduleErrors = {
+    /**
+     * Invalid input
+     */
+    400: unknown;
+    /**
+     * Forbidden
+     */
+    403: unknown;
+    /**
+     * Unavailable resource
+     */
+    404: unknown;
+    /**
+     * Revision or execution conflict
+     */
+    409: unknown;
+};
+export type PreviewJobScheduleResponses = {
+    /**
+     * Success
+     */
+    200: Array<string>;
+};
+export type PreviewJobScheduleResponse = PreviewJobScheduleResponses[keyof PreviewJobScheduleResponses];
+export type GetScheduledJobData = {
+    body?: never;
+    path: {
+        orgID: string;
+        workspaceID: string;
+        jobID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/scheduled-jobs/{jobID}';
+};
+export type GetScheduledJobErrors = {
+    /**
+     * Invalid input
+     */
+    400: unknown;
+    /**
+     * Forbidden
+     */
+    403: unknown;
+    /**
+     * Unavailable resource
+     */
+    404: unknown;
+    /**
+     * Revision or execution conflict
+     */
+    409: unknown;
+};
+export type GetScheduledJobResponses = {
+    /**
+     * Success
+     */
+    200: ScheduledJob;
+};
+export type GetScheduledJobResponse = GetScheduledJobResponses[keyof GetScheduledJobResponses];
+export type UpdateScheduledJobData = {
+    body: {
+        revision: number;
+        input: ScheduledJobInput;
+    };
+    path: {
+        orgID: string;
+        workspaceID: string;
+        jobID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/scheduled-jobs/{jobID}';
+};
+export type UpdateScheduledJobErrors = {
+    /**
+     * Invalid input
+     */
+    400: unknown;
+    /**
+     * Forbidden
+     */
+    403: unknown;
+    /**
+     * Unavailable resource
+     */
+    404: unknown;
+    /**
+     * Revision or execution conflict
+     */
+    409: unknown;
+};
+export type UpdateScheduledJobResponses = {
+    /**
+     * Success
+     */
+    200: ScheduledJob;
+};
+export type UpdateScheduledJobResponse = UpdateScheduledJobResponses[keyof UpdateScheduledJobResponses];
+export type ListScheduledJobRunsData = {
+    body?: never;
+    path: {
+        orgID: string;
+        workspaceID: string;
+        jobID: string;
+    };
+    query?: {
+        offset?: number;
+        limit?: number;
+    };
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/scheduled-jobs/{jobID}/runs';
+};
+export type ListScheduledJobRunsErrors = {
+    /**
+     * Invalid input
+     */
+    400: unknown;
+    /**
+     * Forbidden
+     */
+    403: unknown;
+    /**
+     * Unavailable resource
+     */
+    404: unknown;
+    /**
+     * Revision or execution conflict
+     */
+    409: unknown;
+};
+export type ListScheduledJobRunsResponses = {
+    /**
+     * Success
+     */
+    200: Array<ScheduledJobRun>;
+};
+export type ListScheduledJobRunsResponse = ListScheduledJobRunsResponses[keyof ListScheduledJobRunsResponses];
+export type RunScheduledJobData = {
+    body: {
+        commandId: string;
+    };
+    path: {
+        orgID: string;
+        workspaceID: string;
+        jobID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/scheduled-jobs/{jobID}/runs';
+};
+export type RunScheduledJobErrors = {
+    /**
+     * Invalid input
+     */
+    400: unknown;
+    /**
+     * Forbidden
+     */
+    403: unknown;
+    /**
+     * Unavailable resource
+     */
+    404: unknown;
+    /**
+     * Revision or execution conflict
+     */
+    409: unknown;
+};
+export type RunScheduledJobResponses = {
+    /**
+     * Success
+     */
+    202: ScheduledJobRun;
+};
+export type RunScheduledJobResponse = RunScheduledJobResponses[keyof RunScheduledJobResponses];
+export type GetScheduledJobRunData = {
+    body?: never;
+    path: {
+        orgID: string;
+        workspaceID: string;
+        jobID: string;
+        occurrenceID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/scheduled-jobs/{jobID}/runs/{occurrenceID}';
+};
+export type GetScheduledJobRunErrors = {
+    /**
+     * Invalid input
+     */
+    400: unknown;
+    /**
+     * Forbidden
+     */
+    403: unknown;
+    /**
+     * Unavailable resource
+     */
+    404: unknown;
+    /**
+     * Revision or execution conflict
+     */
+    409: unknown;
+};
+export type GetScheduledJobRunResponses = {
+    /**
+     * Success
+     */
+    200: ScheduledJobRun;
+};
+export type GetScheduledJobRunResponse = GetScheduledJobRunResponses[keyof GetScheduledJobRunResponses];
+export type ListScheduledJobRunEventsData = {
+    body?: never;
+    path: {
+        orgID: string;
+        workspaceID: string;
+        jobID: string;
+        occurrenceID: string;
+    };
+    query?: {
+        afterSequence?: number;
+    };
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/scheduled-jobs/{jobID}/runs/{occurrenceID}/events';
+};
+export type ListScheduledJobRunEventsErrors = {
+    /**
+     * Invalid input
+     */
+    400: unknown;
+    /**
+     * Forbidden
+     */
+    403: unknown;
+    /**
+     * Unavailable resource
+     */
+    404: unknown;
+    /**
+     * Revision or execution conflict
+     */
+    409: unknown;
+};
+export type ListScheduledJobRunEventsResponses = {
+    /**
+     * Success
+     */
+    200: Array<TaskRunEvent>;
+};
+export type ListScheduledJobRunEventsResponse = ListScheduledJobRunEventsResponses[keyof ListScheduledJobRunEventsResponses];
+export type CancelScheduledJobRunData = {
+    body?: never;
+    path: {
+        orgID: string;
+        workspaceID: string;
+        jobID: string;
+        occurrenceID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/scheduled-jobs/{jobID}/runs/{occurrenceID}/cancel';
+};
+export type CancelScheduledJobRunErrors = {
+    /**
+     * Invalid input
+     */
+    400: unknown;
+    /**
+     * Forbidden
+     */
+    403: unknown;
+    /**
+     * Unavailable resource
+     */
+    404: unknown;
+    /**
+     * Revision or execution conflict
+     */
+    409: unknown;
+};
+export type CancelScheduledJobRunResponses = {
+    /**
+     * Success
+     */
+    202: unknown;
+};
+export type RespondScheduledJobPermissionData = {
+    body: {
+        requestId: string;
+        sessionId: string;
+        optionId: string;
+    };
+    path: {
+        orgID: string;
+        workspaceID: string;
+        jobID: string;
+        occurrenceID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/scheduled-jobs/{jobID}/runs/{occurrenceID}/permissions/respond';
+};
+export type RespondScheduledJobPermissionErrors = {
+    /**
+     * Invalid input
+     */
+    400: unknown;
+    /**
+     * Forbidden
+     */
+    403: unknown;
+    /**
+     * Unavailable resource
+     */
+    404: unknown;
+    /**
+     * Revision or execution conflict
+     */
+    409: unknown;
+};
+export type RespondScheduledJobPermissionResponses = {
+    /**
+     * Success
+     */
+    202: unknown;
+};
+export type RespondScheduledJobQuestionData = {
+    body: QuestionResponseRequest;
+    path: {
+        orgID: string;
+        workspaceID: string;
+        jobID: string;
+        occurrenceID: string;
+        questionID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/scheduled-jobs/{jobID}/runs/{occurrenceID}/questions/{questionID}/respond';
+};
+export type RespondScheduledJobQuestionErrors = {
+    /**
+     * Invalid input
+     */
+    400: unknown;
+    /**
+     * Forbidden
+     */
+    403: unknown;
+    /**
+     * Unavailable resource
+     */
+    404: unknown;
+    /**
+     * Revision or execution conflict
+     */
+    409: unknown;
+};
+export type RespondScheduledJobQuestionResponses = {
+    /**
+     * Success
+     */
+    200: {
+        status: string;
+    };
+};
+export type RespondScheduledJobQuestionResponse = RespondScheduledJobQuestionResponses[keyof RespondScheduledJobQuestionResponses];

@@ -58,6 +58,9 @@ type RouterDependencies struct {
 
 // NewRouter validates the served OpenAPI contract before exposing routes.
 func NewRouter(ctx context.Context, deps RouterDependencies) (*chi.Mux, error) {
+	if deps.ScheduledJobs != nil && deps.JobDispatcher == nil {
+		return nil, fmt.Errorf("scheduled job dispatcher is required")
+	}
 	if deps.Profiles == nil {
 		return nil, fmt.Errorf("execution profile service is required")
 	}
