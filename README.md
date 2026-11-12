@@ -19,6 +19,8 @@ Active prototype; see [status](docs/status.md):
 - Organization and workspace management with Keycloak/OIDC authentication and
   application-owned roles and authorization.
 - Tasks, comments, repositories, workflow rules, artifacts, and direct agent conversations.
+- Workspace-scoped scheduled jobs with manual runs, durable run history, and timezone-aware
+  daily, weekly, and crontab schedules.
 - Workspace agent definitions, runtime profiles, skills, HTTP MCP servers, and environment values.
 - GitHub Projects v2 and Jira Server task imports; GitHub and GitLab coding integrations.
 - OpenCode, Claude Code, Codex, GitHub Copilot CLI, and Kiro CLI through independent workers.
@@ -66,6 +68,7 @@ make dev
 2. Create/assign task; assignment never starts work.
 3. Start explicitly or through [workflow rules](docs/guides/workflows.md).
 4. View history/activity, chat, answer approvals, or cancel in task details.
+5. For repeatable work independent of tasks, create a [scheduled job](docs/guides/scheduled-jobs.md).
 
 API authentication: browser session or verified Keycloak bearer token.
 

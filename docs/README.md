@@ -10,6 +10,7 @@ Start with [local setup](../README.md).
 | Implementation/verification | [Status](status.md) |
 | Agent configuration | [Agent configuration](guides/agent-configuration.md), [runtimes](reference/runtimes/README.md) |
 | Task lifecycle | [Workflows](guides/workflows.md), [sessions](guides/sessions.md), [artifacts](guides/artifacts.md) |
+| Repeatable agent work | [Scheduled jobs](guides/scheduled-jobs.md) |
 | Repositories/imports | [Integrations](guides/integrations.md) |
 | Platform setup | [Quick start](../README.md#run-locally), [Compose](guides/local-setup.md), [configuration](operations/configuration.md) |
 | Agent execution | [Docker](reference/executors/docker.md), [Kubernetes](reference/executors/kubernetes.md), [Local](reference/executors/local.md), [execution profiles](guides/execution-profiles.md) |
