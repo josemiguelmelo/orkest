@@ -30,7 +30,10 @@ these contain occurrence execution identities and do not reference board tasks.
 Job ownership is stored in scheduled_job_runs. Completion recognizes this owner
 without changing existing task/direct-chat prompt semantics or model/runtime pins.
 
-Migration 0042 is additive. Stop old platform instances before activating jobs:
+Migration 0047 is additive. The deployment database is already at version 46;
+Goose skips migrations at or below the recorded database version, which is why
+the earlier 0042 job migration left `scheduled_jobs` missing. The 0047 migration
+runs on that database and on fresh installs. Stop old platform instances before activating jobs:
 old completion code cannot interpret job ownership safely. Independent agentctl
 processes continue. Reconcile pending/uncertain runs before rollback; the down
 migration refuses active ownership and removes completed job history/session
