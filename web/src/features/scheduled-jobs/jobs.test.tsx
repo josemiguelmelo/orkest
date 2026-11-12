@@ -81,9 +81,16 @@ it('saves a job definition without board-task fields', async () => {
   await userEvent.selectOptions(screen.getByLabelText('Agent'), 'agent');
   await userEvent.click(screen.getByRole('button', { name: 'Save scheduled job' }));
   expect(api.createScheduledJob).toHaveBeenCalledOnce();
-  const payload = api.createScheduledJob.mock.calls[0]?.[0].body;
-  expect(payload.commandId).toBeTruthy();
-  expect(payload.input.instructions).toBe('Review all repositories');
-  expect(payload.input).not.toHaveProperty('workflowId');
-  expect(payload.input).not.toHaveProperty('status');
+  const [options] = api.createScheduledJob.mock.calls[0] as unknown as [
+    {
+      body: {
+        commandId: string;
+        input: { instructions: string; [key: string]: unknown };
+      };
+    },
+  ];
+  expect(options.body.commandId).toBeTruthy();
+  expect(options.body.input.instructions).toBe('Review all repositories');
+  expect(options.body.input).not.toHaveProperty('workflowId');
+  expect(options.body.input).not.toHaveProperty('status');
 });
