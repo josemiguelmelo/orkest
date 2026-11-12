@@ -2751,8 +2751,14 @@ components:
           enum:
             - daily
             - weekly
+            - cron
+          description: Daily, weekly, or standard five-field crontab schedule.
         timeZone: &a1
           type: string
+        cronExpression:
+          type: string
+          maxLength: 128
+          description: Required for cron frequency; standard five-field expression interpreted in timeZone.
         hour:
           type: integer
           minimum: 0

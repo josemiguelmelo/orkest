@@ -3,11 +3,12 @@ package model
 import "time"
 
 type Schedule struct {
-	Frequency string `json:"frequency"`
-	TimeZone  string `json:"timeZone"`
-	Hour      int    `json:"hour"`
-	Minute    int    `json:"minute"`
-	Weekday   int    `json:"weekday"`
+	Frequency      string `json:"frequency"`
+	TimeZone       string `json:"timeZone"`
+	Hour           int    `json:"hour"`
+	Minute         int    `json:"minute"`
+	Weekday        int    `json:"weekday"`
+	CronExpression string `json:"cronExpression,omitempty"`
 }
 type Input struct {
 	Name               string   `json:"name"`

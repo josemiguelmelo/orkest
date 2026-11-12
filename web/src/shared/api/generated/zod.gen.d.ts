@@ -611,8 +611,10 @@ export declare const zJobSchedule: z.ZodObject<{
     frequency: z.ZodEnum<{
         daily: "daily";
         weekly: "weekly";
+        cron: "cron";
     }>;
     timeZone: z.ZodString;
+    cronExpression: z.ZodOptional<z.ZodString>;
     hour: z.ZodInt;
     minute: z.ZodInt;
     weekday: z.ZodInt;
@@ -631,8 +633,10 @@ export declare const zScheduledJobInput: z.ZodObject<{
         frequency: z.ZodEnum<{
             daily: "daily";
             weekly: "weekly";
+            cron: "cron";
         }>;
         timeZone: z.ZodString;
+        cronExpression: z.ZodOptional<z.ZodString>;
         hour: z.ZodInt;
         minute: z.ZodInt;
         weekday: z.ZodInt;
@@ -654,8 +658,10 @@ export declare const zScheduledJob: z.ZodIntersection<z.ZodObject<{
         frequency: z.ZodEnum<{
             daily: "daily";
             weekly: "weekly";
+            cron: "cron";
         }>;
         timeZone: z.ZodString;
+        cronExpression: z.ZodOptional<z.ZodString>;
         hour: z.ZodInt;
         minute: z.ZodInt;
         weekday: z.ZodInt;
@@ -689,8 +695,10 @@ export declare const zScheduledJobRun: z.ZodObject<{
             frequency: z.ZodEnum<{
                 daily: "daily";
                 weekly: "weekly";
+                cron: "cron";
             }>;
             timeZone: z.ZodString;
+            cronExpression: z.ZodOptional<z.ZodString>;
             hour: z.ZodInt;
             minute: z.ZodInt;
             weekday: z.ZodInt;
@@ -3221,8 +3229,10 @@ export declare const zListScheduledJobsResponse: z.ZodArray<z.ZodIntersection<z.
         frequency: z.ZodEnum<{
             daily: "daily";
             weekly: "weekly";
+            cron: "cron";
         }>;
         timeZone: z.ZodString;
+        cronExpression: z.ZodOptional<z.ZodString>;
         hour: z.ZodInt;
         minute: z.ZodInt;
         weekday: z.ZodInt;
@@ -3254,8 +3264,10 @@ export declare const zCreateScheduledJobBody: z.ZodObject<{
             frequency: z.ZodEnum<{
                 daily: "daily";
                 weekly: "weekly";
+                cron: "cron";
             }>;
             timeZone: z.ZodString;
+            cronExpression: z.ZodOptional<z.ZodString>;
             hour: z.ZodInt;
             minute: z.ZodInt;
             weekday: z.ZodInt;
@@ -3285,8 +3297,10 @@ export declare const zCreateScheduledJobResponse: z.ZodIntersection<z.ZodObject<
         frequency: z.ZodEnum<{
             daily: "daily";
             weekly: "weekly";
+            cron: "cron";
         }>;
         timeZone: z.ZodString;
+        cronExpression: z.ZodOptional<z.ZodString>;
         hour: z.ZodInt;
         minute: z.ZodInt;
         weekday: z.ZodInt;
@@ -3305,8 +3319,10 @@ export declare const zPreviewJobScheduleBody: z.ZodObject<{
     frequency: z.ZodEnum<{
         daily: "daily";
         weekly: "weekly";
+        cron: "cron";
     }>;
     timeZone: z.ZodString;
+    cronExpression: z.ZodOptional<z.ZodString>;
     hour: z.ZodInt;
     minute: z.ZodInt;
     weekday: z.ZodInt;
@@ -3341,8 +3357,10 @@ export declare const zGetScheduledJobResponse: z.ZodIntersection<z.ZodObject<{
         frequency: z.ZodEnum<{
             daily: "daily";
             weekly: "weekly";
+            cron: "cron";
         }>;
         timeZone: z.ZodString;
+        cronExpression: z.ZodOptional<z.ZodString>;
         hour: z.ZodInt;
         minute: z.ZodInt;
         weekday: z.ZodInt;
@@ -3373,8 +3391,10 @@ export declare const zUpdateScheduledJobBody: z.ZodObject<{
             frequency: z.ZodEnum<{
                 daily: "daily";
                 weekly: "weekly";
+                cron: "cron";
             }>;
             timeZone: z.ZodString;
+            cronExpression: z.ZodOptional<z.ZodString>;
             hour: z.ZodInt;
             minute: z.ZodInt;
             weekday: z.ZodInt;
@@ -3405,8 +3425,10 @@ export declare const zUpdateScheduledJobResponse: z.ZodIntersection<z.ZodObject<
         frequency: z.ZodEnum<{
             daily: "daily";
             weekly: "weekly";
+            cron: "cron";
         }>;
         timeZone: z.ZodString;
+        cronExpression: z.ZodOptional<z.ZodString>;
         hour: z.ZodInt;
         minute: z.ZodInt;
         weekday: z.ZodInt;
@@ -3452,8 +3474,10 @@ export declare const zListScheduledJobRunsResponse: z.ZodArray<z.ZodObject<{
             frequency: z.ZodEnum<{
                 daily: "daily";
                 weekly: "weekly";
+                cron: "cron";
             }>;
             timeZone: z.ZodString;
+            cronExpression: z.ZodOptional<z.ZodString>;
             hour: z.ZodInt;
             minute: z.ZodInt;
             weekday: z.ZodInt;
@@ -3500,8 +3524,10 @@ export declare const zRunScheduledJobResponse: z.ZodObject<{
             frequency: z.ZodEnum<{
                 daily: "daily";
                 weekly: "weekly";
+                cron: "cron";
             }>;
             timeZone: z.ZodString;
+            cronExpression: z.ZodOptional<z.ZodString>;
             hour: z.ZodInt;
             minute: z.ZodInt;
             weekday: z.ZodInt;
@@ -3546,8 +3572,10 @@ export declare const zGetScheduledJobRunResponse: z.ZodObject<{
             frequency: z.ZodEnum<{
                 daily: "daily";
                 weekly: "weekly";
+                cron: "cron";
             }>;
             timeZone: z.ZodString;
+            cronExpression: z.ZodOptional<z.ZodString>;
             hour: z.ZodInt;
             minute: z.ZodInt;
             weekday: z.ZodInt;

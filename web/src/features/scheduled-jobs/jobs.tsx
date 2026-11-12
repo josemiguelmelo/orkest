@@ -52,8 +52,10 @@ export function ScheduledJobsPage() {
               {job.name} <Badge>{job.enabled ? 'Enabled' : 'Paused'}</Badge>
             </h2>
             <p>
-              {job.schedule.frequency} at {String(job.schedule.hour).padStart(2, '0')}:
-              {String(job.schedule.minute).padStart(2, '0')} · {job.schedule.timeZone}
+              {job.schedule.frequency === 'cron'
+                ? `Cron · ${job.schedule.cronExpression}`
+                : `${job.schedule.frequency === 'daily' ? 'Daily' : 'Weekly'} at ${String(job.schedule.hour).padStart(2, '0')}:${String(job.schedule.minute).padStart(2, '0')}`}{' '}
+              · {job.schedule.timeZone}
             </p>
             <p className="muted">
               Next: {new Date(job.nextDueAt).toLocaleString()} ·{' '}

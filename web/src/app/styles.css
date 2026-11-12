@@ -1831,6 +1831,117 @@ input[type='checkbox'] {
     display: none;
   }
 }
+
+.job-preview-actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 9px 12px;
+  margin: 14px 0 8px;
+}
+.job-preview-actions > span {
+  color: var(--muted);
+  font-size: 11px;
+}
+.job-schedule-preview {
+  overflow: hidden;
+  margin: 9px 0 16px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+}
+.job-schedule-preview-heading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  background: color-mix(in srgb, var(--primary) 5%, var(--surface));
+}
+.job-schedule-preview-icon {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  flex: none;
+  place-items: center;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--primary) 12%, var(--surface));
+  color: var(--primary);
+}
+.job-schedule-preview-heading h3 {
+  font-size: 13px;
+  font-weight: 650;
+}
+.job-schedule-preview-heading p {
+  margin-top: 2px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.job-schedule-preview > ol {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.job-schedule-preview > ol > li {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) minmax(120px, auto);
+  align-items: center;
+  gap: 10px;
+  min-height: 58px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+}
+.job-schedule-preview > ol > li:last-child { border-bottom: 0; }
+.job-schedule-preview-number {
+  display: grid;
+  width: 26px;
+  height: 26px;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--surface-muted);
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 650;
+}
+.job-schedule-preview-local,
+.job-schedule-preview time {
+  display: grid;
+  gap: 2px;
+}
+.job-schedule-preview-local strong {
+  font-size: 12px;
+  font-weight: 600;
+}
+.job-schedule-preview-local small,
+.job-schedule-preview time small {
+  color: var(--muted);
+  font-size: 10px;
+}
+.job-schedule-preview time {
+  justify-items: end;
+  color: var(--foreground);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.job-schedule-preview > .muted {
+  padding: 14px;
+  font-size: 12px;
+}
+@media (max-width: 520px) {
+  .job-schedule-preview > ol > li {
+    grid-template-columns: 30px minmax(0, 1fr);
+    gap: 8px;
+  }
+  .job-schedule-preview time {
+    grid-column: 2;
+    display: flex;
+    justify-items: start;
+    gap: 6px;
+    color: var(--muted);
+    font-size: 10px;
+  }
+}
 .repository-chips {
   display: flex;
   flex-wrap: wrap;

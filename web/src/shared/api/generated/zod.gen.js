@@ -469,8 +469,13 @@ export const zOperationStatus = z.object({
     status: z.string()
 });
 export const zJobSchedule = z.object({
-    frequency: z.enum(['daily', 'weekly']),
+    frequency: z.enum([
+        'daily',
+        'weekly',
+        'cron'
+    ]),
     timeZone: z.string(),
+    cronExpression: z.string().max(128).optional(),
     hour: z.int().gte(0).lte(23),
     minute: z.int().gte(0).lte(59),
     weekday: z.int().gte(0).lte(6)

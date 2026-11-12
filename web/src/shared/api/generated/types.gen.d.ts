@@ -464,8 +464,15 @@ export type OperationStatus = {
     status: string;
 };
 export type JobSchedule = {
-    frequency: 'daily' | 'weekly';
+    /**
+     * Daily, weekly, or standard five-field crontab schedule.
+     */
+    frequency: 'daily' | 'weekly' | 'cron';
     timeZone: string;
+    /**
+     * Required for cron frequency; standard five-field expression interpreted in timeZone.
+     */
+    cronExpression?: string;
     hour: number;
     minute: number;
     weekday: number;

@@ -6,6 +6,7 @@ import { agentsQuery, repositoriesQuery, path } from '../../shared/api/queries';
 import * as sdk from '../../shared/api/generated/sdk.gen';
 import type { ScheduledJob, ScheduledJobInput } from '../../shared/api/generated/types.gen';
 import { command, data } from '../../shared/api/client';
+import { CalendarClock, Clock3 } from 'lucide-react';
 import { Button } from '../../shared/ui/button';
 import { Field } from '../../shared/ui/form';
 import { Dialog } from '../../shared/ui/dialog';
@@ -40,13 +41,14 @@ export function JobEditor({
   const { scope } = useApp();
   const [input, setInput] = useState<ScheduledJobInput>(job ? jobInput(job) : defaults());
   const [commandId] = useState(() => crypto.randomUUID());
-  const [preview, setPreview] = useState<string[]>([]);
+  const [preview, setPreview] = useState<string[] | null>(null);
+  const [previewing, setPreviewing] = useState(false);
   const agents = useQuery(agentsQuery(scope));
   const repositories = useQuery(repositoriesQuery(scope));
   const action = useAction();
   const update = (value: Partial<ScheduledJobInput>) => {
     setInput((current) => ({ ...current, ...value }));
-    setPreview([]);
+    setPreview(null);
   };
   return (
     <Dialog
@@ -148,16 +150,46 @@ export function JobEditor({
         <Field label="Frequency">
           <select
             value={input.schedule.frequency}
-            onChange={(e) =>
+            onChange={(e) => {
+              const frequency = e.target.value as 'daily' | 'weekly' | 'cron';
+              const { cronExpression, ...baseSchedule } = input.schedule;
               update({
-                schedule: { ...input.schedule, frequency: e.target.value as 'daily' | 'weekly' },
-              })
-            }
+                schedule:
+                  frequency === 'cron'
+                    ? {
+                        ...input.schedule,
+                        frequency,
+                        cronExpression: cronExpression || '0 9 * * 1-5',
+                      }
+                    : { ...baseSchedule, frequency },
+              });
+            }}
           >
             <option value="daily">Daily</option>
             <option value="weekly">Weekly</option>
+            <option value="cron">Custom crontab</option>
           </select>
         </Field>
+        {input.schedule.frequency === 'cron' ? (
+          <Field
+            label="Cron expression"
+            hint="Five fields: minute, hour, day of month, month, weekday. Lists, ranges, steps, names, and Sunday as 0 or 7 are supported. Example: 0 9 * * 1-5 runs weekdays at 09:00. If both day-of-month and weekday are restricted, either can match."
+          >
+            <input
+              required
+              maxLength={128}
+              spellCheck={false}
+              autoComplete="off"
+              placeholder="0 9 * * 1-5"
+              value={input.schedule.cronExpression ?? ''}
+              onChange={(e) =>
+                update({
+                  schedule: { ...input.schedule, cronExpression: e.target.value },
+                })
+              }
+            />
+          </Field>
+        ) : null}
         {input.schedule.frequency === 'weekly' && (
           <Field label="Weekday">
             <select
@@ -176,17 +208,19 @@ export function JobEditor({
             </select>
           </Field>
         )}
-        <Field label="Local time">
-          <input
-            type="time"
-            required
-            value={`${String(input.schedule.hour).padStart(2, '0')}:${String(input.schedule.minute).padStart(2, '0')}`}
-            onChange={(e) => {
-              const [hour, minute] = e.target.value.split(':').map(Number);
-              update({ schedule: { ...input.schedule, hour: hour ?? 0, minute: minute ?? 0 } });
-            }}
-          />
-        </Field>
+        {input.schedule.frequency !== 'cron' && (
+          <Field label="Local time">
+            <input
+              type="time"
+              required
+              value={`${String(input.schedule.hour).padStart(2, '0')}:${String(input.schedule.minute).padStart(2, '0')}`}
+              onChange={(e) => {
+                const [hour, minute] = e.target.value.split(':').map(Number);
+                update({ schedule: { ...input.schedule, hour: hour ?? 0, minute: minute ?? 0 } });
+              }}
+            />
+          </Field>
+        )}
         <Field label="IANA time zone">
           <input
             required
@@ -217,31 +251,70 @@ export function JobEditor({
           late schedules and capacity waits have a one-hour grace period. Pausing leaves
           queued/active runs intact. Email jobs require tools connected to the intended account.
         </p>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={action.pending}
-          onClick={() =>
-            void action.run(async () =>
-              setPreview(
-                await data(
-                  sdk.previewJobSchedule({ ...command, path: path(scope), body: input.schedule }),
-                ),
-              ),
-            )
-          }
-        >
-          Preview next runs
-        </Button>
-        {preview.length > 0 && (
-          <ul>
-            {preview.map((t) => (
-              <li key={t}>
-                {new Date(t).toLocaleString(undefined, { timeZone: input.schedule.timeZone })}{' '}
-                {input.schedule.timeZone} · {t}
-              </li>
-            ))}
-          </ul>
+        <div className="job-preview-actions">
+          <Button
+            type="button"
+            variant="outline"
+            disabled={action.pending}
+            onClick={() => {
+              setPreviewing(true);
+              void action
+                .run(async () =>
+                  setPreview(
+                    await data(
+                      sdk.previewJobSchedule({
+                        ...command,
+                        path: path(scope),
+                        body: input.schedule,
+                      }),
+                    ),
+                  ),
+                )
+                .finally(() => setPreviewing(false));
+            }}
+          >
+            <CalendarClock size={16} />
+            {previewing ? 'Finding times…' : 'Preview next runs'}
+          </Button>
+          <span>Check the upcoming dates before you enable this schedule.</span>
+        </div>
+        {preview !== null && (
+          <section className="job-schedule-preview" aria-live="polite">
+            <div className="job-schedule-preview-heading">
+              <div className="job-schedule-preview-icon">
+                <Clock3 size={17} />
+              </div>
+              <div>
+                <h3>
+                  Next {preview.length} scheduled {preview.length === 1 ? 'run' : 'runs'}
+                </h3>
+                <p>Shown in {input.schedule.timeZone}; UTC is included for reference.</p>
+              </div>
+            </div>
+            {preview.length ? (
+              <ol>
+                {preview.map((timestamp, index) => (
+                  <li key={timestamp}>
+                    <span className="job-schedule-preview-number">
+                      {String(index + 1).padStart(2, '0')}
+                    </span>
+                    <div className="job-schedule-preview-local">
+                      <strong>{formatScheduleTime(timestamp, input.schedule.timeZone)}</strong>
+                      <small>
+                        {relativeScheduleTime(timestamp)} · {input.schedule.timeZone}
+                      </small>
+                    </div>
+                    <time dateTime={timestamp}>
+                      <small>UTC</small>
+                      {formatScheduleTime(timestamp, 'UTC')}
+                    </time>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <p className="muted">No upcoming runs were returned for this schedule.</p>
+            )}
+          </section>
         )}
         {(agents.error || repositories.error) && (
           <ErrorState error={agents.error ?? repositories.error} />
@@ -258,4 +331,29 @@ export function JobEditor({
       </form>
     </Dialog>
   );
+}
+
+function formatScheduleTime(value: string, timeZone: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.valueOf())) return value;
+  return new Intl.DateTimeFormat(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+    timeZone,
+  }).format(date);
+}
+
+function relativeScheduleTime(value: string): string {
+  const minutes = Math.round((new Date(value).valueOf() - Date.now()) / 60_000);
+  if (minutes < 60) return minutes <= 1 ? 'In less than a minute' : `In ${minutes} minutes`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return hours === 1 ? 'In about an hour' : `In about ${hours} hours`;
+  const days = Math.floor(hours / 24);
+  if (days === 1) return 'Tomorrow';
+  if (days < 7) return `In ${days} days`;
+  const weeks = Math.floor(days / 7);
+  return weeks === 1 ? 'In about a week' : `In about ${weeks} weeks`;
 }
