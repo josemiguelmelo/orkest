@@ -58,7 +58,10 @@ type RouterDependencies struct {
 
 // NewRouter validates the served OpenAPI contract before exposing routes.
 func NewRouter(ctx context.Context, deps RouterDependencies) (*chi.Mux, error) {
-	if deps.ScheduledJobs != nil && deps.JobDispatcher == nil {
+	if deps.ScheduledJobs == nil {
+		return nil, fmt.Errorf("scheduled job service is required")
+	}
+	if deps.JobDispatcher == nil {
 		return nil, fmt.Errorf("scheduled job dispatcher is required")
 	}
 	if deps.Profiles == nil {
@@ -132,9 +135,7 @@ func NewRouter(ctx context.Context, deps RouterDependencies) (*chi.Mux, error) {
 			taskRunAPI{tasks: deps.Tasks, launches: deps.Launches}.routes(api)
 			directChatAPI{chats: deps.DirectChats, agents: deps.Agents, workspaces: deps.Workspaces}.routes(api)
 			taskIntegrationAPI{service: deps.Integrations}.routes(api)
-			if deps.ScheduledJobs != nil {
-				scheduledJobAPI{service: deps.ScheduledJobs, launches: deps.Launches, dispatcher: deps.JobDispatcher}.routes(api)
-			}
+			scheduledJobAPI{service: deps.ScheduledJobs, launches: deps.Launches, dispatcher: deps.JobDispatcher}.routes(api)
 		})
 	})
 	openapi.Enable(router, "Orkest API", OpenAPIContract)
