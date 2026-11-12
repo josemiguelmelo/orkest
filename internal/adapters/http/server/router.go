@@ -19,6 +19,7 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/server/mcpserver"
 	"github.com/josemiguelmelo/orkest/internal/server/orchestration"
 	"github.com/josemiguelmelo/orkest/internal/server/organization"
+	"github.com/josemiguelmelo/orkest/internal/server/scheduledjob"
 	"github.com/josemiguelmelo/orkest/internal/server/skill"
 	skillmodel "github.com/josemiguelmelo/orkest/internal/server/skill/model"
 	"github.com/josemiguelmelo/orkest/internal/server/task"
@@ -32,6 +33,8 @@ import (
 
 // RouterDependencies names the services required by platform routes.
 type RouterDependencies struct {
+	ScheduledJobs    *scheduledjob.ScheduledJobService
+	JobDispatcher    *orchestration.JobDispatcher
 	Users            *identity.UserRegistrationService
 	Organizations    *organization.OrganizationService
 	Workspaces       *workspace.WorkspaceService
@@ -126,6 +129,9 @@ func NewRouter(ctx context.Context, deps RouterDependencies) (*chi.Mux, error) {
 			taskRunAPI{tasks: deps.Tasks, launches: deps.Launches}.routes(api)
 			directChatAPI{chats: deps.DirectChats, agents: deps.Agents, workspaces: deps.Workspaces}.routes(api)
 			taskIntegrationAPI{service: deps.Integrations}.routes(api)
+			if deps.ScheduledJobs != nil {
+				scheduledJobAPI{service: deps.ScheduledJobs, launches: deps.Launches, dispatcher: deps.JobDispatcher}.routes(api)
+			}
 		})
 	})
 	openapi.Enable(router, "Orkest API", OpenAPIContract)

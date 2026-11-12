@@ -40,6 +40,7 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/server/mcpserver"
 	"github.com/josemiguelmelo/orkest/internal/server/orchestration"
 	"github.com/josemiguelmelo/orkest/internal/server/organization"
+	"github.com/josemiguelmelo/orkest/internal/server/scheduledjob"
 	"github.com/josemiguelmelo/orkest/internal/server/skill"
 	"github.com/josemiguelmelo/orkest/internal/server/task"
 	"github.com/josemiguelmelo/orkest/internal/server/taskintegration"
@@ -269,6 +270,9 @@ func runServer(ctx context.Context, logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	jobRepository := postgres.NewScheduledJobPostgresRepository(database)
+	jobService := scheduledjob.NewScheduledJobService(jobRepository, workspaces, agents, codeRepositories)
+	jobDispatcher := orchestration.NewJobDispatcher(dispatcher, launchRepo, completion)
 	directChats, err := orchestration.NewDirectChatService(launchRepo, dispatcher, launchService)
 	if err != nil {
 		return err
@@ -317,7 +321,11 @@ func runServer(ctx context.Context, logger *slog.Logger) error {
 	worker := workflowautomation.NewWorkflowAutomationWorker(taskWorkflows, execution, logger)
 	runnerWG.Add(1)
 	go func() { defer runnerWG.Done(); worker.Run(runnerCtx) }()
+	jobWorker := scheduledjob.NewScheduledJobWorker(jobRepository, jobDispatcher, jobService, logger)
+	runnerWG.Add(1)
+	go func() { defer runnerWG.Done(); jobWorker.Run(runnerCtx) }()
 	router, err := httpapi.NewRouter(ctx, httpapi.RouterDependencies{
+		ScheduledJobs: jobService, JobDispatcher: jobDispatcher,
 		Users:            users,
 		Organizations:    organizations,
 		Workspaces:       workspaces,

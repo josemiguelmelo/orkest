@@ -181,6 +181,47 @@ type RunArtifactInput struct {
 	RevisionID string `json:"revision_id"`
 }
 
+type ScheduledJob struct {
+	ID           string             `json:"id"`
+	WorkspaceID  string             `json:"workspace_id"`
+	Revision     int64              `json:"revision"`
+	AuthorizedBy string             `json:"authorized_by"`
+	Definition   []byte             `json:"definition"`
+	Enabled      bool               `json:"enabled"`
+	NextDueAt    pgtype.Timestamptz `json:"next_due_at"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+}
+
+type ScheduledJobRevision struct {
+	WorkspaceID  string `json:"workspace_id"`
+	JobID        string `json:"job_id"`
+	Revision     int64  `json:"revision"`
+	AuthorizedBy string `json:"authorized_by"`
+	Definition   []byte `json:"definition"`
+}
+
+type ScheduledJobRun struct {
+	ID              string             `json:"id"`
+	WorkspaceID     string             `json:"workspace_id"`
+	JobID           string             `json:"job_id"`
+	Revision        int64              `json:"revision"`
+	ActorID         string             `json:"actor_id"`
+	Definition      []byte             `json:"definition"`
+	RepositoryIds   []string           `json:"repository_ids"`
+	ScheduledFor    pgtype.Timestamptz `json:"scheduled_for"`
+	TriggerKey      string             `json:"trigger_key"`
+	State           string             `json:"state"`
+	Reason          string             `json:"reason"`
+	RunID           string             `json:"run_id"`
+	SessionID       string             `json:"session_id"`
+	CommandID       string             `json:"command_id"`
+	ClaimToken      string             `json:"claim_token"`
+	ClaimAttempt    int32              `json:"claim_attempt"`
+	ClaimUntil      pgtype.Timestamptz `json:"claim_until"`
+	CancelRequested bool               `json:"cancel_requested"`
+	CreatedAt       pgtype.Timestamptz `json:"created_at"`
+}
+
 type Skill struct {
 	ID             string             `json:"id"`
 	Scope          string             `json:"scope"`
