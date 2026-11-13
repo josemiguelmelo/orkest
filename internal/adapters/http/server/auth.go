@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -230,12 +231,12 @@ func (a *oidcAuth) middleware(next http.Handler) http.Handler {
 		} else if cookie, err := r.Cookie(sessionCookie); err == nil {
 			raw = cookie.Value
 		}
-		if raw == "" {
-			writeError(w, http.StatusUnauthorized, "unauthorized")
-			return
+		var token *oidc.IDToken
+		var err error
+		if raw != "" {
+			token, err = a.verifier.Verify(r.Context(), raw)
 		}
-		token, err := a.verifier.Verify(r.Context(), raw)
-		if err != nil && r.Header.Get("Authorization") == "" {
+		if shouldRefreshSession(raw, r.Header.Get("Authorization"), err) {
 			if refresh, cookieErr := r.Cookie(refreshCookie); cookieErr == nil && refresh.Value != "" {
 				refreshed, refreshErr := a.refreshSession(r.Context(), refresh.Value)
 				if refreshErr == nil {
@@ -249,7 +250,7 @@ func (a *oidcAuth) middleware(next http.Handler) http.Handler {
 				}
 			}
 		}
-		if err != nil {
+		if token == nil || err != nil {
 			writeError(w, http.StatusUnauthorized, "unauthorized")
 			return
 		}
@@ -272,9 +273,54 @@ func (a *oidcAuth) middleware(next http.Handler) http.Handler {
 	})
 }
 
+func shouldRefreshSession(raw, authorization string, verifyErr error) bool {
+	return authorization == "" && (raw == "" || verifyErr != nil)
+}
+
 func (a *oidcAuth) refreshSession(ctx context.Context, refreshToken string) (*oauth2.Token, error) {
 	ctx = context.WithValue(ctx, oauth2.HTTPClient, a.httpClient)
-	return a.config.TokenSource(ctx, &oauth2.Token{RefreshToken: refreshToken}).Token()
+	// x/oauth2's refresh token source omits scope. Keycloak only returns a new
+	// ID token when the refresh grant explicitly asks for the OpenID scope.
+	form := url.Values{
+		"grant_type":    {"refresh_token"},
+		"refresh_token": {refreshToken},
+		"client_id":     {a.config.ClientID},
+		"client_secret": {a.config.ClientSecret},
+		"scope":         {strings.Join(a.config.Scopes, " ")},
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, a.config.Endpoint.TokenURL, strings.NewReader(form.Encode()))
+	if err != nil {
+		return nil, fmt.Errorf("create OIDC refresh request: %w", err)
+	}
+	request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	response, err := a.httpClient.Do(request)
+	if err != nil {
+		return nil, fmt.Errorf("send OIDC refresh request: %w", err)
+	}
+	defer func() { _ = response.Body.Close() }()
+	if response.StatusCode < http.StatusOK || response.StatusCode >= http.StatusMultipleChoices {
+		_, _ = io.Copy(io.Discard, response.Body)
+		return nil, fmt.Errorf("OIDC refresh returned status %d", response.StatusCode)
+	}
+	var fields map[string]any
+	if err := json.NewDecoder(response.Body).Decode(&fields); err != nil {
+		return nil, fmt.Errorf("decode OIDC refresh response: %w", err)
+	}
+	encoded, err := json.Marshal(fields)
+	if err != nil {
+		return nil, fmt.Errorf("encode OIDC refresh response: %w", err)
+	}
+	var token oauth2.Token
+	if err := json.Unmarshal(encoded, &token); err != nil {
+		return nil, fmt.Errorf("decode OIDC refresh token: %w", err)
+	}
+	if token.ExpiresIn > 0 {
+		token.Expiry = time.Now().Add(time.Duration(token.ExpiresIn) * time.Second)
+	}
+	if token.RefreshToken == "" {
+		token.RefreshToken = refreshToken
+	}
+	return token.WithExtra(fields), nil
 }
 
 func setSessionCookies(w http.ResponseWriter, secure bool, idToken, refreshToken string, expires time.Time) {
