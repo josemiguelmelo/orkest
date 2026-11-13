@@ -1,10 +1,12 @@
 package workflowautomation_test
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
 	"log/slog"
+	"strings"
 	"testing"
 	"time"
 
@@ -168,6 +170,28 @@ func TestExecutionServiceKeepsAcceptedFailuresVisible(t *testing.T) {
 	repo.healthErr = errors.New("health lookup failed")
 	if _, err := service.ProcessNextCommand(context.Background()); err == nil {
 		t.Fatal("health failure was acknowledged")
+	}
+}
+
+func TestDispatchFailureLogIncludesSafeStageAndCauseType(t *testing.T) {
+	var logs bytes.Buffer
+	repo := &singleExecutionCommandRepository{command: workflowautomation.ExecutionCommand{
+		ID: "failed-command", WorkspaceID: "workspace", TaskID: "task", ActorID: "user", StageVersion: 7,
+		Options: workflowautomation.StartWorkOptions{SessionMode: "continue"},
+	}}
+	dispatcher := &sessionDispatcher{startErr: &taskmodel.StartFailure{Stage: "refresh_session_mcp_servers", Cause: errors.New("credential value must not appear in logs")}}
+	service := workflowautomation.NewWorkflowExecutionService(repo, testService(&taskRepositoryStub{task: taskmodel.Task{ID: "task", WorkspaceID: "workspace", StageVersion: 7, AssigneeAgentID: "agent"}}, "admin"), dispatcher, slog.New(slog.NewTextHandler(&logs, nil)))
+	if _, err := service.ProcessNextCommand(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	output := logs.String()
+	for _, expected := range []string{"reason=dispatch_failed", "failure_stage=refresh_session_mcp_servers", "cause_type=*errors.errorString", "session_mode=continue", "stage_version=7"} {
+		if !strings.Contains(output, expected) {
+			t.Fatalf("missing %q in structured dispatch log: %s", expected, output)
+		}
+	}
+	if strings.Contains(output, "credential value must not appear in logs") {
+		t.Fatal("raw dispatch error text leaked into logs")
 	}
 }
 

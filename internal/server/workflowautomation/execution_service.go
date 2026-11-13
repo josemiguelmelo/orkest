@@ -124,13 +124,43 @@ func (w *WorkflowExecutionService) dispatchCommand(ctx context.Context, c Execut
 		if errors.Is(err, taskmodel.ErrIntegrationSession) {
 			reason = "session_incompatible"
 		}
-		w.logger.Warn("workflow start requires attention", "workspace_id", c.WorkspaceID, "task_id", c.TaskID, "command_id", c.ID, "reason", reason)
 		if accepted {
 			return true, "", nil
+		}
+		if w.logger != nil {
+			failureStage, causeType := dispatchFailureDetails(err)
+			w.logger.Warn("workflow start requires attention",
+				"workspace_id", c.WorkspaceID,
+				"task_id", c.TaskID,
+				"command_id", c.ID,
+				"stage_version", c.StageVersion,
+				"session_mode", c.Options.SessionMode,
+				"reason", reason,
+				"failure_stage", failureStage,
+				"cause_type", causeType,
+			)
 		}
 		return false, reason, nil
 	}
 	return true, "", nil
+}
+
+func dispatchFailureDetails(err error) (string, string) {
+	stage := "task_dispatch"
+	cause := err
+	var failure *taskmodel.StartFailure
+	if errors.As(err, &failure) {
+		stage = failure.Stage
+		cause = failure.Cause
+	}
+	for {
+		unwrapped := errors.Unwrap(cause)
+		if unwrapped == nil {
+			break
+		}
+		cause = unwrapped
+	}
+	return stage, fmt.Sprintf("%T", cause)
 }
 
 // TaskAccess supplies current task state and checks execution authorization.

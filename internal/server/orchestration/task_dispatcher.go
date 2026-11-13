@@ -3,7 +3,6 @@ package orchestration
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 
 	"github.com/josemiguelmelo/orkest/internal/platform/ids"
@@ -21,6 +20,17 @@ import (
 
 type taskAgentGetter interface {
 	Get(context.Context, string, string, string, string) (agentmodel.Agent, error)
+}
+
+func taskStartFailure(stage string, err error) error {
+	if err == nil {
+		return nil
+	}
+	var failure *taskmodel.StartFailure
+	if errors.As(err, &failure) {
+		return err
+	}
+	return &taskmodel.StartFailure{Stage: stage, Cause: err}
 }
 
 // TaskDispatcher resolves an assigned agent definition and starts its task run.
@@ -123,17 +133,17 @@ func NewTaskDispatcher(deps TaskDispatcherDependencies) (*TaskDispatcher, error)
 func (d *TaskDispatcher) StartTask(ctx context.Context, userID, organizationID string, command taskmodel.StartCommand) error {
 	value := command.Task
 	if strings.TrimSpace(value.AssigneeAgentID) == "" {
-		return errors.New("task has no assigned agent")
+		return taskStartFailure("assignment", errors.New("task has no assigned agent"))
 	}
 	runID, err := ids.NewUUID()
 	if err != nil {
-		return fmt.Errorf("generate task run ID: %w", err)
+		return taskStartFailure("generate_run_id", err)
 	}
 	commandID := command.CommandID
 	if commandID == "" {
 		commandID, err = ids.NewUUID()
 		if err != nil {
-			return err
+			return taskStartFailure("generate_command_id", err)
 		}
 	}
 	sessions := d.sessions
@@ -142,34 +152,34 @@ func (d *TaskDispatcher) StartTask(ctx context.Context, userID, organizationID s
 	var expectedSessionID string
 	if command.GuardAssignment {
 		if command.ExpectedAssigneeID == "" || command.ExpectedAssigneeID != value.AssigneeAgentID {
-			return errors.New("integration assignment changed")
+			return taskStartFailure("assignment_guard", errors.New("integration assignment changed"))
 		}
 		current, found, readErr := sessions.CurrentSession(ctx, organizationID, value.WorkspaceID, value.ID)
 		if readErr != nil {
-			return readErr
+			return taskStartFailure("read_current_session", readErr)
 		}
 		if found {
 			expectedSessionID = current.TaskSessionID
 			if command.SessionMode != "new" && current.AgentDefinitionID != value.AssigneeAgentID {
-				return taskmodel.ErrIntegrationSession
+				return taskStartFailure("session_compatibility", taskmodel.ErrIntegrationSession)
 			}
 		}
 	}
 	if command.SessionMode != "new" {
 		config, continuing, err = d.continueTaskSession(ctx, userID, organizationID, value, runID)
 		if err != nil {
-			return err
+			return taskStartFailure("continue_session", err)
 		}
 	}
 	if !continuing {
 		config, err = d.createTaskSession(ctx, userID, organizationID, value, runID)
 		if err != nil {
-			return err
+			return taskStartFailure("create_session", err)
 		}
 	}
 	if command.GuardAssignment {
 		if continuing && config.TaskSessionID != expectedSessionID {
-			return taskmodel.ErrIntegrationSession
+			return taskStartFailure("session_compatibility", taskmodel.ErrIntegrationSession)
 		}
 		config.IntegrationGuard = command.Integration
 		config.IntegrationWorkflowID = value.WorkflowID
@@ -179,30 +189,30 @@ func (d *TaskDispatcher) StartTask(ctx context.Context, userID, organizationID s
 		config.ExpectedSessionID = expectedSessionID
 	}
 	if err = d.refreshOrkestMCPServer(userID, organizationID, value.WorkspaceID, value.ID, &config); err != nil {
-		return err
+		return taskStartFailure("refresh_orkest_tools", err)
 	}
 	artifact, err := d.artifactContext(ctx, userID, organizationID, value, &config)
 	if err != nil {
-		return err
+		return taskStartFailure("resolve_artifact_context", err)
 	}
 	prompt, err := composeTaskPrompt(value, &config, artifact, command.PromptText)
 	if err != nil {
-		return err
+		return taskStartFailure("compose_prompt", err)
 	}
 	if err := config.Validate(); err != nil {
-		return err
+		return taskStartFailure("validate_run_configuration", err)
 	}
 	if strings.TrimSpace(commandID) == "" || len(commandID) > 200 || strings.TrimSpace(prompt) == "" || len(prompt) > orchestrationmodel.MaxPromptBytes || len(config.Agent.Instructions) > orchestrationmodel.MaxPromptBytes {
-		return orchestrationmodel.ErrCommand
+		return taskStartFailure("validate_command", orchestrationmodel.ErrCommand)
 	}
 	config.InitialCommandID, config.InitialPrompt = commandID, prompt
 	config.DeliveryToken = command.DeliveryToken
 	if err := sessions.ReserveSessionRun(ctx, config, value.StageVersion); err != nil {
-		return err
+		return taskStartFailure("reserve_session_run", err)
 	}
 	config.ReservedRun = true
 	if _, err = d.launches.StartWithPrompt(ctx, config, commandID, prompt); err != nil {
-		return fmt.Errorf("start agent run: %w", err)
+		return taskStartFailure("start_agent_run", err)
 	}
 	return nil
 }

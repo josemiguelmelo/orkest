@@ -16,7 +16,7 @@ import (
 func (d *TaskDispatcher) createTaskSession(ctx context.Context, userID, organizationID string, value taskmodel.Task, runID string) (orchestrationmodel.RunConfig, error) {
 	config, definition, err := d.freshConfiguration(ctx, userID, organizationID, value)
 	if err != nil {
-		return orchestrationmodel.RunConfig{}, err
+		return orchestrationmodel.RunConfig{}, taskStartFailure("resolve_agent_configuration", err)
 	}
 	config.AgentDefinitionID = value.AssigneeAgentID
 	config.TaskSessionID, err = ids.NewUUID()
@@ -25,10 +25,10 @@ func (d *TaskDispatcher) createTaskSession(ctx context.Context, userID, organiza
 	}
 	config.ExecutionProfileID = definition.ExecutionProfileID
 	if err = d.resolveHostMounts(ctx, &config); err != nil {
-		return orchestrationmodel.RunConfig{}, err
+		return orchestrationmodel.RunConfig{}, taskStartFailure("resolve_host_mounts", err)
 	}
 	if err = d.resolveExecutionImage(ctx, value.WorkspaceID, &config); err != nil {
-		return orchestrationmodel.RunConfig{}, err
+		return orchestrationmodel.RunConfig{}, taskStartFailure("resolve_execution_profile", err)
 	}
 	config.RunID, config.RestoreSession = runID, false
 	config.GitCredentials = nil
@@ -38,7 +38,7 @@ func (d *TaskDispatcher) createTaskSession(ctx context.Context, userID, organiza
 	if d.environmentResolver != nil {
 		config.Environment, err = d.environmentResolver.Resolve(ctx, value.WorkspaceID)
 		if err != nil {
-			return orchestrationmodel.RunConfig{}, fmt.Errorf("resolve workspace environment: %w", err)
+			return orchestrationmodel.RunConfig{}, taskStartFailure("resolve_workspace_environment", fmt.Errorf("resolve workspace environment: %w", err))
 		}
 	}
 	if config.Environment == nil {
@@ -48,13 +48,13 @@ func (d *TaskDispatcher) createTaskSession(ctx context.Context, userID, organiza
 		config.Environment[name] = value
 	}
 	if err = coreruntime.ValidateRequiredEnvironment(config.Runtime, config.Environment); err != nil {
-		return orchestrationmodel.RunConfig{}, fmt.Errorf("resolve runtime configuration: %w", err)
+		return orchestrationmodel.RunConfig{}, taskStartFailure("validate_runtime_environment", fmt.Errorf("resolve runtime configuration: %w", err))
 	}
 	if err = d.resolveTaskRepositories(ctx, userID, organizationID, value, &config); err != nil {
-		return orchestrationmodel.RunConfig{}, err
+		return orchestrationmodel.RunConfig{}, taskStartFailure("resolve_task_repositories", err)
 	}
 	if err := d.resolveAgentCapabilities(ctx, organizationID, value.WorkspaceID, definition, &config); err != nil {
-		return orchestrationmodel.RunConfig{}, err
+		return orchestrationmodel.RunConfig{}, taskStartFailure("resolve_agent_capabilities", err)
 	}
 	return config, nil
 }
@@ -65,7 +65,7 @@ func (d *TaskDispatcher) continueTaskSession(ctx context.Context, userID, organi
 		return config, found, err
 	}
 	if err = d.resolveExecutionImage(ctx, value.WorkspaceID, &config); err != nil {
-		return orchestrationmodel.RunConfig{}, false, err
+		return orchestrationmodel.RunConfig{}, false, taskStartFailure("resolve_execution_profile", err)
 	}
 	config.RunID, config.RestoreSession = runID, true
 	config.GitCredentials = nil
@@ -73,7 +73,7 @@ func (d *TaskDispatcher) continueTaskSession(ctx context.Context, userID, organi
 	if d.environmentResolver != nil {
 		environment, resolveErr := d.environmentResolver.Resolve(ctx, value.WorkspaceID)
 		if resolveErr != nil {
-			return orchestrationmodel.RunConfig{}, false, fmt.Errorf("resolve workspace environment: %w", resolveErr)
+			return orchestrationmodel.RunConfig{}, false, taskStartFailure("resolve_workspace_environment", fmt.Errorf("resolve workspace environment: %w", resolveErr))
 		}
 		if environment == nil {
 			environment = make(map[string]string, len(config.Environment))
@@ -86,10 +86,10 @@ func (d *TaskDispatcher) continueTaskSession(ctx context.Context, userID, organi
 		config.Environment = environment
 	}
 	if err = d.resolveTaskRepositories(ctx, userID, organizationID, value, &config); err != nil {
-		return orchestrationmodel.RunConfig{}, false, err
+		return orchestrationmodel.RunConfig{}, false, taskStartFailure("resolve_task_repositories", err)
 	}
 	if err := d.refreshSessionMCPServers(ctx, value.WorkspaceID, &config); err != nil {
-		return orchestrationmodel.RunConfig{}, false, err
+		return orchestrationmodel.RunConfig{}, false, taskStartFailure("refresh_session_mcp_servers", err)
 	}
 
 	return config, true, nil
