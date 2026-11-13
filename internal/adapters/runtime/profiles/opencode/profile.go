@@ -22,6 +22,7 @@ func (p Profile) Descriptor() agentruntime.RuntimeDescriptor {
 		binary = "opencode"
 	}
 	return agentruntime.RuntimeDescriptor{
+		UseQuestionTool:     true,
 		Runtime:             coreruntime.OpenCode,
 		Version:             Version,
 		Executable:          binary,
@@ -137,6 +138,9 @@ func buildMCPConfiguration(servers []configmodel.MCPServer) (*runtimeMCPConfig, 
 	noOAuth := false
 	for _, server := range servers {
 		name := normalizeNativeName(server.Name) + "-" + normalizeNativeName(server.ID)
+		if server.ID == "orkest-questions" && server.Name == "orkest_questions" {
+			name = server.Name
+		}
 		if _, exists := configured[name]; exists {
 			return nil, errors.New("duplicate MCP server name")
 		}

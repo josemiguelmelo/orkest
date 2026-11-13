@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type ReactNode, type FormEvent } from 'react';
 import { useQueries, useQuery } from '@tanstack/react-query';
 import {
   ArrowDown,
@@ -31,7 +31,7 @@ import {
 } from './chat-model';
 import { ToolCard } from './tool-card';
 import { QuestionList } from './question-list';
-import { conversationQuestions } from './question-model';
+import { conversationQuestions, type ChatQuestion } from './question-model';
 import type { SessionMode } from './session-choice';
 
 export function TaskChat({ task, direct = false }: { task: Task; direct?: boolean }) {
@@ -300,15 +300,20 @@ export function TaskChat({ task, direct = false }: { task: Task; direct?: boolea
             )
           )}
           {turns.map((turn) => (
-            <ConversationTurn key={turn.id} turn={turn} />
+            <ConversationTurn
+              key={turn.id}
+              turn={turn}
+              renderQuestion={(question) => (
+                <QuestionList
+                  questions={[question]}
+                  taskId={task.id}
+                  activeRunId={latest?.runId}
+                  canAnswer={!archived && permissions.editWorkspace && execution.live && !execution.paused}
+                  direct={direct}
+                />
+              )}
+            />
           ))}
-          <QuestionList
-            questions={questions}
-            taskId={task.id}
-            activeRunId={latest?.runId}
-            canAnswer={!archived && permissions.editWorkspace && execution.live && !execution.paused}
-            direct={direct}
-          />
           {!archived && execution.finishing && (
             <p className="agent-turn-notice">
               <LoaderCircle size={13} className="chat-spin" />
@@ -523,7 +528,10 @@ export function TaskChat({ task, direct = false }: { task: Task; direct?: boolea
   );
 }
 
-function ConversationTurn({ turn }: { turn: ChatTurn }) {
+function ConversationTurn({ turn, renderQuestion }: {
+  turn: ChatTurn;
+  renderQuestion: (question: ChatQuestion) => ReactNode;
+}) {
   const taskContext = turn.text.startsWith('Work on the following Orkest task.');
   return (
     <div className="agent-turn">
@@ -553,6 +561,10 @@ function ConversationTurn({ turn }: { turn: ChatTurn }) {
             {turn.blocks.map((block, index) =>
               block.kind === 'text' ? (
                 <Markdown key={index} text={block.text} />
+              ) : block.kind === 'question' ? (
+                <div key={`question:${block.question.runId}:${block.question.id}`}>
+                  {renderQuestion(block.question)}
+                </div>
               ) : (
                 <details className="agent-tools" key={index}>
                   <summary>

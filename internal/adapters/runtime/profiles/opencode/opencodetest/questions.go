@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -21,7 +22,7 @@ func (t fixtureQuestionTransport) RoundTrip(request *http.Request) (*http.Respon
 // fixtureAskUser drives the same HTTP MCP boundary used by fallback runtimes.
 // The parent fixture process alone owns stdout, which remains ACP-only.
 func fixtureAskUser(commandKey string) error {
-	raw, err := fixtureMCPConfig()
+	raw, err := fixtureQuestionMCPConfig()
 	if err != nil {
 		return err
 	}
@@ -78,4 +79,31 @@ func fixtureAskUser(commandKey string) error {
 		return nil
 	}
 	return errors.New("fixture question server missing")
+}
+
+// OpenCode receives its MCP servers through native configuration rather than ACP.
+func fixtureQuestionMCPConfig() ([]byte, error) {
+	if raw := os.Getenv("OPENCODE_CONFIG_CONTENT"); raw != "" {
+		var config struct {
+			MCP struct {
+				Servers map[string]struct {
+					URL     string            `json:"url"`
+					Headers map[string]string `json:"headers"`
+				} `json:"servers"`
+			} `json:"mcp"`
+		}
+		if err := json.Unmarshal([]byte(raw), &config); err != nil {
+			return nil, err
+		}
+		servers := []map[string]any{}
+		for name, server := range config.MCP.Servers {
+			headers := []map[string]string{}
+			for key, value := range server.Headers {
+				headers = append(headers, map[string]string{"name": key, "value": value})
+			}
+			servers = append(servers, map[string]any{"name": name, "url": server.URL, "headers": headers})
+		}
+		return json.Marshal(servers)
+	}
+	return fixtureMCPConfig()
 }

@@ -172,3 +172,45 @@ it('preserves the draft when sending fails and allows correcting it', async () =
   await user.type(composer, ' and this correction');
   expect(composer).toHaveValue('Keep this message and this correction');
 });
+
+it.each(['pending', 'answered'] as const)(
+  'keeps a %s question between the messages surrounding its request',
+  async (status) => {
+    const payloads = [
+      { type: 'prompt_accepted', text: 'Plan this work' },
+      { type: 'update', update: { kind: 'text', text: 'Here is my plan.' } },
+      {
+        type: 'question_requested', requestId: 'question-1', sessionId: 'native-session',
+        question: {
+          message: 'Approve this plan?',
+          schema: { type: 'object', properties: { decision: { type: 'string' } } },
+        },
+      },
+      ...(status === 'answered' ? [{
+        type: 'question_answered', requestId: 'question-1',
+        questionResponse: { answer: { action: 'accept', content: { decision: 'Proceed' } } },
+      }] : []),
+      { type: 'update', update: { kind: 'text', text: 'The next agent message.' } },
+      ...(status === 'answered' ? [{ type: 'prompt_completed' }] : []),
+      { type: 'prompt_accepted', commandId: 'next', text: 'A later user message' },
+    ];
+    vi.mocked(sdk.listTaskRuns).mockResolvedValue({ data: [{ ...run, status: 'ready' }] } as never);
+    vi.mocked(sdk.listTaskRunEvents).mockResolvedValue({
+      data: payloads.map((payload, index) => ({
+        runId: run.runId, sequence: index + 1,
+        payload: { commandId: 'previous', ...payload },
+      })),
+    } as never);
+    setup();
+    const question = await screen.findByRole('region', { name: 'Agent question' });
+    const before = screen.getByText('Here is my plan.');
+    const after = screen.getByText('The next agent message.');
+    const later = screen.getByText('A later user message');
+    expect(before.compareDocumentPosition(question) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(question.compareDocumentPosition(after) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(question.compareDocumentPosition(later) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getAllByRole('region', { name: 'Agent question' })).toHaveLength(1);
+    if (status === 'answered') expect(question).toHaveTextContent('Proceed');
+    else expect(screen.getByRole('textbox', { name: 'decision' })).toBeEnabled();
+  },
+);

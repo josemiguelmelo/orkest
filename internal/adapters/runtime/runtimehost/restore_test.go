@@ -113,6 +113,8 @@ type verifiedHistoryProfile struct{ opencode.Profile }
 func (p verifiedHistoryProfile) Descriptor() agentruntime.RuntimeDescriptor {
 	descriptor := p.Profile.Descriptor()
 	descriptor.ReplayCoverageVerified = true
+	// This fixture qualifies exact plain-command history, without runtime-only MCP context.
+	descriptor.UseQuestionTool = false
 	return descriptor
 }
 

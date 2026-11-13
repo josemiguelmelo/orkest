@@ -148,7 +148,7 @@ func TestRuntimeConformance(t *testing.T) {
 				modelProvider = "kiro"
 			}
 			profile := conformance.Profile{Config: configmodel.RuntimeConfig{OrganizationID: "test-org", WorkspaceID: "test-workspace", TaskID: "test-task", TaskSessionID: "test-session", RunID: "revision-1", Runtime: runtime, Agent: configmodel.AgentDefinition{Name: "Work", Instructions: "Follow user instructions."}, Model: configmodel.ModelSelection{Provider: modelProvider, ID: "fixture"}}, Remember: func(token string) string { return "remember:" + token }, Recall: "recall", Permission: "permission", Wait: "wait", Suspend: "wait"}
-			profile.Question = conformance.Probe{Prompt: "question", Expected: "Using pnpm"}
+			profile.Question = conformance.Probe{Prompt: "mcp-question", Expected: "Using pnpm"}
 			marker, err := ids.NewUUID()
 			if err != nil {
 				t.Fatal(err)
@@ -159,10 +159,12 @@ func TestRuntimeConformance(t *testing.T) {
 			profile.Config.MCPServers = []configmodel.MCPServer{{ID: "conformance", Name: "conformance", URL: "http://127.0.0.1:1/mcp", Transport: mcptransport.HTTP}}
 			profile.Config.MCPServers = append(profile.Config.MCPServers, configmodel.MCPServer{ID: "local", Name: "local", Transport: mcptransport.Stdio, Command: "/opt/mcp/fixture", Args: []string{"--literal"}, Environment: map[string]string{"MCP_TOKEN": "stdio-secret"}})
 			profile.Configuration = map[string]conformance.Probe{
-				"instructions": {Prompt: "probe:instructions", Expected: instructionMarker},
-				"skills":       {Prompt: "probe:skills", Expected: skillMarker},
-				"http-mcp":     {Prompt: "probe:http-mcp", Expected: "http://127.0.0.1:1/mcp"},
-				"stdio-mcp":    {Prompt: "probe:stdio-mcp", Expected: "/opt/mcp/fixture"},
+				"instructions":          {Prompt: "probe:instructions", Expected: instructionMarker},
+				"question instructions": {Prompt: "probe:instructions", Expected: "call ask_user"},
+				"question MCP":          {Prompt: "probe:http-mcp", Expected: "orkest_questions"},
+				"skills":                {Prompt: "probe:skills", Expected: skillMarker},
+				"http-mcp":              {Prompt: "probe:http-mcp", Expected: "http://127.0.0.1:1/mcp"},
+				"stdio-mcp":             {Prompt: "probe:stdio-mcp", Expected: "/opt/mcp/fixture"},
 			}
 			if os.Getenv("ORKEST_RUNTIME_CONFORMANCE") == "live" {
 				profile.Config.MCPServers[0].URL = required(t, "ORKEST_TEST_MCP_URL")

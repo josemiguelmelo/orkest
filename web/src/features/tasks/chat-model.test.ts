@@ -182,3 +182,25 @@ it('shows a useful label for file reads even when locations are omitted', async 
   ).toBe('read · preferred');
   expect(toolLabel({ id: 't', title: 'read', status: 'pending', input: '{broken' })).toBe('read');
 });
+
+it('anchors multiple questions to their request events while answers update them in place', () => {
+  const history = events(
+    { type: 'prompt_accepted', text: 'Plan the work' },
+    { type: 'update', update: { kind: 'text', text: 'The plan.' } },
+    { type: 'question_requested', requestId: 'q1', question: { message: 'Approve?', schema: { properties: {} } } },
+    { type: 'question_answered', requestId: 'q1', questionResponse: { answer: { action: 'accept', content: {} } } },
+    { type: 'update', update: { kind: 'text', text: 'Continuing.' } },
+    { type: 'question_requested', requestId: 'q2', question: { message: 'Which branch?', schema: { properties: {} } } },
+  );
+  const turns = conversationTurns(history);
+  expect(turns[0]?.blocks.map((block) => block.kind)).toEqual(['text', 'question', 'text', 'question']);
+  const questions = turns[0]?.blocks.flatMap((block) => block.kind === 'question' ? [block.question] : []);
+  expect(questions?.map(({ id, status }) => ({ id, status }))).toEqual([
+    { id: 'q1', status: 'answered' }, { id: 'q2', status: 'pending' },
+  ]);
+  const nextRun = history.map((event) => ({ ...event, runId: 'run-2' }));
+  expect(conversationTurns([...history, ...nextRun])).toHaveLength(2);
+  expect(conversationTurns([...history, ...nextRun])[1]?.blocks[1]).toMatchObject({
+    kind: 'question', question: { id: 'q1', runId: 'run-2' },
+  });
+});

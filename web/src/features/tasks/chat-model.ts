@@ -1,3 +1,4 @@
+import { conversationQuestions, type ChatQuestion } from './question-model';
 import type { Task, TaskRun, TaskRunEvent } from '../../shared/api/generated/types.gen';
 
 export type TurnStatus =
@@ -44,7 +45,10 @@ export function toolLabel(tool: ToolActivity): string {
   return file && !tool.title.includes(file) ? `${tool.title} · ${file}` : tool.title;
 }
 
-export type ChatBlock = { kind: 'text'; text: string } | { kind: 'tools'; tools: ToolActivity[] };
+export type ChatBlock =
+  | { kind: 'text'; text: string }
+  | { kind: 'tools'; tools: ToolActivity[] }
+  | { kind: 'question'; question: ChatQuestion };
 export type ChatTurn = {
   id: string;
   runId: string;
@@ -68,6 +72,9 @@ const object = (value: unknown): Record<string, unknown> =>
 // Stream chunks belong to a turn, not to individual chat bubbles. Tool updates
 // revise the original activity in place while preserving text/tool ordering.
 export function conversationTurns(events: TaskRunEvent[]): ChatTurn[] {
+  const questions = new Map(
+    conversationQuestions(events).map((question) => [`${question.runId}:${question.id}`, question]),
+  );
   const turns: ChatTurn[] = [];
   const byCommand = new Map<string, ChatTurn>();
   for (const event of events) {
@@ -99,6 +106,11 @@ export function conversationTurns(events: TaskRunEvent[]): ChatTurn[] {
     if (type === 'prompt_failed') turn.status = 'failed';
     if (type === 'prompt_interrupted' || type === 'runtime_stopped') turn.status = 'interrupted';
     if (payload.error) turn.error = string(payload.error);
+    if (type === 'question_requested') {
+      const question = questions.get(`${event.runId}:${string(payload.requestId)}`);
+      if (question && !turn.blocks.some((block) => block.kind === 'question' && block.question.id === question.id))
+        turn.blocks.push({ kind: 'question', question });
+    }
     if (type !== 'update') continue;
     turn.status = 'running';
     const update = object(payload.update);
