@@ -11,9 +11,10 @@ Start with the [local setup](#run-locally), browse the [documentation map](docs/
 or check the [implementation and verification status](docs/status.md) before choosing
 an execution mode.
 
-Orkest is an active prototype. Core task management, dispatch, and several execution
-modes are implemented, but some capacity and worker-authentication features remain
-unfinished. Runtime qualification also varies by provider and scenario; see the
+Orkest is an active prototype. Task management, dispatch, scheduled jobs, and several
+execution modes are implemented. Team-member capacity enforcement and platform-to-worker
+authentication remain unfinished. Runtime verification varies by provider and scenario;
+deterministic fixtures do not establish live model-driven continuation. See the
 [status and verification record](docs/status.md#verification-record) for current evidence
 and limits.
 
@@ -23,7 +24,7 @@ and limits.
   application-owned roles and authorization.
 - Tasks, comments, repositories, workflow rules, artifacts, and direct agent conversations.
 - Workflow-independent scheduled jobs with timezone-aware calendars, run history, and durable activity.
-- Workspace agent definitions, runtime profiles, skills, HTTP MCP servers, and environment values.
+- Workspace agent definitions, runtime profiles, skills, HTTP and stdio MCP servers, and environment values.
 - GitHub Projects v2 and Jira Server task imports; GitHub and GitLab coding integrations.
 - OpenCode, Claude Code, Codex, GitHub Copilot CLI, and Kiro CLI through independent workers.
 - Ordered activity, chat, approvals, cancellation, and durable PostgreSQL/session history.
