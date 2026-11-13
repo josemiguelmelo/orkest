@@ -11,14 +11,15 @@ import (
 	artifactmodel "github.com/josemiguelmelo/orkest/internal/server/artifact/model"
 	codemodel "github.com/josemiguelmelo/orkest/internal/server/coderepository/model"
 	workflowmodel "github.com/josemiguelmelo/orkest/internal/server/workflow/model"
+	stageintegrationmodel "github.com/josemiguelmelo/orkest/internal/server/workflowstageintegration/model"
 	workspacemodel "github.com/josemiguelmelo/orkest/internal/server/workspace/model"
 )
 
 type workerRepository struct {
-	IntegrationRepository
+	WorkflowStageIntegrationRepository
 	candidate Candidate
-	events    []ProviderEvent
-	admitted  []ProviderEvent
+	events    []stageintegrationmodel.ProviderEvent
+	admitted  []stageintegrationmodel.ProviderEvent
 }
 
 func (r *workerRepository) Candidates(context.Context) ([]Candidate, error) {
@@ -30,16 +31,16 @@ func (r *workerRepository) SaveObservation(_ context.Context, _ Candidate, o Obs
 	return nil
 }
 
-func (r *workerRepository) RecordEvents(_ context.Context, _ Connection, events []ProviderEvent) error {
+func (r *workerRepository) RecordEvents(_ context.Context, _ stageintegrationmodel.Connection, events []stageintegrationmodel.ProviderEvent) error {
 	r.events = append(r.events, events...)
 	return nil
 }
 
-func (r *workerRepository) Events(context.Context, Candidate, Observation) ([]ProviderEvent, error) {
+func (r *workerRepository) Events(context.Context, Candidate, Observation) ([]stageintegrationmodel.ProviderEvent, error) {
 	return r.events, nil
 }
 
-func (r *workerRepository) AdmitEvent(_ context.Context, _ Candidate, _ Observation, event ProviderEvent, _ string) error {
+func (r *workerRepository) AdmitEvent(_ context.Context, _ Candidate, _ Observation, event stageintegrationmodel.ProviderEvent, _ string) error {
 	r.admitted = append(r.admitted, event)
 	return nil
 }
@@ -60,33 +61,33 @@ func (workerCoding) CodingCredential(context.Context, string, string) (codemodel
 }
 
 type workerProvider struct {
-	WorkflowStageIntegration
-	subject     Subject
-	events      []ProviderEvent
+	WorkflowStageIntegrationProvider
+	subject     stageintegrationmodel.Subject
+	events      []stageintegrationmodel.ProviderEvent
 	err         error
 	resolutions int
 }
 
 func (*workerProvider) Provider() string                                 { return "test" }
 func (*workerProvider) ValidateParameters(string, json.RawMessage) error { return nil }
-func (*workerProvider) Matches(string, json.RawMessage, ProviderEvent) (bool, error) {
+func (*workerProvider) Matches(string, json.RawMessage, stageintegrationmodel.ProviderEvent) (bool, error) {
 	return true, nil
 }
 
-func (p *workerProvider) ResolveSubject(context.Context, json.RawMessage, string, string) (Subject, error) {
+func (p *workerProvider) ResolveSubject(context.Context, json.RawMessage, string, string) (stageintegrationmodel.Subject, error) {
 	p.resolutions++
 	return p.subject, p.err
 }
 
-func (p *workerProvider) Reconcile(context.Context, json.RawMessage, string, Subject, time.Time) ([]ProviderEvent, error) {
+func (p *workerProvider) Reconcile(context.Context, json.RawMessage, string, stageintegrationmodel.Subject, time.Time) ([]stageintegrationmodel.ProviderEvent, error) {
 	return p.events, nil
 }
 
 func workerFixture() (*WorkflowStageIntegrationService, *workerRepository, *workerProvider, *workerAccess) {
-	p := &workerProvider{subject: Subject{Kind: "pull_request", ID: "pr", RepositoryID: "external-repo", URL: "https://example.test/pr", HeadSHA: "current-head"}}
+	p := &workerProvider{subject: stageintegrationmodel.Subject{Kind: "pull_request", ID: "pr", RepositoryID: "external-repo", URL: "https://example.test/pr", HeadSHA: "current-head"}}
 	binding := workflowmodel.ArtifactInput{Name: "pr", SourceStageID: "build", OutputName: "pr", Required: true}
 	repo := &workerRepository{candidate: Candidate{
-		Connection: Connection{Provider: "test", CodingIntegrationID: "coding", RepositoryIDs: []string{"repo"}},
+		Connection: stageintegrationmodel.Connection{Provider: "test", CodingIntegrationID: "coding", RepositoryIDs: []string{"repo"}},
 		StageID:    "review", Parameters: json.RawMessage(`{"artifactInputName":"pr"}`),
 		Definition: workflowmodel.Definition{Stages: []workflowmodel.Stage{
 			{ID: "build", ArtifactOutputs: []workflowmodel.ArtifactOutput{{Name: "pr", Kind: "pull_request"}}},
@@ -111,14 +112,14 @@ func TestProcessAdmitsEventsAcrossSlowScans(t *testing.T) {
 			activated := repo.candidate.Observation.ActivatedAt
 			for scan := 1; scan <= 3; scan++ {
 				now = now.Add(31 * time.Second)
-				event := ProviderEvent{ID: fmt.Sprint(scan), Subject: provider.subject, OccurredAt: now.Add(-time.Second)}
+				event := stageintegrationmodel.ProviderEvent{ID: fmt.Sprint(scan), Subject: provider.subject, OccurredAt: now.Add(-time.Second)}
 				event.Subject.HeadSHA = "stale-webhook-head"
 				repo.events = nil
 				provider.events = nil
 				if source == "poll" {
-					provider.events = []ProviderEvent{event}
+					provider.events = []stageintegrationmodel.ProviderEvent{event}
 				} else {
-					repo.events = []ProviderEvent{event}
+					repo.events = []stageintegrationmodel.ProviderEvent{event}
 				}
 				if err := s.Process(t.Context()); err != nil {
 					t.Fatal(err)
@@ -148,7 +149,7 @@ func TestProcessVerificationFailureBackoff(t *testing.T) {
 		t.Fatal(err)
 	}
 	now = now.Add(31 * time.Second)
-	repo.events = []ProviderEvent{{ID: "review", Subject: provider.subject, OccurredAt: now}}
+	repo.events = []stageintegrationmodel.ProviderEvent{{ID: "review", Subject: provider.subject, OccurredAt: now}}
 	provider.err = errors.New("provider unavailable")
 	if err := s.processCandidate(t.Context(), repo.candidate); err == nil {
 		t.Fatal("verification failure hidden")

@@ -4,7 +4,9 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+
 	stageintegration "github.com/josemiguelmelo/orkest/internal/server/workflowstageintegration"
+	stageintegrationmodel "github.com/josemiguelmelo/orkest/internal/server/workflowstageintegration/model"
 )
 
 type workflowStageIntegrationAPI struct {
@@ -36,7 +38,7 @@ func (a workflowStageIntegrationAPI) list(w http.ResponseWriter, r *http.Request
 }
 
 func (a workflowStageIntegrationAPI) create(w http.ResponseWriter, r *http.Request) {
-	var input stageintegration.ConnectionInput
+	var input stageintegrationmodel.ConnectionInput
 	if !decodeBody(w, r, &input) {
 		return
 	}
@@ -45,7 +47,7 @@ func (a workflowStageIntegrationAPI) create(w http.ResponseWriter, r *http.Reque
 }
 
 func (a workflowStageIntegrationAPI) update(w http.ResponseWriter, r *http.Request) {
-	var input stageintegration.ConnectionInput
+	var input stageintegrationmodel.ConnectionInput
 	if !decodeBody(w, r, &input) {
 		return
 	}

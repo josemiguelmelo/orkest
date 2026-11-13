@@ -19,6 +19,7 @@ import (
 	githubsdk "github.com/google/go-github/v93/github"
 	problem "github.com/josemiguelmelo/orkest/internal/contracts/problem"
 	integration "github.com/josemiguelmelo/orkest/internal/server/workflowstageintegration"
+	stageintegrationmodel "github.com/josemiguelmelo/orkest/internal/server/workflowstageintegration/model"
 )
 
 type (
@@ -60,8 +61,8 @@ type GitHubPRIntegration struct {
 }
 
 var (
-	_ integration.WorkflowStageIntegration = GitHubPRIntegration{}
-	_ integration.SubjectProvider          = GitHubPRIntegration{}
+	_ integration.WorkflowStageIntegrationProvider = GitHubPRIntegration{}
+	_ integration.SubjectProvider                  = GitHubPRIntegration{}
 )
 
 func NewProvider() GitHubPRIntegration {
@@ -78,8 +79,8 @@ func (GitHubPRIntegration) ValidateConfig(raw json.RawMessage) error {
 	return decode(raw, &value)
 }
 
-func (GitHubPRIntegration) Actions() []integration.ActionDefinition {
-	return []integration.ActionDefinition{
+func (GitHubPRIntegration) Actions() []stageintegrationmodel.ActionDefinition {
+	return []stageintegrationmodel.ActionDefinition{
 		{ID: string(ActionReviewAdded), Name: "PR review added", ParametersSchema: reviewActionSchema()},
 		{ID: string(ActionPRMerged), Name: "PR merged", ParametersSchema: mergeActionSchema()},
 	}
@@ -197,26 +198,26 @@ func header(headers map[string][]string, key string) string {
 	return value
 }
 
-func (p GitHubPRIntegration) HandleCallback(ctx context.Context, in integration.CallbackInput) (integration.CallbackResult, error) {
+func (p GitHubPRIntegration) HandleCallback(ctx context.Context, in stageintegrationmodel.CallbackInput) (stageintegrationmodel.CallbackResult, error) {
 	if err := ctx.Err(); err != nil {
-		return integration.CallbackResult{}, err
+		return stageintegrationmodel.CallbackResult{}, err
 	}
 	signature := header(in.Request.Headers, "X-Hub-Signature-256")
 	supplied, err := hex.DecodeString(strings.TrimPrefix(signature, "sha256="))
 	mac := hmac.New(sha256.New, []byte(in.Secret))
 	_, _ = mac.Write(in.Request.Body)
 	if in.Secret == "" || !strings.HasPrefix(signature, "sha256=") || err != nil || !hmac.Equal(supplied, mac.Sum(nil)) {
-		return integration.CallbackResult{}, integration.ErrUnauthenticated
+		return stageintegrationmodel.CallbackResult{}, integration.ErrUnauthenticated
 	}
 	if in.Request.Method != "POST" {
-		return integration.CallbackResult{}, problem.ErrInvalid
+		return stageintegrationmodel.CallbackResult{}, problem.ErrInvalid
 	}
 	if err := p.ValidateConfig(in.Config); err != nil {
-		return integration.CallbackResult{}, err
+		return stageintegrationmodel.CallbackResult{}, err
 	}
 	kind := WebhookEventKind(header(in.Request.Headers, "X-GitHub-Event"))
 	if kind != WebhookEventPullRequestReview && kind != WebhookEventPullRequest {
-		return integration.CallbackResult{Ignored: true}, nil
+		return stageintegrationmodel.CallbackResult{Ignored: true}, nil
 	}
 	var payload struct {
 		Action      WebhookAction                `json:"action"`
@@ -225,71 +226,71 @@ func (p GitHubPRIntegration) HandleCallback(ctx context.Context, in integration.
 		Repository  *githubsdk.Repository        `json:"repository"`
 	}
 	if bytes.Equal(bytes.TrimSpace(in.Request.Body), []byte("null")) {
-		return integration.CallbackResult{}, problem.ErrInvalid
+		return stageintegrationmodel.CallbackResult{}, problem.ErrInvalid
 	}
 	if err := json.Unmarshal(in.Request.Body, &payload); err != nil {
-		return integration.CallbackResult{}, problem.ErrInvalid
+		return stageintegrationmodel.CallbackResult{}, problem.ErrInvalid
 	}
 	if kind == WebhookEventPullRequestReview && payload.Action != WebhookActionSubmitted || kind == WebhookEventPullRequest && payload.Action != WebhookActionClosed {
-		return integration.CallbackResult{Ignored: true}, nil
+		return stageintegrationmodel.CallbackResult{Ignored: true}, nil
 	}
 	if kind == WebhookEventPullRequest && !payload.PullRequest.GetMerged() {
-		return integration.CallbackResult{Ignored: true}, nil
+		return stageintegrationmodel.CallbackResult{Ignored: true}, nil
 	}
 	subject, err := subjectFromPR(payload.PullRequest)
 	if err != nil {
-		return integration.CallbackResult{}, err
+		return stageintegrationmodel.CallbackResult{}, err
 	}
 	if payload.Repository.GetID() <= 0 || strconv.FormatInt(payload.Repository.GetID(), 10) != subject.RepositoryID {
-		return integration.CallbackResult{}, problem.ErrInvalid
+		return stageintegrationmodel.CallbackResult{}, problem.ErrInvalid
 	}
-	var event integration.ProviderEvent
+	var event stageintegrationmodel.ProviderEvent
 	if kind == WebhookEventPullRequestReview {
 		event, err = reviewEvent(subject, payload.Review)
 	} else {
 		event, err = mergeEvent(subject, payload.PullRequest)
 	}
 	if err != nil {
-		return integration.CallbackResult{}, err
+		return stageintegrationmodel.CallbackResult{}, err
 	}
 	delivery := header(in.Request.Headers, "X-GitHub-Delivery")
 	if delivery == "" || len(delivery) > 200 {
-		return integration.CallbackResult{}, problem.ErrInvalid
+		return stageintegrationmodel.CallbackResult{}, problem.ErrInvalid
 	}
-	return integration.CallbackResult{DeliveryID: delivery, Events: []integration.ProviderEvent{event}}, nil
+	return stageintegrationmodel.CallbackResult{DeliveryID: delivery, Events: []stageintegrationmodel.ProviderEvent{event}}, nil
 }
 
-func subjectFromPR(pr *githubsdk.PullRequest) (integration.Subject, error) {
+func subjectFromPR(pr *githubsdk.PullRequest) (stageintegrationmodel.Subject, error) {
 	if pr.GetID() <= 0 || pr.GetNumber() <= 0 || pr.GetBase().GetRepo().GetID() <= 0 || pr.GetHead().GetSHA() == "" {
-		return integration.Subject{}, problem.ErrInvalid
+		return stageintegrationmodel.Subject{}, problem.ErrInvalid
 	}
 	owner, repo, number, err := parseURL(pr.GetHTMLURL())
 	if err != nil || number != pr.GetNumber() {
-		return integration.Subject{}, problem.ErrInvalid
+		return stageintegrationmodel.Subject{}, problem.ErrInvalid
 	}
-	return integration.Subject{Kind: string(SubjectKindCodeReview), ID: strconv.FormatInt(pr.GetID(), 10), RepositoryID: strconv.FormatInt(pr.GetBase().GetRepo().GetID(), 10), URL: fmt.Sprintf("https://github.com/%s/%s/pull/%d", owner, repo, number), HeadSHA: pr.GetHead().GetSHA(), Merged: pr.GetMerged()}, nil
+	return stageintegrationmodel.Subject{Kind: string(SubjectKindCodeReview), ID: strconv.FormatInt(pr.GetID(), 10), RepositoryID: strconv.FormatInt(pr.GetBase().GetRepo().GetID(), 10), URL: fmt.Sprintf("https://github.com/%s/%s/pull/%d", owner, repo, number), HeadSHA: pr.GetHead().GetSHA(), Merged: pr.GetMerged()}, nil
 }
 
-func reviewEvent(subject integration.Subject, review *githubsdk.PullRequestReview) (integration.ProviderEvent, error) {
+func reviewEvent(subject stageintegrationmodel.Subject, review *githubsdk.PullRequestReview) (stageintegrationmodel.ProviderEvent, error) {
 	state := ReviewState(strings.ToLower(review.GetState()))
 	at := review.GetSubmittedAt().Time
 	if review.GetID() <= 0 || at.IsZero() || review.GetCommitID() == "" || (state != ReviewStateApproved && state != ReviewStateChangesRequested && state != ReviewStateCommented) {
-		return integration.ProviderEvent{}, problem.ErrInvalid
+		return stageintegrationmodel.ProviderEvent{}, problem.ErrInvalid
 	}
 	facts, _ := json.Marshal(eventFacts{ReviewID: review.GetID(), ReviewState: state, CommitSHA: review.GetCommitID(), ReviewURL: subject.URL + "#pullrequestreview-" + strconv.FormatInt(review.GetID(), 10)})
-	return integration.ProviderEvent{ID: "review:" + subject.RepositoryID + ":" + subject.ID + ":" + strconv.FormatInt(review.GetID(), 10), ActionID: string(ActionReviewAdded), Subject: subject, OccurredAt: at, Facts: facts}, nil
+	return stageintegrationmodel.ProviderEvent{ID: "review:" + subject.RepositoryID + ":" + subject.ID + ":" + strconv.FormatInt(review.GetID(), 10), ActionID: string(ActionReviewAdded), Subject: subject, OccurredAt: at, Facts: facts}, nil
 }
 
-func mergeEvent(subject integration.Subject, pr *githubsdk.PullRequest) (integration.ProviderEvent, error) {
+func mergeEvent(subject stageintegrationmodel.Subject, pr *githubsdk.PullRequest) (stageintegrationmodel.ProviderEvent, error) {
 	at := pr.GetMergedAt().Time
 	if !subject.Merged || at.IsZero() {
-		return integration.ProviderEvent{}, problem.ErrInvalid
+		return stageintegrationmodel.ProviderEvent{}, problem.ErrInvalid
 	}
 	facts, _ := json.Marshal(eventFacts{CommitSHA: pr.GetMergeCommitSHA()})
-	return integration.ProviderEvent{ID: "merge:" + subject.RepositoryID + ":" + subject.ID, ActionID: string(ActionPRMerged), Subject: subject, OccurredAt: at, Facts: facts}, nil
+	return stageintegrationmodel.ProviderEvent{ID: "merge:" + subject.RepositoryID + ":" + subject.ID, ActionID: string(ActionPRMerged), Subject: subject, OccurredAt: at, Facts: facts}, nil
 }
 
-func (p GitHubPRIntegration) Matches(action string, parameters json.RawMessage, event integration.ProviderEvent) (bool, error) {
+func (p GitHubPRIntegration) Matches(action string, parameters json.RawMessage, event stageintegrationmodel.ProviderEvent) (bool, error) {
 	if err := p.ValidateParameters(action, parameters); err != nil {
 		return false, err
 	}
@@ -367,26 +368,26 @@ func (p GitHubPRIntegration) ValidateConnection(ctx context.Context, config json
 	return nil
 }
 
-func (p GitHubPRIntegration) ResolveSubject(ctx context.Context, config json.RawMessage, token, rawURL string) (integration.Subject, error) {
+func (p GitHubPRIntegration) ResolveSubject(ctx context.Context, config json.RawMessage, token, rawURL string) (stageintegrationmodel.Subject, error) {
 	if err := p.ValidateConfig(config); err != nil {
-		return integration.Subject{}, err
+		return stageintegrationmodel.Subject{}, err
 	}
 	owner, repo, number, err := parseURL(rawURL)
 	if err != nil {
-		return integration.Subject{}, err
+		return stageintegrationmodel.Subject{}, err
 	}
 	client, err := p.client(token)
 	if err != nil {
-		return integration.Subject{}, err
+		return stageintegrationmodel.Subject{}, err
 	}
 	pr, _, err := client.PullRequests.Get(ctx, owner, repo, number)
 	if err != nil {
-		return integration.Subject{}, errors.New("GitHub pull request verification failed")
+		return stageintegrationmodel.Subject{}, errors.New("GitHub pull request verification failed")
 	}
 	return subjectFromPR(pr)
 }
 
-func (p GitHubPRIntegration) Reconcile(ctx context.Context, config json.RawMessage, token string, subject integration.Subject, since time.Time) ([]integration.ProviderEvent, error) {
+func (p GitHubPRIntegration) Reconcile(ctx context.Context, config json.RawMessage, token string, subject stageintegrationmodel.Subject, since time.Time) ([]stageintegrationmodel.ProviderEvent, error) {
 	if err := p.ValidateConfig(config); err != nil {
 		return nil, err
 	}
@@ -409,7 +410,7 @@ func (p GitHubPRIntegration) Reconcile(ctx context.Context, config json.RawMessa
 	if verified.ID != subject.ID || verified.RepositoryID != subject.RepositoryID {
 		return nil, problem.ErrConflict
 	}
-	events := []integration.ProviderEvent{}
+	events := []stageintegrationmodel.ProviderEvent{}
 	if verified.Merged {
 		event, e := mergeEvent(verified, pr)
 		if e != nil {
@@ -446,28 +447,28 @@ func (p GitHubPRIntegration) Reconcile(ctx context.Context, config json.RawMessa
 	return events, nil
 }
 
-func (p GitHubPRIntegration) MatchSubjects(action string, parameters json.RawMessage, event integration.ProviderEvent, subjects []integration.Subject) (integration.SubjectMatch, error) {
+func (p GitHubPRIntegration) MatchSubjects(action string, parameters json.RawMessage, event stageintegrationmodel.ProviderEvent, subjects []stageintegrationmodel.Subject) (stageintegrationmodel.SubjectMatch, error) {
 	matched, err := p.Matches(action, parameters, event)
 	if err != nil || !matched {
-		return integration.SubjectMatch{}, err
+		return stageintegrationmodel.SubjectMatch{}, err
 	}
 	if ActionID(action) != ActionPRMerged {
-		return integration.SubjectMatch{Matched: true}, nil
+		return stageintegrationmodel.SubjectMatch{Matched: true}, nil
 	}
 	var params mergeParameters
 	if err := decode(parameters, &params); err != nil {
-		return integration.SubjectMatch{}, err
+		return stageintegrationmodel.SubjectMatch{}, err
 	}
 	if params.MergePolicy == MergePolicyAny {
-		return integration.SubjectMatch{Matched: true}, nil
+		return stageintegrationmodel.SubjectMatch{Matched: true}, nil
 	}
 	if len(subjects) == 0 {
-		return integration.SubjectMatch{}, nil
+		return stageintegrationmodel.SubjectMatch{}, nil
 	}
 	for _, subject := range subjects {
 		if !subject.Merged {
-			return integration.SubjectMatch{}, nil
+			return stageintegrationmodel.SubjectMatch{}, nil
 		}
 	}
-	return integration.SubjectMatch{Matched: true, OncePerObservation: true}, nil
+	return stageintegrationmodel.SubjectMatch{Matched: true, OncePerObservation: true}, nil
 }

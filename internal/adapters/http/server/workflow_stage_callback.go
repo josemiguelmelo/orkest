@@ -7,12 +7,14 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+
 	modelerrors "github.com/josemiguelmelo/orkest/internal/contracts/problem"
 	stageintegration "github.com/josemiguelmelo/orkest/internal/server/workflowstageintegration"
+	stageintegrationmodel "github.com/josemiguelmelo/orkest/internal/server/workflowstageintegration/model"
 )
 
 type callbackIngestor interface {
-	Ingest(context.Context, string, stageintegration.CallbackRequest) (stageintegration.IngestionReceipt, error)
+	Ingest(context.Context, string, stageintegrationmodel.CallbackRequest) (stageintegrationmodel.IngestionReceipt, error)
 }
 
 type workflowStageCallbackAPI struct{ ingestor callbackIngestor }
@@ -30,7 +32,7 @@ func (a workflowStageCallbackAPI) callback(w http.ResponseWriter, r *http.Reques
 		}
 		return
 	}
-	receipt, err := a.ingestor.Ingest(r.Context(), chi.URLParam(r, "connectionID"), stageintegration.CallbackRequest{Method: r.Method, Headers: map[string][]string(r.Header.Clone()), Body: body})
+	receipt, err := a.ingestor.Ingest(r.Context(), chi.URLParam(r, "connectionID"), stageintegrationmodel.CallbackRequest{Method: r.Method, Headers: map[string][]string(r.Header.Clone()), Body: body})
 	if err != nil {
 		switch {
 		case errors.Is(err, stageintegration.ErrUnauthenticated):

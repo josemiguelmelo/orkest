@@ -114,7 +114,7 @@ task and does not solve the existing unfinished team-member slot allocation.
 
 ## Adapter extension
 
-Implement `WorkflowStageIntegration`, plus subject verification/reconciliation
+Implement `WorkflowStageIntegrationProvider`, plus subject verification/reconciliation
 ports, then register the adapter in `cmd/server`. Providers own configuration and
 action schemas, authentication, external identity and matching. GitLab can supply
 its own merge-request actions through these contracts without a new webhook route

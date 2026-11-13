@@ -10,13 +10,15 @@ import (
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+
 	modelerrors "github.com/josemiguelmelo/orkest/internal/contracts/problem"
 	stageintegration "github.com/josemiguelmelo/orkest/internal/server/workflowstageintegration"
+	stageintegrationmodel "github.com/josemiguelmelo/orkest/internal/server/workflowstageintegration/model"
 )
 
-type callbackIngestorFunc func(context.Context, string, stageintegration.CallbackRequest) (stageintegration.IngestionReceipt, error)
+type callbackIngestorFunc func(context.Context, string, stageintegrationmodel.CallbackRequest) (stageintegrationmodel.IngestionReceipt, error)
 
-func (f callbackIngestorFunc) Ingest(ctx context.Context, id string, in stageintegration.CallbackRequest) (stageintegration.IngestionReceipt, error) {
+func (f callbackIngestorFunc) Ingest(ctx context.Context, id string, in stageintegrationmodel.CallbackRequest) (stageintegrationmodel.IngestionReceipt, error) {
 	return f(ctx, id, in)
 }
 
@@ -25,12 +27,12 @@ func TestWorkflowStageCallbackPreservesOpaqueBytesAndHeaders(t *testing.T) {
 		t.Run(header, func(t *testing.T) {
 			body := []byte(" { \"action\": \"anything\" }\n")
 			called := false
-			api := workflowStageCallbackAPI{ingestor: callbackIngestorFunc(func(_ context.Context, id string, input stageintegration.CallbackRequest) (stageintegration.IngestionReceipt, error) {
+			api := workflowStageCallbackAPI{ingestor: callbackIngestorFunc(func(_ context.Context, id string, input stageintegrationmodel.CallbackRequest) (stageintegrationmodel.IngestionReceipt, error) {
 				called = true
 				if id != "connection" || input.Method != http.MethodPost || !bytes.Equal(body, input.Body) || http.Header(input.Headers).Get(header) != "opaque-secret" {
 					t.Fatalf("callback input changed: id=%s method=%s", id, input.Method)
 				}
-				return stageintegration.IngestionReceipt{}, nil
+				return stageintegrationmodel.IngestionReceipt{}, nil
 			})}
 			router := chi.NewRouter()
 			router.Post("/callbacks/workflow-stage-integrations/{connectionID}", api.callback)
@@ -48,19 +50,19 @@ func TestWorkflowStageCallbackPreservesOpaqueBytesAndHeaders(t *testing.T) {
 func TestWorkflowStageCallbackResponses(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
-		receipt stageintegration.IngestionReceipt
+		receipt stageintegrationmodel.IngestionReceipt
 		err     error
 		status  int
 	}{
-		{name: "duplicate", receipt: stageintegration.IngestionReceipt{Duplicate: true}, status: 200},
-		{name: "ignored", receipt: stageintegration.IngestionReceipt{Ignored: true}, status: 200},
+		{name: "duplicate", receipt: stageintegrationmodel.IngestionReceipt{Duplicate: true}, status: 200},
+		{name: "ignored", receipt: stageintegrationmodel.IngestionReceipt{Ignored: true}, status: 200},
 		{name: "signature", err: stageintegration.ErrUnauthenticated, status: 401},
 		{name: "missing", err: modelerrors.ErrNotFound, status: 404},
 		{name: "malformed", err: modelerrors.ErrInvalid, status: 400},
 		{name: "storage", err: errors.New("sensitive storage detail"), status: 503},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			api := workflowStageCallbackAPI{ingestor: callbackIngestorFunc(func(context.Context, string, stageintegration.CallbackRequest) (stageintegration.IngestionReceipt, error) {
+			api := workflowStageCallbackAPI{ingestor: callbackIngestorFunc(func(context.Context, string, stageintegrationmodel.CallbackRequest) (stageintegrationmodel.IngestionReceipt, error) {
 				return tc.receipt, tc.err
 			})}
 			response := httptest.NewRecorder()
@@ -73,9 +75,9 @@ func TestWorkflowStageCallbackResponses(t *testing.T) {
 }
 
 func TestWorkflowStageCallbackRejectsOversizedBodyBeforeIngestion(t *testing.T) {
-	api := workflowStageCallbackAPI{ingestor: callbackIngestorFunc(func(context.Context, string, stageintegration.CallbackRequest) (stageintegration.IngestionReceipt, error) {
+	api := workflowStageCallbackAPI{ingestor: callbackIngestorFunc(func(context.Context, string, stageintegrationmodel.CallbackRequest) (stageintegrationmodel.IngestionReceipt, error) {
 		t.Fatal("ingestion called")
-		return stageintegration.IngestionReceipt{}, nil
+		return stageintegrationmodel.IngestionReceipt{}, nil
 	})}
 	response := httptest.NewRecorder()
 	api.callback(response, httptest.NewRequest(http.MethodPost, "/", strings.NewReader(strings.Repeat("x", stageintegration.MaxCallbackBytes+1))))

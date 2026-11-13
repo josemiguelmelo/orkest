@@ -21,7 +21,15 @@ provider/runtime qualification.
 | HTTP server / React UI | Provider-neutral transport and configuration/status presentation |
 | `cmd/server` | Explicit provider/service/worker construction and coordinated shutdown |
 
-Every adapter implements `WorkflowStageIntegration`: provider identity,
+Public connection, callback, provider and diagnostic data lives in the leaf
+`workflowstageintegration/model` package. The parent owns the service, provider
+and repository interfaces, binding policy, ingestion and worker processing.
+Repository snapshots (`Candidate`, `Observation`, `StoredConnection`) remain
+beside the persistence contract. PostgreSQL connection administration,
+observation persistence and event admission are grouped into separate files;
+transactions and version checks retain their existing behavior.
+
+Every adapter implements `WorkflowStageIntegrationProvider`: provider identity,
 configuration/action schemas and validation, authenticated `HandleCallback`, and
 I/O-free `Matches`. `SubjectProvider` supplies API verification and reconciliation;
 `SubjectMatcher` supplies aggregate conditions. GitHub SDK types stay in adapters.
@@ -242,3 +250,15 @@ security limitations in [status](../status.md) remain outside this feature.
   and `Create your first job`.
 - `make test-postgres` remains blocked by missing database settings. Live GitHub
   and credentialed runtime continuation were not qualified by these changes.
+
+## Package organization follow-up — 2026-11-13
+
+Aligned public data with the leaf-model convention and separated provider and
+repository contracts from service operations. Updated HTTP/provider/persistence
+consumers directly, without forwarding aliases. Existing service and repository
+function bodies retain their behavior after type/field renames and relocation.
+
+`make fmt`, `make lint`, `make check-runtime-boundaries`, the focused integration
+provider/API/domain suites, all Go unit packages and `git diff --check` passed.
+`make test-postgres` remains blocked by missing database settings. This structural
+change adds no live GitHub or runtime continuation qualification.

@@ -16,6 +16,7 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/server/workflow"
 	workflowmodel "github.com/josemiguelmelo/orkest/internal/server/workflow/model"
 	stage "github.com/josemiguelmelo/orkest/internal/server/workflowstageintegration"
+	stageintegrationmodel "github.com/josemiguelmelo/orkest/internal/server/workflowstageintegration/model"
 )
 
 func TestPostgresRepositoriesWorkflowStageIntegrations(t *testing.T) {
@@ -64,7 +65,7 @@ func TestPostgresRepositoriesWorkflowStageIntegrations(t *testing.T) {
 		t.Fatal(err)
 	}
 	repository := NewWorkflowStageIntegrationPostgresRepository(database)
-	connection, err := repository.CreateConnection(ctx, stage.StoredConnection{Connection: stage.Connection{ID: newID(), WorkspaceID: workspaceID, Provider: "github_pr", Name: "PRs", Enabled: true, CodingIntegrationID: coding.ID, RepositoryIDs: []string{repoID}, Config: json.RawMessage(`{}`), ConfiguredBy: user.ID}, EncryptedSecret: "encrypted-webhook"})
+	connection, err := repository.CreateConnection(ctx, stage.StoredConnection{Connection: stageintegrationmodel.Connection{ID: newID(), WorkspaceID: workspaceID, Provider: "github_pr", Name: "PRs", Enabled: true, CodingIntegrationID: coding.ID, RepositoryIDs: []string{repoID}, Config: json.RawMessage(`{}`), ConfiguredBy: user.ID}, EncryptedSecret: "encrypted-webhook"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -140,26 +141,26 @@ func TestPostgresRepositoriesWorkflowStageIntegrations(t *testing.T) {
 	if err = repository.SaveObservation(ctx, candidate, observation); err != nil {
 		t.Fatal(err)
 	}
-	subject := stage.Subject{Kind: "pull_request", ID: "456", RepositoryID: "123", URL: "https://github.com/acme/backend/pull/42", HeadSHA: "head"}
-	observation.Subjects = []stage.Subject{subject}
+	subject := stageintegrationmodel.Subject{Kind: "pull_request", ID: "456", RepositoryID: "123", URL: "https://github.com/acme/backend/pull/42", HeadSHA: "head"}
+	observation.Subjects = []stageintegrationmodel.Subject{subject}
 	observation.RevisionIDs = []string{revisionID}
 	observation.LastError = ""
 	if err = repository.SaveObservation(ctx, candidate, observation); err != nil {
 		t.Fatal("activate unresolved observation", err)
 	}
 	changed := observation
-	changed.Subjects = []stage.Subject{{Kind: "pull_request", ID: "other", RepositoryID: "123"}}
+	changed.Subjects = []stageintegrationmodel.Subject{{Kind: "pull_request", ID: "other", RepositoryID: "123"}}
 	if err = repository.SaveObservation(ctx, candidate, changed); !errors.Is(err, problem.ErrConflict) {
 		t.Fatalf("repin observation: %v", err)
 	}
 	refreshed := observation
-	refreshed.Subjects = []stage.Subject{subject}
+	refreshed.Subjects = []stageintegrationmodel.Subject{subject}
 	refreshed.Subjects[0].HeadSHA = "new-head"
 	if err = repository.SaveObservation(ctx, candidate, refreshed); err != nil {
 		t.Fatal("refresh verified head", err)
 	}
-	event := stage.ProviderEvent{ID: "review:77", ActionID: "review_added", Subject: subject, OccurredAt: now.Add(time.Second), Facts: json.RawMessage(`{"state":"changes_requested"}`)}
-	receipt := stage.CallbackResult{DeliveryID: "delivery-1", Events: []stage.ProviderEvent{event}}
+	event := stageintegrationmodel.ProviderEvent{ID: "review:77", ActionID: "review_added", Subject: subject, OccurredAt: now.Add(time.Second), Facts: json.RawMessage(`{"state":"changes_requested"}`)}
+	receipt := stageintegrationmodel.CallbackResult{DeliveryID: "delivery-1", Events: []stageintegrationmodel.ProviderEvent{event}}
 	var wg sync.WaitGroup
 	results := make(chan bool, 8)
 	failures := make(chan error, 8)
@@ -240,10 +241,10 @@ func TestPostgresRepositoriesWorkflowStageIntegrations(t *testing.T) {
 	if err != nil || updated.Version != 2 {
 		t.Fatalf("disable connection: %v", err)
 	}
-	if _, err = repository.RecordReceipt(ctx, connection, stage.CallbackResult{DeliveryID: "stale"}); !errors.Is(err, problem.ErrConflict) {
+	if _, err = repository.RecordReceipt(ctx, connection, stageintegrationmodel.CallbackResult{DeliveryID: "stale"}); !errors.Is(err, problem.ErrConflict) {
 		t.Fatalf("stale receipt admitted: %v", err)
 	}
-	if err = repository.AdmitEvent(ctx, candidate, observation, stage.ProviderEvent{ID: "review:78", OccurredAt: now.Add(2 * time.Second)}, ""); !errors.Is(err, problem.ErrConflict) {
+	if err = repository.AdmitEvent(ctx, candidate, observation, stageintegrationmodel.ProviderEvent{ID: "review:78", OccurredAt: now.Add(2 * time.Second)}, ""); !errors.Is(err, problem.ErrConflict) {
 		t.Fatalf("stale observation admitted: %v", err)
 	}
 	if _, err = repository.UpdateConnection(ctx, stored); !errors.Is(err, problem.ErrConflict) {

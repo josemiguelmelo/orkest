@@ -16,14 +16,15 @@ import (
 
 	problem "github.com/josemiguelmelo/orkest/internal/contracts/problem"
 	integration "github.com/josemiguelmelo/orkest/internal/server/workflowstageintegration"
+	stageintegrationmodel "github.com/josemiguelmelo/orkest/internal/server/workflowstageintegration/model"
 )
 
 const fixtureSecret = "webhook-secret-fixture-long-enough"
 
-func callbackInput(body, kind string) integration.CallbackInput {
+func callbackInput(body, kind string) stageintegrationmodel.CallbackInput {
 	mac := hmac.New(sha256.New, []byte(fixtureSecret))
 	_, _ = mac.Write([]byte(body))
-	return integration.CallbackInput{Config: json.RawMessage(`{}`), Secret: fixtureSecret, Request: integration.CallbackRequest{Method: "POST", Body: []byte(body), Headers: map[string][]string{"x-hub-signature-256": {"sha256=" + hex.EncodeToString(mac.Sum(nil))}, "x-github-event": {kind}, "x-github-delivery": {"delivery-1"}}}}
+	return stageintegrationmodel.CallbackInput{Config: json.RawMessage(`{}`), Secret: fixtureSecret, Request: stageintegrationmodel.CallbackRequest{Method: "POST", Body: []byte(body), Headers: map[string][]string{"x-hub-signature-256": {"sha256=" + hex.EncodeToString(mac.Sum(nil))}, "x-github-event": {kind}, "x-github-delivery": {"delivery-1"}}}}
 }
 
 func prFixture(merged bool) string {
@@ -144,19 +145,19 @@ func TestTypedParameterValidationAndHeadFilters(t *testing.T) {
 
 func TestMergeAggregationRequiresNonemptyVerifiedSet(t *testing.T) {
 	p := NewProvider()
-	event := integration.ProviderEvent{ActionID: "pr_merged", Subject: integration.Subject{Merged: true}}
+	event := stageintegrationmodel.ProviderEvent{ActionID: "pr_merged", Subject: stageintegrationmodel.Subject{Merged: true}}
 	params := json.RawMessage(`{"artifactInputName":"prs"}`)
-	for _, subjects := range [][]integration.Subject{nil, {{Merged: true}, {Merged: false}}} {
+	for _, subjects := range [][]stageintegrationmodel.Subject{nil, {{Merged: true}, {Merged: false}}} {
 		decision, err := p.MatchSubjects("pr_merged", params, event, subjects)
 		if err != nil || decision.Matched {
 			t.Fatalf("premature aggregate: %+v %v", decision, err)
 		}
 	}
-	decision, err := p.MatchSubjects("pr_merged", params, event, []integration.Subject{{Merged: true}, {Merged: true}})
+	decision, err := p.MatchSubjects("pr_merged", params, event, []stageintegrationmodel.Subject{{Merged: true}, {Merged: true}})
 	if err != nil || !decision.Matched || !decision.OncePerObservation {
 		t.Fatalf("aggregate=%+v %v", decision, err)
 	}
-	decision, err = p.MatchSubjects("pr_merged", json.RawMessage(`{"artifactInputName":"prs","mergePolicy":"any"}`), event, []integration.Subject{{Merged: false}})
+	decision, err = p.MatchSubjects("pr_merged", json.RawMessage(`{"artifactInputName":"prs","mergePolicy":"any"}`), event, []stageintegrationmodel.Subject{{Merged: false}})
 	if err != nil || !decision.Matched || decision.OncePerObservation {
 		t.Fatalf("any=%+v %v", decision, err)
 	}
