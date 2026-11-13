@@ -53,14 +53,14 @@ func TestCallbackAuthenticatesOriginalBytesAndNormalizesReview(t *testing.T) {
 		t.Fatalf("result=%+v", result)
 	}
 	event := result.Events[0]
-	if event.ID != "review:123:50:71" || event.ActionID != "review_added" || event.Subject.RepositoryID != "123" || event.Subject.ID != "50" {
+	if event.ID != "review:123:50:71" || event.ActionID != string(ActionReviewAdded) || event.Subject.Kind != string(SubjectKindCodeReview) || event.Subject.RepositoryID != "123" || event.Subject.ID != "50" {
 		t.Fatalf("event=%+v", event)
 	}
 	if strings.Contains(string(event.Facts), "sensitive") {
 		t.Fatal("review body retained in normalized facts")
 	}
 	params := json.RawMessage(`{"artifactInputName":"prs","reviewStates":["changes_requested"]}`)
-	matched, err := p.Matches("review_added", params, event)
+	matched, err := p.Matches(string(ActionReviewAdded), params, event)
 	if err != nil || !matched {
 		t.Fatalf("matched=%t err=%v", matched, err)
 	}
@@ -108,7 +108,7 @@ func TestCallbackRejectsMalformedIdentityAndRecognizesMerge(t *testing.T) {
 	if err != nil || len(result.Events) != 1 {
 		t.Fatalf("result=%+v err=%v", result, err)
 	}
-	if result.Events[0].ID != "merge:123:50" || result.Events[0].ActionID != "pr_merged" {
+	if result.Events[0].ID != "merge:123:50" || result.Events[0].ActionID != string(ActionPRMerged) {
 		t.Fatalf("event=%+v", result.Events[0])
 	}
 }

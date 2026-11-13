@@ -21,7 +21,38 @@ import (
 	integration "github.com/josemiguelmelo/orkest/internal/server/workflowstageintegration"
 )
 
-const ProviderName = "github_pr"
+type (
+	ActionID         string
+	ProviderID       string
+	WebhookEventKind string
+	WebhookAction    string
+	SubjectKind      string
+	ReviewState      string
+	MergePolicy      string
+)
+
+const (
+	ProviderName ProviderID = "github_pr"
+
+	ActionReviewAdded ActionID = "review_added"
+	ActionPRMerged    ActionID = "pr_merged"
+
+	WebhookEventPullRequest       WebhookEventKind = "pull_request"
+	WebhookEventPullRequestReview WebhookEventKind = "pull_request_review"
+	WebhookActionClosed           WebhookAction    = "closed"
+	WebhookActionSubmitted        WebhookAction    = "submitted"
+
+	SubjectKindCodeReview SubjectKind = "code_review"
+
+	ReviewStateApproved         ReviewState = "approved"
+	ReviewStateChangesRequested ReviewState = "changes_requested"
+	ReviewStateCommented        ReviewState = "commented"
+	ReviewStatePending          ReviewState = "pending"
+	ReviewStateDismissed        ReviewState = "dismissed"
+
+	MergePolicyAll MergePolicy = "all"
+	MergePolicyAny MergePolicy = "any"
+)
 
 type GitHubPRIntegration struct {
 	Client     *http.Client
@@ -36,7 +67,7 @@ var (
 func NewProvider() GitHubPRIntegration {
 	return GitHubPRIntegration{Client: &http.Client{Timeout: 20 * time.Second}}
 }
-func (GitHubPRIntegration) Provider() string       { return ProviderName }
+func (GitHubPRIntegration) Provider() string       { return string(ProviderName) }
 func (GitHubPRIntegration) CodingProvider() string { return "github" }
 func (GitHubPRIntegration) ConfigSchema() json.RawMessage {
 	return json.RawMessage(`{"type":"object","properties":{},"additionalProperties":false}`)
@@ -49,30 +80,65 @@ func (GitHubPRIntegration) ValidateConfig(raw json.RawMessage) error {
 
 func (GitHubPRIntegration) Actions() []integration.ActionDefinition {
 	return []integration.ActionDefinition{
-		{ID: "review_added", Name: "PR review added", ParametersSchema: json.RawMessage(`{"type":"object","properties":{"artifactInputName":{"type":"string","title":"PR artifact input"},"reviewStates":{"type":"array","title":"Review states","items":{"type":"string","enum":["approved","changes_requested","commented"]},"minItems":1,"uniqueItems":true,"default":["changes_requested"]},"requireCurrentHead":{"type":"boolean","title":"Require current head commit","default":true}},"required":["artifactInputName","reviewStates"],"additionalProperties":false}`)},
-		{ID: "pr_merged", Name: "PR merged", ParametersSchema: json.RawMessage(`{"type":"object","properties":{"artifactInputName":{"type":"string","title":"PR artifact input"},"mergePolicy":{"type":"string","title":"Merge policy","enum":["all","any"],"default":"all"}},"required":["artifactInputName"],"additionalProperties":false}`)},
+		{ID: string(ActionReviewAdded), Name: "PR review added", ParametersSchema: reviewActionSchema()},
+		{ID: string(ActionPRMerged), Name: "PR merged", ParametersSchema: mergeActionSchema()},
 	}
 }
 
+func reviewActionSchema() json.RawMessage {
+	return marshalSchema(map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"artifactInputName": map[string]any{"type": "string", "title": "PR artifact input"},
+			"reviewStates": map[string]any{
+				"type": "array", "title": "Review states",
+				"items":    map[string]any{"type": "string", "enum": []ReviewState{ReviewStateApproved, ReviewStateChangesRequested, ReviewStateCommented}},
+				"minItems": 1, "uniqueItems": true, "default": []ReviewState{ReviewStateChangesRequested},
+			},
+			"requireCurrentHead": map[string]any{"type": "boolean", "title": "Require current head commit", "default": true},
+		},
+		"required": []string{"artifactInputName", "reviewStates"}, "additionalProperties": false,
+	})
+}
+
+func mergeActionSchema() json.RawMessage {
+	return marshalSchema(map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"artifactInputName": map[string]any{"type": "string", "title": "PR artifact input"},
+			"mergePolicy":       map[string]any{"type": "string", "title": "Merge policy", "enum": []MergePolicy{MergePolicyAll, MergePolicyAny}, "default": MergePolicyAll},
+		},
+		"required": []string{"artifactInputName"}, "additionalProperties": false,
+	})
+}
+
+func marshalSchema(value any) json.RawMessage {
+	result, err := json.Marshal(value)
+	if err != nil {
+		panic(err)
+	}
+	return result
+}
+
 type reviewParameters struct {
-	ArtifactInputName  string   `json:"artifactInputName"`
-	ReviewStates       []string `json:"reviewStates"`
-	RequireCurrentHead *bool    `json:"requireCurrentHead"`
+	ArtifactInputName  string        `json:"artifactInputName"`
+	ReviewStates       []ReviewState `json:"reviewStates"`
+	RequireCurrentHead *bool         `json:"requireCurrentHead"`
 }
 type mergeParameters struct {
-	ArtifactInputName string `json:"artifactInputName"`
-	MergePolicy       string `json:"mergePolicy"`
+	ArtifactInputName string      `json:"artifactInputName"`
+	MergePolicy       MergePolicy `json:"mergePolicy"`
 }
 type eventFacts struct {
-	ReviewID    int64  `json:"reviewId,omitempty"`
-	ReviewState string `json:"reviewState,omitempty"`
-	CommitSHA   string `json:"commitSha,omitempty"`
-	ReviewURL   string `json:"reviewUrl,omitempty"`
+	ReviewID    int64       `json:"reviewId,omitempty"`
+	ReviewState ReviewState `json:"reviewState,omitempty"`
+	CommitSHA   string      `json:"commitSha,omitempty"`
+	ReviewURL   string      `json:"reviewUrl,omitempty"`
 }
 
 func (GitHubPRIntegration) ValidateParameters(action string, raw json.RawMessage) error {
-	switch action {
-	case "review_added":
+	switch ActionID(action) {
+	case ActionReviewAdded:
 		var p reviewParameters
 		if err := decode(raw, &p); err != nil {
 			return err
@@ -80,19 +146,19 @@ func (GitHubPRIntegration) ValidateParameters(action string, raw json.RawMessage
 		if p.ArtifactInputName == "" || len(p.ReviewStates) == 0 || len(p.ReviewStates) > 3 {
 			return problem.ErrInvalid
 		}
-		seen := map[string]bool{}
+		seen := map[ReviewState]bool{}
 		for _, s := range p.ReviewStates {
-			if (s != "approved" && s != "changes_requested" && s != "commented") || seen[s] {
+			if (s != ReviewStateApproved && s != ReviewStateChangesRequested && s != ReviewStateCommented) || seen[s] {
 				return problem.ErrInvalid
 			}
 			seen[s] = true
 		}
-	case "pr_merged":
+	case ActionPRMerged:
 		var p mergeParameters
 		if err := decode(raw, &p); err != nil {
 			return err
 		}
-		if p.ArtifactInputName == "" || (p.MergePolicy != "" && p.MergePolicy != "all" && p.MergePolicy != "any") {
+		if p.ArtifactInputName == "" || (p.MergePolicy != "" && p.MergePolicy != MergePolicyAll && p.MergePolicy != MergePolicyAny) {
 			return problem.ErrInvalid
 		}
 	default:
@@ -148,12 +214,12 @@ func (p GitHubPRIntegration) HandleCallback(ctx context.Context, in integration.
 	if err := p.ValidateConfig(in.Config); err != nil {
 		return integration.CallbackResult{}, err
 	}
-	kind := header(in.Request.Headers, "X-GitHub-Event")
-	if kind != "pull_request_review" && kind != "pull_request" {
+	kind := WebhookEventKind(header(in.Request.Headers, "X-GitHub-Event"))
+	if kind != WebhookEventPullRequestReview && kind != WebhookEventPullRequest {
 		return integration.CallbackResult{Ignored: true}, nil
 	}
 	var payload struct {
-		Action      string                       `json:"action"`
+		Action      WebhookAction                `json:"action"`
 		PullRequest *githubsdk.PullRequest       `json:"pull_request"`
 		Review      *githubsdk.PullRequestReview `json:"review"`
 		Repository  *githubsdk.Repository        `json:"repository"`
@@ -164,10 +230,10 @@ func (p GitHubPRIntegration) HandleCallback(ctx context.Context, in integration.
 	if err := json.Unmarshal(in.Request.Body, &payload); err != nil {
 		return integration.CallbackResult{}, problem.ErrInvalid
 	}
-	if kind == "pull_request_review" && payload.Action != "submitted" || kind == "pull_request" && payload.Action != "closed" {
+	if kind == WebhookEventPullRequestReview && payload.Action != WebhookActionSubmitted || kind == WebhookEventPullRequest && payload.Action != WebhookActionClosed {
 		return integration.CallbackResult{Ignored: true}, nil
 	}
-	if kind == "pull_request" && !payload.PullRequest.GetMerged() {
+	if kind == WebhookEventPullRequest && !payload.PullRequest.GetMerged() {
 		return integration.CallbackResult{Ignored: true}, nil
 	}
 	subject, err := subjectFromPR(payload.PullRequest)
@@ -178,7 +244,7 @@ func (p GitHubPRIntegration) HandleCallback(ctx context.Context, in integration.
 		return integration.CallbackResult{}, problem.ErrInvalid
 	}
 	var event integration.ProviderEvent
-	if kind == "pull_request_review" {
+	if kind == WebhookEventPullRequestReview {
 		event, err = reviewEvent(subject, payload.Review)
 	} else {
 		event, err = mergeEvent(subject, payload.PullRequest)
@@ -201,17 +267,17 @@ func subjectFromPR(pr *githubsdk.PullRequest) (integration.Subject, error) {
 	if err != nil || number != pr.GetNumber() {
 		return integration.Subject{}, problem.ErrInvalid
 	}
-	return integration.Subject{Kind: "code_review", ID: strconv.FormatInt(pr.GetID(), 10), RepositoryID: strconv.FormatInt(pr.GetBase().GetRepo().GetID(), 10), URL: fmt.Sprintf("https://github.com/%s/%s/pull/%d", owner, repo, number), HeadSHA: pr.GetHead().GetSHA(), Merged: pr.GetMerged()}, nil
+	return integration.Subject{Kind: string(SubjectKindCodeReview), ID: strconv.FormatInt(pr.GetID(), 10), RepositoryID: strconv.FormatInt(pr.GetBase().GetRepo().GetID(), 10), URL: fmt.Sprintf("https://github.com/%s/%s/pull/%d", owner, repo, number), HeadSHA: pr.GetHead().GetSHA(), Merged: pr.GetMerged()}, nil
 }
 
 func reviewEvent(subject integration.Subject, review *githubsdk.PullRequestReview) (integration.ProviderEvent, error) {
-	state := strings.ToLower(review.GetState())
+	state := ReviewState(strings.ToLower(review.GetState()))
 	at := review.GetSubmittedAt().Time
-	if review.GetID() <= 0 || at.IsZero() || review.GetCommitID() == "" || (state != "approved" && state != "changes_requested" && state != "commented") {
+	if review.GetID() <= 0 || at.IsZero() || review.GetCommitID() == "" || (state != ReviewStateApproved && state != ReviewStateChangesRequested && state != ReviewStateCommented) {
 		return integration.ProviderEvent{}, problem.ErrInvalid
 	}
 	facts, _ := json.Marshal(eventFacts{ReviewID: review.GetID(), ReviewState: state, CommitSHA: review.GetCommitID(), ReviewURL: subject.URL + "#pullrequestreview-" + strconv.FormatInt(review.GetID(), 10)})
-	return integration.ProviderEvent{ID: "review:" + subject.RepositoryID + ":" + subject.ID + ":" + strconv.FormatInt(review.GetID(), 10), ActionID: "review_added", Subject: subject, OccurredAt: at, Facts: facts}, nil
+	return integration.ProviderEvent{ID: "review:" + subject.RepositoryID + ":" + subject.ID + ":" + strconv.FormatInt(review.GetID(), 10), ActionID: string(ActionReviewAdded), Subject: subject, OccurredAt: at, Facts: facts}, nil
 }
 
 func mergeEvent(subject integration.Subject, pr *githubsdk.PullRequest) (integration.ProviderEvent, error) {
@@ -220,7 +286,7 @@ func mergeEvent(subject integration.Subject, pr *githubsdk.PullRequest) (integra
 		return integration.ProviderEvent{}, problem.ErrInvalid
 	}
 	facts, _ := json.Marshal(eventFacts{CommitSHA: pr.GetMergeCommitSHA()})
-	return integration.ProviderEvent{ID: "merge:" + subject.RepositoryID + ":" + subject.ID, ActionID: "pr_merged", Subject: subject, OccurredAt: at, Facts: facts}, nil
+	return integration.ProviderEvent{ID: "merge:" + subject.RepositoryID + ":" + subject.ID, ActionID: string(ActionPRMerged), Subject: subject, OccurredAt: at, Facts: facts}, nil
 }
 
 func (p GitHubPRIntegration) Matches(action string, parameters json.RawMessage, event integration.ProviderEvent) (bool, error) {
@@ -230,7 +296,7 @@ func (p GitHubPRIntegration) Matches(action string, parameters json.RawMessage, 
 	if event.ActionID != action {
 		return false, nil
 	}
-	if action == "pr_merged" {
+	if ActionID(action) == ActionPRMerged {
 		return event.Subject.Merged, nil
 	}
 	var params reviewParameters
@@ -360,8 +426,8 @@ func (p GitHubPRIntegration) Reconcile(ctx context.Context, config json.RawMessa
 			return nil, errors.New("GitHub review reconciliation failed")
 		}
 		for _, review := range reviews {
-			state := strings.ToLower(review.GetState())
-			if state == "pending" || state == "dismissed" {
+			state := ReviewState(strings.ToLower(review.GetState()))
+			if state == ReviewStatePending || state == ReviewStateDismissed {
 				continue
 			}
 			event, e := reviewEvent(verified, review)
@@ -385,14 +451,14 @@ func (p GitHubPRIntegration) MatchSubjects(action string, parameters json.RawMes
 	if err != nil || !matched {
 		return integration.SubjectMatch{}, err
 	}
-	if action != "pr_merged" {
+	if ActionID(action) != ActionPRMerged {
 		return integration.SubjectMatch{Matched: true}, nil
 	}
 	var params mergeParameters
 	if err := decode(parameters, &params); err != nil {
 		return integration.SubjectMatch{}, err
 	}
-	if params.MergePolicy == "any" {
+	if params.MergePolicy == MergePolicyAny {
 		return integration.SubjectMatch{Matched: true}, nil
 	}
 	if len(subjects) == 0 {
