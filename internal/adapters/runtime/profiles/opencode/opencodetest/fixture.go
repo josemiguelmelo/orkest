@@ -182,7 +182,7 @@ func Run(version string) {
 				if params.Prompt[0].Text == "crash" {
 					os.Exit(23)
 				}
-				if params.Prompt[0].Text == "question" && (copilotFixture || kiroFixture) && questionKey != "" {
+				if params.Prompt[0].Text == "mcp-question" {
 					if err := fixtureAskUser(questionKey); err != nil {
 						os.Exit(24)
 					}

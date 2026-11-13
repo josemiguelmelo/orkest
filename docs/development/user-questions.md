@@ -60,9 +60,11 @@ Orkest closes the callback; it does not choose an answer when time expires.
 
 ## Portable MCP path
 
-New Copilot and Kiro sessions receive an `orkest_questions` HTTP MCP server with an
-`ask_user` tool, backed by the same callback and journal. This is the fallback path
-until native ACP forwarding is established for those pinned runtime profiles.
+New sessions for all five runtimes (OpenCode, Codex, Claude Code, Copilot, and Kiro)
+receive an `orkest_questions` HTTP MCP server with an `ask_user` tool, backed by the
+same callback and journal. This provides a common human-input path independent of
+native question tool availability or collaboration mode. Native ACP forms remain
+supported.
 
 The endpoint lives inside agentctl's execution environment and binds only
 `127.0.0.1`. It requires a private session bearer token. Each prompt supplies a fresh
@@ -95,7 +97,7 @@ Workers that do not understand v4 reject it.
 
 Existing v1/v2/v3 sessions retain their previous configuration and do not silently
 acquire the fallback server or new instructions. Starting a new session enables the
-fallback. Native ACP client form support does not change the pinned runtime/model.
+fallback for every runtime. Native ACP client form support does not change the pinned runtime/model.
 
 Deploy matching platform/UI and worker builds; mixed question protocol versions are
 unsupported. Rebuild execution images for new worker behavior. Existing running
@@ -117,8 +119,9 @@ Deterministic tests cover schema/answer validation, ACP scope and form mapping,
 concurrent duplicate answers, persistence failures, cancellation, restart guards,
 HTTP authorization, MCP authentication/deduplication, and browser controls/history.
 The common runtime suite asks a question and consumes `pnpm` before and after
-session restore. Copilot/Kiro fixtures use actual HTTP MCP transport; the other
-fixtures use ACP elicitation. These tests are not live provider qualification.
+session restore. All five runtime fixtures use actual HTTP MCP transport; native
+ACP elicitation is covered separately by adapter and controller tests. These tests
+are not live provider qualification.
 
 For live `make qualify-runtime QUALIFY_RUNTIME=<runtime>`, also set:
 

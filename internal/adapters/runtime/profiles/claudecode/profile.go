@@ -21,7 +21,8 @@ func (p Profile) Descriptor() agentruntime.RuntimeDescriptor {
 		binary = "claude-agent-acp"
 	}
 	return agentruntime.RuntimeDescriptor{
-		Runtime: coreruntime.ClaudeCode, Version: Version, Executable: binary,
+		UseQuestionTool: true,
+		Runtime:         coreruntime.ClaudeCode, Version: Version, Executable: binary,
 		VersionArguments:    []string{"--version"},
 		ReservedEnvNames:    []string{"HOME", "CLAUDE_CONFIG_DIR", "CLAUDE_AGENT_ACP_PROTOCOL"},
 		ReservedEnvPrefixes: []string{"CLAUDE_"},
