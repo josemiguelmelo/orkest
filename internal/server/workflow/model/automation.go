@@ -40,7 +40,7 @@ func validateIntegrationRule(d Definition, r AutomationRule) error {
 	}
 	switch r.Action {
 	case MoveTask:
-		if _, ok := d.Stage(r.TargetStageID); !ok || r.TargetStageID == r.SourceStageID || r.TargetStageID == d.ClosedStageID || r.PromptText != "" || r.SessionPolicy != "" {
+		if _, ok := d.Stage(r.TargetStageID); !ok || r.PromptText != "" || r.SessionPolicy != "" {
 			return modelerrors.ErrInvalid
 		}
 	case CallAgent:

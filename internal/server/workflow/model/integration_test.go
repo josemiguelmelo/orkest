@@ -24,7 +24,13 @@ func TestIntegrationRuleValidation(t *testing.T) {
 			r.TargetStageID = "done"
 			r.PromptText = ""
 			r.SessionPolicy = ""
-		}, false},
+		}, true},
+		{"same stage", func(r *AutomationRule) {
+			r.Action = MoveTask
+			r.TargetStageID = r.SourceStageID
+			r.PromptText = ""
+			r.SessionPolicy = ""
+		}, true},
 		{"no prompt", func(r *AutomationRule) { r.PromptText = " " }, false},
 		{"unknown policy", func(r *AutomationRule) { r.SessionPolicy = "auto" }, false},
 		{"no integration", func(r *AutomationRule) { r.Integration = nil }, false},

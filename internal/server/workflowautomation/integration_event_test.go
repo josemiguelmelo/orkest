@@ -72,3 +72,29 @@ func TestIntegrationMovementUsesExistingStageAssignment(t *testing.T) {
 		t.Fatalf("incorrect movement: %+v %v", effects, err)
 	}
 }
+
+func TestIntegrationMovementCanTargetClosedStage(t *testing.T) {
+	snapshot := integrationSnapshot()
+	rule := &snapshot.Workflow.Rules[3]
+	rule.Action = workflowmodel.MoveTask
+	rule.TargetStageID = snapshot.Workflow.ClosedStageID
+	rule.PromptText = ""
+	rule.SessionPolicy = ""
+	effects, err := (&WorkflowAutomationService{evaluator: WorkflowRuleEvaluator{}}).evaluateEvent(snapshot)
+	if err != nil || !effects.Moved || effects.Plan.StageID != snapshot.Workflow.ClosedStageID {
+		t.Fatalf("closed-stage callback move failed: %+v %v", effects, err)
+	}
+}
+
+func TestIntegrationMovementToSourceStageIsAcknowledgedWithoutMoving(t *testing.T) {
+	snapshot := integrationSnapshot()
+	rule := &snapshot.Workflow.Rules[3]
+	rule.Action = workflowmodel.MoveTask
+	rule.TargetStageID = snapshot.StageID
+	rule.PromptText = ""
+	rule.SessionPolicy = ""
+	effects, err := (&WorkflowAutomationService{evaluator: WorkflowRuleEvaluator{}}).evaluateEvent(snapshot)
+	if err != nil || effects.Moved || effects.Plan.StageID != snapshot.StageID {
+		t.Fatalf("same-stage callback should be a no-op: %+v %v", effects, err)
+	}
+}

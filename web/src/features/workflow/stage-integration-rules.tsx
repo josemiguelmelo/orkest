@@ -233,15 +233,11 @@ export function StageIntegrationRules({
                       onChange={(event) => patch(rule.id, { targetStageId: event.target.value })}
                     >
                       <option value="">Choose destination</option>
-                      {definition.stages
-                        .filter(
-                          (item) => item.id !== stageID && item.id !== definition.closedStageId,
-                        )
-                        .map((item) => (
-                          <option key={item.id} value={item.id}>
-                            {item.name}
-                          </option>
-                        ))}
+                      {definition.stages.map((item) => (
+                        <option key={item.id} value={item.id}>
+                          {item.name}
+                        </option>
+                      ))}
                     </select>
                   </Field>
                 )}

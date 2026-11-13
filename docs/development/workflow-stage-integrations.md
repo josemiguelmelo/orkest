@@ -82,7 +82,10 @@ senders never supply Orkest authority: effects are attributed to the workflow
 configuring administrator and recheck current access. Viewers cannot mutate or
 retry. The user explicitly authorized configured agent calls for this feature;
 this is an opt-in exception to manual starts, not a general execution-policy change.
-Automatic moves cannot target the closed stage or reopen a closed task.
+Integration callbacks may target any stage, including the source or closed
+stage. Targeting the source stage is acknowledged without moving the task;
+targeting the closed stage closes it. A closed task cannot be reopened by an
+integration callback.
 
 ## Artifact observations and external identity
 

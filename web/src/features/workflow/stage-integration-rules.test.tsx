@@ -126,8 +126,9 @@ it('configures provider parameters and switches between movement and a custom ag
   await user.selectOptions(screen.getByLabelText('PR input'), 'prs');
   expect(screen.getByLabelText('Current head')).toBeChecked();
   expect(screen.queryByRole('option', { name: 'plan' })).not.toBeInTheDocument();
+  expect(screen.getByRole('option', { name: 'Work' })).toBeInTheDocument();
+  expect(screen.getByRole('option', { name: 'Done' })).toBeInTheDocument();
   await user.selectOptions(screen.getByLabelText('Callback target stage'), 'review');
-  expect(screen.queryByRole('option', { name: 'Done' })).not.toBeInTheDocument();
   let rules = JSON.parse(
     screen.getByTestId('rules').textContent ?? '[]',
   ) as WorkflowAutomationRule[];
