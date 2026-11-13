@@ -84,6 +84,9 @@ func NewRouter(ctx context.Context, deps RouterDependencies) (*chi.Mux, error) {
 	if deps.Integrations == nil {
 		return nil, fmt.Errorf("task integration service is required")
 	}
+	if deps.StageIntegrations == nil {
+		return nil, fmt.Errorf("workflow stage integration service is required")
+	}
 	if _, err := openapi.LoadAndValidateOpenAPIDoc(OpenAPIContract, ctx); err != nil {
 		return nil, fmt.Errorf("load platform OpenAPI contract: %w", err)
 	}
@@ -106,9 +109,7 @@ func NewRouter(ctx context.Context, deps RouterDependencies) (*chi.Mux, error) {
 	if deps.AgentTools != nil {
 		router.Handle("/mcp/agent-tools", deps.AgentTools.Handler())
 	}
-	if deps.StageIntegrations != nil {
-		router.Post("/callbacks/workflow-stage-integrations/{connectionID}", workflowStageCallbackAPI{ingestor: deps.StageIntegrations}.callback)
-	}
+	router.Post("/callbacks/workflow-stage-integrations/{connectionID}", workflowStageCallbackAPI{ingestor: deps.StageIntegrations}.callback)
 	router.Group(func(api chi.Router) {
 		api.Use(auth.middleware)
 		api.Route("/api", func(api chi.Router) {
@@ -141,9 +142,7 @@ func NewRouter(ctx context.Context, deps RouterDependencies) (*chi.Mux, error) {
 			directChatAPI{chats: deps.DirectChats, agents: deps.Agents, workspaces: deps.Workspaces}.routes(api)
 			taskIntegrationAPI{service: deps.Integrations}.routes(api)
 			scheduledJobAPI{service: deps.ScheduledJobs, launches: deps.Launches, dispatcher: deps.JobDispatcher}.routes(api)
-			if deps.StageIntegrations != nil {
-				workflowStageIntegrationAPI{service: deps.StageIntegrations}.routes(api)
-			}
+			workflowStageIntegrationAPI{service: deps.StageIntegrations}.routes(api)
 		})
 	})
 	openapi.Enable(router, "Orkest API", OpenAPIContract)
