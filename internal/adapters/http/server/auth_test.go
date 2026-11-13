@@ -8,6 +8,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"golang.org/x/oauth2"
+
 	"github.com/josemiguelmelo/orkest/internal/server/identity"
 	identitymodel "github.com/josemiguelmelo/orkest/internal/server/identity/model"
 	"github.com/josemiguelmelo/orkest/internal/server/organization"
@@ -63,5 +65,50 @@ func TestCurrentUserAdminLookupFailure(t *testing.T) {
 	auth.currentUser(recorder, request)
 	if recorder.Code != http.StatusInternalServerError || recorder.Body.String() != "{\"error\":\"internal_error\"}\n" {
 		t.Fatalf("unexpected response %d %q", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestRefreshSessionRequestsOpenIDTokenAndRetainsRefreshToken(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := r.ParseForm(); err != nil {
+			t.Fatal(err)
+		}
+		if got := r.Form.Get("scope"); got != "openid profile email" {
+			t.Errorf("scope = %q", got)
+		}
+		if got := r.Form.Get("refresh_token"); got != "old-refresh" {
+			t.Errorf("refresh_token = %q", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"access","id_token":"new-id","expires_in":300}`))
+	}))
+	defer server.Close()
+
+	auth := oidcAuth{
+		config: oauth2.Config{
+			ClientID: "client", ClientSecret: "secret",
+			Endpoint: oauth2.Endpoint{TokenURL: server.URL},
+			Scopes:   []string{"openid", "profile", "email"},
+		},
+		httpClient: server.Client(),
+	}
+	token, err := auth.refreshSession(context.Background(), "old-refresh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := token.Extra("id_token").(string); got != "new-id" {
+		t.Fatalf("id_token = %q", got)
+	}
+	if token.RefreshToken != "old-refresh" {
+		t.Fatalf("refresh token = %q", token.RefreshToken)
+	}
+}
+
+func TestShouldRefreshSessionWhenSessionCookieIsAbsent(t *testing.T) {
+	if !shouldRefreshSession("", "", nil) {
+		t.Fatal("expected refresh when the browser omits the expired session cookie")
+	}
+	if shouldRefreshSession("", "Bearer supplied-token", nil) {
+		t.Fatal("must not refresh a bearer-authenticated request")
 	}
 }
