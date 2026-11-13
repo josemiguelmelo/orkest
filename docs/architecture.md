@@ -1,5 +1,9 @@
 # Architecture and extension points
 
+See the domain-specific [architecture flow diagrams](architecture/flows/README.md)
+for task/workflow, execution/recovery, agentctl, artifact, scheduled-job, and
+integration flows.
+
 Go platform, independent `agentctl` worker, React UI. These boundaries describe
 current code and are enforced by `make check-runtime-boundaries`.
 

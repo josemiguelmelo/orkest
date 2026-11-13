@@ -7,6 +7,7 @@ Start with [local setup](../README.md).
 | Product requirements | [Requirements](requirements.md) |
 | Domain terms | [Glossary](glossary.md) |
 | Code organization | [Architecture](architecture.md), [technology stack](tech-stack.md) |
+| Runtime flows | [Architecture flow diagrams](architecture/flows/README.md) |
 | Implementation/verification | [Status](status.md) |
 | Agent configuration | [Agent configuration](guides/agent-configuration.md), [runtimes](reference/runtimes/README.md) |
 | Task lifecycle | [Workflows](guides/workflows.md), [sessions](guides/sessions.md), [artifacts](guides/artifacts.md), [scheduled jobs](guides/scheduled-jobs.md) |
