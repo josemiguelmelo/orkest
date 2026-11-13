@@ -1142,6 +1142,10 @@ export type BrowseCodingRepositoriesData = {
     query?: {
         page?: number;
         perPage?: number;
+        /**
+         * Filter provider repositories by name
+         */
+        search?: string;
     };
     url: '/api/organizations/{orgID}/workspaces/{workspaceID}/coding-integrations/{integrationID}/repositories';
 };

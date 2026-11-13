@@ -213,7 +213,7 @@ func (s *CodeRepositoryService) DeleteIntegration(ctx context.Context, userID, o
 	return repository.DeleteCodingIntegration(ctx, workspaceID, id)
 }
 
-func (s *CodeRepositoryService) BrowseRepositories(ctx context.Context, userID, orgID, workspaceID, id string, page, perPage int) (coderepositorymodel.RepositoryPage, error) {
+func (s *CodeRepositoryService) BrowseRepositories(ctx context.Context, userID, orgID, workspaceID, id string, page, perPage int, search string) (coderepositorymodel.RepositoryPage, error) {
 	w, err := s.workspaces.GetWorkspace(ctx, userID, orgID, workspaceID)
 	if err != nil {
 		return coderepositorymodel.RepositoryPage{}, err
@@ -241,7 +241,36 @@ func (s *CodeRepositoryService) BrowseRepositories(ctx context.Context, userID, 
 	if provider == nil {
 		return coderepositorymodel.RepositoryPage{}, modelerrors.ErrInvalid
 	}
-	return provider.DiscoverRepositories(ctx, item.ProviderConfig, coderepositorymodel.Credentials{Token: token}, page, perPage)
+	if strings.TrimSpace(search) == "" {
+		return provider.DiscoverRepositories(ctx, item.ProviderConfig, coderepositorymodel.Credentials{Token: token}, page, perPage)
+	}
+	search = strings.ToLower(strings.TrimSpace(search))
+	matched := make([]coderepositorymodel.RepositoryMetadata, 0)
+	for providerPage := 1; providerPage > 0; {
+		result, discoverErr := provider.DiscoverRepositories(ctx, item.ProviderConfig, coderepositorymodel.Credentials{Token: token}, providerPage, 100)
+		if discoverErr != nil {
+			return coderepositorymodel.RepositoryPage{}, discoverErr
+		}
+		for _, repository := range result.Repositories {
+			if strings.Contains(strings.ToLower(repository.Name), search) {
+				matched = append(matched, repository)
+			}
+		}
+		providerPage = result.NextPage
+	}
+	start := (page - 1) * perPage
+	if start >= len(matched) {
+		return coderepositorymodel.RepositoryPage{Repositories: []coderepositorymodel.RepositoryMetadata{}}, nil
+	}
+	end := start + perPage
+	if end > len(matched) {
+		end = len(matched)
+	}
+	next := 0
+	if end < len(matched) {
+		next = page + 1
+	}
+	return coderepositorymodel.RepositoryPage{Repositories: matched[start:end], NextPage: next}, nil
 }
 
 func (s *CodeRepositoryService) RegisterRepository(ctx context.Context, userID, orgID, workspaceID string, integrationID, providerRepositoryID string) (coderepositorymodel.CodeRepository, error) {

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { ArrowUpRight, FolderGit2, GitBranch, Globe2, LockKeyhole, Search } from 'lucide-react';
 import { useApp } from '../../app/context';
@@ -45,24 +45,29 @@ function RepositoryCard({ item }: { item: CodeRepository }) {
 function RepositoryEditor({ onClose }: { onClose: () => void }) {
   const { scope } = useApp(); const refresh = useRefresh(); const action = useAction();
   const integrations = useQuery(codingIntegrationsQuery(scope));
-  const [integrationID, setIntegrationID] = useState(''); const [selected, setSelected] = useState<CodingRepository | null>(null);
+  const [integrationID, setIntegrationID] = useState(''); const [selected, setSelected] = useState<CodingRepository[]>([]);
   const [search, setSearch] = useState('');
-  const repositories = useInfiniteQuery({ queryKey: ['coding-repository-picker', scope.orgID, scope.workspaceID, integrationID], initialPageParam: 1, queryFn: ({ signal, pageParam }) => data(sdk.browseCodingRepositories({ ...command, path: { ...path(scope), integrationID }, query: { page: pageParam, perPage: 50 }, signal })), getNextPageParam: (lastPage) => lastPage.nextPage, enabled: !!integrationID });
+  const [debouncedSearch, setDebouncedSearch] = useState(search.trim());
+  useEffect(() => {
+    const timeout = window.setTimeout(() => setDebouncedSearch(search.trim()), 300);
+    return () => window.clearTimeout(timeout);
+  }, [search]);
+  const repositories = useInfiniteQuery({ queryKey: ['coding-repository-picker', scope.orgID, scope.workspaceID, integrationID, debouncedSearch], initialPageParam: 1, queryFn: ({ signal, pageParam }) => data(sdk.browseCodingRepositories({ ...command, path: { ...path(scope), integrationID }, query: { page: pageParam, perPage: 50, ...(debouncedSearch ? { search: debouncedSearch } : {}) }, signal })), getNextPageParam: (lastPage) => lastPage.nextPage, enabled: !!integrationID });
   const repositoryItems = repositories.data?.pages.flatMap((page) => page.repositories) ?? [];
-  const filteredRepositories = repositoryItems.filter((repo) => `${repo.name} ${repo.defaultBranch}`.toLowerCase().includes(search.trim().toLowerCase()));
+  const filteredRepositories = repositoryItems;
   return <Dialog title="Register repository" description="Select a repository visible to this integration." open onOpenChange={(open) => { if (!open && !action.pending) onClose(); }}>
-    <form className="form-stack" onSubmit={(event) => { event.preventDefault(); if (!selected) return; void action.run(async () => { await data(sdk.createCodeRepository({ ...command, path: path(scope), body: { integrationId: integrationID, providerRepositoryId: selected.id } })); await refresh(scope); onClose(); }); }}>
+    <form className="form-stack" onSubmit={(event) => { event.preventDefault(); if (!selected.length) return; void action.run(async () => { for (const repo of selected) await data(sdk.createCodeRepository({ ...command, path: path(scope), body: { integrationId: integrationID, providerRepositoryId: repo.id } })); await refresh(scope); onClose(); }); }}>
       {integrations.isError && <ErrorState error={integrations.error} retry={() => void integrations.refetch()} />}
-      {!integrations.isPending && integrations.data?.length === 0 ? <div className="picker-empty"><KeyRoundIcon /><strong>No connections yet</strong><span>Ask a workspace administrator to connect a coding provider in Settings.</span></div> : <Field label="1. Choose a connection" hint="Repositories are listed according to the access granted to this connection."><select required value={integrationID} onChange={(event) => { setIntegrationID(event.target.value); setSelected(null); setSearch(''); }}><option value="">Select a provider connection</option>{integrations.data?.map((item) => <option key={item.id} value={item.id}>{item.name} · {providerLabel(item.providerName)}</option>)}</select></Field>}
+      {!integrations.isPending && integrations.data?.length === 0 ? <div className="picker-empty"><KeyRoundIcon /><strong>No connections yet</strong><span>Ask a workspace administrator to connect a coding provider in Settings.</span></div> : <Field label="1. Choose a connection" hint="Repositories are listed according to the access granted to this connection."><select required value={integrationID} onChange={(event) => { setIntegrationID(event.target.value); setSelected([]); setSearch(''); }}><option value="">Select a provider connection</option>{integrations.data?.map((item) => <option key={item.id} value={item.id}>{item.name} · {providerLabel(item.providerName)}</option>)}</select></Field>}
       {integrationID && repositories.isPending ? <Loading /> : repositories.isError ? <ErrorState error={repositories.error} /> : integrationID && repositoryItems.length ? <>
         <Field label="2. Choose a repository"><div className="input-with-icon"><Search size={15} /><input type="search" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search repositories" /></div></Field>
-        <div className="repository-picker-list" role="listbox" aria-label="Available repositories">{filteredRepositories.map((repo) => <button type="button" role="option" aria-selected={selected?.id === repo.id} className={`repository-picker-option ${selected?.id === repo.id ? 'selected' : ''}`} key={repo.id} onClick={() => setSelected(repo)}><span className="picker-repo-icon"><FolderGit2 size={17} /></span><span className="picker-repo-copy"><strong>{repo.name}</strong><small><GitBranch size={12} /> {repo.defaultBranch}</small></span><Badge>{repo.private ? <><LockKeyhole size={11} /> Private</> : <><Globe2 size={11} /> Public</>}</Badge></button>)}{filteredRepositories.length === 0 && <p className="picker-no-match">No repositories match “{search}”.</p>}</div>
+        <div className="repository-picker-list" aria-label="Available repositories">{filteredRepositories.map((repo) => <button type="button" aria-pressed={selected.some((item) => item.id === repo.id)} className={`repository-picker-option ${selected.some((item) => item.id === repo.id) ? 'selected' : ''}`} key={repo.id} onClick={() => setSelected((items) => items.some((item) => item.id === repo.id) ? items.filter((item) => item.id !== repo.id) : [...items, repo])}><span className="picker-repo-icon"><FolderGit2 size={17} /></span><span className="picker-repo-copy"><strong>{repo.name}</strong><small><GitBranch size={12} /> {repo.defaultBranch}</small></span><Badge>{repo.private ? <><LockKeyhole size={11} /> Private</> : <><Globe2 size={11} /> Public</>}</Badge>{selected.some((item) => item.id === repo.id) && <CheckMark />}</button>)}{filteredRepositories.length === 0 && <p className="picker-no-match">No repositories match “{search}”.</p>}</div>
         <p className="picker-count">Showing {repositoryItems.length}{repositories.hasNextPage ? ' of more' : ''} repositories</p>
         {repositories.hasNextPage && <Button className="picker-load-more" type="button" variant="outline" disabled={repositories.isFetchingNextPage} onClick={() => void repositories.fetchNextPage()}>{repositories.isFetchingNextPage ? 'Loading repositories…' : 'Load more repositories'}</Button>}
-        {selected && <div className="selected-repository"><CheckMark /><span><strong>{selected.name}</strong> is ready to register</span></div>}
+        {selected.length > 0 && <div className="selected-repository"><CheckMark /><span><strong>{selected.length} {selected.length === 1 ? 'repository' : 'repositories'}</strong> ready to add</span></div>}
       </> : integrationID ? <Empty title="No repositories available">This connection cannot see any repositories. Check its permissions or connect another provider account.</Empty> : null}
       {action.error !== undefined && <ErrorState error={action.error} />}
-      <div className="form-actions"><Button type="button" variant="outline" onClick={onClose}>Cancel</Button><Button type="submit" disabled={!selected || action.pending}>{action.pending ? 'Adding…' : 'Add repository'}</Button></div>
+      <div className="form-actions"><Button type="button" variant="outline" onClick={onClose}>Cancel</Button><Button type="submit" disabled={!selected.length || action.pending}>{action.pending ? 'Adding…' : `Add ${selected.length ? `${selected.length} ` : ''}${selected.length === 1 ? 'repository' : 'repositories'}`}</Button></div>
     </form>
   </Dialog>;
 }

@@ -756,7 +756,8 @@ export const zBrowseCodingRepositoriesPath = z.object({
 });
 export const zBrowseCodingRepositoriesQuery = z.object({
     page: z.int().gte(1).optional().default(1),
-    perPage: z.int().gte(1).lte(100).optional().default(50)
+    perPage: z.int().gte(1).lte(100).optional().default(50),
+    search: z.string().optional()
 });
 /**
  * Provider repository page

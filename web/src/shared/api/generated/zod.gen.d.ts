@@ -1246,6 +1246,7 @@ export declare const zBrowseCodingRepositoriesPath: z.ZodObject<{
 export declare const zBrowseCodingRepositoriesQuery: z.ZodObject<{
     page: z.ZodDefault<z.ZodOptional<z.ZodInt>>;
     perPage: z.ZodDefault<z.ZodOptional<z.ZodInt>>;
+    search: z.ZodOptional<z.ZodString>;
 }, z.core.$strip>;
 /**
  * Provider repository page
