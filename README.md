@@ -2,17 +2,20 @@
 
 [![Runtime conformance](https://github.com/josemiguelmelo/orkest/actions/workflows/runtime-conformance.yml/badge.svg)](https://github.com/josemiguelmelo/orkest/actions/workflows/runtime-conformance.yml)
 
-Orkest runs software-development agents with shared tasks, chat, approvals, and
-history. A Go platform serves React; independent `agentctl` workers run runtimes through ACP.
+Orkest is a self-hosted platform for coordinating software-development agents.
+Teams can manage tasks and repositories, start agent runs, follow activity and chat,
+answer approval requests, and review the resulting work. A Go API serves the React
+web app, while independent `agentctl` workers run coding agents through ACP.
 
-Active prototype; see [status](docs/status.md):
+Start with the [local setup](#run-locally), browse the [documentation map](docs/README.md),
+or check the [implementation and verification status](docs/status.md) before choosing
+an execution mode.
 
-- Implemented: management, dispatch, Docker/Local execution, initial Kubernetes
-  Pod execution, durable sessions.
-- Unfinished: member capacity, worker transport authentication.
-- Live qualification is scenario-specific: OpenCode memory continuation has a dated
-  verification record; other providers, real approvals, MCP, and full platform
-  restart journeys still need qualification. See [evidence and limits](docs/status.md#verification-record).
+Orkest is an active prototype. Core task management, dispatch, and several execution
+modes are implemented, but some capacity and worker-authentication features remain
+unfinished. Runtime qualification also varies by provider and scenario; see the
+[status and verification record](docs/status.md#verification-record) for current evidence
+and limits.
 
 ## Features
 
