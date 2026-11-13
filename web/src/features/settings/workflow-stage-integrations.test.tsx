@@ -98,15 +98,20 @@ it('creates a scoped connection using only repositories from selected coding cre
   setup('admin');
   await user.click(await screen.findByRole('button', { name: 'Add stage connection' }));
   await user.type(await screen.findByLabelText('Connection name'), 'Review events');
-  await user.selectOptions(screen.getByLabelText('Stage integration provider'), 'example');
+  await user.selectOptions(screen.getByLabelText('Provider'), 'example');
   await user.selectOptions(screen.getByLabelText('Coding credentials'), 'coding');
-  expect(
-    screen.queryByRole('option', { name: 'Other connection repository' }),
-  ).not.toBeInTheDocument();
-  await user.selectOptions(screen.getByLabelText('Allowed repositories'), 'repository');
+  expect(screen.queryByText('Other connection repository')).not.toBeInTheDocument();
+  const backend = screen.getByRole('checkbox', { name: /Backend/ });
+  expect(backend).not.toBeChecked();
+  await user.click(screen.getByRole('button', { name: 'Select visible' }));
+  expect(backend).toBeChecked();
+  expect(screen.getByText('1 selected')).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: 'Clear' }));
+  expect(backend).not.toBeChecked();
+  await user.click(backend);
   const secret = 'a'.repeat(32);
   await user.type(screen.getByLabelText('Webhook secret'), secret);
-  await user.click(screen.getByLabelText('Enable connection'));
+  await user.click(screen.getByLabelText(/Enable this connection/));
   await user.click(screen.getByRole('button', { name: 'Save stage connection' }));
   await waitFor(() =>
     expect(api.createWorkflowStageIntegration).toHaveBeenCalledWith(
@@ -125,6 +130,27 @@ it('creates a scoped connection using only repositories from selected coding cre
       }),
     ),
   );
+});
+
+it('guides workspace admins from the empty state into connection setup', async () => {
+  const user = userEvent.setup();
+  setup('admin');
+  expect(await screen.findByText('Connect a code host to your workflow')).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: 'Create your first connection' }));
+  expect(await screen.findByRole('dialog')).toBeInTheDocument();
+});
+
+it('generates a strong webhook secret and lets admins reveal or hide it', async () => {
+  const user = userEvent.setup();
+  setup('admin');
+  await user.click(await screen.findByRole('button', { name: 'Add stage connection' }));
+  const secret = await screen.findByLabelText('Webhook secret');
+  await user.click(screen.getByRole('button', { name: 'Generate secret' }));
+  expect(secret).toHaveValue();
+  expect((secret as HTMLInputElement).value).toMatch(/^[0-9a-f]{64}$/);
+  expect(secret).toHaveAttribute('type', 'text');
+  await user.click(screen.getByRole('button', { name: 'Hide secret' }));
+  expect(secret).toHaveAttribute('type', 'password');
 });
 
 it('preserves write-only webhook secrets when editing and requests retry explicitly', async () => {

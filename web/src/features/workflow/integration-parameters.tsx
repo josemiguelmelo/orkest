@@ -1,5 +1,6 @@
 import { Field } from '../../shared/ui/form';
 import type { JsonValue } from '../integrations/schema';
+import { WorkflowChoiceSelect, WorkflowMultiChoiceSelect } from './workflow-choice-select';
 
 type Schema = Record<string, unknown>;
 function object(value: unknown): Schema {
@@ -7,6 +8,20 @@ function object(value: unknown): Schema {
     ? (value as Schema)
     : {};
 }
+
+function optionLabel(name: string, value: string) {
+  if (name === 'mergePolicy') {
+    if (value === 'all') return 'All linked PRs must be merged';
+    if (value === 'any') return 'Any linked PR can be merged';
+  }
+  if (name === 'reviewStates') {
+    if (value === 'changes_requested') return 'Changes requested';
+    if (value === 'approved') return 'Approved';
+    if (value === 'commented') return 'Commented';
+  }
+  return value.replaceAll('_', ' ').replace(/^\w/, (letter) => letter.toUpperCase());
+}
+
 export function parameterDefaults(schema: Schema): Record<string, JsonValue> {
   const result: Record<string, JsonValue> = {};
   for (const [name, raw] of Object.entries(object(schema.properties))) {
@@ -41,25 +56,31 @@ export function IntegrationParameters({
         const choices = Array.isArray(field.enum)
           ? field.enum.filter((entry): entry is string => typeof entry === 'string')
           : [];
+        const isRequired = required.includes(name);
         if (name === 'artifactInputName')
           return (
             <Field key={name} label={label} {...(hint ? { hint } : {})}>
-              <select
+              <WorkflowChoiceSelect
                 disabled={disabled}
-                required
                 value={typeof value[name] === 'string' ? value[name] : ''}
-                onChange={(event) => change(event.target.value)}
-              >
-                <option value="">Choose a stage artifact input</option>
-                {typeof value[name] === 'string' &&
+                placeholder="Choose a PR artifact input"
+                aria-required
+                options={[
+                  ...(typeof value[name] === 'string' &&
                   value[name] !== '' &&
-                  !artifactInputs.includes(value[name]) && (
-                    <option value={value[name]}>Unavailable artifact input ({value[name]})</option>
-                  )}
-                {artifactInputs.map((input) => (
-                  <option key={input}>{input}</option>
-                ))}
-              </select>
+                  !artifactInputs.includes(value[name])
+                    ? [
+                        {
+                          value: value[name],
+                          label: `Unavailable artifact input (${value[name]})`,
+                          description: 'This saved input is no longer available in the stage.',
+                        },
+                      ]
+                    : []),
+                  ...artifactInputs.map((input) => ({ value: input, label: input })),
+                ]}
+                onChange={(next) => change(next)}
+              />
             </Field>
           );
         if (field.type === 'boolean')
@@ -79,20 +100,16 @@ export function IntegrationParameters({
           if (Array.isArray(options))
             return (
               <Field key={name} label={label} {...(hint ? { hint } : {})}>
-                <select
-                  multiple
+                <WorkflowMultiChoiceSelect
                   disabled={disabled}
                   value={selected}
-                  onChange={(event) =>
-                    change(Array.from(event.target.selectedOptions, (option) => option.value))
-                  }
-                >
-                  {options
+                  placeholder="Choose review states"
+                  aria-required={isRequired}
+                  options={options
                     .filter((entry): entry is string => typeof entry === 'string')
-                    .map((entry) => (
-                      <option key={entry}>{entry}</option>
-                    ))}
-                </select>
+                    .map((entry) => ({ value: entry, label: optionLabel(name, entry) }))}
+                  onChange={(next) => change(next)}
+                />
               </Field>
             );
           return (
@@ -116,17 +133,17 @@ export function IntegrationParameters({
           return (
             <Field key={name} label={label} {...(hint ? { hint } : {})}>
               {choices.length ? (
-                <select
-                  required={required.includes(name)}
+                <WorkflowChoiceSelect
                   disabled={disabled}
                   value={typeof value[name] === 'string' ? value[name] : ''}
-                  onChange={(event) => change(event.target.value)}
-                >
-                  <option value="">Choose a value</option>
-                  {choices.map((entry) => (
-                    <option key={entry}>{entry}</option>
-                  ))}
-                </select>
+                  placeholder="Choose a value"
+                  aria-required={isRequired}
+                  options={choices.map((entry) => ({
+                    value: entry,
+                    label: optionLabel(name, entry),
+                  }))}
+                  onChange={(next) => change(next)}
+                />
               ) : (
                 <input
                   required={required.includes(name)}
