@@ -11,7 +11,6 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/josemiguelmelo/orkest/internal/adapters/postgres/sqlc"
 	problem "github.com/josemiguelmelo/orkest/internal/contracts/problem"
-	artifactmodel "github.com/josemiguelmelo/orkest/internal/server/artifact/model"
 	codemodel "github.com/josemiguelmelo/orkest/internal/server/coderepository/model"
 	workflowmodel "github.com/josemiguelmelo/orkest/internal/server/workflow/model"
 	stage "github.com/josemiguelmelo/orkest/internal/server/workflowstageintegration"
@@ -271,46 +270,19 @@ func (r *WorkflowStageIntegrationPostgresRepository) candidateInputs(ctx context
 		return err
 	}
 	c.ActorID = definition.ConfiguredBy
-	var parameters struct {
-		ArtifactInputName string `json:"artifactInputName"`
-	}
-	if err = json.Unmarshal(c.Parameters, &parameters); err != nil {
+	c.Definition = definition
+	artifacts, err := q.ListTaskArtifacts(ctx, sqlc.ListTaskArtifactsParams{WorkspaceID: c.Connection.WorkspaceID, TaskID: c.TaskID})
+	if err != nil {
 		return err
 	}
-	current, ok := definition.Stage(c.StageID)
-	if !ok {
-		return problem.ErrConflict
-	}
-	var input *workflowmodel.ArtifactInput
-	for _, item := range current.ArtifactInputs {
-		if item.Name == parameters.ArtifactInputName {
-			copy := item
-			input = &copy
-			break
-		}
-	}
-	if input != nil {
-		artifacts, err := q.ListTaskArtifacts(ctx, sqlc.ListTaskArtifactsParams{WorkspaceID: c.Connection.WorkspaceID, TaskID: c.TaskID})
+	for _, row := range artifacts {
+		revision, err := artifactRevision(sqlc.ArtifactPublicationRow(row))
 		if err != nil {
 			return err
 		}
-		var latest int64
-		for _, a := range artifacts {
-			if a.StageID == input.SourceStageID && a.OutputName == input.OutputName && (a.Kind == "pull_request" || a.Kind == "code_review") && a.StageVersion > latest {
-				latest = a.StageVersion
-			}
-		}
-		for _, a := range artifacts {
-			if a.StageID != input.SourceStageID || a.OutputName != input.OutputName || a.StageVersion != latest || (a.Kind != "pull_request" && a.Kind != "code_review") {
-				continue
-			}
-			var content artifactmodel.Content
-			if err = json.Unmarshal(a.Content, &content); err != nil {
-				return err
-			}
-			c.Artifacts = append(c.Artifacts, artifactmodel.Revision{ID: a.ID, ArtifactID: a.ArtifactID, Number: a.Number, Kind: a.Kind, Title: a.Title, OutputName: a.OutputName, Content: content, CreatedBy: a.CreatedBy, ProducingRunID: a.ProducingRunID.String, StageID: a.StageID, StageVersion: a.StageVersion, CreatedAt: a.CreatedAt.Time})
-		}
+		c.AvailableArtifacts = append(c.AvailableArtifacts, revision)
 	}
+
 	repos, err := q.ListWorkflowStageTaskRepositories(ctx, sqlc.ListWorkflowStageTaskRepositoriesParams{WorkspaceID: c.Connection.WorkspaceID, TaskID: c.TaskID})
 	if err != nil {
 		return err

@@ -167,6 +167,17 @@ this feature does not claim complete historical external auditing. See GitHub's
 and [failure-handling](https://docs.github.com/en/webhooks/using-webhooks/handling-failed-webhook-deliveries)
 documentation.
 
+Artifact input selection is shared with task orchestration through the pure
+`workflow/artifactinput` domain policy. Persistence returns a consistent workflow
+and artifact snapshot; the service selects the named binding's declared output
+kind and latest matching producing stage entry before pinning revisions. Other
+required inputs do not gate this single-input observation.
+
+A successful reconciliation verifies authorization and current subjects, then
+admits matching events in the same scan. Successful verification does not impose
+retry backoff; failed observations retain bounded retries. Slow scans and polling
+intervals exceeding the reconciliation interval must still admit events.
+
 ## Session compatibility
 
 `continue_or_create_if_absent` restores only a compatible conversation belonging
@@ -214,3 +225,20 @@ restore/follow-up are not verified: required live model/provider settings and an
 OpenCode executable are unavailable. Fixture/local-infrastructure evidence must
 not be presented as live qualification. Existing team-member capacity and transport
 security limitations in [status](../status.md) remain outside this feature.
+
+## PR 89 review verification — 2026-11-13
+
+- Added deterministic clock-controlled worker coverage for webhook and polled event
+  admission over repeated 31-second scans, failed verification backoff/recovery,
+  revoked authorization, and changed artifact output kinds.
+- Shared resolver coverage retains the existing handoff tests and checks exact
+  declared kinds, latest matching stage entries, optional/required bindings and
+  missing source/output declarations.
+- `make fmt`, Go lint, runtime/architecture boundaries, all Go unit packages,
+  generated API consistency, frontend lint/type checks and `make build` passed.
+- `make check` stopped at three existing scheduled-jobs frontend test failures
+  (97 frontend tests passed). The unchanged tests expect `No scheduled jobs` and
+  `New job`, while the unchanged empty-state UI displays `No scheduled jobs yet`
+  and `Create your first job`.
+- `make test-postgres` remains blocked by missing database settings. Live GitHub
+  and credentialed runtime continuation were not qualified by these changes.

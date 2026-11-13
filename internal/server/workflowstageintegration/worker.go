@@ -2,10 +2,13 @@ package workflowstageintegration
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"time"
 
 	problem "github.com/josemiguelmelo/orkest/internal/contracts/problem"
+	artifactmodel "github.com/josemiguelmelo/orkest/internal/server/artifact/model"
+	"github.com/josemiguelmelo/orkest/internal/server/workflow/artifactinput"
 )
 
 // Process scans current observations. Each external call happens before a short,
@@ -43,10 +46,11 @@ func (s *WorkflowStageIntegrationService) processCandidate(ctx context.Context, 
 		o.Subjects = append([]Subject(nil), o.Subjects...)
 		o.RevisionIDs = append([]string(nil), o.RevisionIDs...)
 	}
+	verified := false
+	now := s.now()
 	// Rejected observations retry bounded read-only verification, not execution.
-	due := (o.ReconciledAt.IsZero() || time.Since(o.ReconciledAt) >= 30*time.Second) && (o.AttemptedAt.IsZero() || time.Since(o.AttemptedAt) >= 10*time.Second)
+	due := (o.ReconciledAt.IsZero() || now.Sub(o.ReconciledAt) >= 30*time.Second) && (o.AttemptedAt.IsZero() || now.Sub(o.AttemptedAt) >= 10*time.Second)
 	if due {
-		now := time.Now().UTC()
 		initial := len(o.Subjects) == 0
 		err := s.refreshObservation(ctx, p, resolver, c, &o, now)
 		if err != nil && initial {
@@ -68,6 +72,7 @@ func (s *WorkflowStageIntegrationService) processCandidate(ctx context.Context, 
 		if err != nil {
 			return err
 		}
+		verified = true
 	}
 	if len(o.Subjects) == 0 || o.LastError != "" {
 		return nil
@@ -76,14 +81,12 @@ func (s *WorkflowStageIntegrationService) processCandidate(ctx context.Context, 
 	if err != nil {
 		return err
 	}
-	if len(events) > 0 {
-		if !o.AttemptedAt.IsZero() && time.Since(o.AttemptedAt) < 10*time.Second {
-			return nil
-		}
+	if len(events) > 0 && !verified {
 		// Recheck authorization and live heads before consuming queued facts. A
-		// cached reconciliation snapshot cannot authorize an old-head review.
+		// cached reconciliation snapshot cannot authorize an old-head review. A
+		// successful refresh above already performed this verification.
 		err := s.refreshEventSubjects(ctx, resolver, c, &o)
-		o.AttemptedAt = time.Now().UTC()
+		o.AttemptedAt = s.now()
 		if err != nil {
 			o.LastError = "verification_or_reconciliation_failed"
 		}
@@ -153,12 +156,33 @@ func (s *WorkflowStageIntegrationService) refreshObservation(ctx context.Context
 		return err
 	}
 	if len(o.Subjects) == 0 {
-		if len(c.Artifacts) == 0 {
+		var parameters struct {
+			ArtifactInputName string `json:"artifactInputName"`
+		}
+		if err := json.Unmarshal(c.Parameters, &parameters); err != nil {
+			return problem.ErrInvalid
+		}
+		current, ok := c.Definition.Stage(c.StageID)
+		if !ok {
+			return problem.ErrConflict
+		}
+		var artifacts []artifactmodel.Revision
+		for _, binding := range current.ArtifactInputs {
+			if binding.Name != parameters.ArtifactInputName {
+				continue
+			}
+			artifacts, err = artifactinput.ResolveInput(c.Definition, binding, c.AvailableArtifacts)
+			if err != nil {
+				return err
+			}
+			break
+		}
+		if len(artifacts) == 0 {
 			return problem.ErrInvalid
 		}
 		o.RevisionIDs = []string{}
 		o.Subjects = []Subject{}
-		for _, artifact := range c.Artifacts {
+		for _, artifact := range artifacts {
 			if artifact.Kind != "pull_request" && artifact.Kind != "code_review" {
 				return problem.ErrInvalid
 			}

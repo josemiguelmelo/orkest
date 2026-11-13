@@ -129,7 +129,7 @@ func TestPostgresRepositoriesWorkflowStageIntegrations(t *testing.T) {
 			break
 		}
 	}
-	if candidate.ObservationID == "" || len(candidate.Artifacts) != 1 || candidate.Artifacts[0].ID != revisionID || len(candidate.Repositories) != 1 || candidate.Repositories[0].ProviderRepositoryID != "123" {
+	if candidate.ObservationID == "" || len(candidate.AvailableArtifacts) != 1 || candidate.AvailableArtifacts[0].ID != revisionID || len(candidate.Repositories) != 1 || candidate.Repositories[0].ProviderRepositoryID != "123" {
 		t.Fatalf("candidate inputs: %+v", candidate)
 	}
 	if err = repository.DeleteConnection(ctx, workspaceID, connection.ID); !errors.Is(err, problem.ErrConflict) {

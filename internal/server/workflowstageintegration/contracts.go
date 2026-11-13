@@ -9,6 +9,7 @@ import (
 
 	artifactmodel "github.com/josemiguelmelo/orkest/internal/server/artifact/model"
 	codemodel "github.com/josemiguelmelo/orkest/internal/server/coderepository/model"
+	workflowmodel "github.com/josemiguelmelo/orkest/internal/server/workflow/model"
 	workspacemodel "github.com/josemiguelmelo/orkest/internal/server/workspace/model"
 )
 
@@ -130,8 +131,8 @@ type CodingAccess interface {
 
 // Candidate is the current task/stage/rule snapshot, selected by persistence.
 // ObservationID deterministically includes connection and workflow versions,
-// task stage-entry version and rule ID. Artifacts are current named input
-// revisions from the latest producing stage entry, until first observation pin.
+// task stage-entry version and rule ID. Definition and AvailableArtifacts form a
+// consistent snapshot; the service resolves inputs until first observation pin.
 type Candidate struct {
 	ObservationID                                                string
 	Connection                                                   Connection
@@ -139,7 +140,8 @@ type Candidate struct {
 	StageVersion, ConfigurationVersion                           int64
 	ActionID                                                     string
 	Parameters                                                   json.RawMessage
-	Artifacts                                                    []artifactmodel.Revision
+	Definition                                                   workflowmodel.Definition
+	AvailableArtifacts                                           []artifactmodel.Revision
 	Repositories                                                 []codemodel.CodeRepository
 	Observation                                                  *Observation
 }

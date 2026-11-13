@@ -23,10 +23,11 @@ type WorkflowStageIntegrationService struct {
 	coding    CodingAccess
 	logger    *slog.Logger
 	providers map[string]WorkflowStageIntegration
+	now       func() time.Time
 }
 
 func NewWorkflowStageIntegrationService(repo IntegrationRepository, box *secretbox.Box, access WorkspaceAccess, coding CodingAccess, logger *slog.Logger, providers ...WorkflowStageIntegration) *WorkflowStageIntegrationService {
-	s := &WorkflowStageIntegrationService{repo: repo, box: box, access: access, coding: coding, logger: logger, providers: map[string]WorkflowStageIntegration{}}
+	s := &WorkflowStageIntegrationService{repo: repo, box: box, access: access, coding: coding, logger: logger, now: func() time.Time { return time.Now().UTC() }, providers: map[string]WorkflowStageIntegration{}}
 	for _, p := range providers {
 		s.providers[p.Provider()] = p
 	}
