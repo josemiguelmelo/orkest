@@ -240,7 +240,7 @@ func TestCodingIntegrationRolesAndRepositoryResolution(t *testing.T) {
 	}
 	viewer := NewCodeRepositoryService(repository, workspaceStub{role: "viewer"}, t.TempDir(), nil, &providerStub{})
 	viewer.secretBox = box
-	if _, err = viewer.BrowseRepositories(context.Background(), "u", "o", "w", integration.ID, 1, 50); !errors.Is(err, modelerrors.ErrForbidden) {
+	if _, err = viewer.BrowseRepositories(context.Background(), "u", "o", "w", integration.ID, 1, 50, ""); !errors.Is(err, modelerrors.ErrForbidden) {
 		t.Fatalf("viewer repository browsing error=%v", err)
 	}
 	registered, err := service.RegisterRepository(context.Background(), "u", "o", "w", integration.ID, "42")

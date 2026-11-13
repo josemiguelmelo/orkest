@@ -67,6 +67,6 @@ func (a codingIntegrationAPI) validate(w http.ResponseWriter, r *http.Request) {
 func (a codingIntegrationAPI) repositories(w http.ResponseWriter, r *http.Request) {
 	page, _ := strconv.Atoi(r.URL.Query().Get("page"))
 	perPage, _ := strconv.Atoi(r.URL.Query().Get("perPage"))
-	v, e := a.service.BrowseRepositories(r.Context(), currentUserID(r), chi.URLParam(r, "orgID"), chi.URLParam(r, "workspaceID"), chi.URLParam(r, "integrationID"), page, perPage)
+	v, e := a.service.BrowseRepositories(r.Context(), currentUserID(r), chi.URLParam(r, "orgID"), chi.URLParam(r, "workspaceID"), chi.URLParam(r, "integrationID"), page, perPage, r.URL.Query().Get("search"))
 	respond(w, v, e, http.StatusOK)
 }

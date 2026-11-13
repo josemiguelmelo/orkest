@@ -20,7 +20,7 @@ import { RepositoriesPage } from './repositories';
 
 afterEach(() => { cleanup(); vi.clearAllMocks(); });
 
-it('clears a repository selection when integration changes and registers provider identity', async () => {
+it('clears selections when the integration changes and adds selected repositories', async () => {
   const user = userEvent.setup();
   api.listCodeRepositories.mockResolvedValue({ data: [] });
   api.listCodingIntegrations.mockResolvedValue({ data: [
@@ -43,10 +43,10 @@ it('clears a repository selection when integration changes and registers provide
   await user.click(await screen.findByRole('button', { name: 'Register repository' }));
   const integrationSelect = await screen.findByLabelText('1. Choose a connection');
   await user.selectOptions(integrationSelect, 'first');
-  await user.click(await screen.findByRole('option', { name: /acme\/first/ }));
+  await user.click(await screen.findByRole('button', { name: /acme\/first/ }));
   await user.selectOptions(integrationSelect, 'second');
-  expect(screen.getByRole('button', { name: /^Add repository$/ })).toBeDisabled();
-  await user.click(await screen.findByRole('option', { name: /acme\/second/ }));
-  await user.click(screen.getByRole('button', { name: /^Add repository$/ }));
+  expect(screen.getByRole('button', { name: /^Add repositories$/ })).toBeDisabled();
+  await user.click(await screen.findByRole('button', { name: /acme\/second/ }));
+  await user.click(screen.getByRole('button', { name: 'Add 1 repository' }));
   await waitFor(() => expect(api.createCodeRepository).toHaveBeenCalledWith(expect.objectContaining({ body: { integrationId: 'second', providerRepositoryId: '84' } })));
 });
