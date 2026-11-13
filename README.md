@@ -11,11 +11,12 @@ Start with the [local setup](#run-locally), browse the [documentation map](docs/
 or check the [implementation and verification status](docs/status.md) before choosing
 an execution mode.
 
-Orkest is an active prototype. Task management, dispatch, scheduled jobs, and several
-execution modes are implemented. Team-member capacity enforcement and platform-to-worker
-authentication remain unfinished. Runtime verification varies by provider and scenario;
-deterministic fixtures do not establish live model-driven continuation. See the
-[status and verification record](docs/status.md#verification-record) for current evidence
+Orkest is an active prototype. Task management, workflow dispatch, scheduled jobs, and
+Docker, Local, and initial Kubernetes execution are implemented. Team-member capacity
+enforcement and platform-to-agentctl authentication remain unfinished. Runtime evidence
+is scenario-specific: OpenCode has limited continuation and MCP handshake coverage, while
+live approval and interrupted-tool recovery still need qualification. See the
+[status and verification record](docs/status.md#verification-record) for dated evidence
 and limits.
 
 ## Features
