@@ -12,6 +12,8 @@ reviewed without reading a single system-wide diagram.
 | [Artifacts](artifacts.md) | Publication, immutable revisions, and stage handoffs | `artifact`, MCP adapter, workflow dispatch |
 | [Scheduled jobs](scheduled-jobs.md) | Schedule matching, occurrence ownership, and completion | `scheduledjob`, orchestration |
 | [Integrations](integrations.md) | Repository setup and source synchronization | `coderepository`, `taskintegration`, provider adapters |
+| [Direct conversations](direct-conversations.md) | Conversation creation, session restoration, prompts, and run reservation | `orchestration`, direct-session persistence |
+| [Execution profiles](execution-profiles.md) | Image build enqueueing, lease ownership, publishing, and reconciliation | `executionprofile`, image builder, PostgreSQL |
 
 ## Reading the diagrams
 

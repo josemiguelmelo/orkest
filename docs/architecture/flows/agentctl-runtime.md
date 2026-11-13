@@ -44,8 +44,14 @@ sequenceDiagram
   Follow-ups accepted during work or approval remain queued.
 - Question responses are delivered only after their journal record commits.
   Task, run, session, and request identities prevent cross-run responses.
-- Prompt completion does not complete the run. The queue drains first; terminal
-  run completion then stops the runtime and releases confirmed ownership.
+- For task-session runs, prompt completion does not complete the run. The queue
+  drains first; terminal run completion then persists terminal intent, stops the
+  runtime, and releases confirmed ownership. Scheduled-job runs are the
+  exception: `LaunchCompletionService` checks job ownership and treats
+  `prompt_completed` or `prompt_failed` as terminal even when a task-session ID
+  is present. In both cases the platform persists terminal intent before
+  process termination, then writes the final launch status; restart recovery
+  retries that cleanup if termination was interrupted.
 - Cancellation pauses remaining work. It does not authorize automatic retry or
   auto-answering an old interaction.
 - Restore checks runtime/provider/model, configuration fingerprints, working
