@@ -30,7 +30,8 @@ Active prototype; see [status](docs/status.md):
 ## Prerequisites
 
 - Go matching [go.mod](go.mod).
-- Node.js matching [web/package.json](web/package.json) and npm 11.
+- Node.js matching [web/.node-version](web/.node-version) and
+  [web/package.json](web/package.json), plus npm 11.
 - Docker Engine and Compose v2 for local PostgreSQL and Keycloak.
 - Python 3 for runtime-boundary checks and selected tooling.
 
@@ -60,6 +61,20 @@ make dev
   isolation and is for trusted single-user development. [Compose setup](docs/guides/local-setup.md).
 - `make db-down` retains PostgreSQL volume. Initialization settings affect only new
   volumes; removing a volume deletes its data.
+
+## Run with Compose
+
+To run the platform and its infrastructure in containers, configure `.env` as above
+and use the [Compose setup guide](docs/guides/local-setup.md):
+
+```sh
+docker compose up --build
+```
+
+This starts PostgreSQL, Keycloak, and the local registry. To include the Orkest
+platform container, add `--profile orkest`. Build and publish the
+[runtime images](docs/reference/executors/docker.md#build-and-configure-images)
+before running tasks.
 
 ## First task
 
