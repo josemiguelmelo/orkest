@@ -2,17 +2,22 @@
 
 [![Runtime conformance](https://github.com/josemiguelmelo/orkest/actions/workflows/runtime-conformance.yml/badge.svg)](https://github.com/josemiguelmelo/orkest/actions/workflows/runtime-conformance.yml)
 
-Orkest runs software-development agents with shared tasks, chat, approvals, and
-history. A Go platform serves React; independent `agentctl` workers run runtimes through ACP.
+Orkest is a self-hosted platform for coordinating software-development agents.
+Teams can manage tasks and repositories, start agent runs, follow activity and chat,
+answer approval requests, and review the resulting work. A Go API serves the React
+web app, while independent `agentctl` workers run coding agents through ACP.
 
-Active prototype; see [status](docs/status.md):
+Start with the [local setup](#run-locally), browse the [documentation map](docs/README.md),
+or check the [implementation and verification status](docs/status.md) before choosing
+an execution mode.
 
-- Implemented: management, dispatch, Docker/Local execution, initial Kubernetes
-  Pod execution, durable sessions.
-- Unfinished: member capacity, worker transport authentication.
-- Live qualification is scenario-specific: OpenCode memory continuation has a dated
-  verification record; other providers, real approvals, MCP, and full platform
-  restart journeys still need qualification. See [evidence and limits](docs/status.md#verification-record).
+Orkest is an active prototype. Task management, workflow dispatch, scheduled jobs, and
+Docker, Local, and initial Kubernetes execution are implemented. Team-member capacity
+enforcement and platform-to-agentctl authentication remain unfinished. Runtime evidence
+is scenario-specific: OpenCode has limited continuation and MCP handshake coverage, while
+live approval and interrupted-tool recovery still need qualification. See the
+[status and verification record](docs/status.md#verification-record) for dated evidence
+and limits.
 
 ## Features
 
@@ -20,7 +25,7 @@ Active prototype; see [status](docs/status.md):
   application-owned roles and authorization.
 - Tasks, comments, repositories, workflow rules, artifacts, and direct agent conversations.
 - Workflow-independent scheduled jobs with timezone-aware calendars, run history, and durable activity.
-- Workspace agent definitions, runtime profiles, skills, HTTP MCP servers, and environment values.
+- Workspace agent definitions, runtime profiles, skills, HTTP and stdio MCP servers, and environment values.
 - GitHub Projects v2 and Jira Server task imports; GitHub and GitLab coding integrations.
 - OpenCode, Claude Code, Codex, GitHub Copilot CLI, and Kiro CLI through independent workers.
 - Ordered activity, chat, approvals, cancellation, and durable PostgreSQL/session history.
@@ -30,7 +35,8 @@ Active prototype; see [status](docs/status.md):
 ## Prerequisites
 
 - Go matching [go.mod](go.mod).
-- Node.js matching [web/package.json](web/package.json) and npm 11.
+- Node.js matching [web/.node-version](web/.node-version) and
+  [web/package.json](web/package.json), plus npm 11.
 - Docker Engine and Compose v2 for local PostgreSQL and Keycloak.
 - Python 3 for runtime-boundary checks and selected tooling.
 
@@ -60,6 +66,20 @@ make dev
   isolation and is for trusted single-user development. [Compose setup](docs/guides/local-setup.md).
 - `make db-down` retains PostgreSQL volume. Initialization settings affect only new
   volumes; removing a volume deletes its data.
+
+## Run with Compose
+
+To run the platform and its infrastructure in containers, configure `.env` as above
+and use the [Compose setup guide](docs/guides/local-setup.md):
+
+```sh
+docker compose up --build
+```
+
+This starts PostgreSQL, Keycloak, and the local registry. To include the Orkest
+platform container, add `--profile orkest`. Build and publish the
+[runtime images](docs/reference/executors/docker.md#build-and-configure-images)
+before running tasks.
 
 ## First task
 
