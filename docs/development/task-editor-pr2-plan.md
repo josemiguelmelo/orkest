@@ -186,7 +186,12 @@ against a disposable database. The broader `make test-postgres` run reached its
 tests but failed in unrelated workflow-delivery and migration-rollback cases. The
 pinned OpenCode continuation integration fixture now uses the extracted task
 storage directories and asserts session, runtime and model identity, but skipped
-because the binary/provider/model settings are unavailable. The real Docker
+and was then attempted with pinned OpenCode 2.1.4 and the supplied
+`opencode/deepseek-v4.1-flash-1017` selection. The fixture now creates the
+calculated work/state directories before launch. ACP rejected that model as
+absent from the pinned catalog, before sending a prompt; no provider credential
+was available. A catalog model may be tried if explicitly selected, but real
+restore-and-follow-up acceptance remains outstanding. The real Docker
 `TestDockerSessionRestore` passed against Colima
 with the pinned image's bundled `opencode/beam-free` selection; it verifies
 container replacement, restored session identity, retained untracked work and

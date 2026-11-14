@@ -50,6 +50,12 @@ func testOpenCodeContinuation(t *testing.T, legacy bool) {
 	}
 	dataRoot := t.TempDir()
 	workDir, stateDir := taskstorage.Directories(dataRoot, "test-org", "test-workspace", "test-task")
+	if err := os.MkdirAll(workDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(stateDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
 	host := runtimehost.New(opencode.Profile{Binary: binary}, sharedacp.Factory{}, runtimehost.Environment{WorkDir: workDir, StateDir: stateDir, GrantedEnv: env})
 	config := configmodel.RunConfig{RuntimeConfig: configmodel.RuntimeConfig{OrganizationID: "test-org", WorkspaceID: "test-workspace", TaskID: "test-task", TaskSessionID: "test-session", RunID: "first", Runtime: "opencode", Agent: configmodel.AgentDefinition{Name: "Integration", Instructions: "Follow the user's instructions. Do not use tools for these memory tests."}, Model: configmodel.ModelSelection{Provider: modelProvider, ID: model}}}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
