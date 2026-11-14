@@ -81,6 +81,8 @@ release qualification remain outstanding. See [implementation, checks and
 operator constraints](development/task-editor-backend.md).
 
 The subsequent [production code review](development/task-editor-review.md) records
-lifecycle fixes, the qualified native-network correction, and unresolved
-adversarial mount-path qualification. Always exposing
-the feature does not establish production isolation qualification.
+lifecycle fixes, the qualified native-network correction, protected worker checkout
+ancestry, stale-snapshot cleanup and authorization revocation independent of slow
+reconciliation. Legacy-layout restoration followed by a successful message was
+verified against pinned OpenCode; deployment/PostgreSQL qualification remains open.
+Always exposing the feature does not establish production isolation qualification.

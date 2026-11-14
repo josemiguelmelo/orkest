@@ -226,3 +226,11 @@ publishing an internal-only Docker bridge does not provide a native-host endpoin
 and a routable editor can reach unauthenticated worker ports through host aliases.
 Relay credentials remain private to the backend and relay process; lifecycle APIs
 never serialize them. Editor resources and orphan cleanup remain executor-owned.
+
+Workers protect `/workspace/repositories` with a read-only parent bind and overlay
+selected writable checkout roots without changing session paths. Editor admission
+refuses legacy/unprotected worker mounts while preserving those workers and sessions.
+Resource cleanup rechecks ownership under generation admission before mutation.
+Independent per-generation authorization watchdogs revoke gateway leases without
+waiting for lifecycle locks, Docker or Git traversal; both authorization and
+lifecycle I/O have bounded concurrency.

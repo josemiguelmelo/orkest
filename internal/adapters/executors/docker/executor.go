@@ -165,10 +165,15 @@ func (e *Executor) StartAgentctl(ctx context.Context, config orchestrationmodel.
 	if err = e.prepareRepositories(ctx, workDir, config); err != nil {
 		return orchestrationmodel.Process{}, fmt.Errorf("prepare task repositories: %w", err)
 	}
+	checkoutMounts, err := protectedCheckoutMounts(workDir, config.Repositories)
+	if err != nil {
+		return orchestrationmodel.Process{}, err
+	}
 	labels, err := labelsFor(config)
 	if err != nil {
 		return orchestrationmodel.Process{}, err
 	}
+	labels[checkoutMountLayoutLabel] = checkoutMountLayout
 	port := network.MustParsePort(fmt.Sprintf("%d/tcp", e.config.AgentctlPort))
 	providerEnv := e.providerEnvironment()
 	containerEnv := append([]string(nil), providerEnv...)
@@ -212,6 +217,7 @@ func (e *Executor) StartAgentctl(ctx context.Context, config orchestrationmodel.
 		return orchestrationmodel.Process{}, err
 	}
 	hostConfig.Mounts = append(hostConfig.Mounts, hostMounts...)
+	hostConfig.Mounts = append(hostConfig.Mounts, checkoutMounts...)
 	if config.Runtime == coreruntime.Codex && e.config.CodexAuthFile != "" {
 		hostConfig.Mounts = append(hostConfig.Mounts, mount.Mount{
 			Type: mount.TypeBind, Source: e.config.CodexAuthFile, Target: codexAuthMountPath, ReadOnly: true,

@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -74,21 +75,28 @@ type entry struct {
 	user          string
 }
 type TaskEditorService struct {
-	gates     map[string]*semaphore.Weighted
-	tasks     TaskReader
-	inspector CheckoutInspector
-	backend   Backend
-	idle      IdleReader
-	mu        sync.Mutex
-	entries   map[Scope]*entry
+	lifetime       context.Context
+	close          context.CancelFunc
+	authorizations *semaphore.Weighted
+	gates          map[string]*semaphore.Weighted
+	tasks          TaskReader
+	inspector      CheckoutInspector
+	backend        Backend
+	idle           IdleReader
+	mu             sync.Mutex
+	entries        map[Scope]*entry
 }
 
 func NewTaskEditorService(tasks TaskReader, inspector CheckoutInspector, backend Backend, idle IdleReader) (*TaskEditorService, error) {
 	if tasks == nil || inspector == nil || backend == nil || idle == nil {
 		return nil, errors.New("task editor dependencies required")
 	}
-	return &TaskEditorService{tasks: tasks, inspector: inspector, backend: backend, idle: idle, entries: make(map[Scope]*entry), gates: make(map[string]*semaphore.Weighted)}, nil
+	lifetime, cancel := context.WithCancel(context.Background())
+	return &TaskEditorService{lifetime: lifetime, close: cancel, authorizations: semaphore.NewWeighted(8), tasks: tasks, inspector: inspector, backend: backend, idle: idle, entries: make(map[Scope]*entry), gates: make(map[string]*semaphore.Weighted)}, nil
 }
+
+// Close revokes active leases and stops their authorization watchdogs.
+func (s *TaskEditorService) Close() { s.close() }
 
 func (s *TaskEditorService) entry(scope Scope) *entry {
 	s.mu.Lock()
@@ -171,6 +179,11 @@ func (s *TaskEditorService) open(ctx context.Context, e *entry, user string, sco
 	}
 	fingerprint := sha256.Sum256(fingerprintBytes)
 	compatible := found && current.Endpoint != "" && current.Mode == mode && current.Fingerprint == hex.EncodeToString(fingerprint[:])
+	// A revoked lease cannot be renewed under the same generation: old browser
+	// tickets must stay invalid even if authority is subsequently restored.
+	if e.instance.Generation == current.Generation && (e.access == nil || e.access.Err() != nil) {
+		compatible = false
+	}
 	if !compatible {
 		if err = s.stop(ctx, e, current, found); err != nil {
 			return Status{}, err
@@ -196,7 +209,8 @@ func (s *TaskEditorService) open(ctx context.Context, e *entry, user string, sco
 		if e.cancel != nil {
 			e.cancel()
 		}
-		e.access, e.cancel = context.WithCancel(context.Background())
+		e.access, e.cancel = context.WithCancel(s.lifetime)
+		go s.watchAuthorization(e.access, e.cancel, user, scope)
 	}
 	e.instance = current
 	e.requested = true
@@ -340,7 +354,7 @@ func (s *TaskEditorService) Access(ctx context.Context, user string, scope Scope
 		return Instance{}, nil, err
 	}
 	defer unlock()
-	if e.instance.Generation != generation || e.instance.UserID != user || e.access == nil {
+	if e.instance.Generation != generation || e.instance.UserID != user || e.access == nil || e.access.Err() != nil {
 		return Instance{}, nil, ErrGeneration
 	}
 	return e.instance, e.access, nil
@@ -387,6 +401,7 @@ func (s *TaskEditorService) reconcile(ctx context.Context, scope Scope) error {
 }
 
 func (s *TaskEditorService) Run(ctx context.Context) {
+	defer s.Close()
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	for {
@@ -401,13 +416,62 @@ func (s *TaskEditorService) Run(ctx context.Context) {
 			scopes = append(scopes, scope)
 		}
 		s.mu.Unlock()
-		for _, scope := range scopes {
-			opCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
-			_ = s.reconcile(opCtx, scope)
-			cancel()
+		s.reconcileBatch(ctx, scopes)
+	}
+}
+
+// This path never takes lifecycle/task/workspace locks or calls the executor or
+// filesystem. Every lease independently fails closed if admission or authority
+// cannot be established within the deadline, even when lifecycle workers stall.
+func (s *TaskEditorService) watchAuthorization(ctx context.Context, revoke context.CancelFunc, user string, scope Scope) {
+	ticker := time.NewTicker(time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+		checkCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
+		err := s.authorizations.Acquire(checkCtx, 1)
+		if err == nil {
+			err = s.authorize(checkCtx, user, scope)
+			s.authorizations.Release(1)
+		}
+		err = errors.Join(err, checkCtx.Err())
+		cancel()
+		if err != nil {
 			if ctx.Err() != nil {
 				return
 			}
+			revoke()
+			slog.Default().Warn("task editor access revoked", "organization_id", scope.OrganizationID, "workspace_id", scope.WorkspaceID, "task_id", scope.TaskID, "reason", "authorization_unavailable")
+			return
+		}
+	}
+}
+
+func (s *TaskEditorService) reconcileBatch(ctx context.Context, scopes []Scope) {
+	work := make(chan Scope)
+	var workers sync.WaitGroup
+	for range min(4, len(scopes)) {
+		workers.Go(func() {
+			for scope := range work {
+				opCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+				if err := s.reconcile(opCtx, scope); err != nil && ctx.Err() == nil {
+					slog.Default().Warn("task editor reconciliation deferred", "organization_id", scope.OrganizationID, "workspace_id", scope.WorkspaceID, "task_id", scope.TaskID, "reason", "lifecycle_unavailable")
+				}
+				cancel()
+			}
+		})
+	}
+	defer workers.Wait()
+	defer close(work)
+	for _, scope := range scopes {
+		select {
+		case work <- scope:
+		case <-ctx.Done():
+			return
 		}
 	}
 }

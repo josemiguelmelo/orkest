@@ -15,9 +15,9 @@ and access to an unauthenticated worker through a Docker host alias.
 
 The refactor closes those demonstrated network paths and fixes reproducible
 ownership, revocation, cleanup and locking faults. Always-available APIs and
-capabilities do not constitute production sign-off. In particular, adversarial
-mount-source replacement and complete PostgreSQL/restart qualification remain
-open. No current backend version should be described as fully production-qualified.
+capabilities do not constitute production sign-off. Protected worker ancestry now prevents checkout-root replacement; legacy mount
+layouts deny editor admission while their workers remain untouched. Complete
+PostgreSQL/restart and deployment qualification remain open. No current backend version should be described as fully production-qualified.
 
 ## Architectural & Pattern Feedback
 
@@ -67,25 +67,22 @@ controlled egress remains a product/technical decision.
 
 ### Major
 
-**M1 — Checkout inspection and Docker mount resolution are not atomic. Open.**
+**M1 — Checkout inspection and Docker mount resolution were not atomic. Fixed by protected ancestry.**
 
 Baseline: [path validation followed by container creation](https://github.com/josemiguelmelo/orkest/blob/e2d4e30/internal/adapters/executors/docker/editor.go#L127).
-Violation: check/use consistency at a security boundary. An active worker can modify
-the worktree while a read-only editor is created. `Lstat`/directory inspection is a
-preflight check; the daemon later resolves the bind source by pathname. A directory
-rename/symlink substitution between those operations is not prevented by repeating
-the check. This race has not been adversarially qualified here; do not call the
-current checks atomic isolation.
+Repeating pathname checks could not prevent a worker replacing the source before
+the daemon bound it. New workers now mount repository ancestry read-only, with
+writable checkout overlays at unchanged paths. Linux mountpoints and read-only
+parents prevent worker renames and symlink substitution at the source boundary.
+Editor admission verifies the protected layout and rejects legacy/privileged mounts,
+writable ancestor aliases and uncertain inspection. Old workers are left running;
+sessions remain restorable with the new layout after normal retirement.
 
-The refactor rejects sources/targets outside the exact task repository layout
-before any Engine call. Completing the remedy requires protected mount parents or
-a daemon-side inode-pinning design that also preserves exact selected-repository
-identity. Moby's [safe-path implementation](https://raw.githubusercontent.com/moby/moby/master/daemon/volume/safepath/join_linux.go)
-illustrates descriptor pinning, but its
-[path evaluation](https://raw.githubusercontent.com/moby/moby/master/daemon/volume/safepath/common.go)
-can first resolve in-volume symlinks: mounting subpaths of an alias to the entire
-installation is not an adequate drop-in authorization fix. Any worker mount-layout
-change must preserve existing session paths and prove restore plus follow-up.
+Real Docker checks deny root/parent renames while preserving writable files and
+Git branches. A legacy-layout OpenCode 2.1.4 session was replaced with the protected
+layout, restored with the same session ID and explicit model, and successfully
+answered a follow-up using earlier conversation context. This is protected ancestry,
+not a claim that a repeated pathname preflight is an atomic mount primitive.
 
 **M2 — Ownership disappears between writable shutdown and replacement. Fixed.**
 
@@ -95,14 +92,16 @@ another mutating member claim the task's editor during the handoff gap. Pending
 request ownership is now authoritative until an explicit Stop or completed cleanup.
 Open, Inspect and Stop apply the same check, including failed/pending states.
 
-**M3 — Revocation depends on successful daemon inspection. Fixed once the
-reconciler examines the task; scheduling latency remains an open performance concern.**
+**M3 — Revocation depends on successful daemon inspection. Fixed independently of lifecycle scheduling.**
 
 Baseline: [Run](https://github.com/josemiguelmelo/orkest/blob/e2d4e30/internal/server/taskeditor/service.go#L317).
 Violation: fail-closed authorization. After membership loss, a Docker inspect error
 previously prevented cancellation of an already-connected browser's lease. The
 refactor revokes first, records Stop intent, then reconciles external resources.
-A regression test reproduces the combined authorization-loss/backend-outage case.
+Regression tests reproduce combined authorization-loss/backend-outage and revocation
+while the lifecycle lock is held. Per-generation watchdogs bypass lifecycle locks;
+authorization admission and checks share a two-second deadline. Revoked generations
+cannot be reactivated by restoring authority.
 
 **M4 — Failed Stop loses cleanup intent and successful Stop can retain failure. Fixed.**
 
@@ -123,18 +122,26 @@ workspaces. Admission now uses cancellable workspace-scoped weighted semaphores,
 then the task lock. Reference-counted task entries are removed only when no holder
 or waiter remains; inactive GETs no longer accumulate task locks indefinitely.
 
-**M6 — Polling cost and revocation latency grow with history and filesystem size. Open.**
+**M6 — Slow lifecycle reconciliation delays revocation. Major issue fixed.**
 
-Baseline: [idle reader](https://github.com/josemiguelmelo/orkest/blob/e2d4e30/internal/server/orchestration/editor_handoff.go#L27),
-[reconciliation loop](https://github.com/josemiguelmelo/orkest/blob/e2d4e30/internal/server/taskeditor/service.go#L317).
-Violation: bounded background work and operational visibility. A pass can cost
-approximately `O(E × (H + F))`, with E editors, H historical runs and F Git metadata
-entries, plus remote I/O. Sequential twenty-second attempts delay other tasks'
-authorization checks. Errors are reflected in coarse status but lack safe operator
-diagnostics. Use a cheap authorization path independent of slow recreation, bounded
-concurrency, and minimal durable ownership reads; add structured reason codes and
-identifiers without logging tokens, task contents or terminal data. Do not remove
-ownership checks merely to make the loop faster.
+The baseline sequential loop mixed authorization with history scans, filesystem
+traversal and Docker recreation. Each generation now independently checks authority
+on a one-second cadence, with a two-second admission/check budget and eight concurrent
+checks. Admission timeout also revokes access. Four workers bound lifecycle work;
+cleanup may lag, but it cannot retain browser access. Scope IDs and stable reason
+codes provide diagnostics without task contents, tokens or raw backend errors.
+History/metadata scan cost still grows with retained data; reducing that cost is a
+remaining performance optimization, independent of the revocation boundary.
+
+**M7 — Stale resource snapshots disconnect a live editor gateway. Fixed.**
+
+A container list can predate a concurrently completed Open while the later network
+list includes it. Checking only the temporary starting marker falsely declared the
+network orphaned and disconnected the gateway before removal failed. Cleanup now
+claims per-generation admission and freshly inspects the concrete owner. Creation
+uses the same admission. Network removal refuses execution endpoints before touching
+the gateway. Regression tests cover stale snapshots, uncertain ownership, confirmed
+orphans and active endpoints.
 
 ### Minor
 
@@ -184,8 +191,9 @@ now contains the following changes:
 
 The former enable/disable flag is ignored and removed from supported configuration.
 Unsupported executors return unavailable. Runtime/model pins, worker wire formats
-and persisted session paths are unchanged. Unresolved M1/M6 and remaining production
-qualification prevent certifying this refactor as fully production-ready.
+and persisted session paths are unchanged. M1/M6/M7 are addressed by the focused
+follow-up; remaining deployment/PostgreSQL qualification still prevents certifying
+the complete feature as production-ready.
 
 ### Verification actually run
 
@@ -213,3 +221,12 @@ qualification prevent certifying this refactor as fully production-ready.
   unchanged. It is not reported as passing. PostgreSQL editor concurrency,
   containerized-gateway networking, production TLS/OIDC and amd64 qualification
   were not established by the local fixture runs.
+
+### Major review fix verification
+
+The focused fixes passed ordinary/race suites, normal and Docker/security-tagged
+lint, real Docker mount protection, lifecycle and network-isolation checks. Real
+legacy-layout restoration and successful next-message recall passed with the same
+session ID, saved untracked file and branch, pinned OpenCode 2.1.4 and the explicit
+previously qualified free model. See [current backend notes](task-editor-backend.md#major-review-fix-verification)
+for the continuation command and qualification scope.

@@ -243,6 +243,7 @@ func runServer(ctx context.Context, logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	defer editorService.Close()
 	if err = editorService.ReconcileStartup(ctx); err != nil {
 		return fmt.Errorf("reconcile editors before work recovery: %w", err)
 	}

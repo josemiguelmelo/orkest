@@ -203,4 +203,4 @@ test-task-editor-backend: docker-task-editor-images
 
 .PHONY: test-task-editor-security
 test-task-editor-security: docker-task-editor-images
-	go test -tags=docker,security ./internal/adapters/executors/docker -run '^TestDockerEditorNetworkIsolation$$' -count=1 -timeout=3m -v
+	go test -tags=docker,security ./internal/adapters/executors/docker -run '^TestDocker(EditorNetworkIsolation|ProtectedCheckoutMounts)$$' -count=1 -timeout=3m -v

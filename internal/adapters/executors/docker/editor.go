@@ -163,6 +163,9 @@ func (b *EditorBackend) StartEditor(ctx context.Context, spec taskeditor.Spec) (
 			return taskeditor.Instance{}, err
 		}
 	}
+	if err := b.requireProtectedWorkers(ctx, spec); err != nil {
+		return taskeditor.Instance{}, err
+	}
 	manifestRoot := filepath.Join(b.executor.config.DataRoot, "editor-workspaces")
 	if err := os.MkdirAll(manifestRoot, 0o700); err != nil {
 		return taskeditor.Instance{}, err
@@ -188,7 +191,9 @@ func (b *EditorBackend) StartEditor(ctx context.Context, spec taskeditor.Spec) (
 	pids := int64(256)
 	host := &container.HostConfig{Mounts: mounts, ReadonlyRootfs: true, CapDrop: []string{"ALL"}, SecurityOpt: []string{"no-new-privileges:true"}, Tmpfs: map[string]string{"/tmp": "rw,nosuid,nodev,size=256m,mode=1777", "/home/editor": "rw,nosuid,nodev,size=512m,mode=1777"}, Resources: container.Resources{Memory: 2 << 30, NanoCPUs: 2e9, PidsLimit: &pids}, RestartPolicy: container.RestartPolicy{Name: container.RestartPolicyDisabled}}
 	networkName := b.networkName(spec.Instance)
-	b.starting.Store(networkName, struct{}{})
+	if _, busy := b.starting.LoadOrStore(networkName, struct{}{}); busy {
+		return taskeditor.Instance{}, taskeditor.ErrUnavailable
+	}
 	defer b.starting.Delete(networkName)
 	containerCreated := false
 	defer func() {

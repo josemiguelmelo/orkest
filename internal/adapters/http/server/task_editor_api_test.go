@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -17,10 +18,10 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/server/taskeditor"
 )
 
-type gatewayTasks struct{ denied bool }
+type gatewayTasks struct{ denied atomic.Bool }
 
 func (t *gatewayTasks) AuthorizeExecution(context.Context, string, string, string, string, bool) error {
-	if t.denied {
+	if t.denied.Load() {
 		return problem.ErrForbidden
 	}
 	return nil
@@ -75,6 +76,7 @@ func gatewayFixture(t *testing.T, upstream string) (*EditorGateway, *taskeditor.
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(service.Close)
 	scope := taskeditor.Scope{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task"}
 	status, err := service.Open(context.Background(), "user", scope)
 	if err != nil {
@@ -136,7 +138,7 @@ func TestEditorGatewayGrantAndCredentialIsolation(t *testing.T) {
 	if rec.Code != http.StatusOK || rec.Body.String() != "/static/file" || rec.Header().Get("Set-Cookie") != "" {
 		t.Fatalf("proxy: %d %s", rec.Code, rec.Body.String())
 	}
-	tasks.denied = true
+	tasks.denied.Store(true)
 	rec = httptest.NewRecorder()
 	gateway.ServeHTTP(rec, request)
 	if rec.Code != http.StatusForbidden {

@@ -68,6 +68,12 @@ func (b *EditorBackend) removeNetwork(ctx context.Context, i taskeditor.Instance
 		return errors.New("editor network ownership mismatch")
 	}
 	gateway := inspected.Network.Labels[editorLabel+".gateway"]
+	// Never disconnect a gateway while any editor or relay still owns an endpoint.
+	for id := range inspected.Network.Containers {
+		if id != gateway {
+			return errors.New("editor network still has execution endpoints")
+		}
+	}
 	if _, attached := inspected.Network.Containers[gateway]; gateway != "" && attached {
 		if _, err = b.engine.NetworkDisconnect(ctx, inspected.Network.ID, client.NetworkDisconnectOptions{Container: gateway}); err != nil && !errdefs.IsNotFound(err) {
 			return err
@@ -115,10 +121,35 @@ func (b *EditorBackend) cleanupOrphanNetworks(ctx context.Context, instances []t
 			}
 		}
 		if !owned {
-			if err = b.removeNetwork(ctx, i); err != nil {
+			if err = b.cleanupOrphan(ctx, i, b.removeNetwork); err != nil {
 				return err
 			}
 		}
 	}
 	return nil
+}
+
+// Container and network lists are independent snapshots. Serialize with creation
+// of this generation and establish current absence before any destructive effect.
+func (b *EditorBackend) cleanupOrphan(ctx context.Context, i taskeditor.Instance, cleanup func(context.Context, taskeditor.Instance) error) error {
+	key := b.networkName(i)
+	if _, busy := b.starting.LoadOrStore(key, struct{}{}); busy {
+		return nil
+	}
+	defer b.starting.Delete(key)
+	current, err := b.engine.ContainerInspect(ctx, b.name(i.Scope), client.ContainerInspectOptions{})
+	if errdefs.IsNotFound(err) {
+		return cleanup(ctx, i)
+	}
+	if err != nil {
+		return err
+	}
+	actual, err := b.decode(current.Container)
+	if err != nil {
+		return err
+	}
+	if actual.Scope == i.Scope && actual.Generation == i.Generation {
+		return nil
+	}
+	return cleanup(ctx, i)
 }

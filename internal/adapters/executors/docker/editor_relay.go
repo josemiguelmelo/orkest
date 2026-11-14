@@ -118,7 +118,7 @@ func (b *EditorBackend) cleanupOrphanRelays(ctx context.Context, containers []co
 			}
 		}
 		if !owned {
-			if err = b.stopRelay(ctx, i); err != nil {
+			if err = b.cleanupOrphan(ctx, i, b.stopRelay); err != nil {
 				return err
 			}
 		}

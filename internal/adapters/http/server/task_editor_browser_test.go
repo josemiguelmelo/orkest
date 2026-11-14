@@ -23,7 +23,7 @@ import (
 
 type browserTasks struct{ gatewayTasks }
 
-func (browserTasks) Get(context.Context, string, string, string, string) (taskmodel.Task, error) {
+func (*browserTasks) Get(context.Context, string, string, string, string) (taskmodel.Task, error) {
 	return taskmodel.Task{Repositories: []taskmodel.RepositoryRef{{ID: "repo", ProviderName: "github", Name: "repo"}}}, nil
 }
 
@@ -85,6 +85,7 @@ func TestDockerEditorGatewayBrowser(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer service.Close()
 	scope := taskeditor.Scope{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task"}
 	defer func() {
 		stopCtx, stop := context.WithTimeout(context.Background(), 15*time.Second)

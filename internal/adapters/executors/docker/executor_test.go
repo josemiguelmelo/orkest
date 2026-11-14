@@ -58,17 +58,17 @@ func TestStartAgentctlCreatesIsolatedContainerAndReturnsLoopbackEndpoint(t *test
 	if got := engine.created.HostConfig.PortBindings[network.MustParsePort("8081/tcp")]; len(got) != 1 || got[0].HostIP.String() != "127.0.0.1" || got[0].HostPort != "" {
 		t.Fatalf("port binding = %+v", got)
 	}
-	if len(engine.created.HostConfig.Mounts) != 2 {
+	if len(engine.created.HostConfig.Mounts) != 3 {
 		t.Fatalf("mounts = %+v", engine.created.HostConfig.Mounts)
 	}
-	expectedMounts := map[string]bool{workMountPath: false, stateMountPath: false}
+	expectedMounts := map[string]bool{workMountPath: false, stateMountPath: false, workMountPath + "/repositories": false}
 	for _, mount := range engine.created.HostConfig.Mounts {
 		if _, ok := expectedMounts[mount.Target]; !ok {
 			t.Fatalf("unexpected mount target: %+v", mount)
 		}
 		expectedMounts[mount.Target] = true
-		if mount.Type != "bind" || mount.ReadOnly {
-			t.Fatalf("mount is not a writable bind: %+v", mount)
+		if mount.Type != "bind" || mount.ReadOnly != (mount.Target == workMountPath+"/repositories") {
+			t.Fatalf("unexpected bind permissions: %+v", mount)
 		}
 		info, statErr := os.Stat(mount.Source)
 		if statErr != nil || !info.IsDir() {
@@ -178,7 +178,7 @@ func TestCodexAuthFileIsMountedReadOnlyOnlyForCodex(t *testing.T) {
 	if _, err := otherExecutor.StartAgentctl(context.Background(), runConfig()); err != nil {
 		t.Fatal(err)
 	}
-	if len(otherEngine.created.HostConfig.Mounts) != 2 {
+	if len(otherEngine.created.HostConfig.Mounts) != 3 {
 		t.Fatalf("non-Codex container received an auth mount: %+v", otherEngine.created.HostConfig.Mounts)
 	}
 }
@@ -411,7 +411,7 @@ func (p *checkoutProviderStub) PrepareAuthenticatedTaskCheckout(_ context.Contex
 	p.credential = credential
 	p.path = path
 	p.branch = branch
-	return nil
+	return os.MkdirAll(path, 0o700)
 }
 
 type credentialResolverStub struct{ workspaceID, integrationID string }

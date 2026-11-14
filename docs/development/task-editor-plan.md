@@ -530,3 +530,22 @@ Chromium terminal/mode-transition flow passed using `editor.localhost` routing.
 Pinned OpenCode 2.1.4 recovery and current/v1-manifest successful follow-ups passed
 again using the same explicit free model. The prior full-check scheduled-job UI
 failures remain unrelated and unchanged; no production qualification is implied.
+
+### Major review fixes completed
+
+Protected checkout ancestry through worker parent/read-write checkout mounts at
+unchanged paths. Legacy/unsafe workers deny editor admission while remaining
+untouched. Orphan cleanup claims generation admission, freshly inspects ownership,
+and refuses network disconnection while execution endpoints survive. Independent
+authorization watchdogs revoke leases outside lifecycle locks; authorization and
+lifecycle work have bounded concurrency. Revoked generations cannot be renewed.
+
+Verification: all ordinary Go packages; focused race suites; normal and
+Docker/security-tagged lint; architecture boundaries; real Colima protected mounts,
+legacy-worker refusal, lifecycle, peer/worker/host-alias isolation, existing Docker
+storage/restart restoration and legacy-layout restore followed by successful marker
+recall. The latter retained session ID, untracked checkout file and branch using
+pinned OpenCode 2.1.4 and the explicit previously qualified free model
+`opencode/deepseek-v4.1-flash-free`. No runtime/model/configuration/wire pins or
+persisted session paths changed. Full frontend/browser/PostgreSQL/deployment
+qualification was not rerun; previously documented limits remain explicit.

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -68,6 +69,7 @@ func newEditorFixture(t *testing.T) (*TaskEditorService, *editorBackendFake, *ed
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(service.Close)
 	return service, backend, idle
 }
 
@@ -295,11 +297,11 @@ func TestSuccessfulStopClearsEarlierFailure(t *testing.T) {
 
 type revokedEditorTasks struct {
 	serviceTasks
-	denied bool
+	denied atomic.Bool
 }
 
 func (t *revokedEditorTasks) AuthorizeExecution(context.Context, string, string, string, string, bool) error {
-	if t.denied {
+	if t.denied.Load() {
 		return errors.New("membership revoked")
 	}
 	return nil
@@ -318,7 +320,7 @@ func TestRevocationDoesNotDependOnBackendAvailability(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tasks.denied = true
+	tasks.denied.Store(true)
 	b.inspectError = errors.New("Docker unavailable")
 	runCtx, cancel := context.WithCancel(ctx)
 	done := make(chan struct{})
@@ -410,5 +412,124 @@ func TestInspectionDoesNotRetainInactiveTaskLocks(t *testing.T) {
 	}
 	if len(s.entries) != 0 {
 		t.Fatalf("retained %d inactive task locks", len(s.entries))
+	}
+}
+
+func TestAuthorizationRevokesLeaseWhileLifecycleLockIsHeld(t *testing.T) {
+	s, _, _ := newEditorFixture(t)
+	tasks := &revokedEditorTasks{}
+	s.tasks = tasks
+	status, err := s.Open(context.Background(), "owner", editorTestScope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, lease, err := s.Access(context.Background(), "owner", editorTestScope, status.Generation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A stuck Docker/filesystem operation holds this same lifecycle lock.
+	_, unlock, err := s.lockEntry(context.Background(), editorTestScope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tasks.denied.Store(true)
+	select {
+	case <-lease.Done():
+	case <-time.After(2 * time.Second):
+		unlock()
+		t.Fatal("revocation waited for the lifecycle lock")
+	}
+	unlock()
+	// Restoring authority must never reactivate the old generation's tickets.
+	tasks.denied.Store(false)
+	reopened, err := s.Open(context.Background(), "owner", editorTestScope)
+	if err != nil || reopened.Generation == status.Generation {
+		t.Fatalf("revoked generation reused: %+v %v", reopened, err)
+	}
+	if _, _, err := s.Access(context.Background(), "owner", editorTestScope, status.Generation); !errors.Is(err, ErrGeneration) {
+		t.Fatalf("old ticket accepted: %v", err)
+	}
+}
+
+func TestAuthorizationAdmissionTimeoutFailsClosed(t *testing.T) {
+	s, _, _ := newEditorFixture(t)
+	status, err := s.Open(context.Background(), "owner", editorTestScope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, lease, err := s.Access(context.Background(), "owner", editorTestScope, status.Generation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.authorizations.Acquire(context.Background(), 8); err != nil {
+		t.Fatal(err)
+	}
+	defer s.authorizations.Release(8)
+	select {
+	case <-lease.Done():
+	case <-time.After(4 * time.Second):
+		t.Fatal("saturated authorization admission retained editor access")
+	}
+}
+
+func TestCloseRevokesEditorLeases(t *testing.T) {
+	s, _, _ := newEditorFixture(t)
+	status, err := s.Open(context.Background(), "owner", editorTestScope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, lease, err := s.Access(context.Background(), "owner", editorTestScope, status.Generation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s.Close()
+	if lease.Err() == nil {
+		t.Fatal("shutdown retained editor lease")
+	}
+}
+
+type stalledLifecycleBackend struct {
+	Backend
+	started chan Scope
+}
+
+func (b *stalledLifecycleBackend) InspectEditor(ctx context.Context, scope Scope) (Instance, bool, error) {
+	b.started <- scope
+	<-ctx.Done()
+	return Instance{}, false, ctx.Err()
+}
+
+func TestReconciliationBoundsConcurrentExecutorIOAndCancels(t *testing.T) {
+	s, _, _ := newEditorFixture(t)
+	backend := &stalledLifecycleBackend{started: make(chan Scope, 6)}
+	s.backend = backend
+	scopes := make([]Scope, 6)
+	for i := range scopes {
+		scopes[i] = Scope{"org", fmt.Sprint(i), "task"}
+		e := s.entry(scopes[i])
+		e.requested, e.user = true, "owner"
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() { defer close(done); s.reconcileBatch(ctx, scopes) }()
+	defer func() { cancel(); <-done }()
+	// Independent workspaces progress concurrently, even while earlier I/O stalls.
+	for range 4 {
+		select {
+		case <-backend.started:
+		case <-time.After(time.Second):
+			t.Fatal("stalled executor serialized unrelated workspaces")
+		}
+	}
+	select {
+	case <-backend.started:
+		t.Fatal("unbounded executor I/O")
+	case <-time.After(30 * time.Millisecond):
+	}
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("reconciliation did not stop on cancellation")
 	}
 }
