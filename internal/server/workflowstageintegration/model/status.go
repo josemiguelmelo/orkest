@@ -12,3 +12,16 @@ type Status struct {
 	Error        string    `json:"error"`
 	CreatedAt    time.Time `json:"createdAt"`
 }
+
+// StatusPosition is a keyset position in the combined observation/effect history.
+type StatusPosition struct {
+	CreatedAt time.Time `json:"createdAt"`
+	ID        string    `json:"id"`
+}
+
+type StatusPage struct {
+	Items      []Status `json:"items"`
+	NextCursor string   `json:"nextCursor,omitempty"`
+}
+
+const StatusPageSize = 50

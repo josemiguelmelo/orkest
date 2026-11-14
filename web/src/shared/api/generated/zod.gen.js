@@ -168,6 +168,10 @@ export const zWorkflowStageIntegrationStatus = z.object({
     error: z.string(),
     createdAt: z.iso.datetime()
 });
+export const zWorkflowStageIntegrationStatusPage = z.object({
+    items: z.array(zWorkflowStageIntegrationStatus).max(50),
+    nextCursor: z.string().optional()
+});
 export const zWorkflowIntegrationTrigger = z.object({
     connectionId: z.string().min(1),
     actionId: z.string().min(1),
@@ -757,10 +761,13 @@ export const zListWorkflowStageIntegrationStatusPath = z.object({
     workspaceID: z.string(),
     connectionID: z.string()
 });
+export const zListWorkflowStageIntegrationStatusQuery = z.object({
+    cursor: z.string().max(1024).optional()
+});
 /**
  * Callback and observation diagnostics
  */
-export const zListWorkflowStageIntegrationStatusResponse = z.array(zWorkflowStageIntegrationStatus);
+export const zListWorkflowStageIntegrationStatusResponse = zWorkflowStageIntegrationStatusPage;
 export const zRetryWorkflowStageIntegrationEventPath = z.object({
     orgID: z.string(),
     workspaceID: z.string(),

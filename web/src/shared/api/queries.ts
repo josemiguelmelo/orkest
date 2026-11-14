@@ -182,3 +182,16 @@ export const agentRuntimeProfilesQuery = (s: WorkspaceScope) =>
     queryFn: ({ signal }) =>
       data(sdk.listAgentRuntimeProfiles({ ...command, path: path(s), signal })),
   });
+
+export const stageConnectionsQuery = (scope: WorkspaceScope) =>
+  queryOptions({
+    queryKey: [...keys.workspace(scope), 'workflow-stage-integrations'],
+    queryFn: ({ signal }) =>
+      data(sdk.listWorkflowStageIntegrations({ ...command, path: path(scope), signal })),
+  });
+export const stageProvidersQuery = (userID: string) =>
+  queryOptions({
+    queryKey: [...keys.user(userID), 'workflow-stage-integration-providers'],
+    queryFn: ({ signal }) =>
+      data(sdk.listWorkflowStageIntegrationProviders({ ...command, signal })),
+  });

@@ -147,12 +147,14 @@ paths:
       - {name: orgID, in: path, required: true, schema: {type: string}}
       - {name: workspaceID, in: path, required: true, schema: {type: string}}
       - {name: connectionID, in: path, required: true, schema: {type: string}}
+      - {name: cursor, in: query, schema: {type: string, maxLength: 1024}, description: Opaque cursor for older activity}
     get:
       tags: [WorkflowStageIntegrations]
       operationId: listWorkflowStageIntegrationStatus
       security: [{bearerAuth: []}, {cookieAuth: []}]
       responses:
-        "200": {description: Callback and observation diagnostics, content: {application/json: {schema: {type: array, items: {$ref: "#/components/schemas/WorkflowStageIntegrationStatus"}}}}}
+        "200": {description: Callback and observation diagnostics, content: {application/json: {schema: {$ref: "#/components/schemas/WorkflowStageIntegrationStatusPage"}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
         "401": {$ref: "#/components/responses/Unauthorized"}
         "403": {$ref: "#/components/responses/Forbidden"}
         "404": {$ref: "#/components/responses/NotFound"}
@@ -2543,6 +2545,15 @@ components:
       properties:
         duplicate: {type: boolean}
         ignored: {type: boolean}
+    WorkflowStageIntegrationStatusPage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 50
+          items: {$ref: "#/components/schemas/WorkflowStageIntegrationStatus"}
+        nextCursor: {type: string, description: Opaque cursor for the next page of older activity}
     WorkflowStageIntegrationStatus:
       type: object
       required: [id, taskId, ruleId, stageVersion, actionId, state, error, createdAt]

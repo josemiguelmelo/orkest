@@ -60,10 +60,7 @@ type GitHubPRIntegration struct {
 	APIBaseURL string
 }
 
-var (
-	_ integration.WorkflowStageIntegrationProvider = GitHubPRIntegration{}
-	_ integration.SubjectProvider                  = GitHubPRIntegration{}
-)
+var _ integration.WorkflowStageIntegrationProvider = GitHubPRIntegration{}
 
 func NewProvider() GitHubPRIntegration {
 	return GitHubPRIntegration{Client: &http.Client{Timeout: 20 * time.Second}}
@@ -137,35 +134,46 @@ type eventFacts struct {
 	ReviewURL   string      `json:"reviewUrl,omitempty"`
 }
 
+func parseReviewParameters(raw json.RawMessage) (reviewParameters, error) {
+	var p reviewParameters
+	if err := decode(raw, &p); err != nil {
+		return p, err
+	}
+	if p.ArtifactInputName == "" || len(p.ReviewStates) == 0 || len(p.ReviewStates) > 3 {
+		return p, problem.ErrInvalid
+	}
+	seen := map[ReviewState]bool{}
+	for _, state := range p.ReviewStates {
+		if (state != ReviewStateApproved && state != ReviewStateChangesRequested && state != ReviewStateCommented) || seen[state] {
+			return p, problem.ErrInvalid
+		}
+		seen[state] = true
+	}
+	return p, nil
+}
+
+func parseMergeParameters(raw json.RawMessage) (mergeParameters, error) {
+	var p mergeParameters
+	if err := decode(raw, &p); err != nil {
+		return p, err
+	}
+	if p.ArtifactInputName == "" || (p.MergePolicy != "" && p.MergePolicy != MergePolicyAll && p.MergePolicy != MergePolicyAny) {
+		return p, problem.ErrInvalid
+	}
+	return p, nil
+}
+
 func (GitHubPRIntegration) ValidateParameters(action string, raw json.RawMessage) error {
 	switch ActionID(action) {
 	case ActionReviewAdded:
-		var p reviewParameters
-		if err := decode(raw, &p); err != nil {
-			return err
-		}
-		if p.ArtifactInputName == "" || len(p.ReviewStates) == 0 || len(p.ReviewStates) > 3 {
-			return problem.ErrInvalid
-		}
-		seen := map[ReviewState]bool{}
-		for _, s := range p.ReviewStates {
-			if (s != ReviewStateApproved && s != ReviewStateChangesRequested && s != ReviewStateCommented) || seen[s] {
-				return problem.ErrInvalid
-			}
-			seen[s] = true
-		}
+		_, err := parseReviewParameters(raw)
+		return err
 	case ActionPRMerged:
-		var p mergeParameters
-		if err := decode(raw, &p); err != nil {
-			return err
-		}
-		if p.ArtifactInputName == "" || (p.MergePolicy != "" && p.MergePolicy != MergePolicyAll && p.MergePolicy != MergePolicyAny) {
-			return problem.ErrInvalid
-		}
+		_, err := parseMergeParameters(raw)
+		return err
 	default:
 		return problem.ErrInvalid
 	}
-	return nil
 }
 
 func decode(raw []byte, target any) error {
@@ -290,37 +298,6 @@ func mergeEvent(subject stageintegrationmodel.Subject, pr *githubsdk.PullRequest
 	return stageintegrationmodel.ProviderEvent{ID: "merge:" + subject.RepositoryID + ":" + subject.ID, ActionID: string(ActionPRMerged), Subject: subject, OccurredAt: at, Facts: facts}, nil
 }
 
-func (p GitHubPRIntegration) Matches(action string, parameters json.RawMessage, event stageintegrationmodel.ProviderEvent) (bool, error) {
-	if err := p.ValidateParameters(action, parameters); err != nil {
-		return false, err
-	}
-	if event.ActionID != action {
-		return false, nil
-	}
-	if ActionID(action) == ActionPRMerged {
-		return event.Subject.Merged, nil
-	}
-	var params reviewParameters
-	if err := decode(parameters, &params); err != nil {
-		return false, err
-	}
-	var facts eventFacts
-	if err := json.Unmarshal(event.Facts, &facts); err != nil {
-		return false, problem.ErrInvalid
-	}
-	if params.RequireCurrentHead == nil || *params.RequireCurrentHead {
-		if facts.CommitSHA == "" || facts.CommitSHA != event.Subject.HeadSHA {
-			return false, nil
-		}
-	}
-	for _, state := range params.ReviewStates {
-		if state == facts.ReviewState {
-			return true, nil
-		}
-	}
-	return false, nil
-}
-
 func parseURL(raw string) (string, string, int, error) {
 	u, err := url.Parse(raw)
 	if err != nil || u.Scheme != "https" || u.Host != "github.com" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
@@ -354,7 +331,7 @@ func (p GitHubPRIntegration) client(token string) (*githubsdk.Client, error) {
 	return githubsdk.NewClient(options...)
 }
 
-func (p GitHubPRIntegration) ValidateConnection(ctx context.Context, config json.RawMessage, token string) error {
+func (p GitHubPRIntegration) ValidateConnection(ctx context.Context, config json.RawMessage, token string, repositoryIDs []string) error {
 	if err := p.ValidateConfig(config); err != nil {
 		return err
 	}
@@ -362,8 +339,22 @@ func (p GitHubPRIntegration) ValidateConnection(ctx context.Context, config json
 	if err != nil {
 		return err
 	}
-	if _, _, err := client.Users.Get(ctx, ""); err != nil {
-		return errors.New("GitHub connection validation failed")
+	if len(repositoryIDs) == 0 {
+		return problem.ErrInvalid
+	}
+	for _, rawID := range repositoryIDs {
+		id, parseErr := strconv.ParseInt(rawID, 10, 64)
+		if parseErr != nil || id <= 0 {
+			return problem.ErrInvalid
+		}
+		repository, _, readErr := client.Repositories.GetByID(ctx, id)
+		if readErr != nil || repository.GetID() != id || repository.GetOwner().GetLogin() == "" || repository.GetName() == "" {
+			return errors.New("GitHub repository access validation failed")
+		}
+		// Repository metadata alone does not establish pull-request read access.
+		if _, _, readErr = client.PullRequests.List(ctx, repository.GetOwner().GetLogin(), repository.GetName(), &githubsdk.PullRequestListOptions{ListOptions: githubsdk.ListOptions{PerPage: 1}}); readErr != nil {
+			return errors.New("GitHub pull request access validation failed")
+		}
 	}
 	return nil
 }
@@ -387,44 +378,50 @@ func (p GitHubPRIntegration) ResolveSubject(ctx context.Context, config json.Raw
 	return subjectFromPR(pr)
 }
 
-func (p GitHubPRIntegration) Reconcile(ctx context.Context, config json.RawMessage, token string, subject stageintegrationmodel.Subject, since time.Time) ([]stageintegrationmodel.ProviderEvent, error) {
+func (p GitHubPRIntegration) Reconcile(ctx context.Context, config json.RawMessage, token, action string, subject stageintegrationmodel.Subject, since time.Time) (stageintegrationmodel.Reconciliation, error) {
+	if ActionID(action) != ActionPRMerged && ActionID(action) != ActionReviewAdded {
+		return stageintegrationmodel.Reconciliation{}, problem.ErrInvalid
+	}
 	if err := p.ValidateConfig(config); err != nil {
-		return nil, err
+		return stageintegrationmodel.Reconciliation{}, err
 	}
 	owner, repo, number, err := parseURL(subject.URL)
 	if err != nil {
-		return nil, err
+		return stageintegrationmodel.Reconciliation{}, err
 	}
 	client, err := p.client(token)
 	if err != nil {
-		return nil, err
+		return stageintegrationmodel.Reconciliation{}, err
 	}
 	pr, _, err := client.PullRequests.Get(ctx, owner, repo, number)
 	if err != nil {
-		return nil, errors.New("GitHub pull request reconciliation failed")
+		return stageintegrationmodel.Reconciliation{}, errors.New("GitHub pull request reconciliation failed")
 	}
 	verified, err := subjectFromPR(pr)
 	if err != nil {
-		return nil, err
+		return stageintegrationmodel.Reconciliation{}, err
 	}
 	if verified.ID != subject.ID || verified.RepositoryID != subject.RepositoryID {
-		return nil, problem.ErrConflict
+		return stageintegrationmodel.Reconciliation{}, problem.ErrConflict
 	}
 	events := []stageintegrationmodel.ProviderEvent{}
-	if verified.Merged {
+	if ActionID(action) == ActionPRMerged && verified.Merged {
 		event, e := mergeEvent(verified, pr)
 		if e != nil {
-			return nil, e
+			return stageintegrationmodel.Reconciliation{}, e
 		}
 		if event.OccurredAt.After(since) {
 			events = append(events, event)
 		}
 	}
+	if ActionID(action) == ActionPRMerged {
+		return stageintegrationmodel.Reconciliation{Subject: verified, Events: events}, nil
+	}
 	options := &githubsdk.ListOptions{PerPage: 100}
 	for {
 		reviews, response, e := client.PullRequests.ListReviews(ctx, owner, repo, number, options)
 		if e != nil {
-			return nil, errors.New("GitHub review reconciliation failed")
+			return stageintegrationmodel.Reconciliation{}, errors.New("GitHub review reconciliation failed")
 		}
 		for _, review := range reviews {
 			state := ReviewState(strings.ToLower(review.GetState()))
@@ -433,7 +430,7 @@ func (p GitHubPRIntegration) Reconcile(ctx context.Context, config json.RawMessa
 			}
 			event, e := reviewEvent(verified, review)
 			if e != nil {
-				return nil, e
+				return stageintegrationmodel.Reconciliation{}, e
 			}
 			if event.OccurredAt.After(since) {
 				events = append(events, event)
@@ -444,20 +441,41 @@ func (p GitHubPRIntegration) Reconcile(ctx context.Context, config json.RawMessa
 		}
 		options.Page = response.NextPage
 	}
-	return events, nil
+	return stageintegrationmodel.Reconciliation{Subject: verified, Events: events}, nil
 }
 
 func (p GitHubPRIntegration) MatchSubjects(action string, parameters json.RawMessage, event stageintegrationmodel.ProviderEvent, subjects []stageintegrationmodel.Subject) (stageintegrationmodel.SubjectMatch, error) {
-	matched, err := p.Matches(action, parameters, event)
-	if err != nil || !matched {
-		return stageintegrationmodel.SubjectMatch{}, err
+	if ActionID(action) == ActionReviewAdded {
+		params, err := parseReviewParameters(parameters)
+		if err != nil {
+			return stageintegrationmodel.SubjectMatch{}, err
+		}
+		if event.ActionID != action {
+			return stageintegrationmodel.SubjectMatch{}, nil
+		}
+		var facts eventFacts
+		if err := json.Unmarshal(event.Facts, &facts); err != nil {
+			return stageintegrationmodel.SubjectMatch{}, problem.ErrInvalid
+		}
+		if (params.RequireCurrentHead == nil || *params.RequireCurrentHead) && (facts.CommitSHA == "" || facts.CommitSHA != event.Subject.HeadSHA) {
+			return stageintegrationmodel.SubjectMatch{}, nil
+		}
+		for _, state := range params.ReviewStates {
+			if state == facts.ReviewState {
+				return stageintegrationmodel.SubjectMatch{Matched: true}, nil
+			}
+		}
+		return stageintegrationmodel.SubjectMatch{}, nil
 	}
 	if ActionID(action) != ActionPRMerged {
-		return stageintegrationmodel.SubjectMatch{Matched: true}, nil
+		return stageintegrationmodel.SubjectMatch{}, problem.ErrInvalid
 	}
-	var params mergeParameters
-	if err := decode(parameters, &params); err != nil {
+	params, err := parseMergeParameters(parameters)
+	if err != nil {
 		return stageintegrationmodel.SubjectMatch{}, err
+	}
+	if event.ActionID != action || !event.Subject.Merged {
+		return stageintegrationmodel.SubjectMatch{}, nil
 	}
 	if params.MergePolicy == MergePolicyAny {
 		return stageintegrationmodel.SubjectMatch{Matched: true}, nil

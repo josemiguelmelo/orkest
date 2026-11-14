@@ -152,3 +152,21 @@ func lockIntegrationConnection(ctx context.Context, q *sqlc.Queries, c stageinte
 	}
 	return nil
 }
+
+func (r *WorkflowStageIntegrationPostgresRepository) ConnectionRepositoryIDs(ctx context.Context, c stageintegrationmodel.Connection) ([]string, error) {
+	rows, err := r.queries.WorkflowStageIntegrationRepositories(ctx, sqlc.WorkflowStageIntegrationRepositoriesParams{WorkspaceID: c.WorkspaceID, IntegrationID: pgtype.Text{String: c.CodingIntegrationID, Valid: true}, RepositoryIds: c.RepositoryIDs})
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) == 0 || len(rows) != len(c.RepositoryIDs) {
+		return nil, problem.ErrInvalid
+	}
+	ids := make([]string, 0, len(rows))
+	for _, row := range rows {
+		if !row.ProviderRepositoryID.Valid || row.ProviderRepositoryID.String == "" {
+			return nil, problem.ErrInvalid
+		}
+		ids = append(ids, row.ProviderRepositoryID.String)
+	}
+	return ids, nil
+}

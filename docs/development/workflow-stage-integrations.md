@@ -24,8 +24,11 @@ transactions and version checks retain their existing behavior.
 
 Every adapter implements `WorkflowStageIntegrationProvider`: provider identity,
 configuration/action schemas and validation, authenticated `HandleCallback`, and
-I/O-free `Matches`. `SubjectProvider` supplies API verification and reconciliation;
-`SubjectMatcher` supplies aggregate conditions. GitHub SDK types stay in adapters.
+I/O-free `MatchSubjects`, subject verification, action-specific reconciliation,
+and repository/PR-access validation. These capabilities are required at compile
+time; adapters cannot be registered without the worker capabilities they need.
+Reconciliation returns its verified subject snapshot with normalized events, so the
+worker neither fetches the same PR twice nor matches against an older snapshot. GitHub SDK types stay in adapters.
 Provider calls never run inside workflow database transactions.
 
 Provider actions and workflow callbacks differ. `review_added` and `pr_merged`
@@ -175,9 +178,27 @@ kind and latest matching producing stage entry before pinning revisions. Other
 required inputs do not gate this single-input observation.
 
 A successful reconciliation verifies authorization and current subjects, then
-admits matching events in the same scan. Successful verification does not impose
-retry backoff; failed observations retain bounded retries. Slow scans and polling
-intervals exceeding the reconciliation interval must still admit events.
+admits matching events in the same scan. Queued facts are selected by pinned
+subject identity before external verification. Rechecking unmatched reviews and
+incomplete aggregates is limited to once per ten seconds per observation; facts
+remain eligible rather than being discarded. This also bounds webhook processing
+latency after a recent verification. Periodic reconciliation remains every thirty
+seconds; merge-only bindings do not fetch review history. Slow scans still admit
+facts immediately after successful reconciliation.
+
+Candidate selection joins existing observations into one lightweight snapshot.
+Workflow definitions are reused within a scan, artifact inputs are loaded only
+for unresolved observations outside retry backoff, and task repositories are
+reused across bindings. All admission/configuration guards remain in their short
+write transactions.
+
+Activity uses a combined observation/effect keyset ordered by creation time and
+ID descending. `GET .../{connectionID}/status` returns `{items, nextCursor}` with
+at most fifty items; `cursor` requests older history. The UI polls loaded activity pages
+and explicitly loads older history. Index migration 0050 supports candidate identity,
+subject selection and activity scans. Repository access validation reads each
+selected immutable repository ID and its pull-request endpoint, rather than only
+checking token identity.
 
 ## Session compatibility
 
@@ -197,8 +218,9 @@ real credentialed runtime continuation is a separate qualification requirement.
 
 ## Migrations and deployment
 
-0042 adds connections, receipts, normalized events, observations and admissions.
-0043 extends existing rule/event fields and indexes. Regenerate sqlc from SQL and
+0048 adds connections, receipts, normalized events, observations and admissions.
+0049 extends existing rule/event fields and indexes; 0050 adds observation-identity,
+subject-selection and activity indexes. Regenerate sqlc from SQL and
 frontend SDK/validators from OpenAPI. Scoped foreign keys prevent cross-workspace
 or dangling connection selection. Keep replay-protection identities while active
 observations can receive redelivery.

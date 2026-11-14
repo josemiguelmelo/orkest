@@ -115,24 +115,40 @@ Documented hazards below; SQL is the complete inventory.
   containers. Export selections before rollback; stop affected containers to
   revoke their host access.
 
-## Workflow stage integrations (0042–0043)
+## Workflow stage integrations (0048–0050)
+
+Main already includes `0047_scheduled_jobs.sql`. Workflow-stage integration
+migrations therefore start at 0048; gaps before 0047 are retained to preserve
+merged migration identities. These replace the unmerged branch's former
+0042–0044 filenames. Development databases that applied those earlier branch
+versions require explicit Goose-history reconciliation before using the renamed
+files; do not rerun the renamed schema migrations over the same tables. No
+existing database or migration history is modified by this file renumbering.
 
 Stop all old platform ingestion and workflow workers before deploying migrations
-0042–0043 and matching platform/UI builds. Older workers cannot interpret the new
+0048–0050 and matching platform/UI builds. Older workers cannot interpret the new
 integration rule/event kinds. Independent agentctl processes continue; no worker
 wire protocol or runtime session format is changed. New optional platform session
 metadata records agent-definition identity for guarded integration continuation.
 Legacy manual continuation remains supported; an integration cannot infer missing
 legacy agent identity and fails visibly while preserving saved state.
 
-0042 adds encrypted connection configuration, receipt/semantic deduplication,
-observations and admissions. 0043 extends rules/events and adds scoped connection
+0048 adds encrypted connection configuration, receipt/semantic deduplication,
+observations and admissions. 0049 extends rules/events and adds scoped connection
 foreign keys. Keep new connections disabled until configured and validated.
 Webhook secrets and coding credentials are distinct; encryption must be configured.
 
 Before rollback, stop ingestion, reconcile all pending/uncertain callback commands,
-and retain an export of integration history/configuration. 0043 refuses rollback while integration rules/events or pending integration commands remain; 0042 refuses
+and retain an export of integration history/configuration. 0049 refuses rollback while integration rules/events or pending integration commands remain; 0048 refuses
 rollback while integration events or commands are pending.
 Do not remove deduplication history while redelivery remains possible. Dropping
 these tables after explicit history removal loses their diagnostic/audit data.
 Rollback does not cancel, replace or terminate agentctl processes.
+
+0050 adds indexes for deterministic observation identity, subject-scoped event
+selection and paginated activity. It preserves connection/event/session data;
+rollback only removes these indexes. Index creation runs inside the migration
+transaction and can block writes while existing rows are indexed, so apply it
+with ingestion stopped as described above. Deploy the matching UI/API together:
+the status endpoint now returns a bounded `{items, nextCursor}` page rather than
+an unbounded array. Worker wire and native session formats remain unchanged.

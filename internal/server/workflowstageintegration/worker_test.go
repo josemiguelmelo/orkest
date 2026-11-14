@@ -22,7 +22,7 @@ type workerRepository struct {
 	admitted  []stageintegrationmodel.ProviderEvent
 }
 
-func (r *workerRepository) Candidates(context.Context) ([]Candidate, error) {
+func (r *workerRepository) Candidates(context.Context, time.Time) ([]Candidate, error) {
 	return []Candidate{r.candidate}, nil
 }
 
@@ -66,12 +66,13 @@ type workerProvider struct {
 	events      []stageintegrationmodel.ProviderEvent
 	err         error
 	resolutions int
+	reject      bool
 }
 
 func (*workerProvider) Provider() string                                 { return "test" }
 func (*workerProvider) ValidateParameters(string, json.RawMessage) error { return nil }
-func (*workerProvider) Matches(string, json.RawMessage, stageintegrationmodel.ProviderEvent) (bool, error) {
-	return true, nil
+func (p *workerProvider) MatchSubjects(string, json.RawMessage, stageintegrationmodel.ProviderEvent, []stageintegrationmodel.Subject) (stageintegrationmodel.SubjectMatch, error) {
+	return stageintegrationmodel.SubjectMatch{Matched: !p.reject}, nil
 }
 
 func (p *workerProvider) ResolveSubject(context.Context, json.RawMessage, string, string) (stageintegrationmodel.Subject, error) {
@@ -79,8 +80,9 @@ func (p *workerProvider) ResolveSubject(context.Context, json.RawMessage, string
 	return p.subject, p.err
 }
 
-func (p *workerProvider) Reconcile(context.Context, json.RawMessage, string, stageintegrationmodel.Subject, time.Time) ([]stageintegrationmodel.ProviderEvent, error) {
-	return p.events, nil
+func (p *workerProvider) Reconcile(context.Context, json.RawMessage, string, string, stageintegrationmodel.Subject, time.Time) (stageintegrationmodel.Reconciliation, error) {
+	p.resolutions++
+	return stageintegrationmodel.Reconciliation{Subject: p.subject, Events: p.events}, p.err
 }
 
 func workerFixture() (*WorkflowStageIntegrationService, *workerRepository, *workerProvider, *workerAccess) {
@@ -171,7 +173,7 @@ func TestProcessVerificationFailureBackoff(t *testing.T) {
 		t.Fatal("event not admitted after recovery")
 	}
 	// A cached observation must still recheck authorization before event admission.
-	now = now.Add(time.Second)
+	now = now.Add(10 * time.Second)
 	access.err = errors.New("access revoked")
 	if err := s.processCandidate(t.Context(), repo.candidate); err == nil {
 		t.Fatal("revoked access accepted")
@@ -200,5 +202,52 @@ func TestProcessRejectsArtifactOfPreviousOutputKind(t *testing.T) {
 	}
 	if got := repo.candidate.Observation.RevisionIDs; len(got) != 1 || got[0] != "new-revision" {
 		t.Fatalf("pinned revisions: %v", got)
+	}
+}
+
+func TestUnrelatedEventsDoNotRefreshObservation(t *testing.T) {
+	s, repo, provider, _ := workerFixture()
+	now := time.Date(2026, 11, 13, 12, 0, 0, 0, time.UTC)
+	s.now = func() time.Time { return now }
+	if err := s.Process(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	unrelated := provider.subject
+	unrelated.ID = "another-pr"
+	repo.events = []stageintegrationmodel.ProviderEvent{{ID: "other", Subject: unrelated, OccurredAt: now.Add(time.Second)}}
+	now = now.Add(11 * time.Second)
+	if err := s.Process(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if provider.resolutions != 1 || len(repo.admitted) != 0 {
+		t.Fatalf("unrelated event caused work: calls=%d admissions=%d", provider.resolutions, len(repo.admitted))
+	}
+}
+
+func TestUnmatchedEventsUseBoundedVerificationAndRemainEligible(t *testing.T) {
+	s, repo, provider, _ := workerFixture()
+	now := time.Date(2026, 11, 13, 12, 0, 0, 0, time.UTC)
+	s.now = func() time.Time { return now }
+	if err := s.Process(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	provider.reject = true
+	repo.events = []stageintegrationmodel.ProviderEvent{{ID: "review", Subject: provider.subject, OccurredAt: now.Add(time.Second)}}
+	for range 30 {
+		now = now.Add(time.Second)
+		if err := s.Process(t.Context()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if provider.resolutions != 4 || len(repo.admitted) != 0 {
+		t.Fatalf("unbounded verification: calls=%d admissions=%d", provider.resolutions, len(repo.admitted))
+	}
+	provider.reject = false
+	now = now.Add(10 * time.Second)
+	if err := s.Process(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if len(repo.admitted) != 1 {
+		t.Fatal("pending event lost while waiting for match")
 	}
 }

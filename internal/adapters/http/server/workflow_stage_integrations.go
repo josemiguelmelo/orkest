@@ -64,7 +64,7 @@ func (a workflowStageIntegrationAPI) validate(w http.ResponseWriter, r *http.Req
 }
 
 func (a workflowStageIntegrationAPI) status(w http.ResponseWriter, r *http.Request) {
-	value, err := a.service.Status(r.Context(), currentUserID(r), chi.URLParam(r, "orgID"), chi.URLParam(r, "workspaceID"), chi.URLParam(r, "connectionID"))
+	value, err := a.service.Status(r.Context(), currentUserID(r), chi.URLParam(r, "orgID"), chi.URLParam(r, "workspaceID"), chi.URLParam(r, "connectionID"), r.URL.Query().Get("cursor"))
 	respond(w, value, err, http.StatusOK)
 }
 

@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"encoding/json"
+	"sort"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/josemiguelmelo/orkest/internal/adapters/postgres/sqlc"
@@ -68,7 +69,11 @@ func (r *WorkflowStageIntegrationPostgresRepository) RecordEvents(ctx context.Co
 }
 
 func (r *WorkflowStageIntegrationPostgresRepository) Events(ctx context.Context, c stage.Candidate, obs stage.Observation) ([]stageintegrationmodel.ProviderEvent, error) {
-	rows, err := r.queries.ListWorkflowStageProviderEvents(ctx, sqlc.ListWorkflowStageProviderEventsParams{ConnectionID: c.Connection.ID, ActionID: c.ActionID, ActivatedAt: pgtype.Timestamptz{Time: obs.ActivatedAt, Valid: true}, ObservationID: obs.ID})
+	subjects, err := json.Marshal(obs.Subjects)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := r.queries.ListWorkflowStageProviderEvents(ctx, sqlc.ListWorkflowStageProviderEventsParams{ConnectionID: c.Connection.ID, ActionID: c.ActionID, ActivatedAt: pgtype.Timestamptz{Time: obs.ActivatedAt, Valid: true}, ObservationID: obs.ID, Subjects: subjects})
 	if err != nil {
 		return nil, err
 	}
@@ -121,9 +126,9 @@ func (r *WorkflowStageIntegrationPostgresRepository) AdmitEvent(ctx context.Cont
 	return tx.Commit(ctx)
 }
 
-func (r *WorkflowStageIntegrationPostgresRepository) ListStatus(ctx context.Context, workspaceID, connectionID string) ([]stageintegrationmodel.Status, error) {
+func (r *WorkflowStageIntegrationPostgresRepository) ListStatus(ctx context.Context, workspaceID, connectionID string, position stageintegrationmodel.StatusPosition) ([]stageintegrationmodel.Status, error) {
 	q := r.queries
-	observations, err := q.ListWorkflowStageObservations(ctx, sqlc.ListWorkflowStageObservationsParams{WorkspaceID: workspaceID, ConnectionID: connectionID})
+	observations, err := q.ListWorkflowStageObservations(ctx, sqlc.ListWorkflowStageObservationsParams{WorkspaceID: workspaceID, ConnectionID: connectionID, HasCursor: position.ID != "", BeforeTime: pgtype.Timestamptz{Time: position.CreatedAt, Valid: true}, BeforeID: position.ID, PageSize: stageintegrationmodel.StatusPageSize + 1})
 	if err != nil {
 		return nil, err
 	}
@@ -135,7 +140,7 @@ func (r *WorkflowStageIntegrationPostgresRepository) ListStatus(ctx context.Cont
 		}
 		out = append(out, stageintegrationmodel.Status{ID: obs.ID, TaskID: obs.TaskID, RuleID: obs.RuleID, StageVersion: obs.StageVersion, ActionID: obs.ActionID, State: state, Error: obs.LastError, CreatedAt: obs.CreatedAt.Time})
 	}
-	effects, err := q.ListWorkflowStageEffectStatus(ctx, sqlc.ListWorkflowStageEffectStatusParams{WorkspaceID: workspaceID, ConnectionID: connectionID})
+	effects, err := q.ListWorkflowStageEffectStatus(ctx, sqlc.ListWorkflowStageEffectStatusParams{WorkspaceID: workspaceID, ConnectionID: connectionID, HasCursor: position.ID != "", BeforeTime: pgtype.Timestamptz{Time: position.CreatedAt, Valid: true}, BeforeID: position.ID, PageSize: stageintegrationmodel.StatusPageSize + 1})
 	if err != nil {
 		return nil, err
 	}
@@ -159,6 +164,15 @@ func (r *WorkflowStageIntegrationPostgresRepository) ListStatus(ctx context.Cont
 			diagnostic = effect.DeliveryError
 		}
 		out = append(out, stageintegrationmodel.Status{ID: effect.ID, TaskID: effect.TaskID, RuleID: event.RuleID, StageVersion: effect.StageVersion, ActionID: effect.ActionID, State: state, Error: diagnostic, CreatedAt: effect.OccurredAt.Time})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].CreatedAt.Equal(out[j].CreatedAt) {
+			return out[i].ID > out[j].ID
+		}
+		return out[i].CreatedAt.After(out[j].CreatedAt)
+	})
+	if len(out) > stageintegrationmodel.StatusPageSize+1 {
+		out = out[:stageintegrationmodel.StatusPageSize+1]
 	}
 	return out, nil
 }

@@ -58,16 +58,18 @@ function setup(role: 'admin' | 'viewer', connected = false) {
   api.createWorkflowStageIntegration.mockResolvedValue({ data: connection });
   api.updateWorkflowStageIntegration.mockResolvedValue({ data: connection });
   api.listWorkflowStageIntegrationStatus.mockResolvedValue({
-    data: [
-      {
-        id: 'event',
-        taskId: 'task',
-        actionId: 'review_added',
-        ruleId: 'rule',
-        state: 'blocked',
-        error: 'busy',
-      },
-    ],
+    data: {
+      items: [
+        {
+          id: 'event',
+          taskId: 'task',
+          actionId: 'review_added',
+          ruleId: 'rule',
+          state: 'blocked',
+          error: 'busy',
+        },
+      ],
+    },
   });
   api.retryWorkflowStageIntegrationEvent.mockResolvedValue({ data: undefined });
   render(
@@ -210,16 +212,24 @@ it('keeps stale stage and configuration effects as history without retry control
   const user = userEvent.setup();
   setup('admin', true);
   api.listWorkflowStageIntegrationStatus.mockResolvedValue({
-    data: [
-      { id: 'old-stage', taskId: 'task', ruleId: 'rule', state: 'blocked', error: 'stage_changed' },
-      {
-        id: 'old-config',
-        taskId: 'task',
-        ruleId: 'rule',
-        state: 'blocked',
-        error: 'configuration_changed',
-      },
-    ],
+    data: {
+      items: [
+        {
+          id: 'old-stage',
+          taskId: 'task',
+          ruleId: 'rule',
+          state: 'blocked',
+          error: 'stage_changed',
+        },
+        {
+          id: 'old-config',
+          taskId: 'task',
+          ruleId: 'rule',
+          state: 'blocked',
+          error: 'configuration_changed',
+        },
+      ],
+    },
   });
   await user.click(await screen.findByRole('button', { name: 'Show activity' }));
   expect(
@@ -231,4 +241,37 @@ it('keeps stale stage and configuration effects as history without retry control
     ),
   ).toBeInTheDocument();
   expect(screen.queryByRole('button', { name: 'Retry callback' })).not.toBeInTheDocument();
+});
+
+it('loads older activity explicitly using the server cursor', async () => {
+  const user = userEvent.setup();
+  setup('viewer', true);
+  api.listWorkflowStageIntegrationStatus.mockImplementation(
+    (request: { query?: { cursor?: string } }) =>
+      Promise.resolve({
+        data:
+          request.query?.cursor === 'older-page'
+            ? {
+                items: [
+                  { id: 'older', taskId: 'task', ruleId: 'rule', state: 'processed', error: '' },
+                ],
+              }
+            : {
+                items: [
+                  { id: 'recent', taskId: 'task', ruleId: 'rule', state: 'observing', error: '' },
+                ],
+                nextCursor: 'older-page',
+              },
+      }),
+  );
+  await user.click(await screen.findByRole('button', { name: 'Show activity' }));
+  expect(await screen.findByText('Watching pull requests')).toBeInTheDocument();
+  expect(api.listWorkflowStageIntegrationStatus).toHaveBeenCalledTimes(1);
+  await user.click(screen.getByRole('button', { name: 'Load older activity' }));
+  expect(await screen.findByText('Processed')).toBeInTheDocument();
+  expect(screen.getByText('Watching pull requests')).toBeInTheDocument();
+  expect(api.listWorkflowStageIntegrationStatus).toHaveBeenLastCalledWith(
+    expect.objectContaining({ query: { cursor: 'older-page' } }),
+  );
+  expect(screen.queryByRole('button', { name: 'Load older activity' })).not.toBeInTheDocument();
 });

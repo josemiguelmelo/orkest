@@ -169,6 +169,13 @@ export type WorkflowStageIngestionReceipt = {
     duplicate: boolean;
     ignored: boolean;
 };
+export type WorkflowStageIntegrationStatusPage = {
+    items: Array<WorkflowStageIntegrationStatus>;
+    /**
+     * Opaque cursor for the next page of older activity
+     */
+    nextCursor?: string;
+};
 export type WorkflowStageIntegrationStatus = {
     id: string;
     taskId: string;
@@ -973,10 +980,19 @@ export type ListWorkflowStageIntegrationStatusData = {
         workspaceID: string;
         connectionID: string;
     };
-    query?: never;
+    query?: {
+        /**
+         * Opaque cursor for older activity
+         */
+        cursor?: string;
+    };
     url: '/api/organizations/{orgID}/workspaces/{workspaceID}/workflow-stage-integrations/{connectionID}/status';
 };
 export type ListWorkflowStageIntegrationStatusErrors = {
+    /**
+     * Request body or role is invalid
+     */
+    400: Error;
     /**
      * Missing or invalid credentials
      */
@@ -995,7 +1011,7 @@ export type ListWorkflowStageIntegrationStatusResponses = {
     /**
      * Callback and observation diagnostics
      */
-    200: Array<WorkflowStageIntegrationStatus>;
+    200: WorkflowStageIntegrationStatusPage;
 };
 export type ListWorkflowStageIntegrationStatusResponse = ListWorkflowStageIntegrationStatusResponses[keyof ListWorkflowStageIntegrationStatusResponses];
 export type RetryWorkflowStageIntegrationEventData = {

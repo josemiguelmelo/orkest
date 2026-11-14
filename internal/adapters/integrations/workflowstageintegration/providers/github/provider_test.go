@@ -61,9 +61,9 @@ func TestCallbackAuthenticatesOriginalBytesAndNormalizesReview(t *testing.T) {
 		t.Fatal("review body retained in normalized facts")
 	}
 	params := json.RawMessage(`{"artifactInputName":"prs","reviewStates":["changes_requested"]}`)
-	matched, err := p.Matches(string(ActionReviewAdded), params, event)
-	if err != nil || !matched {
-		t.Fatalf("matched=%t err=%v", matched, err)
+	matched, err := p.MatchSubjects(string(ActionReviewAdded), params, event, nil)
+	if err != nil || !matched.Matched {
+		t.Fatalf("matched=%+v err=%v", matched, err)
 	}
 	in.Request.Body = append(in.Request.Body, ' ')
 	if _, err := p.HandleCallback(context.Background(), in); !errors.Is(err, integration.ErrUnauthenticated) {
@@ -134,12 +134,12 @@ func TestTypedParameterValidationAndHeadFilters(t *testing.T) {
 		t.Fatal(err)
 	}
 	params := json.RawMessage(`{"artifactInputName":"prs","reviewStates":["approved"]}`)
-	if matched, err := p.Matches("review_added", params, result.Events[0]); err != nil || matched {
-		t.Fatalf("old review matched: %t %v", matched, err)
+	if matched, err := p.MatchSubjects("review_added", params, result.Events[0], nil); err != nil || matched.Matched {
+		t.Fatalf("old review matched: %+v %v", matched, err)
 	}
 	params = json.RawMessage(`{"artifactInputName":"prs","reviewStates":["approved"],"requireCurrentHead":false}`)
-	if matched, err := p.Matches("review_added", params, result.Events[0]); err != nil || !matched {
-		t.Fatalf("explicit old review rejected: %t %v", matched, err)
+	if matched, err := p.MatchSubjects("review_added", params, result.Events[0], nil); err != nil || !matched.Matched {
+		t.Fatalf("explicit old review rejected: %+v %v", matched, err)
 	}
 }
 
@@ -196,12 +196,12 @@ func TestResolveAndReconcileUseKnownAPIAndPaginate(t *testing.T) {
 	if subject.RepositoryID != "123" || !subject.Merged {
 		t.Fatalf("subject=%+v", subject)
 	}
-	events, err := p.Reconcile(context.Background(), json.RawMessage(`{}`), "fixture-token", subject, time.Date(2026, 11, 11, 10, 0, 0, 0, time.UTC))
+	result, err := p.Reconcile(context.Background(), json.RawMessage(`{}`), "fixture-token", "review_added", subject, time.Date(2026, 11, 11, 10, 0, 0, 0, time.UTC))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(events) != 3 || calls != 4 {
-		t.Fatalf("events=%d calls=%d", len(events), calls)
+	if len(result.Events) != 2 || calls != 4 {
+		t.Fatalf("events=%d calls=%d", len(result.Events), calls)
 	}
 	prior := calls
 	for _, raw := range []string{"https://evil.example/acme/backend/pull/42", "http://github.com/acme/backend/pull/42", "https://github.com/acme/backend/pull/42?token=secret", "https://github.com/acme/backend/pull/42#fragment", "https://user@github.com/acme/backend/pull/42"} {
@@ -211,5 +211,58 @@ func TestResolveAndReconcileUseKnownAPIAndPaginate(t *testing.T) {
 	}
 	if calls != prior {
 		t.Fatal("invalid artifact URL fetched")
+	}
+}
+
+func TestMergeReconciliationFetchesOneSnapshotWithoutReviews(t *testing.T) {
+	calls := 0
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if r.URL.Path != "/repos/acme/backend/pulls/42" {
+			t.Errorf("unexpected request: %s", r.URL)
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(prFixture(true)))
+	}))
+	defer server.Close()
+	p := GitHubPRIntegration{Client: server.Client(), APIBaseURL: server.URL}
+	// The returned subject must carry the live state, not the caller's stale head.
+	subject := stageintegrationmodel.Subject{Kind: "code_review", ID: "50", RepositoryID: "123", URL: "https://github.com/acme/backend/pull/42", HeadSHA: "stale"}
+	result, err := p.Reconcile(t.Context(), json.RawMessage(`{}`), "token", "pr_merged", subject, time.Time{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if calls != 1 || !result.Subject.Merged || result.Subject.HeadSHA != "head-commit" || len(result.Events) != 1 {
+		t.Fatalf("calls=%d result=%+v", calls, result)
+	}
+}
+
+func TestValidateConnectionRequiresSelectedRepositoryAndPRAccess(t *testing.T) {
+	for _, status := range []int{http.StatusOK, http.StatusForbidden, http.StatusNotFound} {
+		t.Run(fmt.Sprint(status), func(t *testing.T) {
+			calls := 0
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				calls++
+				w.Header().Set("Content-Type", "application/json")
+				switch r.URL.Path {
+				case "/repositories/123":
+					_, _ = w.Write([]byte(`{"id":123,"owner":{"login":"acme"},"name":"backend"}`))
+				case "/repos/acme/backend/pulls":
+					w.WriteHeader(status)
+					_, _ = w.Write([]byte(`[]`))
+				default:
+					t.Errorf("unexpected validation request: %s", r.URL)
+					w.WriteHeader(http.StatusNotFound)
+				}
+			}))
+			defer server.Close()
+			p := GitHubPRIntegration{Client: server.Client(), APIBaseURL: server.URL}
+			err := p.ValidateConnection(t.Context(), json.RawMessage(`{}`), "token", []string{"123"})
+			if calls != 2 || (err == nil) != (status == http.StatusOK) {
+				t.Fatalf("calls=%d err=%v", calls, err)
+			}
+		})
 	}
 }

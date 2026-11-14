@@ -221,6 +221,19 @@ export declare const zWorkflowStageIntegrationStatus: z.ZodObject<{
     error: z.ZodString;
     createdAt: z.ZodISODateTime;
 }, z.core.$strip>;
+export declare const zWorkflowStageIntegrationStatusPage: z.ZodObject<{
+    items: z.ZodArray<z.ZodObject<{
+        id: z.ZodString;
+        taskId: z.ZodString;
+        ruleId: z.ZodString;
+        stageVersion: z.ZodCoercedBigInt<unknown>;
+        actionId: z.ZodString;
+        state: z.ZodString;
+        error: z.ZodString;
+        createdAt: z.ZodISODateTime;
+    }, z.core.$strip>>;
+    nextCursor: z.ZodOptional<z.ZodString>;
+}, z.core.$strip>;
 export declare const zWorkflowIntegrationTrigger: z.ZodObject<{
     connectionId: z.ZodString;
     actionId: z.ZodString;
@@ -1082,19 +1095,25 @@ export declare const zListWorkflowStageIntegrationStatusPath: z.ZodObject<{
     workspaceID: z.ZodString;
     connectionID: z.ZodString;
 }, z.core.$strip>;
+export declare const zListWorkflowStageIntegrationStatusQuery: z.ZodObject<{
+    cursor: z.ZodOptional<z.ZodString>;
+}, z.core.$strip>;
 /**
  * Callback and observation diagnostics
  */
-export declare const zListWorkflowStageIntegrationStatusResponse: z.ZodArray<z.ZodObject<{
-    id: z.ZodString;
-    taskId: z.ZodString;
-    ruleId: z.ZodString;
-    stageVersion: z.ZodCoercedBigInt<unknown>;
-    actionId: z.ZodString;
-    state: z.ZodString;
-    error: z.ZodString;
-    createdAt: z.ZodISODateTime;
-}, z.core.$strip>>;
+export declare const zListWorkflowStageIntegrationStatusResponse: z.ZodObject<{
+    items: z.ZodArray<z.ZodObject<{
+        id: z.ZodString;
+        taskId: z.ZodString;
+        ruleId: z.ZodString;
+        stageVersion: z.ZodCoercedBigInt<unknown>;
+        actionId: z.ZodString;
+        state: z.ZodString;
+        error: z.ZodString;
+        createdAt: z.ZodISODateTime;
+    }, z.core.$strip>>;
+    nextCursor: z.ZodOptional<z.ZodString>;
+}, z.core.$strip>;
 export declare const zRetryWorkflowStageIntegrationEventPath: z.ZodObject<{
     orgID: z.ZodString;
     workspaceID: z.ZodString;

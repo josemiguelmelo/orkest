@@ -42,3 +42,9 @@ type SubjectMatch struct {
 	Matched            bool
 	OncePerObservation bool
 }
+
+// Reconciliation binds normalized events to the same verified subject snapshot.
+type Reconciliation struct {
+	Subject Subject
+	Events  []ProviderEvent
+}

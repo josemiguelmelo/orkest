@@ -16,7 +16,7 @@ import (
 // Process scans current observations. Each external call happens before a short,
 // version-checked persistence transaction. One bad connection never starves peers.
 func (s *WorkflowStageIntegrationService) Process(ctx context.Context) error {
-	candidates, err := s.repo.Candidates(ctx)
+	candidates, err := s.repo.Candidates(ctx, s.now())
 	if err != nil {
 		return err
 	}
@@ -38,10 +38,6 @@ func (s *WorkflowStageIntegrationService) processCandidate(ctx context.Context, 
 	if !ok {
 		return problem.ErrInvalid
 	}
-	resolver, ok := p.(SubjectProvider)
-	if !ok {
-		return problem.ErrInvalid
-	}
 	o := Observation{ID: c.ObservationID, TaskID: c.TaskID, RuleID: c.RuleID, StageVersion: c.StageVersion, Subjects: []stageintegrationmodel.Subject{}, RevisionIDs: []string{}}
 	if c.Observation != nil {
 		o = *c.Observation
@@ -54,7 +50,7 @@ func (s *WorkflowStageIntegrationService) processCandidate(ctx context.Context, 
 	due := (o.ReconciledAt.IsZero() || now.Sub(o.ReconciledAt) >= 30*time.Second) && (o.AttemptedAt.IsZero() || now.Sub(o.AttemptedAt) >= 10*time.Second)
 	if due {
 		initial := len(o.Subjects) == 0
-		err := s.refreshObservation(ctx, p, resolver, c, &o, now)
+		err := s.refreshObservation(ctx, p, c, &o, now)
 		if err != nil && initial {
 			o.Subjects = []stageintegrationmodel.Subject{}
 			o.RevisionIDs = []string{}
@@ -83,11 +79,29 @@ func (s *WorkflowStageIntegrationService) processCandidate(ctx context.Context, 
 	if err != nil {
 		return err
 	}
+	// Only pinned identities can trigger verification. In particular, an event
+	// for another task must not cause API requests or observation writes.
+	indices := make(map[subjectIdentity]int, len(o.Subjects))
+	for i, subject := range o.Subjects {
+		indices[subjectKey(subject)] = i
+	}
+	matching := events[:0]
+	for _, event := range events {
+		if _, ok := indices[subjectKey(event.Subject)]; ok {
+			matching = append(matching, event)
+		}
+	}
+	events = matching
 	if len(events) > 0 && !verified {
+		// Unmatched reviews and incomplete aggregates remain eligible, but do not
+		// bypass the verification interval on every one-second worker scan.
+		if !o.AttemptedAt.IsZero() && now.Sub(o.AttemptedAt) < 10*time.Second {
+			return nil
+		}
 		// Recheck authorization and live heads before consuming queued facts. A
 		// cached reconciliation snapshot cannot authorize an old-head review. A
 		// successful refresh above already performed this verification.
-		err := s.refreshEventSubjects(ctx, resolver, c, &o)
+		err := s.refreshEventSubjects(ctx, p, c, &o)
 		o.AttemptedAt = s.now()
 		if err != nil {
 			o.LastError = "verification_or_reconciliation_failed"
@@ -103,37 +117,18 @@ func (s *WorkflowStageIntegrationService) processCandidate(ctx context.Context, 
 		if !event.OccurredAt.After(o.ActivatedAt) {
 			continue
 		}
-		index := -1
-		for i, subject := range o.Subjects {
-			if sameSubject(subject, event.Subject) {
-				index = i
-				break
-			}
-		}
-		if index < 0 {
-			continue
-		}
-		// Matching receives API-verified current state; event-specific state stays
-		// in the immutable facts. Providers own head and aggregate conditions.
+		index := indices[subjectKey(event.Subject)]
+		// Match immutable event facts against the freshly verified live state.
 		event.Subject.HeadSHA = o.Subjects[index].HeadSHA
-		matched, e := p.Matches(c.ActionID, c.Parameters, event)
-		if e != nil {
-			return e
+		decision, err := p.MatchSubjects(c.ActionID, c.Parameters, event, o.Subjects)
+		if err != nil {
+			return err
 		}
-		if !matched {
+		if !decision.Matched {
 			continue
 		}
-		if aggregator, ok := p.(SubjectMatcher); ok {
-			decision, matchErr := aggregator.MatchSubjects(c.ActionID, c.Parameters, event, o.Subjects)
-			if matchErr != nil {
-				return matchErr
-			}
-			if !decision.Matched {
-				continue
-			}
-			if decision.OncePerObservation {
-				event.ID = "aggregate_satisfied"
-			}
+		if decision.OncePerObservation {
+			event.ID = "aggregate_satisfied"
 		}
 		if err := s.repo.AdmitEvent(ctx, c, o, event, eventContext(event)); err != nil && !errors.Is(err, problem.ErrConflict) {
 			return err
@@ -142,11 +137,19 @@ func (s *WorkflowStageIntegrationService) processCandidate(ctx context.Context, 
 	return nil
 }
 
-func sameSubject(a, b stageintegrationmodel.Subject) bool {
-	return a.Kind == b.Kind && a.ID == b.ID && a.RepositoryID == b.RepositoryID
+type subjectIdentity struct {
+	Kind, ID, RepositoryID string
 }
 
-func (s *WorkflowStageIntegrationService) refreshObservation(ctx context.Context, p WorkflowStageIntegrationProvider, resolver SubjectProvider, c Candidate, o *Observation, now time.Time) error {
+func subjectKey(subject stageintegrationmodel.Subject) subjectIdentity {
+	return subjectIdentity{Kind: subject.Kind, ID: subject.ID, RepositoryID: subject.RepositoryID}
+}
+
+func sameSubject(a, b stageintegrationmodel.Subject) bool {
+	return subjectKey(a) == subjectKey(b)
+}
+
+func (s *WorkflowStageIntegrationService) refreshObservation(ctx context.Context, p WorkflowStageIntegrationProvider, c Candidate, o *Observation, now time.Time) error {
 	if err := p.ValidateParameters(c.ActionID, c.Parameters); err != nil {
 		return err
 	}
@@ -188,7 +191,7 @@ func (s *WorkflowStageIntegrationService) refreshObservation(ctx context.Context
 			if artifact.Kind != "pull_request" && artifact.Kind != "code_review" {
 				return problem.ErrInvalid
 			}
-			subject, e := resolver.ResolveSubject(ctx, c.Connection.Config, credentials.Token, artifact.Content.URL)
+			subject, e := p.ResolveSubject(ctx, c.Connection.Config, credentials.Token, artifact.Content.URL)
 			if e != nil {
 				return e
 			}
@@ -212,19 +215,15 @@ func (s *WorkflowStageIntegrationService) refreshObservation(ctx context.Context
 		return nil
 	}
 	for i, subject := range o.Subjects {
-		current, e := resolver.ResolveSubject(ctx, c.Connection.Config, credentials.Token, subject.URL)
-		if e != nil {
-			return e
+		result, err := p.Reconcile(ctx, c.Connection.Config, credentials.Token, c.ActionID, subject, reconciliationStart(*o))
+		if err != nil {
+			return err
 		}
-		if !sameSubject(subject, current) || !allowedSubject(c, current) {
+		if !sameSubject(subject, result.Subject) || !allowedSubject(c, result.Subject) {
 			return problem.ErrForbidden
 		}
-		o.Subjects[i] = current
-		events, e := resolver.Reconcile(ctx, c.Connection.Config, credentials.Token, current, reconciliationStart(*o))
-		if e != nil {
-			return e
-		}
-		if err := s.repo.RecordEvents(ctx, c.Connection, events); err != nil {
+		o.Subjects[i] = result.Subject
+		if err := s.repo.RecordEvents(ctx, c.Connection, result.Events); err != nil {
 			return err
 		}
 	}
@@ -253,7 +252,7 @@ func reconciliationStart(o Observation) time.Time {
 	return since
 }
 
-func (s *WorkflowStageIntegrationService) refreshEventSubjects(ctx context.Context, resolver SubjectProvider, c Candidate, o *Observation) error {
+func (s *WorkflowStageIntegrationService) refreshEventSubjects(ctx context.Context, p WorkflowStageIntegrationProvider, c Candidate, o *Observation) error {
 	if err := s.authorize(ctx, c.ActorID, c.OrganizationID, c.Connection.WorkspaceID, true); err != nil {
 		return err
 	}
@@ -262,7 +261,7 @@ func (s *WorkflowStageIntegrationService) refreshEventSubjects(ctx context.Conte
 		return err
 	}
 	for i, subject := range o.Subjects {
-		current, err := resolver.ResolveSubject(ctx, c.Connection.Config, credential.Token, subject.URL)
+		current, err := p.ResolveSubject(ctx, c.Connection.Config, credential.Token, subject.URL)
 		if err != nil {
 			return err
 		}

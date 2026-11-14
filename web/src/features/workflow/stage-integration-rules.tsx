@@ -7,10 +7,7 @@ import type {
 import { Button } from '../../shared/ui/button';
 import { Field } from '../../shared/ui/form';
 import { ErrorState, Loading } from '../../shared/ui/common';
-import {
-  stageConnectionsQuery,
-  stageProvidersQuery,
-} from '../settings/workflow-stage-integrations';
+import { stageConnectionsQuery, stageProvidersQuery } from '../../shared/api/queries';
 import { IntegrationParameters, parameterDefaults } from './integration-parameters';
 import type { JsonValue } from '../integrations/schema';
 import { WorkflowChoiceSelect, type WorkflowChoice } from './workflow-choice-select';

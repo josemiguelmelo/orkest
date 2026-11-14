@@ -5,16 +5,16 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/josemiguelmelo/orkest/internal/adapters/postgres/sqlc"
 	problem "github.com/josemiguelmelo/orkest/internal/contracts/problem"
+	artifactmodel "github.com/josemiguelmelo/orkest/internal/server/artifact/model"
 	codemodel "github.com/josemiguelmelo/orkest/internal/server/coderepository/model"
 	workflowmodel "github.com/josemiguelmelo/orkest/internal/server/workflow/model"
 	stage "github.com/josemiguelmelo/orkest/internal/server/workflowstageintegration"
-	stageintegrationmodel "github.com/josemiguelmelo/orkest/internal/server/workflowstageintegration/model"
 )
 
 func observationFromRow(row sqlc.WorkflowStageIntegrationObservation) (stage.Observation, error) {
@@ -29,7 +29,7 @@ func stableIntegrationID(parts ...any) string {
 	return "wsi:" + hex.EncodeToString(sum[:])
 }
 
-func (r *WorkflowStageIntegrationPostgresRepository) Candidates(ctx context.Context) ([]stage.Candidate, error) {
+func (r *WorkflowStageIntegrationPostgresRepository) Candidates(ctx context.Context, now time.Time) ([]stage.Candidate, error) {
 	tx, err := r.pool.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead, AccessMode: pgx.ReadOnly})
 	if err != nil {
 		return nil, err
@@ -41,63 +41,81 @@ func (r *WorkflowStageIntegrationPostgresRepository) Candidates(ctx context.Cont
 		return nil, err
 	}
 	out := make([]stage.Candidate, 0, len(rows))
+	type scopedID struct{ WorkspaceID, ID string }
+	definitions := map[scopedID]workflowmodel.Definition{}
+	artifacts := map[scopedID][]artifactmodel.Revision{}
+	repositories := map[scopedID][]codemodel.CodeRepository{}
 	for _, row := range rows {
-		c := stageintegrationmodel.Connection{ID: row.ID, WorkspaceID: row.WorkspaceID, Provider: row.Provider, Name: row.Name, Enabled: row.Enabled, CodingIntegrationID: row.CodingIntegrationID, RepositoryIDs: row.RepositoryIds, Config: row.Config, Version: row.Version, ConfiguredBy: row.ConfiguredBy, UpdatedAt: row.UpdatedAt.Time}
+		c := integrationConnection(row.WorkflowStageIntegration).Connection
+		workflowKey := scopedID{WorkspaceID: c.WorkspaceID, ID: row.WorkflowID}
+		taskKey := scopedID{WorkspaceID: c.WorkspaceID, ID: row.TaskID}
 		var trigger workflowmodel.IntegrationTrigger
 		if err = json.Unmarshal(row.Integration, &trigger); err != nil {
 			return nil, err
 		}
-		candidate := stage.Candidate{Connection: c, OrganizationID: row.OrganizationID, TaskID: row.TaskID, WorkflowID: row.WorkflowID, StageID: row.StageID, StageVersion: row.StageVersion, ConfigurationVersion: row.ConfigurationVersion, RuleID: row.RuleID, ActorID: c.ConfiguredBy, ActionID: trigger.ActionID, Parameters: trigger.Parameters}
+		candidate := stage.Candidate{Connection: c, OrganizationID: row.OrganizationID, TaskID: row.TaskID, WorkflowID: row.WorkflowID, StageID: row.StageID, StageVersion: row.StageVersion, ConfigurationVersion: row.ConfigurationVersion, RuleID: row.RuleID, ActorID: row.ActorID, ActionID: trigger.ActionID, Parameters: trigger.Parameters}
 		candidate.ObservationID = stableIntegrationID(c.ID, c.Version, row.TaskID, row.StageVersion, row.ConfigurationVersion, row.RuleID)
-		obs, obsErr := q.GetWorkflowStageObservation(ctx, candidate.ObservationID)
-		if obsErr == nil {
-			mapped, e := observationFromRow(obs)
+		if row.ObservationID != "" {
+			observation := stage.Observation{ID: row.ObservationID, TaskID: row.TaskID, RuleID: row.RuleID, StageVersion: row.StageVersion, ActivatedAt: row.ActivatedAt.Time, ReconciledAt: row.ReconciledAt.Time, AttemptedAt: row.AttemptedAt.Time, RevisionIDs: row.RevisionIds, LastError: row.LastError}
+			if err = json.Unmarshal(row.Subjects, &observation.Subjects); err != nil {
+				return nil, err
+			}
+			candidate.Observation = &observation
+		}
+		// Defer unresolved inputs still in backoff to the next scan. Do not
+		// return an incomplete candidate that could become due during a slow scan.
+		if candidate.Observation != nil && len(candidate.Observation.Subjects) == 0 && !candidate.Observation.AttemptedAt.IsZero() && now.Sub(candidate.Observation.AttemptedAt) < 10*time.Second {
+			continue
+		}
+		// Pinned observations never resolve artifacts again.
+		if candidate.Observation == nil || len(candidate.Observation.Subjects) == 0 {
+			definition, ok := definitions[workflowKey]
+			if !ok {
+				workflowRow, e := q.GetWorkflow(ctx, sqlc.GetWorkflowParams{WorkspaceID: c.WorkspaceID, ID: row.WorkflowID})
+				if e != nil {
+					return nil, e
+				}
+				definition, err = workflowDefinition(ctx, q, workflowRow)
+				if err != nil {
+					return nil, err
+				}
+				definitions[workflowKey] = definition
+			}
+			candidate.Definition = definition
+			available, ok := artifacts[taskKey]
+			if !ok {
+				available = []artifactmodel.Revision{}
+				artifactRows, e := q.ListTaskArtifacts(ctx, sqlc.ListTaskArtifactsParams{WorkspaceID: c.WorkspaceID, TaskID: row.TaskID})
+				if e != nil {
+					return nil, e
+				}
+				for _, artifact := range artifactRows {
+					revision, e := artifactRevision(sqlc.ArtifactPublicationRow(artifact))
+					if e != nil {
+						return nil, e
+					}
+					available = append(available, revision)
+				}
+				artifacts[taskKey] = available
+			}
+			candidate.AvailableArtifacts = available
+		}
+		repos, ok := repositories[taskKey]
+		if !ok {
+			repos = []codemodel.CodeRepository{}
+			repoRows, e := q.ListWorkflowStageTaskRepositories(ctx, sqlc.ListWorkflowStageTaskRepositoriesParams{WorkspaceID: c.WorkspaceID, TaskID: row.TaskID})
 			if e != nil {
 				return nil, e
 			}
-			candidate.Observation = &mapped
-		} else if !errors.Is(obsErr, pgx.ErrNoRows) {
-			return nil, obsErr
+			for _, repo := range repoRows {
+				repos = append(repos, codemodel.CodeRepository{ID: repo.ID, WorkspaceID: repo.WorkspaceID, IntegrationID: repo.IntegrationID.String, ProviderRepositoryID: repo.ProviderRepositoryID.String})
+			}
+			repositories[taskKey] = repos
 		}
-		if err = r.candidateInputs(ctx, q, &candidate); err != nil {
-			return nil, err
-		}
+		candidate.Repositories = repos
 		out = append(out, candidate)
 	}
 	return out, tx.Commit(ctx)
-}
-
-func (r *WorkflowStageIntegrationPostgresRepository) candidateInputs(ctx context.Context, q *sqlc.Queries, c *stage.Candidate) error {
-	row, err := q.GetWorkflow(ctx, sqlc.GetWorkflowParams{WorkspaceID: c.Connection.WorkspaceID, ID: c.WorkflowID})
-	if err != nil {
-		return err
-	}
-	definition, err := workflowDefinition(ctx, q, row)
-	if err != nil {
-		return err
-	}
-	c.ActorID = definition.ConfiguredBy
-	c.Definition = definition
-	artifacts, err := q.ListTaskArtifacts(ctx, sqlc.ListTaskArtifactsParams{WorkspaceID: c.Connection.WorkspaceID, TaskID: c.TaskID})
-	if err != nil {
-		return err
-	}
-	for _, row := range artifacts {
-		revision, err := artifactRevision(sqlc.ArtifactPublicationRow(row))
-		if err != nil {
-			return err
-		}
-		c.AvailableArtifacts = append(c.AvailableArtifacts, revision)
-	}
-
-	repos, err := q.ListWorkflowStageTaskRepositories(ctx, sqlc.ListWorkflowStageTaskRepositoriesParams{WorkspaceID: c.Connection.WorkspaceID, TaskID: c.TaskID})
-	if err != nil {
-		return err
-	}
-	for _, repo := range repos {
-		c.Repositories = append(c.Repositories, codemodel.CodeRepository{ID: repo.ID, WorkspaceID: repo.WorkspaceID, ProviderName: repo.ProviderName, URL: repo.Url, IntegrationID: repo.IntegrationID.String, ProviderRepositoryID: repo.ProviderRepositoryID.String, DefaultBranch: repo.DefaultBranch, Name: repo.DisplayName, Private: repo.IsPrivate})
-	}
-	return nil
 }
 
 // lockCandidate follows workflow -> connection -> task lock ordering. External

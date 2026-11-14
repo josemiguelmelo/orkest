@@ -1,6 +1,6 @@
 import { useId, useState } from 'react';
 import { Check, Copy, Search } from 'lucide-react';
-import { useQuery, queryOptions } from '@tanstack/react-query';
+import { useQuery, useInfiniteQuery } from '@tanstack/react-query';
 import './workflow-stage-integrations.css';
 import { useApp } from '../../app/context';
 import { command, data } from '../../shared/api/client';
@@ -8,13 +8,15 @@ import * as sdk from '../../shared/api/generated/sdk.gen';
 import type {
   WorkflowStageIntegration,
   WorkflowStageIntegrationInputWritable,
+  WorkflowStageIntegrationStatusPage,
 } from '../../shared/api/generated/types.gen';
 import {
   codingIntegrationsQuery,
+  stageConnectionsQuery,
+  stageProvidersQuery,
   keys,
   path,
   repositoriesQuery,
-  type WorkspaceScope,
 } from '../../shared/api/queries';
 import { Button } from '../../shared/ui/button';
 import { ConfirmButton, ErrorState, Loading } from '../../shared/ui/common';
@@ -23,19 +25,6 @@ import { Field } from '../../shared/ui/form';
 import { useAction } from '../../shared/use-action';
 import { IntegrationParameters, parameterDefaults } from '../workflow/integration-parameters';
 import { validateConfig, type JsonValue } from '../integrations/schema';
-
-export const stageConnectionsQuery = (scope: WorkspaceScope) =>
-  queryOptions({
-    queryKey: [...keys.workspace(scope), 'workflow-stage-integrations'],
-    queryFn: ({ signal }) =>
-      data(sdk.listWorkflowStageIntegrations({ ...command, path: path(scope), signal })),
-  });
-export const stageProvidersQuery = (userID: string) =>
-  queryOptions({
-    queryKey: [...keys.user(userID), 'workflow-stage-integration-providers'],
-    queryFn: ({ signal }) =>
-      data(sdk.listWorkflowStageIntegrationProviders({ ...command, signal })),
-  });
 
 function providerLabel(provider: string) {
   if (provider === 'github_pr') return 'GitHub pull requests';
@@ -180,12 +169,15 @@ function StageConnectionCard({
   const [copied, setCopied] = useState(false);
   const [copyError, setCopyError] = useState(false);
   const callbackURLID = useId();
-  const status = useQuery({
+  const status = useInfiniteQuery({
     queryKey: [...keys.workspace(scope), 'workflow-stage-integrations', item.id, 'status'],
-    queryFn: ({ signal }) =>
+    initialPageParam: '',
+    getNextPageParam: (page: WorkflowStageIntegrationStatusPage) => page.nextCursor,
+    queryFn: ({ signal, pageParam }) =>
       data(
         sdk.listWorkflowStageIntegrationStatus({
           ...command,
+          query: { cursor: pageParam },
           path: { ...path(scope), connectionID: item.id },
           signal,
         }),
@@ -318,63 +310,77 @@ function StageConnectionCard({
           <Loading />
         ) : status.isError ? (
           <ErrorState error={status.error} />
-        ) : status.data.length === 0 ? (
+        ) : status.data.pages.every((page) => page.items.length === 0) ? (
           <p className="muted">No observations or callback effects yet.</p>
         ) : (
-          <ul>
-            {status.data.map((event) => (
-              <li className="stage-activity-row" key={event.id}>
-                <div className="stage-activity-summary">
-                  <strong>{activityLabel(event.state)}</strong>
-                  <span>·</span>
-                  <a
-                    href={`/organizations/${encodeURIComponent(scope.orgID)}/workspaces/${encodeURIComponent(scope.workspaceID)}/tasks/${encodeURIComponent(event.taskId)}`}
-                  >
-                    Task {event.taskId.slice(0, 8)}
-                  </a>
-                  <span>·</span>
-                  <span>{integrationActionLabel(event.actionId || event.ruleId)}</span>
-                </div>
-                {Number.isFinite(Date.parse(event.createdAt)) && (
-                  <time dateTime={event.createdAt}>
-                    {new Date(event.createdAt).toLocaleString()}
-                  </time>
-                )}
-                {event.error && (
-                  <p role="status">
-                    {callbackErrors[event.error] ??
-                      'This callback needs attention. Review the connection and task configuration.'}
-                  </p>
-                )}
-                {permissions.workspaceAdmin &&
-                  event.state === 'blocked' &&
-                  [
-                    'busy',
-                    'execution_busy',
-                    'authorization_revoked',
-                    'callback_prerequisites',
-                  ].includes(event.error) && (
-                    <Button
-                      size="sm"
-                      disabled={action.pending}
-                      onClick={() =>
-                        void action.run(async () => {
-                          await data(
-                            sdk.retryWorkflowStageIntegrationEvent({
-                              ...command,
-                              path: { ...path(scope), eventID: event.id },
-                            }),
-                          );
-                          await status.refetch();
-                        }, 'Retry requested.')
-                      }
-                    >
-                      Retry callback
-                    </Button>
-                  )}
-              </li>
-            ))}
-          </ul>
+          <div>
+            <ul>
+              {status.data.pages
+                .flatMap((page) => page.items)
+                .map((event) => (
+                  <li className="stage-activity-row" key={event.id}>
+                    <div className="stage-activity-summary">
+                      <strong>{activityLabel(event.state)}</strong>
+                      <span>·</span>
+                      <a
+                        href={`/organizations/${encodeURIComponent(scope.orgID)}/workspaces/${encodeURIComponent(scope.workspaceID)}/tasks/${encodeURIComponent(event.taskId)}`}
+                      >
+                        Task {event.taskId.slice(0, 8)}
+                      </a>
+                      <span>·</span>
+                      <span>{integrationActionLabel(event.actionId || event.ruleId)}</span>
+                    </div>
+                    {Number.isFinite(Date.parse(event.createdAt)) && (
+                      <time dateTime={event.createdAt}>
+                        {new Date(event.createdAt).toLocaleString()}
+                      </time>
+                    )}
+                    {event.error && (
+                      <p role="status">
+                        {callbackErrors[event.error] ??
+                          'This callback needs attention. Review the connection and task configuration.'}
+                      </p>
+                    )}
+                    {permissions.workspaceAdmin &&
+                      event.state === 'blocked' &&
+                      [
+                        'busy',
+                        'execution_busy',
+                        'authorization_revoked',
+                        'callback_prerequisites',
+                      ].includes(event.error) && (
+                        <Button
+                          size="sm"
+                          disabled={action.pending}
+                          onClick={() =>
+                            void action.run(async () => {
+                              await data(
+                                sdk.retryWorkflowStageIntegrationEvent({
+                                  ...command,
+                                  path: { ...path(scope), eventID: event.id },
+                                }),
+                              );
+                              await status.refetch();
+                            }, 'Retry requested.')
+                          }
+                        >
+                          Retry callback
+                        </Button>
+                      )}
+                  </li>
+                ))}
+            </ul>
+            {status.hasNextPage && (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={status.isFetchingNextPage}
+                onClick={() => void status.fetchNextPage()}
+              >
+                Load older activity
+              </Button>
+            )}
+          </div>
         ))}
     </article>
   );

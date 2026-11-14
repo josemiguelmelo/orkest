@@ -19,16 +19,10 @@ type WorkflowStageIntegrationProvider interface {
 	Actions() []stageintegrationmodel.ActionDefinition
 	ValidateParameters(string, json.RawMessage) error
 	HandleCallback(context.Context, stageintegrationmodel.CallbackInput) (stageintegrationmodel.CallbackResult, error)
-	Matches(string, json.RawMessage, stageintegrationmodel.ProviderEvent) (bool, error)
-}
-
-// SubjectProvider performs provider I/O outside workflow database transactions.
-type SubjectProvider interface {
 	ResolveSubject(context.Context, json.RawMessage, string, string) (stageintegrationmodel.Subject, error)
-	Reconcile(context.Context, json.RawMessage, string, stageintegrationmodel.Subject, time.Time) ([]stageintegrationmodel.ProviderEvent, error)
-}
-
-// SubjectMatcher evaluates provider-owned aggregate conditions.
-type SubjectMatcher interface {
+	// Reconcile returns one verified snapshot and only the requested action's events.
+	Reconcile(context.Context, json.RawMessage, string, string, stageintegrationmodel.Subject, time.Time) (stageintegrationmodel.Reconciliation, error)
 	MatchSubjects(string, json.RawMessage, stageintegrationmodel.ProviderEvent, []stageintegrationmodel.Subject) (stageintegrationmodel.SubjectMatch, error)
+	// ValidateConnection checks each immutable provider repository ID and PR access.
+	ValidateConnection(context.Context, json.RawMessage, string, []string) error
 }

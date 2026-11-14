@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/josemiguelmelo/orkest/db/migrations"
 	"github.com/josemiguelmelo/orkest/internal/adapters/postgres/sqlc"
 	problem "github.com/josemiguelmelo/orkest/internal/contracts/problem"
 	"github.com/josemiguelmelo/orkest/internal/platform/ids"
@@ -119,7 +121,7 @@ func TestPostgresRepositoriesWorkflowStageIntegrations(t *testing.T) {
 	if err = q.AdvanceArtifactRevision(ctx, artifactID); err != nil {
 		t.Fatal(err)
 	}
-	candidates, err := repository.Candidates(ctx)
+	candidates, err := repository.Candidates(ctx, time.Now())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -137,9 +139,27 @@ func TestPostgresRepositoriesWorkflowStageIntegrations(t *testing.T) {
 		t.Fatalf("referenced connection deletion: %v", err)
 	}
 	now := time.Now().UTC().Add(-time.Minute).Truncate(time.Microsecond)
-	observation := stage.Observation{ID: candidate.ObservationID, TaskID: taskID, RuleID: candidate.RuleID, StageVersion: candidate.StageVersion, ActivatedAt: now, ReconciledAt: now, LastError: "subject_unavailable"}
+	observation := stage.Observation{ID: candidate.ObservationID, TaskID: taskID, RuleID: candidate.RuleID, StageVersion: candidate.StageVersion, ActivatedAt: now, ReconciledAt: now, AttemptedAt: time.Now().UTC(), LastError: "subject_unavailable"}
 	if err = repository.SaveObservation(ctx, candidate, observation); err != nil {
 		t.Fatal(err)
+	}
+	for _, delay := range []time.Duration{5 * time.Second, 11 * time.Second} {
+		pending, e := repository.Candidates(ctx, observation.AttemptedAt.Add(delay))
+		if e != nil {
+			t.Fatal(e)
+		}
+		found := false
+		for _, current := range pending {
+			if current.TaskID == taskID {
+				found = true
+				if len(current.Definition.Stages) == 0 || len(current.AvailableArtifacts) != 1 {
+					t.Fatal("returned incomplete unresolved candidate")
+				}
+			}
+		}
+		if found != (delay >= 10*time.Second) {
+			t.Fatalf("unresolved candidate backoff: delay=%s found=%v", delay, found)
+		}
 	}
 	subject := stageintegrationmodel.Subject{Kind: "pull_request", ID: "456", RepositoryID: "123", URL: "https://github.com/acme/backend/pull/42", HeadSHA: "head"}
 	observation.Subjects = []stageintegrationmodel.Subject{subject}
@@ -189,6 +209,34 @@ func TestPostgresRepositoriesWorkflowStageIntegrations(t *testing.T) {
 	if fresh != 1 {
 		t.Fatalf("fresh receipts: %d", fresh)
 	}
+	// Irrelevant PR identities must be filtered in persistence, before API I/O.
+	for i, field := range []string{"id", "repository", "kind"} {
+		other := event
+		other.ID = "unrelated:" + field
+		switch i {
+		case 0:
+			other.Subject.ID = "other-pr"
+		case 1:
+			other.Subject.RepositoryID = "other-repo"
+		case 2:
+			other.Subject.Kind = "other-kind"
+		}
+		if err = repository.RecordEvents(ctx, connection, []stageintegrationmodel.ProviderEvent{other}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	pinned, err := repository.Candidates(ctx, time.Now())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, current := range pinned {
+		if current.TaskID != taskID {
+			continue
+		}
+		if current.Observation == nil || current.Observation.Subjects[0].HeadSHA != "new-head" || current.ActorID != user.ID || len(current.AvailableArtifacts) != 0 || len(current.Definition.Stages) != 0 {
+			t.Fatalf("pinned observation reloaded inputs or lost state: %+v", current)
+		}
+	}
 	// A distinct transport delivery cannot duplicate the same semantic review.
 	receipt.DeliveryID = "delivery-2"
 	if _, err = repository.RecordReceipt(ctx, connection, receipt); err != nil {
@@ -207,7 +255,7 @@ func TestPostgresRepositoriesWorkflowStageIntegrations(t *testing.T) {
 	if err != nil || len(events) != 0 {
 		t.Fatalf("admitted event returned: %d %v", len(events), err)
 	}
-	statuses, err := repository.ListStatus(ctx, workspaceID, connection.ID)
+	statuses, err := repository.ListStatus(ctx, workspaceID, connection.ID, stageintegrationmodel.StatusPosition{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -234,6 +282,81 @@ func TestPostgresRepositoriesWorkflowStageIntegrations(t *testing.T) {
 	if err = database.pool.QueryRow(ctx, `SELECT count(*) FROM workflow_events WHERE workspace_id=$1 AND event_type='integration_action'`, workspaceID).Scan(&eventCount); err != nil || eventCount != 1 {
 		t.Fatalf("atomic callback dedup count: %d %v", eventCount, err)
 	}
+	t.Run("activity keyset pagination across tied observation and effect timestamps", func(t *testing.T) {
+		at := time.Now().UTC().Truncate(time.Microsecond)
+		if _, e := database.pool.Exec(ctx, `UPDATE workflow_stage_integration_observations SET created_at=$1 WHERE id=$2`, at, observation.ID); e != nil {
+			t.Fatal(e)
+		}
+		if _, e := database.pool.Exec(ctx, `UPDATE workflow_events SET occurred_at=$1 WHERE id=$2`, at, eventID); e != nil {
+			t.Fatal(e)
+		}
+		payload, e := json.Marshal(workflowmodel.IntegrationEvent{ConnectionID: connection.ID, RuleID: candidate.RuleID})
+		if e != nil {
+			t.Fatal(e)
+		}
+		_, e = database.pool.Exec(ctx, `INSERT INTO workflow_events(id,workspace_id,task_id,stage_version,actor_id,event_type,run_id,causation_id,correlation_id,integration,occurred_at)
+		 SELECT 'activity:'||$1||':'||n::text,$2,$3,0,$4,'integration_action','','','',$5,$6 FROM generate_series(1,55) n`, connection.ID, workspaceID, taskID, user.ID, payload, at)
+		if e != nil {
+			t.Fatal(e)
+		}
+		seen := map[string]bool{}
+		var position stageintegrationmodel.StatusPosition
+		for {
+			page, e := repository.ListStatus(ctx, workspaceID, connection.ID, position)
+			if e != nil {
+				t.Fatal(e)
+			}
+			if len(page) > stageintegrationmodel.StatusPageSize+1 {
+				t.Fatal("unbounded activity page")
+			}
+			more := len(page) > stageintegrationmodel.StatusPageSize
+			if more {
+				page = page[:stageintegrationmodel.StatusPageSize]
+			}
+			for _, item := range page {
+				if seen[item.ID] {
+					t.Fatalf("duplicate activity: %s", item.ID)
+				}
+				ordered := item.CreatedAt.Before(position.CreatedAt) || (item.CreatedAt.Equal(position.CreatedAt) && item.ID < position.ID)
+				if position.ID != "" && !ordered {
+					t.Fatalf("unstable activity ordering: %+v after %+v", item, position)
+				}
+				seen[item.ID] = true
+				position = stageintegrationmodel.StatusPosition{ID: item.ID, CreatedAt: item.CreatedAt}
+			}
+			if !more {
+				break
+			}
+		}
+		if len(seen) != 57 {
+			t.Fatalf("lost activity across pages: %d", len(seen))
+		}
+	})
+	t.Run("scan index migration preserves data through rollback and reapply", func(t *testing.T) {
+		source, e := migrations.FS.ReadFile("0050_workflow_stage_integration_scan_indexes.sql")
+		if e != nil {
+			t.Fatal(e)
+		}
+		up, down, ok := strings.Cut(string(source), "-- +goose Down")
+		if !ok {
+			t.Fatal("missing index migration rollback")
+		}
+		tx, e := database.pool.Begin(ctx)
+		if e != nil {
+			t.Fatal(e)
+		}
+		defer func() { _ = tx.Rollback(ctx) }()
+		if _, e = tx.Exec(ctx, down); e != nil {
+			t.Fatal(e)
+		}
+		if _, e = tx.Exec(ctx, up); e != nil {
+			t.Fatal(e)
+		}
+		var count int
+		if e = tx.QueryRow(ctx, `SELECT count(*) FROM workflow_stage_integration_observations WHERE id=$1`, observation.ID).Scan(&count); e != nil || count != 1 {
+			t.Fatalf("observation lost during index migration: count=%d err=%v", count, e)
+		}
+	})
 	// Configuration versions fence notifications verified before disable/rotation.
 	stored.Connection = connection
 	stored.Connection.Enabled = false

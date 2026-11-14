@@ -41,13 +41,16 @@ INSERT INTO workflow_stage_integration_events(workspace_id,connection_id,semanti
 VALUES($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING;
 
 -- name: ListWorkflowStageCandidates :many
-SELECT i.*,w.organization_id,t.id AS task_id,t.workflow_id,t.status AS stage_id,t.stage_version,
- f.version AS configuration_version,r.id AS rule_id,r.integration,r.source_stage_id
+SELECT sqlc.embed(i),COALESCE(o.id,'')::text AS observation_id,o.activated_at,o.reconciled_at,o.attempted_at,
+ o.revision_ids,COALESCE(o.subjects,'[]'::jsonb) AS subjects,COALESCE(o.last_error,'')::text AS last_error,w.organization_id,t.id AS task_id,t.workflow_id,t.status AS stage_id,t.stage_version,
+ f.version AS configuration_version,f.configured_by AS actor_id,r.id AS rule_id,r.integration,r.source_stage_id
 FROM workflow_stage_integrations i
 JOIN workspaces w ON w.id=i.workspace_id
 JOIN workflow_rules r ON r.workspace_id=i.workspace_id AND r.integration->>'connectionId'=i.id
 JOIN workspace_workflows f ON f.workspace_id=r.workspace_id AND f.id=r.workflow_id
 JOIN tasks t ON t.workspace_id=r.workspace_id AND t.workflow_id=r.workflow_id AND t.status=r.source_stage_id
+LEFT JOIN workflow_stage_integration_observations o ON o.connection_id=i.id AND o.connection_version=i.version
+ AND o.task_id=t.id AND o.stage_version=t.stage_version AND o.configuration_version=f.version AND o.rule_id=r.id
 WHERE i.enabled AND r.enabled AND r.event_type='integration_action'
 ORDER BY i.id,t.id,r.id;
 
@@ -65,6 +68,8 @@ UPDATE workflow_stage_integration_observations SET reconciled_at=$2,last_error=$
 -- name: ListWorkflowStageProviderEvents :many
 SELECT e.* FROM workflow_stage_integration_events e
 WHERE e.connection_id=$1 AND e.action_id=$2 AND e.occurred_at>sqlc.arg(activated_at)
+AND EXISTS(SELECT 1 FROM jsonb_array_elements(sqlc.arg(subjects)::jsonb) s
+ WHERE s->>'kind'=e.subject->>'kind' AND s->>'id'=e.subject->>'id' AND s->>'repositoryId'=e.subject->>'repositoryId')
 AND NOT EXISTS(SELECT 1 FROM workflow_stage_integration_admissions a WHERE a.observation_id=$3 AND a.semantic_id=e.semantic_id)
 AND NOT EXISTS(SELECT 1 FROM workflow_stage_integration_admissions a WHERE a.observation_id=$3 AND a.semantic_id='aggregate_satisfied')
 ORDER BY e.occurred_at,e.semantic_id;
@@ -79,7 +84,9 @@ SELECT EXISTS(SELECT 1 FROM workflow_stage_integration_admissions WHERE observat
 SELECT * FROM workflow_stage_integration_observations WHERE workspace_id=$1 AND id=$2 FOR UPDATE;
 
 -- name: ListWorkflowStageObservations :many
-SELECT * FROM workflow_stage_integration_observations WHERE workspace_id=$1 AND connection_id=$2 ORDER BY created_at DESC,id;
+SELECT * FROM workflow_stage_integration_observations WHERE workspace_id=$1 AND connection_id=$2
+AND (NOT sqlc.arg(has_cursor)::boolean OR (created_at,id)<(sqlc.arg(before_time)::timestamptz,sqlc.arg(before_id)::text))
+ORDER BY created_at DESC,id DESC LIMIT sqlc.arg(page_size);
 
 -- name: ListWorkflowStageEffectStatus :many
 SELECT e.id,e.task_id,e.stage_version,e.integration,e.processed_at,e.processing_error,e.occurred_at,
@@ -89,7 +96,8 @@ LEFT JOIN workflow_commands c ON c.id=e.id||':start'
 LEFT JOIN workflow_stage_integration_admissions a ON a.event_id=e.id
 LEFT JOIN workflow_stage_integration_observations o ON o.id=a.observation_id
 WHERE e.workspace_id=$1 AND e.event_type='integration_action' AND e.integration->>'connectionId'=sqlc.arg(connection_id)::text
-ORDER BY e.occurred_at DESC,e.id;
+AND (NOT sqlc.arg(has_cursor)::boolean OR (e.occurred_at,e.id)<(sqlc.arg(before_time)::timestamptz,sqlc.arg(before_id)::text))
+ORDER BY e.occurred_at DESC,e.id DESC LIMIT sqlc.arg(page_size);
 
 -- name: LockWorkflowStageRetryEvent :one
 SELECT * FROM workflow_events WHERE workspace_id=$1 AND id=$2 AND event_type='integration_action' FOR UPDATE;

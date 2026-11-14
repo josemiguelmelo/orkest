@@ -334,40 +334,39 @@ func (q *Queries) InsertWorkflowStageReceipt(ctx context.Context, arg InsertWork
 }
 
 const listWorkflowStageCandidates = `-- name: ListWorkflowStageCandidates :many
-SELECT i.id, i.workspace_id, i.provider, i.name, i.enabled, i.coding_integration_id, i.repository_ids, i.config, i.encrypted_secret, i.configured_by, i.version, i.created_at, i.updated_at,w.organization_id,t.id AS task_id,t.workflow_id,t.status AS stage_id,t.stage_version,
- f.version AS configuration_version,r.id AS rule_id,r.integration,r.source_stage_id
+SELECT i.id, i.workspace_id, i.provider, i.name, i.enabled, i.coding_integration_id, i.repository_ids, i.config, i.encrypted_secret, i.configured_by, i.version, i.created_at, i.updated_at,COALESCE(o.id,'')::text AS observation_id,o.activated_at,o.reconciled_at,o.attempted_at,
+ o.revision_ids,COALESCE(o.subjects,'[]'::jsonb) AS subjects,COALESCE(o.last_error,'')::text AS last_error,w.organization_id,t.id AS task_id,t.workflow_id,t.status AS stage_id,t.stage_version,
+ f.version AS configuration_version,f.configured_by AS actor_id,r.id AS rule_id,r.integration,r.source_stage_id
 FROM workflow_stage_integrations i
 JOIN workspaces w ON w.id=i.workspace_id
 JOIN workflow_rules r ON r.workspace_id=i.workspace_id AND r.integration->>'connectionId'=i.id
 JOIN workspace_workflows f ON f.workspace_id=r.workspace_id AND f.id=r.workflow_id
 JOIN tasks t ON t.workspace_id=r.workspace_id AND t.workflow_id=r.workflow_id AND t.status=r.source_stage_id
+LEFT JOIN workflow_stage_integration_observations o ON o.connection_id=i.id AND o.connection_version=i.version
+ AND o.task_id=t.id AND o.stage_version=t.stage_version AND o.configuration_version=f.version AND o.rule_id=r.id
 WHERE i.enabled AND r.enabled AND r.event_type='integration_action'
 ORDER BY i.id,t.id,r.id
 `
 
 type ListWorkflowStageCandidatesRow struct {
-	ID                   string             `json:"id"`
-	WorkspaceID          string             `json:"workspace_id"`
-	Provider             string             `json:"provider"`
-	Name                 string             `json:"name"`
-	Enabled              bool               `json:"enabled"`
-	CodingIntegrationID  string             `json:"coding_integration_id"`
-	RepositoryIds        []string           `json:"repository_ids"`
-	Config               []byte             `json:"config"`
-	EncryptedSecret      string             `json:"encrypted_secret"`
-	ConfiguredBy         string             `json:"configured_by"`
-	Version              int64              `json:"version"`
-	CreatedAt            pgtype.Timestamptz `json:"created_at"`
-	UpdatedAt            pgtype.Timestamptz `json:"updated_at"`
-	OrganizationID       string             `json:"organization_id"`
-	TaskID               string             `json:"task_id"`
-	WorkflowID           string             `json:"workflow_id"`
-	StageID              string             `json:"stage_id"`
-	StageVersion         int64              `json:"stage_version"`
-	ConfigurationVersion int64              `json:"configuration_version"`
-	RuleID               string             `json:"rule_id"`
-	Integration          []byte             `json:"integration"`
-	SourceStageID        string             `json:"source_stage_id"`
+	WorkflowStageIntegration WorkflowStageIntegration `json:"workflow_stage_integration"`
+	ObservationID            string                   `json:"observation_id"`
+	ActivatedAt              pgtype.Timestamptz       `json:"activated_at"`
+	ReconciledAt             pgtype.Timestamptz       `json:"reconciled_at"`
+	AttemptedAt              pgtype.Timestamptz       `json:"attempted_at"`
+	RevisionIds              []string                 `json:"revision_ids"`
+	Subjects                 []byte                   `json:"subjects"`
+	LastError                string                   `json:"last_error"`
+	OrganizationID           string                   `json:"organization_id"`
+	TaskID                   string                   `json:"task_id"`
+	WorkflowID               string                   `json:"workflow_id"`
+	StageID                  string                   `json:"stage_id"`
+	StageVersion             int64                    `json:"stage_version"`
+	ConfigurationVersion     int64                    `json:"configuration_version"`
+	ActorID                  string                   `json:"actor_id"`
+	RuleID                   string                   `json:"rule_id"`
+	Integration              []byte                   `json:"integration"`
+	SourceStageID            string                   `json:"source_stage_id"`
 }
 
 func (q *Queries) ListWorkflowStageCandidates(ctx context.Context) ([]ListWorkflowStageCandidatesRow, error) {
@@ -380,25 +379,33 @@ func (q *Queries) ListWorkflowStageCandidates(ctx context.Context) ([]ListWorkfl
 	for rows.Next() {
 		var i ListWorkflowStageCandidatesRow
 		if err := rows.Scan(
-			&i.ID,
-			&i.WorkspaceID,
-			&i.Provider,
-			&i.Name,
-			&i.Enabled,
-			&i.CodingIntegrationID,
-			&i.RepositoryIds,
-			&i.Config,
-			&i.EncryptedSecret,
-			&i.ConfiguredBy,
-			&i.Version,
-			&i.CreatedAt,
-			&i.UpdatedAt,
+			&i.WorkflowStageIntegration.ID,
+			&i.WorkflowStageIntegration.WorkspaceID,
+			&i.WorkflowStageIntegration.Provider,
+			&i.WorkflowStageIntegration.Name,
+			&i.WorkflowStageIntegration.Enabled,
+			&i.WorkflowStageIntegration.CodingIntegrationID,
+			&i.WorkflowStageIntegration.RepositoryIds,
+			&i.WorkflowStageIntegration.Config,
+			&i.WorkflowStageIntegration.EncryptedSecret,
+			&i.WorkflowStageIntegration.ConfiguredBy,
+			&i.WorkflowStageIntegration.Version,
+			&i.WorkflowStageIntegration.CreatedAt,
+			&i.WorkflowStageIntegration.UpdatedAt,
+			&i.ObservationID,
+			&i.ActivatedAt,
+			&i.ReconciledAt,
+			&i.AttemptedAt,
+			&i.RevisionIds,
+			&i.Subjects,
+			&i.LastError,
 			&i.OrganizationID,
 			&i.TaskID,
 			&i.WorkflowID,
 			&i.StageID,
 			&i.StageVersion,
 			&i.ConfigurationVersion,
+			&i.ActorID,
 			&i.RuleID,
 			&i.Integration,
 			&i.SourceStageID,
@@ -421,12 +428,17 @@ LEFT JOIN workflow_commands c ON c.id=e.id||':start'
 LEFT JOIN workflow_stage_integration_admissions a ON a.event_id=e.id
 LEFT JOIN workflow_stage_integration_observations o ON o.id=a.observation_id
 WHERE e.workspace_id=$1 AND e.event_type='integration_action' AND e.integration->>'connectionId'=$2::text
-ORDER BY e.occurred_at DESC,e.id
+AND (NOT $3::boolean OR (e.occurred_at,e.id)<($4::timestamptz,$5::text))
+ORDER BY e.occurred_at DESC,e.id DESC LIMIT $6
 `
 
 type ListWorkflowStageEffectStatusParams struct {
-	WorkspaceID  string `json:"workspace_id"`
-	ConnectionID string `json:"connection_id"`
+	WorkspaceID  string             `json:"workspace_id"`
+	ConnectionID string             `json:"connection_id"`
+	HasCursor    bool               `json:"has_cursor"`
+	BeforeTime   pgtype.Timestamptz `json:"before_time"`
+	BeforeID     string             `json:"before_id"`
+	PageSize     int32              `json:"page_size"`
 }
 
 type ListWorkflowStageEffectStatusRow struct {
@@ -443,7 +455,14 @@ type ListWorkflowStageEffectStatusRow struct {
 }
 
 func (q *Queries) ListWorkflowStageEffectStatus(ctx context.Context, arg ListWorkflowStageEffectStatusParams) ([]ListWorkflowStageEffectStatusRow, error) {
-	rows, err := q.db.Query(ctx, listWorkflowStageEffectStatus, arg.WorkspaceID, arg.ConnectionID)
+	rows, err := q.db.Query(ctx, listWorkflowStageEffectStatus,
+		arg.WorkspaceID,
+		arg.ConnectionID,
+		arg.HasCursor,
+		arg.BeforeTime,
+		arg.BeforeID,
+		arg.PageSize,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -512,16 +531,29 @@ func (q *Queries) ListWorkflowStageIntegrations(ctx context.Context, workspaceID
 }
 
 const listWorkflowStageObservations = `-- name: ListWorkflowStageObservations :many
-SELECT id, workspace_id, connection_id, connection_version, task_id, workflow_id, rule_id, stage_id, stage_version, configuration_version, action_id, activated_at, reconciled_at, attempted_at, revision_ids, subjects, last_error, created_at FROM workflow_stage_integration_observations WHERE workspace_id=$1 AND connection_id=$2 ORDER BY created_at DESC,id
+SELECT id, workspace_id, connection_id, connection_version, task_id, workflow_id, rule_id, stage_id, stage_version, configuration_version, action_id, activated_at, reconciled_at, attempted_at, revision_ids, subjects, last_error, created_at FROM workflow_stage_integration_observations WHERE workspace_id=$1 AND connection_id=$2
+AND (NOT $3::boolean OR (created_at,id)<($4::timestamptz,$5::text))
+ORDER BY created_at DESC,id DESC LIMIT $6
 `
 
 type ListWorkflowStageObservationsParams struct {
-	WorkspaceID  string `json:"workspace_id"`
-	ConnectionID string `json:"connection_id"`
+	WorkspaceID  string             `json:"workspace_id"`
+	ConnectionID string             `json:"connection_id"`
+	HasCursor    bool               `json:"has_cursor"`
+	BeforeTime   pgtype.Timestamptz `json:"before_time"`
+	BeforeID     string             `json:"before_id"`
+	PageSize     int32              `json:"page_size"`
 }
 
 func (q *Queries) ListWorkflowStageObservations(ctx context.Context, arg ListWorkflowStageObservationsParams) ([]WorkflowStageIntegrationObservation, error) {
-	rows, err := q.db.Query(ctx, listWorkflowStageObservations, arg.WorkspaceID, arg.ConnectionID)
+	rows, err := q.db.Query(ctx, listWorkflowStageObservations,
+		arg.WorkspaceID,
+		arg.ConnectionID,
+		arg.HasCursor,
+		arg.BeforeTime,
+		arg.BeforeID,
+		arg.PageSize,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -562,6 +594,8 @@ func (q *Queries) ListWorkflowStageObservations(ctx context.Context, arg ListWor
 const listWorkflowStageProviderEvents = `-- name: ListWorkflowStageProviderEvents :many
 SELECT e.workspace_id, e.connection_id, e.semantic_id, e.action_id, e.subject, e.occurred_at, e.facts, e.created_at FROM workflow_stage_integration_events e
 WHERE e.connection_id=$1 AND e.action_id=$2 AND e.occurred_at>$4
+AND EXISTS(SELECT 1 FROM jsonb_array_elements($5::jsonb) s
+ WHERE s->>'kind'=e.subject->>'kind' AND s->>'id'=e.subject->>'id' AND s->>'repositoryId'=e.subject->>'repositoryId')
 AND NOT EXISTS(SELECT 1 FROM workflow_stage_integration_admissions a WHERE a.observation_id=$3 AND a.semantic_id=e.semantic_id)
 AND NOT EXISTS(SELECT 1 FROM workflow_stage_integration_admissions a WHERE a.observation_id=$3 AND a.semantic_id='aggregate_satisfied')
 ORDER BY e.occurred_at,e.semantic_id
@@ -572,6 +606,7 @@ type ListWorkflowStageProviderEventsParams struct {
 	ActionID      string             `json:"action_id"`
 	ObservationID string             `json:"observation_id"`
 	ActivatedAt   pgtype.Timestamptz `json:"activated_at"`
+	Subjects      []byte             `json:"subjects"`
 }
 
 func (q *Queries) ListWorkflowStageProviderEvents(ctx context.Context, arg ListWorkflowStageProviderEventsParams) ([]WorkflowStageIntegrationEvent, error) {
@@ -580,6 +615,7 @@ func (q *Queries) ListWorkflowStageProviderEvents(ctx context.Context, arg ListW
 		arg.ActionID,
 		arg.ObservationID,
 		arg.ActivatedAt,
+		arg.Subjects,
 	)
 	if err != nil {
 		return nil, err

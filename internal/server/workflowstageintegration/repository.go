@@ -19,7 +19,8 @@ type StoredConnection struct {
 // Candidate is the current task/stage/rule snapshot, selected by persistence.
 // ObservationID deterministically includes connection and workflow versions,
 // task stage-entry version and rule ID. Definition and AvailableArtifacts form a
-// consistent snapshot; the service resolves inputs until first observation pin.
+// consistent snapshot when unresolved inputs are due. Pinned observations omit
+// those inputs; they retain only their original verified identity and revisions.
 type Candidate struct {
 	ObservationID                                                string
 	Connection                                                   stageintegrationmodel.Connection
@@ -50,6 +51,7 @@ type Observation struct {
 // before admitting observations or events. External provider I/O never occurs
 // while its transactions are open.
 type WorkflowStageIntegrationRepository interface {
+	ConnectionRepositoryIDs(context.Context, stageintegrationmodel.Connection) ([]string, error)
 	ListConnections(context.Context, string) ([]stageintegrationmodel.Connection, error)
 	GetConnection(context.Context, string, string) (StoredConnection, error)
 	CallbackConnection(context.Context, string) (StoredConnection, error)
@@ -57,11 +59,11 @@ type WorkflowStageIntegrationRepository interface {
 	UpdateConnection(context.Context, StoredConnection) (stageintegrationmodel.Connection, error)
 	DeleteConnection(context.Context, string, string) error
 	RecordReceipt(context.Context, stageintegrationmodel.Connection, stageintegrationmodel.CallbackResult) (bool, error)
-	Candidates(context.Context) ([]Candidate, error)
+	Candidates(context.Context, time.Time) ([]Candidate, error)
 	SaveObservation(context.Context, Candidate, Observation) error
 	RecordEvents(context.Context, stageintegrationmodel.Connection, []stageintegrationmodel.ProviderEvent) error
 	Events(context.Context, Candidate, Observation) ([]stageintegrationmodel.ProviderEvent, error)
 	AdmitEvent(context.Context, Candidate, Observation, stageintegrationmodel.ProviderEvent, string) error
-	ListStatus(context.Context, string, string) ([]stageintegrationmodel.Status, error)
+	ListStatus(context.Context, string, string, stageintegrationmodel.StatusPosition) ([]stageintegrationmodel.Status, error)
 	Retry(context.Context, string, string) error
 }

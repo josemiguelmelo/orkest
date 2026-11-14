@@ -2,6 +2,7 @@ package workflowstageintegration
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"log/slog"
 	"sort"
@@ -189,19 +190,42 @@ func (s *WorkflowStageIntegrationService) Validate(ctx context.Context, userID, 
 	if p == nil {
 		return problem.ErrInvalid
 	}
-	if validator, ok := p.(interface {
-		ValidateConnection(context.Context, json.RawMessage, string) error
-	}); ok {
-		return validator.ValidateConnection(ctx, c.Connection.Config, credential.Token)
+	repositories, err := s.repo.ConnectionRepositoryIDs(ctx, c.Connection)
+	if err != nil {
+		return err
 	}
-	return p.ValidateConfig(c.Connection.Config)
+	return p.ValidateConnection(ctx, c.Connection.Config, credential.Token, repositories)
 }
 
-func (s *WorkflowStageIntegrationService) Status(ctx context.Context, userID, orgID, workspaceID, connectionID string) ([]stageintegrationmodel.Status, error) {
+func (s *WorkflowStageIntegrationService) Status(ctx context.Context, userID, orgID, workspaceID, connectionID, cursor string) (stageintegrationmodel.StatusPage, error) {
 	if err := s.authorize(ctx, userID, orgID, workspaceID, false); err != nil {
-		return nil, err
+		return stageintegrationmodel.StatusPage{}, err
 	}
-	return s.repo.ListStatus(ctx, workspaceID, connectionID)
+	var position stageintegrationmodel.StatusPosition
+	if cursor != "" {
+		if len(cursor) > 1024 {
+			return stageintegrationmodel.StatusPage{}, problem.ErrInvalid
+		}
+		raw, err := base64.RawURLEncoding.DecodeString(cursor)
+		if err != nil || json.Unmarshal(raw, &position) != nil || position.ID == "" || position.CreatedAt.IsZero() {
+			return stageintegrationmodel.StatusPage{}, problem.ErrInvalid
+		}
+	}
+	items, err := s.repo.ListStatus(ctx, workspaceID, connectionID, position)
+	if err != nil {
+		return stageintegrationmodel.StatusPage{}, err
+	}
+	page := stageintegrationmodel.StatusPage{Items: items}
+	if len(items) > stageintegrationmodel.StatusPageSize {
+		page.Items = items[:stageintegrationmodel.StatusPageSize]
+		last := page.Items[len(page.Items)-1]
+		raw, err := json.Marshal(stageintegrationmodel.StatusPosition{CreatedAt: last.CreatedAt, ID: last.ID})
+		if err != nil {
+			return stageintegrationmodel.StatusPage{}, err
+		}
+		page.NextCursor = base64.RawURLEncoding.EncodeToString(raw)
+	}
+	return page, nil
 }
 
 func (s *WorkflowStageIntegrationService) Retry(ctx context.Context, userID, orgID, workspaceID, eventID string) error {

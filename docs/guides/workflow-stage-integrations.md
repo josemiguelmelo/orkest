@@ -124,3 +124,9 @@ See [implementation](../development/workflow-stage-integrations.md) and
 [workflow delivery ownership](../development/workflow-delivery.md). Private GitHub
 access, real webhook delivery and credentialed model continuation require live
 qualification beyond deterministic fixtures and local PostgreSQL tests.
+
+Activity shows the fifty most recent observations and effects. Use **Load older
+activity** to inspect earlier history. **Check repository access** verifies access
+to every selected repository and its pull requests. Pending review and merge
+conditions are reverified at most once per ten seconds; periodic reconciliation
+continues to recover missed webhook events.
