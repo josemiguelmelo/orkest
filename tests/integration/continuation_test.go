@@ -56,7 +56,12 @@ func testOpenCodeContinuation(t *testing.T, legacy bool) {
 	if err := os.MkdirAll(stateDir, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	host := runtimehost.New(opencode.Profile{Binary: binary}, sharedacp.Factory{}, runtimehost.Environment{WorkDir: workDir, StateDir: stateDir, GrantedEnv: env})
+	profile := opencode.Profile{Binary: binary}
+	var runtimeProfile agentruntime.RuntimeProfile = profile
+	if legacy {
+		runtimeProfile = legacyOpenCodeProfile{Profile: profile}
+	}
+	host := runtimehost.New(runtimeProfile, sharedacp.Factory{}, runtimehost.Environment{WorkDir: workDir, StateDir: stateDir, GrantedEnv: env})
 	config := configmodel.RunConfig{RuntimeConfig: configmodel.RuntimeConfig{OrganizationID: "test-org", WorkspaceID: "test-workspace", TaskID: "test-task", TaskSessionID: "test-session", RunID: "first", Runtime: "opencode", Agent: configmodel.AgentDefinition{Name: "Integration", Instructions: "Follow the user's instructions. Do not use tools for these memory tests."}, Model: configmodel.ModelSelection{Provider: modelProvider, ID: model}}}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
@@ -106,6 +111,15 @@ func testOpenCodeContinuation(t *testing.T, legacy bool) {
 	if data, err := os.ReadFile(path); err != nil || string(data) != "preserved" {
 		t.Fatal("working files were not preserved", err)
 	}
+}
+
+// Historical OpenCode sessions predate the Orkest question tool configuration.
+type legacyOpenCodeProfile struct{ opencode.Profile }
+
+func (p legacyOpenCodeProfile) Descriptor() agentruntime.RuntimeDescriptor {
+	descriptor := p.Profile.Descriptor()
+	descriptor.UseQuestionTool = false
+	return descriptor
 }
 
 // Pair the historical v1 envelope with a real pinned runtime's durable history.

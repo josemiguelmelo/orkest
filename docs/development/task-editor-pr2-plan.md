@@ -179,19 +179,18 @@ real `git init` fixtures and cover storage hash compatibility, selection/missing
 roots, authorization ordering, symlink rejection, external alternates,
 non-mutation and temporary cleanup.
 
-Still required before PR 2 is complete: a real pinned OpenCode restore followed by
-a successful continuation using the extracted storage helper. PostgreSQL-backed
-selection isolation passed for `TestPostgresRepositories/bounded_task_listing`
+PostgreSQL-backed selection isolation passed for
+`TestPostgresRepositories/bounded_task_listing`
 against a disposable database. The broader `make test-postgres` run reached its
 tests but failed in unrelated workflow-delivery and migration-rollback cases. The
-pinned OpenCode continuation integration fixture now uses the extracted task
-storage directories and asserts session, runtime and model identity, but skipped
-and was then attempted with pinned OpenCode 2.1.4 and the supplied
-`opencode/deepseek-v4.1-flash-1017` selection. The fixture now creates the
-calculated work/state directories before launch. ACP rejected that model as
-absent from the pinned catalog, before sending a prompt; no provider credential
-was available. A catalog model may be tried if explicitly selected, but real
-restore-and-follow-up acceptance remains outstanding. The real Docker
+Pinned OpenCode 2.1.4 continuation passed for both current and v1 manifests using
+`opencode/deepseek-v4.1-flash-free`; each restored the same session and completed
+a successful follow-up. The fixture creates the extracted task storage
+directories before launch. Its legacy case launches with the historical profile
+configuration that predates the question tool. The supplied
+`opencode/deepseek-v4.1-flash-1017` and NVIDIA
+`deepseek-ai/deepseek-v4.1-flash` selections were rejected as absent from the
+pinned catalog before prompts were sent. The real Docker
 `TestDockerSessionRestore` passed against Colima
 with the pinned image's bundled `opencode/beam-free` selection; it verifies
 container replacement, restored session identity, retained untracked work and
@@ -201,6 +200,6 @@ earlier sandbox run had failed because loopback question-tool servers could not
 bind. Docker images built and the Docker launch smoke test passed against Colima.
 The focused PR2 tests, lint and architecture checks pass.
 
-These are implementation steps within one PR. Merge readiness requires the
-discovery invariants and continuation evidence above; missing credentials must be
-reported as an outstanding acceptance limitation.
+The discovery invariants and real current/legacy session continuation evidence
+are complete. The broader PostgreSQL failures are outside the scoped task-listing
+case and are recorded above.
