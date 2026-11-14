@@ -80,6 +80,9 @@ checks leave this PR's feasibility acceptance incomplete; mocks do not replace i
 
 ## PR 2 — Resolve existing task files without preparing repositories
 
+See the [detailed implementation plan](task-editor-pr2-plan.md) for code findings,
+proposed file boundaries, implementation order and acceptance checks.
+
 **Scope:** extract only the task storage/path helpers needed by Docker editing.
 Separate pure path calculation and existing-checkout inspection from directory
 creation, checkout preparation and credential setup. Resolve selected registrations

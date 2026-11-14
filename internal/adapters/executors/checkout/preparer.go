@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
+	"github.com/josemiguelmelo/orkest/internal/platform/repositorypath"
 	coderepositorymodel "github.com/josemiguelmelo/orkest/internal/server/coderepository/model"
 	orchestrationmodel "github.com/josemiguelmelo/orkest/internal/server/orchestration/model"
 )
@@ -46,10 +46,11 @@ func (p Preparer) prepare(ctx context.Context, workDir, workspaceID string, repo
 	if !ok {
 		return fmt.Errorf("repository provider %q is unavailable", repository.ProviderName)
 	}
-	if !safePathComponent(repository.ProviderName) || !safePathComponent(repository.ID) {
-		return errors.New("repository identity is invalid")
+	relative, err := RepositoryRelativePath(repository.ProviderName, repository.ID)
+	if err != nil {
+		return err
 	}
-	path := filepath.Join(workDir, "repositories", repository.ProviderName, repository.ID)
+	path := filepath.Join(workDir, relative)
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("create repository directory: %w", err)
 	}
@@ -78,6 +79,6 @@ func (p Preparer) checkout(ctx context.Context, provider Provider, workspaceID s
 	return provider.PrepareAuthenticatedTaskCheckout(ctx, metadata, credential, path, "")
 }
 
-func safePathComponent(value string) bool {
-	return value != "" && value != "." && value != ".." && filepath.Base(value) == value && !strings.ContainsRune(value, filepath.Separator)
+func RepositoryRelativePath(provider, repositoryID string) (string, error) {
+	return repositorypath.Relative(provider, repositoryID)
 }
