@@ -194,6 +194,9 @@ export type WorkflowAutomationRule = {
     action: 'move_task' | 'start_work' | 'call_agent';
     targetStageId?: string;
     integration?: WorkflowIntegrationTrigger;
+    /**
+     * Required for call_agent; optional instructions for the destination stage agent launch with move_task.
+     */
     promptText?: string;
     sessionPolicy?: 'continue_or_create_if_absent' | 'new';
 };

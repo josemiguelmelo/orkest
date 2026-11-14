@@ -102,6 +102,53 @@ func TestPostgresRepositoriesWorkflowStageIntegrations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Run("move prompt round trip", func(t *testing.T) {
+		index := len(definition.Rules) - 1
+		definition.Rules[index].PromptText = "Address requested changes"
+		saved, e := workflows.Save(ctx, workspaceID, definition, workflow.PlanConfigurationChange)
+		if e != nil {
+			t.Fatal("save move prompt", e)
+		}
+		loaded, e := workflows.Definition(ctx, workspaceID, workspaceID)
+		if e != nil {
+			t.Fatal(e)
+		}
+		found := false
+		for _, rule := range loaded.Rules {
+			if rule.ID == "review-feedback" {
+				found = rule.PromptText == "Address requested changes"
+			}
+		}
+		if !found {
+			t.Fatal("move prompt lost")
+		}
+		migration, e := migrations.FS.ReadFile("0052_workflow_move_prompt.sql")
+		if e != nil {
+			t.Fatal(e)
+		}
+		_, down, ok := strings.Cut(string(migration), "-- +goose Down")
+		if !ok {
+			t.Fatal("missing move prompt rollback")
+		}
+		tx, e := database.pool.Begin(ctx)
+		if e != nil {
+			t.Fatal(e)
+		}
+		defer func() { _ = tx.Rollback(ctx) }()
+		if _, e = tx.Exec(ctx, down); e == nil {
+			t.Fatal("rollback discarded configured prompt protection")
+		}
+		if e = tx.Rollback(ctx); e != nil {
+			t.Fatal(e)
+		}
+		definition = saved
+		definition.Rules[index].PromptText = ""
+		definition, e = workflows.Save(ctx, workspaceID, definition, workflow.PlanConfigurationChange)
+		if e != nil {
+			t.Fatal("clear optional move prompt", e)
+		}
+	})
+
 	sameStageMigration, err := migrations.FS.ReadFile("0051_workflow_integration_same_stage.sql")
 	if err != nil {
 		t.Fatal(err)

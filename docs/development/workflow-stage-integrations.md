@@ -73,8 +73,8 @@ configuring administrator. Coding API credentials and webhook secrets are distin
 Connection provider/coding identity is immutable; secret omission preserves it.
 
 Workflow rules add an integration trigger (`connectionId`, `actionId`, typed
-`parameters`) and one callback. Move uses `targetStageId`; call uses `promptText`
-and `sessionPolicy`. Existing internal-event rules and legacy command JSON retain
+`parameters`) and one callback. Move uses `targetStageId` and optional
+`promptText`; call uses `promptText` and `sessionPolicy`. Existing internal-event rules and legacy command JSON retain
 their meaning. One enabled rule per source-stage/connection/action is allowed;
 multiple connection/action pairs are independent. SQL enforces scoped connection
 references and matching uniqueness. Provider validation rejects unsupported actions,
@@ -150,7 +150,11 @@ flowchart LR
   commits movement/outbox effects and acknowledgement together. Stale, busy or
   unauthorized effects expose diagnostics without poisoning unrelated tasks.
 - Movement uses existing assignment and stage-entry semantics. It never releases
-  execution ownership. Entry automation can run separately after the move.
+  execution ownership. Entry automation runs after the move. With a nonblank move
+  prompt and an enabled destination stage-entry start rule, movement and the prompt command are planned
+  atomically; queued work prevents the stage-entry event from starting a duplicate.
+  Destination assignment, new-session policy, and default prompts for blank values
+  retain their existing meaning. Same-stage moves never start entry automation.
 - Agent callbacks snapshot the custom prompt plus bounded structured event context,
   expected assignment and integration configuration identity in a stable command.
   Review bodies are excluded; external context is labeled untrusted data.
@@ -232,3 +236,8 @@ cannot interpret new event/rule kinds. Independent agentctl processes continue.
 Validate new connections before enabling them. Before rollback, stop ingestion,
 reconcile commands, export relevant history/configuration and honor down-migration
 guards. See [operations](../operations/migrations.md).
+
+Migration 0052 permits optional move-action prompts (up to 32 KiB). No data is
+deleted; rollback refuses while nonempty move prompts exist. Clear those prompts
+before rollback. Stop old platform workflow workers before deploying, since old
+workers do not preserve move prompts; independent agentctl workers continue.

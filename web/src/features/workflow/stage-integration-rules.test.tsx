@@ -197,6 +197,12 @@ it('configures provider parameters and switches between movement and a custom ag
       },
     },
   });
+  const movePrompt = screen.getByLabelText('Agent prompt (optional)');
+  expect(movePrompt).not.toBeRequired();
+  await user.type(movePrompt, 'Fix requested changes.');
+  rules = JSON.parse(screen.getByTestId('rules').textContent ?? '[]') as WorkflowAutomationRule[];
+  expect(rules[0]?.promptText).toBe('Fix requested changes.');
+  await user.clear(movePrompt);
   await user.click(screen.getByRole('combobox', { name: 'Response' }));
   await user.click(screen.getByRole('option', { name: /Call assigned agent/ }));
   await user.type(screen.getByLabelText('Agent prompt'), 'Address review feedback.');

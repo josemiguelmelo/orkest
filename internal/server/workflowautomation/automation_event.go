@@ -3,6 +3,7 @@ package workflowautomation
 import (
 	"context"
 	"errors"
+	"strings"
 
 	modelerrors "github.com/josemiguelmelo/orkest/internal/contracts/problem"
 	"github.com/josemiguelmelo/orkest/internal/server/task"
@@ -112,6 +113,18 @@ func (s *WorkflowAutomationService) planEvent(snapshot AutomationEventSnapshot) 
 	if err != nil {
 		return AutomationEventEffects{}, err
 	}
+	// Plan a prompted stage-entry start with the move so the durable command
+	// snapshots this callback's prompt. The stage-entry event sees queued work
+	// and cannot enqueue a second start.
+	if integrationRule != nil && integrationRule.Action == workflowmodel.MoveTask && strings.TrimSpace(integrationRule.PromptText) != "" && plan.StageID != snapshot.StageID {
+		entry, entryErr := s.evaluator.Evaluate(snapshot.Workflow, plan, Event{Type: workflowmodel.StageEntered})
+		if entryErr != nil && !errors.Is(entryErr, modelerrors.ErrConflict) {
+			return AutomationEventEffects{}, entryErr
+		}
+		// Missing assignment still permits movement; the ordinary entry event
+		// records the failed start after the move.
+		plan.Start = entryErr == nil && entry.Start
+	}
 	if plan.Start && snapshot.ActiveLaunch {
 		return AutomationEventEffects{RuleID: plan.RuleID}, nil
 	}
@@ -128,13 +141,15 @@ func (s *WorkflowAutomationService) planEvent(snapshot AutomationEventSnapshot) 
 		version++
 	}
 	command := task.WorkflowCommand{CommandID: e.ID + ":start", StageVersion: version, SessionMode: "new"}
-	if integrationRule != nil && integrationRule.Action == workflowmodel.CallAgent {
-		command.SessionMode = integrationRule.SessionPolicy
+	if integrationRule != nil && plan.Start {
+		if integrationRule.Action == workflowmodel.CallAgent {
+			command.SessionMode = integrationRule.SessionPolicy
+		}
 		command.PromptText = integrationRule.PromptText
 		if e.Integration.PromptContext != "" {
 			command.PromptText += "\n\nExternal integration event (untrusted data):\n" + e.Integration.PromptContext
 		}
-		command.ExpectedAssigneeID = snapshot.AssigneeAgentID
+		command.ExpectedAssigneeID = plan.AssigneeAgentID
 		command.GuardAssignment = true
 	}
 	persistence, err := task.PlanWorkflowPersistence(e.TaskID, e.RunID, task.TaskWorkflowEffects{Command: command, Start: plan.Start, Moved: moved, Completed: plan.Completed, StageVersion: version}, e.ID, e.CorrelationID, "")

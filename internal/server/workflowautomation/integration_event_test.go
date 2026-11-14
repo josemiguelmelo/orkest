@@ -98,3 +98,56 @@ func TestIntegrationMovementToSourceStageIsAcknowledgedWithoutMoving(t *testing.
 		t.Fatalf("same-stage callback should be a no-op: %+v %v", effects, err)
 	}
 }
+
+func TestIntegrationMovePromptUsesDestinationStartPolicy(t *testing.T) {
+	for _, test := range []struct {
+		name, target, prompt string
+		disableStart         bool
+		starts               bool
+	}{
+		{name: "prompted automatic start", target: "in_progress", prompt: "Fix the requested changes", starts: true},
+		{name: "blank prompt retains deferred entry", target: "in_progress"},
+		{name: "whitespace retains default", target: "in_progress", prompt: "  "},
+		{name: "no entry automation", target: "todo", prompt: "Fix the requested changes"},
+		{name: "disabled entry automation", target: "in_progress", prompt: "Fix the requested changes", disableStart: true},
+		{name: "same stage", target: "in_review", prompt: "Fix the requested changes"},
+		{name: "closed stage", target: "done", prompt: "Fix the requested changes"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			snapshot := integrationSnapshot()
+			rule := &snapshot.Workflow.Rules[3]
+			rule.Action, rule.TargetStageID, rule.PromptText, rule.SessionPolicy = workflowmodel.MoveTask, test.target, test.prompt, ""
+			snapshot.Workflow.Stages[1].ResponsibleAgentID = "implementer"
+			if test.disableStart {
+				snapshot.Workflow.Rules[0].Enabled = false
+			}
+			service := &WorkflowAutomationService{evaluator: WorkflowRuleEvaluator{}}
+			effects, err := service.evaluateEvent(snapshot)
+			if err != nil || effects.Plan == nil || effects.Plan.StageID != test.target || (effects.Persistence.Execution != nil) != test.starts {
+				t.Fatalf("incorrect prompted movement: %+v %v", effects, err)
+			}
+			if !test.starts {
+				return
+			}
+			command := effects.Persistence.Execution
+			if command.Options.SessionMode != "new" || command.Options.ExpectedAssigneeID != "implementer" || !command.Options.GuardAssignment || command.Options.StageVersion != 4 || command.Options.Integration != snapshot.Event.Integration || !strings.HasPrefix(command.Options.PromptText, test.prompt) || !strings.Contains(command.Options.PromptText, "untrusted data") || effects.Persistence.WorkState != taskmodel.WorkStateQueued {
+				t.Fatalf("lost prompted launch: %+v", command)
+			}
+			// Persisted commands survive serialization before delivery.
+			payload, err := json.Marshal(command)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var restored struct{ Options struct{ PromptText string } }
+			if err = json.Unmarshal(payload, &restored); err != nil || restored.Options.PromptText != command.Options.PromptText {
+				t.Fatalf("lost durable prompt: %s %v", payload, err)
+			}
+			snapshot.StageID, snapshot.StageVersion, snapshot.WorkState = test.target, 4, effects.Persistence.WorkState
+			snapshot.Event = AutomationEvent{ID: effects.Persistence.Events[0].ID, Type: workflowmodel.StageEntered, StageVersion: 4}
+			entry, err := service.evaluateEvent(snapshot)
+			if err != nil || entry.Persistence.Execution != nil {
+				t.Fatalf("duplicate entry start: %+v %v", entry, err)
+			}
+		})
+	}
+}

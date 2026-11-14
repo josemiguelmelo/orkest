@@ -73,7 +73,10 @@ Each rule has one callback:
 
 - **Move task:** choose any workflow stage as the destination, including the
   current or closed stage. Existing stage assignment and entry automation apply
-  after movement; choosing the current stage leaves the task in place.
+  after movement; choosing the current stage leaves the task in place. An optional
+  agent prompt supplies instructions when the destination stage automatically starts
+  its agent, with bounded external event context appended as untrusted data. Leave
+  it blank to use the default prompt. It does not enable automatic start.
 - **Call assigned agent:** enter a custom prompt. The task stays in its current
   stage for this callback. Bounded external PR/review context is appended as
   untrusted data. The agent can retrieve feedback with its existing credentials;

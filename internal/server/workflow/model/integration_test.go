@@ -2,6 +2,7 @@ package model
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 )
 
@@ -31,6 +32,17 @@ func TestIntegrationRuleValidation(t *testing.T) {
 			r.PromptText = ""
 			r.SessionPolicy = ""
 		}, true},
+		{"move with prompt", func(r *AutomationRule) {
+			r.Action = MoveTask
+			r.TargetStageID = "in_progress"
+			r.SessionPolicy = ""
+		}, true},
+		{"move prompt too large", func(r *AutomationRule) {
+			r.Action = MoveTask
+			r.TargetStageID = "in_progress"
+			r.SessionPolicy = ""
+			r.PromptText = strings.Repeat("é", MaxCustomPromptBytes/2+1)
+		}, false},
 		{"no prompt", func(r *AutomationRule) { r.PromptText = " " }, false},
 		{"unknown policy", func(r *AutomationRule) { r.SessionPolicy = "auto" }, false},
 		{"no integration", func(r *AutomationRule) { r.Integration = nil }, false},
