@@ -379,19 +379,32 @@ export function StageIntegrationRules({
                       </Field>
                     </>
                   ) : (
-                    <Field
-                      label="Destination stage"
-                      hint="Choose where the task should go when this provider event arrives. The current stage keeps it here; the closed stage marks the task done."
-                    >
-                      <WorkflowChoiceSelect
-                        disabled={disabled}
-                        value={rule.targetStageId ?? ''}
-                        groups={targetGroups}
-                        aria-required
-                        onChange={(value) => patch(rule.id, { targetStageId: value })}
-                        placeholder="Choose where the task should go"
-                      />
-                    </Field>
+                    <>
+                      <Field
+                        label="Destination stage"
+                        hint="Choose where the task should go when this provider event arrives. The current stage keeps it here; the closed stage marks the task done."
+                      >
+                        <WorkflowChoiceSelect
+                          disabled={disabled}
+                          value={rule.targetStageId ?? ''}
+                          groups={targetGroups}
+                          aria-required
+                          onChange={(value) => patch(rule.id, { targetStageId: value })}
+                          placeholder="Choose where the task should go"
+                        />
+                      </Field>
+                      <Field
+                        label="Agent prompt (optional)"
+                        hint="Pass custom instructions when the destination stage launches its agent. Leave blank to use the default prompt."
+                      >
+                        <textarea
+                          disabled={disabled}
+                          maxLength={32768}
+                          value={rule.promptText ?? ''}
+                          onChange={(event) => patch(rule.id, { promptText: event.target.value })}
+                        />
+                      </Field>
+                    </>
                   )}
                 </fieldset>
                 <div className="workflow-integration-preview">

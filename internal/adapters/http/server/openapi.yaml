@@ -2578,7 +2578,7 @@ components:
         action: {type: string, enum: [move_task, start_work, call_agent]}
         targetStageId: {type: string}
         integration: {$ref: "#/components/schemas/WorkflowIntegrationTrigger"}
-        promptText: {type: string, maxLength: 32768}
+        promptText: {type: string, maxLength: 32768, description: Required for call_agent; optional instructions for the destination stage agent launch with move_task.}
         sessionPolicy: {type: string, enum: [continue_or_create_if_absent, new]}
     WorkflowIntegrationTrigger:
       type: object
