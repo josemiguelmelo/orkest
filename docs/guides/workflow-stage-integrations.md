@@ -55,7 +55,13 @@ that baseline is not an eligible trigger. An empty PR set never satisfies a merg
 
 ## Configure a stage rule
 
-The workflow editor lists the connection's provider actions and their parameters.
+In the workflow editor, expand **External integrations** on the consuming stage
+and select **Add integration callback**. Under **When this happens**, choose the
+connection, event and matching parameters. Under **Then do this**, choose a
+response and its destination stage or agent prompt. The summary updates as you
+edit; paused rules remain editable. Save the workflow to apply changes. Existing
+events are not replayed.
+
 Only one enabled rule per stage, connection and action is permitted.
 
 | GitHub action | Parameters / behavior |

@@ -87,6 +87,8 @@ function WorkflowEditor({
   const action = useAction();
   const disabled = !permissions.workspaceAdmin || action.pending;
   const dirty = JSON.stringify(draft) !== JSON.stringify(definition);
+  const initialStageId = draft.stages[0]?.id ?? '';
+  const closedStageId = draft.stages.at(-1)?.id ?? '';
   function patch(id: string, values: Partial<WorkflowStage>) {
     setDraft((d) => ({
       ...d,
@@ -128,7 +130,7 @@ function WorkflowEditor({
       if (!stage || target < 0 || target >= stages.length) return d;
       stages.splice(index, 1);
       stages.splice(target, 0, stage);
-      return { ...d, stages };
+      return withDerivedStageBoundaries({ ...d, stages });
     });
   }
   return (
@@ -241,43 +243,9 @@ function WorkflowEditor({
           <WorkflowIcon size={17} />
           <div>
             <strong>Stage sequence</strong>
-            <span>Choose task entry and closure independently of column order.</span>
+            <span>Tasks start in the first column and close in the last.</span>
           </div>
         </div>
-      </div>
-      <div className="workflow-toolbar">
-        <Field label="New tasks start in">
-          <select
-            disabled={disabled}
-            value={draft.initialStageId}
-            onChange={(e) => setDraft({ ...draft, initialStageId: e.target.value })}
-          >
-            {draft.stages.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-        </Field>
-        <Field label="Closed source tasks go to">
-          <select
-            disabled={disabled}
-            value={draft.closedStageId}
-            onChange={(e) =>
-              setDraft({
-                ...draft,
-                closedStageId: e.target.value,
-                rules: draft.rules.filter((r) => r.sourceStageId !== e.target.value),
-              })
-            }
-          >
-            {draft.stages.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-        </Field>
       </div>
       <div className="workflow-board-hint">
         <span>Column order controls display</span>
@@ -312,13 +280,13 @@ function WorkflowEditor({
               </div>
             </div>
             <div className="workflow-stage-markers">
-              {stage.id === draft.initialStageId && (
+              {stage.id === initialStageId && (
                 <span className="workflow-marker marker-start">Starts here</span>
               )}
-              {stage.id === draft.closedStageId && (
+              {stage.id === closedStageId && (
                 <span className="workflow-marker marker-closed">Final stage</span>
               )}
-              {stage.id !== draft.initialStageId && stage.id !== draft.closedStageId && (
+              {stage.id !== initialStageId && stage.id !== closedStageId && (
                 <span className="workflow-marker-placeholder">&nbsp;</span>
               )}
             </div>
@@ -386,7 +354,7 @@ function WorkflowEditor({
               <label className="workflow-toggle">
                 <input
                   type="checkbox"
-                  disabled={disabled || stage.id === draft.closedStageId}
+                  disabled={disabled || stage.id === closedStageId}
                   checked={draft.rules.some(
                     (r) => r.enabled && r.sourceStageId === stage.id && r.event === 'stage_entered',
                   )}
@@ -407,7 +375,7 @@ function WorkflowEditor({
                   }
                 >
                   <select
-                    disabled={disabled || stage.id === draft.closedStageId}
+                    disabled={disabled || stage.id === closedStageId}
                     value={
                       draft.rules.find(
                         (r) => r.enabled && r.sourceStageId === stage.id && r.event === event,
@@ -441,17 +409,19 @@ function WorkflowEditor({
                   disabled={
                     disabled ||
                     draft.stages.length === 1 ||
-                    stage.id === draft.initialStageId ||
-                    stage.id === draft.closedStageId
+                    stage.id === initialStageId ||
+                    stage.id === closedStageId
                   }
                   onClick={() =>
-                    setDraft({
-                      ...draft,
-                      stages: draft.stages.filter((s) => s.id !== stage.id),
-                      rules: draft.rules.filter(
-                        (r) => r.sourceStageId !== stage.id && r.targetStageId !== stage.id,
-                      ),
-                    })
+                    setDraft(
+                      withDerivedStageBoundaries({
+                        ...draft,
+                        stages: draft.stages.filter((s) => s.id !== stage.id),
+                        rules: draft.rules.filter(
+                          (r) => r.sourceStageId !== stage.id && r.targetStageId !== stage.id,
+                        ),
+                      }),
+                    )
                   }
                   aria-label={`Remove ${stage.name}`}
                   title="Remove stage"
@@ -470,18 +440,20 @@ function WorkflowEditor({
             aria-label="Add stage"
             disabled={disabled || draft.stages.length >= 50}
             onClick={() =>
-              setDraft({
-                ...draft,
-                stages: [
-                  ...draft.stages,
-                  {
-                    id: crypto.randomUUID(),
-                    name: 'New stage',
-                    description: '',
-                    responsibleAgentId: '',
-                  },
-                ],
-              })
+              setDraft(
+                withDerivedStageBoundaries({
+                  ...draft,
+                  stages: [
+                    ...draft.stages,
+                    {
+                      id: crypto.randomUUID(),
+                      name: 'New stage',
+                      description: '',
+                      responsibleAgentId: '',
+                    },
+                  ],
+                }),
+              )
             }
           >
             <span className="workflow-add-icon">
@@ -708,9 +680,19 @@ function StageArtifacts({
 }
 
 function normalizeDefinition(definition: WorkspaceWorkflow): WorkspaceWorkflow {
-  return {
+  return withDerivedStageBoundaries({
     ...definition,
     stages: structuredClone(definition.stages),
     rules: structuredClone(definition.rules),
+  });
+}
+
+function withDerivedStageBoundaries(definition: WorkspaceWorkflow): WorkspaceWorkflow {
+  const closedStageId = definition.stages.at(-1)?.id ?? '';
+  return {
+    ...definition,
+    initialStageId: definition.stages[0]?.id ?? '',
+    closedStageId,
+    rules: definition.rules.filter((rule) => rule.sourceStageId !== closedStageId),
   };
 }
