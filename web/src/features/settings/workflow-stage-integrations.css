@@ -398,7 +398,7 @@
   background: var(--surface);
 }
 
-.workflow-stage-integrations .workflow-choice-trigger {
+:is(.workflow-stage-integrations, .workflow-artifacts) .workflow-choice-trigger {
   display: flex;
   width: 100%;
   min-height: 44px;
@@ -417,13 +417,14 @@
     background 120ms ease;
 }
 
-.workflow-stage-integrations .workflow-choice-trigger:hover:not(:disabled),
-.workflow-stage-integrations .workflow-choice-trigger[data-state='open'] {
+:is(.workflow-stage-integrations, .workflow-artifacts)
+  .workflow-choice-trigger:hover:not(:disabled),
+:is(.workflow-stage-integrations, .workflow-artifacts) .workflow-choice-trigger[data-state='open'] {
   border-color: color-mix(in srgb, var(--primary) 55%, var(--border));
   background: color-mix(in srgb, var(--primary) 3%, var(--surface));
 }
 
-.workflow-stage-integrations .workflow-choice-trigger:focus-visible {
+:is(.workflow-stage-integrations, .workflow-artifacts) .workflow-choice-trigger:focus-visible {
   border-color: var(--primary);
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 13%, transparent);
   outline: none;

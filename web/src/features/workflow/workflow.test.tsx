@@ -16,6 +16,14 @@ const api = vi.hoisted(() => ({
 }));
 vi.mock('../../shared/api/generated/sdk.gen', () => api);
 import { WorkflowPage } from './workflow';
+for (const method of [
+  'hasPointerCapture',
+  'setPointerCapture',
+  'releasePointerCapture',
+  'scrollIntoView',
+]) {
+  Object.defineProperty(HTMLElement.prototype, method, { configurable: true, value: () => false });
+}
 const definition: WorkspaceWorkflow = {
   id: 'workspace',
   name: 'Default',
@@ -205,10 +213,8 @@ it('configures stage artifact outputs and required inputs', async () => {
   await user.type(within(sourceArtifacts).getByLabelText('Output name'), '-report');
   await user.click(artifactSections[1]!);
   await user.click(within(targetArtifacts).getByRole('button', { name: 'Add input' }));
-  await user.selectOptions(
-    within(targetArtifacts).getByLabelText('Source output'),
-    within(targetArtifacts).getByRole('option', { name: 'Ready / output-report' }),
-  );
+  await user.click(within(targetArtifacts).getByLabelText('Source output'));
+  await user.click(screen.getByRole('option', { name: 'Ready / output-report' }));
   expect(within(targetArtifacts).getByRole('checkbox')).toBeChecked();
   await user.click(screen.getByRole('button', { name: 'Save workflow' }));
   await waitFor(() => expect(api.saveWorkspaceWorkflow).toHaveBeenCalled());

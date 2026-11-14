@@ -4,7 +4,6 @@ import {
   ArrowRight,
   Bot,
   Check,
-  FileOutput,
   Plus,
   Save,
   Trash2,
@@ -14,18 +13,14 @@ import { useQuery } from '@tanstack/react-query';
 import { useApp } from '../../app/context';
 import { command, data } from '../../shared/api/client';
 import * as sdk from '../../shared/api/generated/sdk.gen';
-import type {
-  ArtifactInput,
-  ArtifactOutput,
-  WorkspaceWorkflow,
-  WorkflowStage,
-} from '../../shared/api/generated/types.gen';
+import type { WorkspaceWorkflow, WorkflowStage } from '../../shared/api/generated/types.gen';
 import { agentsQuery, path, useRefresh, workflowsQuery } from '../../shared/api/queries';
 import { Button } from '../../shared/ui/button';
 import { ConfirmButton, ErrorState, Loading, PageHeader } from '../../shared/ui/common';
 import { Field } from '../../shared/ui/form';
 import { Dialog } from '../../shared/ui/dialog';
 import { useAction } from '../../shared/use-action';
+import { StageArtifacts } from './stage-artifacts';
 import { StageIntegrationRules } from './stage-integration-rules';
 
 export function useWorkflows() {
@@ -473,209 +468,6 @@ function WorkflowEditor({
         </div>
       )}
     </>
-  );
-}
-
-function StageArtifacts({
-  stage,
-  stages,
-  disabled,
-  onChange,
-}: {
-  stage: WorkflowStage;
-  stages: WorkflowStage[];
-  disabled: boolean;
-  onChange: (values: Partial<WorkflowStage>) => void;
-}) {
-  const outputs = stage.artifactOutputs ?? [];
-  const inputs = stage.artifactInputs ?? [];
-  const total = outputs.length + inputs.length;
-  const availableOutputs = stages
-    .filter((candidate) => candidate.id !== stage.id)
-    .flatMap((candidate) =>
-      (candidate.artifactOutputs ?? []).map((output) => ({
-        stageID: candidate.id,
-        stageName: candidate.name,
-        output,
-      })),
-    );
-  function updateOutput(index: number, values: Partial<ArtifactOutput>) {
-    onChange({
-      artifactOutputs: outputs.map((output, current) =>
-        current === index ? { ...output, ...values } : output,
-      ),
-    });
-  }
-  function updateInput(index: number, values: Partial<ArtifactInput>) {
-    onChange({
-      artifactInputs: inputs.map((input, current) =>
-        current === index ? { ...input, ...values } : input,
-      ),
-    });
-  }
-  return (
-    <details className="workflow-artifacts">
-      <summary>
-        <span className="workflow-artifacts-summary">
-          <FileOutput size={14} /> Artifacts
-        </span>
-        <span className="workflow-artifact-count">{total}</span>
-      </summary>
-      <div className="workflow-artifacts-intro">
-        <p>Define the files this stage produces and the files it needs from other stages.</p>
-        <small>Artifact names are used by agents and workflow integrations.</small>
-      </div>
-      <section className="workflow-artifact-section" aria-labelledby={`${stage.id}-outputs`}>
-        <div className="workflow-artifact-section-heading">
-          <div>
-            <h3 id={`${stage.id}-outputs`}>Outputs</h3>
-            <p>Results published when work in this stage completes.</p>
-          </div>
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={disabled || outputs.length >= 50}
-            onClick={() =>
-              onChange({ artifactOutputs: [...outputs, { name: 'output', kind: 'plan' }] })
-            }
-          >
-            <Plus size={14} /> Add output
-          </Button>
-        </div>
-        {outputs.length === 0 ? (
-          <p className="workflow-artifact-empty">No outputs configured yet.</p>
-        ) : (
-          outputs.map((output, index) => (
-            <div className="workflow-artifact-card" key={index}>
-              <div className="workflow-artifact-card-heading">
-                <strong>Output {index + 1}</strong>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  disabled={disabled}
-                  aria-label={`Remove output ${index + 1}`}
-                  title="Remove output"
-                  onClick={() =>
-                    onChange({ artifactOutputs: outputs.filter((_, current) => current !== index) })
-                  }
-                >
-                  <Trash2 size={14} />
-                </Button>
-              </div>
-              <div className="workflow-artifact-fields">
-                <Field label="Output name" hint="A short name agents can refer to.">
-                  <input
-                    disabled={disabled}
-                    value={output.name}
-                    onChange={(event) => updateOutput(index, { name: event.target.value })}
-                  />
-                </Field>
-                <Field label="Output kind" hint="For example, plan or pull_request.">
-                  <input
-                    disabled={disabled}
-                    value={output.kind}
-                    onChange={(event) => updateOutput(index, { kind: event.target.value })}
-                  />
-                </Field>
-              </div>
-            </div>
-          ))
-        )}
-      </section>
-      <section className="workflow-artifact-section" aria-labelledby={`${stage.id}-inputs`}>
-        <div className="workflow-artifact-section-heading">
-          <div>
-            <h3 id={`${stage.id}-inputs`}>Inputs</h3>
-            <p>Bring an output from another stage into this stage.</p>
-          </div>
-          <Button
-            size="sm"
-            variant="outline"
-            disabled={disabled || inputs.length >= 50}
-            onClick={() =>
-              onChange({
-                artifactInputs: [
-                  ...inputs,
-                  { name: 'input', sourceStageId: '', outputName: '', required: true },
-                ],
-              })
-            }
-          >
-            <Plus size={14} /> Add input
-          </Button>
-        </div>
-        {inputs.length === 0 ? (
-          <p className="workflow-artifact-empty">No inputs configured yet.</p>
-        ) : (
-          inputs.map((input, index) => (
-            <div className="workflow-artifact-card" key={index}>
-              <div className="workflow-artifact-card-heading">
-                <strong>Input {index + 1}</strong>
-                <Button
-                  size="icon"
-                  variant="ghost"
-                  disabled={disabled}
-                  aria-label={`Remove input ${index + 1}`}
-                  title="Remove input"
-                  onClick={() =>
-                    onChange({ artifactInputs: inputs.filter((_, current) => current !== index) })
-                  }
-                >
-                  <Trash2 size={14} />
-                </Button>
-              </div>
-              <div className="workflow-artifact-fields">
-                <Field label="Input name" hint="The local name used by this stage.">
-                  <input
-                    disabled={disabled}
-                    value={input.name}
-                    onChange={(event) => updateInput(index, { name: event.target.value })}
-                  />
-                </Field>
-                <Field label="Source output">
-                  <select
-                    className="workflow-select"
-                    disabled={disabled || availableOutputs.length === 0}
-                    value={JSON.stringify([input.sourceStageId, input.outputName])}
-                    onChange={(event) => {
-                      const [sourceStageId, outputName] = JSON.parse(event.target.value) as [
-                        string,
-                        string,
-                      ];
-                      updateInput(index, { sourceStageId, outputName });
-                    }}
-                  >
-                    <option value={JSON.stringify(['', ''])}>
-                      {availableOutputs.length === 0 ? 'Add an output first' : 'Select output'}
-                    </option>
-                    {availableOutputs.map(({ stageID, stageName, output }) => (
-                      <option
-                        key={`${stageID}:${output.name}`}
-                        value={JSON.stringify([stageID, output.name])}
-                      >
-                        {stageName} / {output.name}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-              </div>
-              <label className="workflow-artifact-required">
-                <input
-                  type="checkbox"
-                  disabled={disabled}
-                  checked={input.required}
-                  onChange={(event) => updateInput(index, { required: event.target.checked })}
-                />
-                <span>
-                  <strong>Required before starting</strong>
-                  <small>Prevent this stage from starting until the input exists.</small>
-                </span>
-              </label>
-            </div>
-          ))
-        )}
-      </section>
-    </details>
   );
 }
 
