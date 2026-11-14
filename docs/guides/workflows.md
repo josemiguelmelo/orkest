@@ -1,9 +1,10 @@
 # Workspace workflows
 
-- Workspace boards contain 1–50 stages, explicit `initialStageId`/`closedStageId`,
-  and up to 200 rules. Every task/source integration selects one.
+- Workspace boards contain 1–50 ordered stages, with the first stage used as
+  `initialStageId`, the last stage used as `closedStageId`, and up to 200 rules.
+  Every task/source integration selects one.
 - Stable stage IDs appear in task `status` for API compatibility. Display order
-  controls neither movement, entry, nor closure.
+  controls task entry and closure.
 
 ## Configuration and behavior
 
@@ -11,9 +12,8 @@
   Viewers cannot mutate, start, complete stages, configure rules, or answer approvals.
 - Stages contain name, description, optional responsible agent. Entry applies that
   assignment or retains the existing one; name/description scope the agent prompt.
-- New tasks enter initial stage; source closure goes directly to closed stage.
-  Closed tasks cannot reopen. Changing the closed-stage reference changes task closure;
-  reordering columns changes no behavior.
+- New tasks enter the first stage; source closure goes directly to the last stage.
+  Closed tasks cannot reopen. Reordering columns changes the start and closure stages.
 - Referenced stages/workflows/agents cannot be deleted; retain at least one workflow.
 - Rule fields: stable ID, enabled flag, event, source stage, action, optional target.
 
@@ -43,7 +43,7 @@
 - Legacy task PUT shares locks/planner and preserves content.
 - Saves require last-read workflow version; movement/evaluation use latest configuration
   under the same workflow row lock.
-- Editor: initial/closed selectors, entry-start toggles, separate success/manual destinations.
+- Editor: ordered columns, entry-start toggles, separate success/manual destinations.
 
 ## Limits and references
 

@@ -66,6 +66,8 @@ it('saves stable stage IDs, ordering and defaults for a newly created stage', as
   setup('admin');
   expect(await screen.findByText('Starts here')).toBeInTheDocument();
   expect(screen.getByText('Final stage')).toBeInTheDocument();
+  expect(screen.queryByLabelText('New tasks start in')).not.toBeInTheDocument();
+  expect(screen.queryByLabelText('Closed source tasks go to')).not.toBeInTheDocument();
   const user = userEvent.setup();
   await user.click(await screen.findByRole('button', { name: 'Add stage' }));
   const names = screen.getAllByLabelText('Name');
@@ -79,7 +81,7 @@ it('saves stable stage IDs, ordering and defaults for a newly created stage', as
   expect(call.body.stages.map((s) => s.name)).toEqual(['Backlog', 'New stage', 'Closed']);
   expect(call.body.stages[0]?.id).toBe('ready');
   expect(call.body.rules).toEqual([]);
-  expect(call.body.initialStageId).toBe('ready');
+  expect(call.body.initialStageId).toBe(call.body.stages[0]?.id);
   expect(call.body.closedStageId).toBe('closed');
 });
 it('renders workflow settings read-only for viewers', async () => {
@@ -101,8 +103,8 @@ it('keeps explicit automation destinations and endpoints when columns move', asy
   await waitFor(() => expect(api.saveWorkspaceWorkflow).toHaveBeenCalled());
   const call = api.saveWorkspaceWorkflow.mock.calls[0]?.[0] as { body: WorkspaceWorkflow };
   expect(call.body.stages.map((s) => s.id)).toEqual(['closed', 'ready']);
-  expect(call.body.initialStageId).toBe('ready');
-  expect(call.body.closedStageId).toBe('closed');
+  expect(call.body.initialStageId).toBe('closed');
+  expect(call.body.closedStageId).toBe('ready');
   expect(call.body.rules).toHaveLength(1);
   expect(call.body.rules[0]?.id).toMatch(/^[0-9a-f-]{36}$/);
   expect(call.body.rules[0]).toMatchObject({
