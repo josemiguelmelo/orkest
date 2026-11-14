@@ -619,9 +619,11 @@ function normalizeDefinition(definition: WorkspaceWorkflow): WorkspaceWorkflow {
 }
 
 function withDerivedStageBoundaries(definition: WorkspaceWorkflow): WorkspaceWorkflow {
+  const closedStageId = definition.stages.at(-1)?.id ?? '';
   return {
     ...definition,
     initialStageId: definition.stages[0]?.id ?? '',
-    closedStageId: definition.stages.at(-1)?.id ?? '',
+    closedStageId,
+    rules: definition.rules.filter((rule) => rule.sourceStageId !== closedStageId),
   };
 }

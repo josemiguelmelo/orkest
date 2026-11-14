@@ -39,8 +39,8 @@ const definition: WorkspaceWorkflow = {
   ],
 };
 afterEach(() => vi.clearAllMocks());
-function setup(role: 'admin' | 'viewer') {
-  api.listWorkspaceWorkflows.mockResolvedValue({ data: [definition] });
+function setup(role: 'admin' | 'viewer', workflow = definition) {
+  api.listWorkspaceWorkflows.mockResolvedValue({ data: [workflow] });
   api.listAgents.mockResolvedValue({ data: [] });
   api.listWorkflowStageIntegrations.mockResolvedValue({ data: [] });
   api.listWorkflowStageIntegrationProviders.mockResolvedValue({ data: [] });
@@ -93,27 +93,75 @@ it('renders workflow settings read-only for viewers', async () => {
   expect(screen.queryByRole('button', { name: 'Add stage' })).not.toBeInTheDocument();
 });
 
-it('keeps explicit automation destinations and endpoints when columns move', async () => {
-  setup('admin');
+it('removes outgoing automation from the new final stage while preserving incoming rules', async () => {
+  const incoming = {
+    id: 'incoming',
+    enabled: true,
+    event: 'run_succeeded' as const,
+    sourceStageId: 'ready',
+    action: 'move_task' as const,
+    targetStageId: 'working',
+  };
+  setup('admin', {
+    ...definition,
+    stages: [
+      definition.stages[0]!,
+      { id: 'working', name: 'Working', description: '', responsibleAgentId: '' },
+      definition.stages[1]!,
+    ],
+    rules: [
+      incoming,
+      {
+        id: 'outgoing',
+        enabled: true,
+        event: 'run_succeeded',
+        sourceStageId: 'working',
+        action: 'move_task',
+        targetStageId: 'closed',
+      },
+      {
+        id: 'disabled',
+        enabled: false,
+        event: 'stage_entered',
+        sourceStageId: 'working',
+        action: 'start_work',
+      },
+    ],
+  });
   await screen.findByText('Starts here');
   const user = userEvent.setup();
-  await user.selectOptions(screen.getAllByLabelText('After successful run')[0]!, 'closed');
-  await user.click(screen.getAllByRole('button', { name: 'Move earlier' })[1]!);
+  await user.click(screen.getAllByRole('button', { name: 'Move earlier' })[2]!);
   await user.click(screen.getByRole('button', { name: 'Save workflow' }));
   await waitFor(() => expect(api.saveWorkspaceWorkflow).toHaveBeenCalled());
   const call = api.saveWorkspaceWorkflow.mock.calls[0]?.[0] as { body: WorkspaceWorkflow };
-  expect(call.body.stages.map((s) => s.id)).toEqual(['closed', 'ready']);
+  expect(call.body.stages.map((s) => s.id)).toEqual(['ready', 'closed', 'working']);
+  expect(call.body.initialStageId).toBe('ready');
+  expect(call.body.closedStageId).toBe('working');
+  expect(call.body.rules).toEqual([incoming]);
+});
+
+it('cleans outgoing rules when loading a workflow with a different configured final stage', async () => {
+  setup('admin', {
+    ...definition,
+    stages: [...definition.stages].reverse(),
+    rules: [
+      {
+        id: 'outgoing',
+        enabled: true,
+        event: 'stage_entered',
+        sourceStageId: 'ready',
+        action: 'start_work',
+      },
+    ],
+  });
+  await screen.findByText('Final stage');
+  const user = userEvent.setup();
+  await user.click(screen.getByRole('button', { name: 'Save workflow' }));
+  await waitFor(() => expect(api.saveWorkspaceWorkflow).toHaveBeenCalled());
+  const call = api.saveWorkspaceWorkflow.mock.calls[0]?.[0] as { body: WorkspaceWorkflow };
   expect(call.body.initialStageId).toBe('closed');
   expect(call.body.closedStageId).toBe('ready');
-  expect(call.body.rules).toHaveLength(1);
-  expect(call.body.rules[0]?.id).toMatch(/^[0-9a-f-]{36}$/);
-  expect(call.body.rules[0]).toMatchObject({
-    enabled: true,
-    event: 'run_succeeded',
-    sourceStageId: 'ready',
-    action: 'move_task',
-    targetStageId: 'closed',
-  });
+  expect(call.body.rules).toEqual([]);
 });
 
 it('saves multiline custom stage prompts and clears them', async () => {
