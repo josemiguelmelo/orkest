@@ -48,7 +48,6 @@ help:
 	@echo "docker-agentctl-images Build the agentctl base and separate runtime images"
 	@echo "docker-agentctl-push-local Build and push runtime images to the local registry"
 	@echo "test-docker       Run Docker Engine smoke test (builds images; requires Docker Engine)"
-	@echo "test-task-editor  Run isolated Docker/browser editor feasibility (requires Playwright Chromium)"
 
 setup:
 	npm --prefix web ci
@@ -181,16 +180,6 @@ qualify-runtime:
 # Requires buildctl, built agentctl-base, registry:3, and moby/buildkit:v0.34.1.
 test-image-composition:
 	go test -tags=docker ./internal/adapters/imagebuild/docker -run '^TestDockerImageComposition$$' -count=1 -v
-
-.PHONY: docker-task-editor-spike test-task-editor
-TASK_EDITOR_IMAGE ?= orkest/task-editor-spike:4.145.2
-# Isolated feasibility only: no production routes, agent images, model or registry.
-docker-task-editor-spike:
-	$(DOCKER) build -f build/docker/task-editor.Dockerfile --target editor -t $(TASK_EDITOR_IMAGE) .
-	$(DOCKER) build -f build/docker/task-editor.Dockerfile --target readonly -t $(TASK_EDITOR_IMAGE)-ro .
-
-test-task-editor: docker-task-editor-spike
-	DOCKER=$(DOCKER) TASK_EDITOR_IMAGE=$(TASK_EDITOR_IMAGE) node tools/task-editor/spike.mjs
 
 .PHONY: docker-task-editor-images test-task-editor-backend
 docker-task-editor-images:

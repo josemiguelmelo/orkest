@@ -121,14 +121,7 @@ func (b *EditorBackend) InspectEditor(ctx context.Context, scope taskeditor.Scop
 		if b.executor.config.NetworkName == "" {
 			return b.inspectRelay(ctx, i)
 		}
-		i.Endpoint, err = publishedEndpoint(result.Container, 8080)
-		if b.executor.config.NetworkName != "" {
-			i.Endpoint = "http://" + b.name(scope) + ":8080"
-			err = nil
-		}
-		if err != nil {
-			return i, false, err
-		}
+		i.Endpoint = "http://" + b.name(scope) + ":8080"
 	}
 	return i, true, nil
 }
