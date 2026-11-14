@@ -4,7 +4,6 @@ package docker
 import (
 	"context"
 	"crypto/sha256"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -404,12 +403,10 @@ func (e *Executor) AgentctlRunningByRunID(ctx context.Context, runID string) (bo
 }
 
 func (e *Executor) taskDirectories(config orchestrationmodel.RunConfig) (string, string, error) {
-	scope, err := json.Marshal([]string{config.OrganizationID, config.WorkspaceID, config.TaskID})
+	workDir, stateDir, err := taskStorageDirectories(e.config.DataRoot, taskStorageScope{OrganizationID: config.OrganizationID, WorkspaceID: config.WorkspaceID, TaskID: config.TaskID})
 	if err != nil {
-		return "", "", fmt.Errorf("encode task storage scope: %w", err)
+		return "", "", err
 	}
-	taskDir := filepath.Join(e.config.DataRoot, "tasks", fmt.Sprintf("%x", sha256.Sum256(scope)))
-	workDir, stateDir := filepath.Join(taskDir, "work"), filepath.Join(taskDir, "agentctl-state")
 	for _, path := range []string{workDir, stateDir} {
 		if err := os.MkdirAll(path, 0o700); err != nil {
 			return "", "", fmt.Errorf("create durable task directory: %w", err)

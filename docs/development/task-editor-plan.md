@@ -443,18 +443,18 @@ product requirements. Record decisions here rather than silently changing scope.
 
 ## 16. Cross-session progress and handoff
 
-Current slice: Slice 1 / PR 1 verified in the isolated Docker/browser harness.
-[Evidence and exit decision](task-editor-pr1-evidence.md) record the real results,
-read-only image variant, browser-session approach and UID/GID limitations.
-Next action: PR 2 existing-checkout discovery in the
-[first-delivery breakdown](task-editor-first-delivery.md). Production editing
-remains unavailable; preserve task storage/session compatibility in that increment.
+Current slice: PR 2 existing-checkout discovery is in progress. The
+[detailed PR 2 plan](task-editor-pr2-plan.md) records implementation and remaining
+acceptance evidence. Production editing remains unavailable; pinned OpenCode
+restore and successful follow-up through the extracted storage helper are still
+required before PR 2 is complete.
 
 | Date | Slice | Changes / decisions | Verification actually run | Blockers / next action |
 | --- | --- | --- | --- | --- |
 | 2026-11-14 | Planning | Recorded simple design, automatic mode transitions and no new database storage | Documentation review only; no feature implementation/tests | Start Docker feasibility spike |
 | 2026-11-14 | First-delivery planning | Proposed Docker-only first release in nine focused PRs, with dependencies, per-PR acceptance and enablement/rollback gates | Reviewed requirements, stack, status, delivery/testing guidance, executor paths and worker prompt/queue code; no feature checks run | Implement PR 1 feasibility spike; qualify idle boundary and browser/session approach before enablement |
 | 2026-11-14 | Slice 1 / PR 1 | Added pinned editor image pair, isolated two-repository browser/proxy harness and focused Make targets; immutable read-only PTY guard required | Real Docker arm64 + Chromium passed `make test-task-editor`; mount/Git write rejection, terminal descendants stopped, offline extension denied, generation reconnect, saved files/branches retained, unsaved edit lost; lint 0 issues; syntax/format/diff checks passed | [Full evidence](task-editor-pr1-evidence.md); proceed to PR 2; production HTTPS, authorization, execution handoff and amd64 remain unqualified |
+| 2026-11-14 | PR 2 / discovery | Extracted historical task storage path calculation; shared repository path validation; added authorized task selection resolver and Docker checkout inspector, symlink/Git metadata checks, structured missing roots, deterministic container manifest paths, private materialization; updated continuation fixture to use extracted storage | Focused tests passed with real `git init` fixtures and non-mutation checks; `make lint` and architecture checks passed. PostgreSQL bounded task-listing subtest passed against a disposable DB; broader repository suite hit unrelated delivery/migration failures. `make test-recovery-unit` passed outside sandbox with race detection. Docker images, launch smoke, and `TestDockerSessionRestore` passed on Colima with bundled `opencode/beam-free` selection; no model prompt sent. OpenCode continuation skipped without explicit binary/model settings | Real pinned OpenCode restore plus successful follow-up remains unverified; complete after explicit model configuration is available |
 
 At each handoff, update the current slice, next action and table. Record relevant
 files/commits and exact meaningful check results. Preserve unrelated user changes.
