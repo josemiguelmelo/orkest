@@ -34,6 +34,7 @@ import (
 
 // RouterDependencies names the services required by platform routes.
 type RouterDependencies struct {
+	Editor            *EditorGateway
 	ScheduledJobs     *scheduledjob.ScheduledJobService
 	JobDispatcher     *orchestration.JobDispatcher
 	Users             *identity.UserRegistrationService
@@ -114,6 +115,9 @@ func NewRouter(ctx context.Context, deps RouterDependencies) (*chi.Mux, error) {
 		api.Use(auth.middleware)
 		api.Route("/api", func(api chi.Router) {
 			api.Get("/me", auth.currentUser)
+			if deps.Editor != nil {
+				deps.Editor.routes(api)
+			}
 			api.Get("/runtime-providers", listRuntimeProviders)
 			organizationAPI{organizations: deps.Organizations, workspaces: deps.Workspaces}.routes(api)
 			agentAPI{agents: deps.Agents}.routes(api)

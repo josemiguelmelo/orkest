@@ -1,6 +1,6 @@
 # Task VS Code and terminal implementation plan
 
-Status: PR 1 Docker/browser feasibility verified; production implementation planned.
+Status: Docker backend implemented behind a default-off gate; frontend and release qualification remain.
 Last updated: 2026-11-14.
 
 This document is the implementation checklist and cross-session handoff for task
@@ -335,25 +335,25 @@ mock-only checks do not satisfy this slice.
 
 ### Slice 2 — Core service and execution handoff
 
-- [ ] Add the minimal service/interface and reuse task storage calculation.
-- [ ] Implement discovery, ownership checks and instance generations.
-- [ ] Integrate handoff across every execution entry point listed in section 6.
-- [ ] Handle queued work, approval/input waits and uncertain ownership.
-- [ ] Serialize per-task transitions and reject stale writable transitions.
-- [ ] Add startup reconciliation and document deployment constraints.
-- [ ] Verify existing session restore and successful follow-up compatibility.
+- [x] Add the minimal service/interface and reuse task storage calculation.
+- [x] Implement discovery, ownership checks and instance generations.
+- [x] Integrate handoff across every execution entry point listed in section 6.
+- [x] Handle queued work, approval/input waits and uncertain ownership.
+- [x] Serialize per-task transitions and reject stale writable transitions.
+- [x] Add startup reconciliation and document deployment constraints.
+- [x] Verify existing session restore and successful follow-up compatibility.
 
 Acceptance: no writable editor overlaps agent execution, including races,
 worker-side queues and restart scenarios; no editor database storage is added.
 
 ### Slice 3 — Docker feature, gateway and UI
 
-- [ ] Complete Docker resource lifecycle, networking and cleanup.
-- [ ] Add lifecycle endpoints and authenticated HTTP/WebSocket gateway.
-- [ ] Update OpenAPI and regenerate the frontend client.
+- [x] Complete Docker resource lifecycle, networking and cleanup.
+- [x] Add lifecycle endpoints and authenticated HTTP/WebSocket gateway.
+- [x] Update OpenAPI and regenerate the frontend client.
 - [ ] Add task actions, launch page, mode/status and automatic reconnect.
-- [ ] Enforce authority, requesting-user access and stale-session revocation.
-- [ ] Cover missing checkouts, failure messages and explicit Stop.
+- [x] Enforce authority, requesting-user access and stale-session revocation.
+- [x] Cover missing checkouts, failure messages and explicit Stop.
 
 Acceptance: a user edits a task, starts its agent without manually closing Code,
 sees read-only reconnect, and regains editing/terminal access when work finishes.
@@ -443,11 +443,14 @@ product requirements. Record decisions here rather than silently changing scope.
 
 ## 16. Cross-session progress and handoff
 
-Current slice: PR 2 existing-checkout discovery is in progress. The
-[detailed PR 2 plan](task-editor-pr2-plan.md) records implementation and remaining
-acceptance evidence. Production editing remains unavailable; pinned OpenCode
-restore and successful follow-up through the extracted storage helper are still
-required before PR 2 is complete.
+Current slice: the user requested one backend PR combining planned PRs 3–7.
+PR 2 discovery and its current/legacy model continuation evidence are complete.
+The [backend implementation and operator notes](task-editor-backend.md) describe
+lifecycle, conservative idle proof, execution/recovery guards, selection/removal
+fencing, gateway, API and configuration. No frontend task actions or automatic
+reconnect flow have been added. Keep the feature disabled pending release
+qualification. Next action: finish recorded backend checks and review the one-PR
+diff; then implement the frontend and outstanding cross-component qualification.
 
 | Date | Slice | Changes / decisions | Verification actually run | Blockers / next action |
 | --- | --- | --- | --- | --- |
@@ -458,3 +461,35 @@ required before PR 2 is complete.
 
 At each handoff, update the current slice, next action and table. Record relevant
 files/commits and exact meaningful check results. Preserve unrelated user changes.
+
+### Backend increment verification (2026-11-14)
+
+Implemented the Docker adapter, task editor coordinator, all platform work-delivery
+guards, startup reconciliation, requesting-user HTTP/WebSocket gateway, scoped
+lifecycle API and generated client. Added default-off configuration, image/test
+Make targets and operator notes. No schema or worker wire changes.
+
+Passed so far: focused package/race tests; architecture boundaries; real Colima
+`TestDockerEditorLifecycle`; real Colima/Chromium `TestDockerEditorGatewayBrowser`
+through the Go gateway, including terminal creation and read-only denial. These
+browser fixtures do not establish production OIDC/PostgreSQL/TLS qualification.
+Full check and pinned recovery results are recorded after completion below.
+
+Pinned recovery verification passed using the pinned executable at
+`/private/tmp/orkest-opencode-pinned/node_modules/@opencode/cli-darwin-arm64/bin/opencode`
+and the previously qualified explicit free selection
+`ORKEST_TEST_MODEL_PROVIDER=opencode ORKEST_TEST_MODEL_ID=deepseek-v4.1-flash-free`:
+`make test-recovery` passed deterministic race/recovery tests plus real current/v1
+manifest restore and successful follow-ups, handshake and stdio MCP handshake.
+The globally installed executable was 2.3.0 and was not used as a substitute for
+the pinned runtime. Production PostgreSQL editor races remain unqualified.
+
+Final backend checks: full `make check` passed boundaries, lint, all ordinary Go
+tests, generated client consistency and frontend lint, then failed three existing
+scheduled-job empty-state UI tests (`New scheduled job` expected; unchanged implementation
+renders `Create your first job`). Frontend typecheck and `make build` passed
+separately. The final focused race suite and `make test-task-editor-backend` passed,
+including a file written through the real integrated terminal. Server wiring was
+corrected to consume optional executor-factory editor capabilities: it no longer
+imports or type-asserts the Docker executor. Factory tests cover disabled editing,
+Docker capability selection and unsupported Local execution.

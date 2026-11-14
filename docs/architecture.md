@@ -206,3 +206,14 @@ and credentials where required. See [runtime qualification](development/testing.
 - Reconcile uncertain effects before retry; recovery never auto-answers approvals.
 
 See [unfinished work](status.md) and [verification](development/testing.md).
+
+## Task editor coordination
+
+The default-off Docker task editor uses a task-editor service without a persistence
+repository. Docker resource labels provide discovery; existing task storage and
+launch state provide files and execution ownership. All platform execution sends
+and restores share its task handoff guard; writable access requires durable
+terminal launches and confirmed worker absence. The separate-origin gateway
+binds temporary browser access to user/task/generation and revokes existing
+connections on replacement. This initially supports one active platform
+coordinator. See [backend and deployment constraints](development/task-editor-backend.md).

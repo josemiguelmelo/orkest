@@ -78,6 +78,13 @@ func (s *TaskService) Update(ctx context.Context, userID, orgID, workspaceID, ta
 			return taskmodel.Task{}, fmt.Errorf("generate task execution command ID: %w", err)
 		}
 	}
+	if s.editorGuard != nil {
+		unlock, err := s.editorGuard.BeforeTaskMutation(ctx, orgID, workspaceID, taskID)
+		if err != nil {
+			return taskmodel.Task{}, err
+		}
+		defer unlock()
+	}
 	return s.updates.WithTaskUpdate(ctx, userID, orgID, workspaceID, taskID, input, func(snapshot TaskWorkflowSnapshot, input taskmodel.TaskInput) (TaskUpdateEffects, error) {
 		snapshot.CandidateCommandID = candidateID
 		return s.planTaskUpdate(snapshot, input)

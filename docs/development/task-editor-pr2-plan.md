@@ -1,7 +1,6 @@
 # Task editor PR 2: existing checkout discovery
 
-Status: implementation in progress; discovery and filesystem qualifications are
-in place, real-model continuation remains outstanding.
+Status: discovery, filesystem qualification and real current/legacy model continuation evidence complete.
 Last updated: 2026-11-14.
 
 Prerequisite: PR 1, merged as `2b85451`, with its recorded Docker/browser evidence.

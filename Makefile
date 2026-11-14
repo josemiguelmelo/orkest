@@ -191,3 +191,12 @@ docker-task-editor-spike:
 
 test-task-editor: docker-task-editor-spike
 	DOCKER=$(DOCKER) TASK_EDITOR_IMAGE=$(TASK_EDITOR_IMAGE) node tools/task-editor/spike.mjs
+
+.PHONY: docker-task-editor-images test-task-editor-backend
+docker-task-editor-images:
+	$(DOCKER) build -f build/docker/task-editor.Dockerfile --target editor -t orkest/task-editor:4.145.2 .
+	$(DOCKER) build -f build/docker/task-editor.Dockerfile --target readonly -t orkest/task-editor:4.145.2-ro .
+
+test-task-editor-backend:
+	go test -tags=docker ./internal/adapters/executors/docker -run '^TestDockerEditorLifecycle$$' -count=1 -timeout=3m -v
+	go test -tags=docker ./internal/adapters/http/server -run '^TestDockerEditorGatewayBrowser$$' -count=1 -timeout=4m -v

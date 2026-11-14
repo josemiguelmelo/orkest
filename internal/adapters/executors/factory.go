@@ -13,6 +13,7 @@ import (
 	coreruntime "github.com/josemiguelmelo/orkest/internal/contracts/runtimecatalog"
 	"github.com/josemiguelmelo/orkest/internal/server/coderepository"
 	"github.com/josemiguelmelo/orkest/internal/server/orchestration"
+	"github.com/josemiguelmelo/orkest/internal/server/taskeditor"
 )
 
 type Kind string
@@ -30,14 +31,25 @@ type Executor interface {
 	Close() error
 }
 
-// Selection pairs the constructed executor with its selected execution mode.
+// EditorCapabilities exposes editor contracts without revealing the concrete
+// executor. Nil capabilities mean editing is disabled or unsupported.
+type EditorCapabilities struct {
+	Backend   taskeditor.Backend
+	Checkouts taskeditor.CheckoutInspector
+}
+
+type EditorConfig struct{ Image, ReadOnlyImage string }
+
+// Selection pairs the executor with its optional editor capabilities.
 type Selection struct {
+	Editor   *EditorCapabilities
 	Kind     Kind
 	Executor Executor
 }
 
 // Config holds the shared settings needed to construct either executor.
 type Config struct {
+	Editor                   *EditorConfig
 	Kind                     string
 	DataRoot                 string
 	DockerNetwork            string
@@ -69,7 +81,16 @@ func New(ctx context.Context, config Config) (Selection, error) {
 		if err != nil {
 			return Selection{}, err
 		}
-		return Selection{Kind: kind, Executor: executor}, nil
+		selection := Selection{Kind: kind, Executor: executor}
+		if config.Editor != nil {
+			backend, editorErr := executor.NewEditorBackend(config.Editor.Image, config.Editor.ReadOnlyImage)
+			if editorErr != nil {
+				_ = executor.Close()
+				return Selection{}, editorErr
+			}
+			selection.Editor = &EditorCapabilities{Backend: backend, Checkouts: dockerexecutor.TaskCheckoutInspector{DataRoot: config.DataRoot}}
+		}
+		return selection, nil
 	case Local:
 		executor, err := localexecutor.New(localexecutor.Config{
 			DataRoot: config.DataRoot, AgentctlBinary: config.AgentctlBinary,

@@ -1,6 +1,6 @@
 # Task editor: first delivery and PR breakdown
 
-Status: PR 1 feasibility verified; PRs 2–9 remain planned increments.
+Status: PRs 1–2 complete; backend PRs 3–7 combined by user request; frontend and release qualification remain.
 Last updated: 2026-11-14.
 
 This expands the [task editor plan](task-editor-plan.md), which remains the source
@@ -252,3 +252,12 @@ in PR 3.
 Next action: PR 2 existing task storage and authorized checkout discovery, including
 its required persisted-session restore and successful follow-up compatibility test.
 No production wiring, routes or UI have been enabled.
+
+## Revised backend delivery
+
+The user requested the remaining backend as one PR. Planned PRs 3–7 are therefore
+combined without changing their execution-safety or authorization requirements.
+See [backend implementation and operator notes](task-editor-backend.md). PR 8
+frontend and PR 9 release qualification remain separate. Older progress prose
+above describes the original sequential breakdown; the main plan's current
+handoff and the backend notes describe the implemented state.

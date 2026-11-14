@@ -67,3 +67,15 @@ server/worker models, wire DTOs, validation and adapters. Persistence converts o
 at the generated SQL boundary. The historical alternative credential-fingerprint
 fallback has been removed: sessions requiring it fail visibly without replacing or
 rewriting their saved state; exact supported manifest fingerprints still restore.
+
+## Task VS Code backend
+
+The Docker editor backend, lifecycle coordination, conservative idle proof,
+execution/recovery handoff guards, scoped lifecycle API and separate-origin
+HTTP/WebSocket gateway are implemented behind `ORKEST_EDITOR_ENABLED=false`.
+Saved task checkouts are reused; no editor database or worker wire changes.
+Only the requesting mutating user may attach or explicitly Stop. One active
+platform coordinator is required. Local/Kubernetes editor configurations return
+unavailable. Task-page actions, automatic browser reconnect and production
+release qualification remain outstanding. See [implementation, checks and
+operator constraints](development/task-editor-backend.md).

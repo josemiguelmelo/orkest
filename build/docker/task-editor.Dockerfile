@@ -1,4 +1,4 @@
-# Isolated feasibility image; never used by the platform or agentctl.
+# Task editor image pair; editor and readonly targets must remain distinct.
 FROM debian:bookworm-slim@sha256:734a72b3d6142a71993b4bc580ca01d8ca687f77a2c422d96a961d3376b179bc AS runtime
 
 # Checksums from the GitHub release asset digests, not a downloaded checksum file.

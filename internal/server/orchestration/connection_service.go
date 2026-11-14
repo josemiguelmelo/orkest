@@ -25,6 +25,7 @@ type connectionRun struct {
 }
 
 type ConnectionService struct {
+	editorGuard      ExecutionGuard
 	ctx              context.Context
 	client           AgentConnectionClient
 	repo             ConnectionRepository
@@ -253,6 +254,14 @@ func (s *ConnectionService) reconcilePrompts(ctx context.Context, launch orchest
 	if err != nil {
 		return err
 	}
+	if len(prompts) == 0 {
+		return nil
+	}
+	unlock, err := guardExecution(ctx, s.editorGuard, launch.OrganizationID, launch.WorkspaceID, launch.TaskID)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	for _, prompt := range prompts {
 		// Same identity and text are idempotent even if acceptance was recorded
 		// before the previous connection disappeared.

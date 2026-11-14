@@ -91,7 +91,12 @@ func Discover(ctx context.Context, tasks TaskReader, inspector CheckoutInspector
 
 // MaterializeManifest writes manifest bytes to a private disposable directory.
 func MaterializeManifest(manifest []byte) (string, func(), error) {
-	dir, err := os.MkdirTemp("", "orkest-editor-workspace-")
+	return MaterializeManifestAt("", manifest)
+}
+
+// MaterializeManifestAt uses a daemon-visible temporary base for Docker mounts.
+func MaterializeManifestAt(base string, manifest []byte) (string, func(), error) {
+	dir, err := os.MkdirTemp(base, "orkest-editor-workspace-")
 	if err != nil {
 		return "", nil, err
 	}

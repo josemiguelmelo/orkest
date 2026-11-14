@@ -422,3 +422,19 @@ Confirmed:
 
 See [execution profiles](guides/execution-profiles.md) for roles, runtime-change
 constraints, and operational qualifications.
+
+## 12. Task browser editor
+
+Confirmed direction: open VS Code with integrated terminal against existing task
+checkouts; read/write while demonstrably idle and read-only while agents work,
+wait for interaction, or have uncertain ownership. Opening never starts work or
+prepares repositories. Starting an agent automatically terminates the writable
+editor/terminal before execution, without an additional user confirmation.
+Saved files and branches persist across recreation.
+
+The proposed first release is Docker-only and restricted to the requesting user
+with task mutation authority; Viewer review and collaboration are deferred.
+The backend is default-off, and its deployment/verification constraints are in
+[the implementation notes](development/task-editor-backend.md). Frontend delivery
+and release qualification remain outstanding; implementation does not establish
+production release readiness.

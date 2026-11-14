@@ -1,4 +1,23 @@
 import * as z from 'zod';
+export declare const zTaskEditorStatus: z.ZodObject<{
+    state: z.ZodEnum<{
+        ready: "ready";
+        stopped: "stopped";
+        unavailable: "unavailable";
+        failed: "failed";
+    }>;
+    mode: z.ZodOptional<z.ZodEnum<{
+        ro: "ro";
+        rw: "rw";
+    }>>;
+    generation: z.ZodOptional<z.ZodString>;
+    launchUrl: z.ZodOptional<z.ZodString>;
+    missing: z.ZodOptional<z.ZodArray<z.ZodObject<{
+        registrationId: z.ZodString;
+        providerName: z.ZodString;
+        name: z.ZodString;
+    }, z.core.$strip>>>;
+}, z.core.$strip>;
 export declare const zSkillInput: z.ZodObject<{
     skillMD: z.ZodString;
 }, z.core.$strip>;
@@ -354,11 +373,11 @@ export declare const zTaskInput: z.ZodObject<{
     repositoryIds: z.ZodOptional<z.ZodArray<z.ZodString>>;
 }, z.core.$strip>;
 export declare const zStageWorkState: z.ZodEnum<{
+    failed: "failed";
     idle: "idle";
     queued: "queued";
     running: "running";
     completed: "completed";
-    failed: "failed";
 }>;
 export declare const zTaskRepository: z.ZodObject<{
     id: z.ZodString;
@@ -378,11 +397,11 @@ export declare const zTask: z.ZodObject<{
     stageVersion: z.ZodOptional<z.ZodCoercedBigInt<unknown>>;
     automationPending: z.ZodOptional<z.ZodBoolean>;
     stageWorkState: z.ZodOptional<z.ZodEnum<{
+        failed: "failed";
         idle: "idle";
         queued: "queued";
         running: "running";
         completed: "completed";
-        failed: "failed";
     }>>;
     closed: z.ZodOptional<z.ZodBoolean>;
     status: z.ZodString;
@@ -965,6 +984,87 @@ export declare const zTaskIntegration2: z.ZodObject<{
     labels: z.ZodOptional<z.ZodArray<z.ZodString>>;
     interval: z.ZodOptional<z.ZodString>;
     credential: z.ZodOptional<z.ZodString>;
+}, z.core.$strip>;
+export declare const zStopTaskEditorPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+    taskID: z.ZodString;
+}, z.core.$strip>;
+/**
+ * Editor state
+ */
+export declare const zStopTaskEditorResponse: z.ZodObject<{
+    state: z.ZodEnum<{
+        ready: "ready";
+        stopped: "stopped";
+        unavailable: "unavailable";
+        failed: "failed";
+    }>;
+    mode: z.ZodOptional<z.ZodEnum<{
+        ro: "ro";
+        rw: "rw";
+    }>>;
+    generation: z.ZodOptional<z.ZodString>;
+    launchUrl: z.ZodOptional<z.ZodString>;
+    missing: z.ZodOptional<z.ZodArray<z.ZodObject<{
+        registrationId: z.ZodString;
+        providerName: z.ZodString;
+        name: z.ZodString;
+    }, z.core.$strip>>>;
+}, z.core.$strip>;
+export declare const zGetTaskEditorPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+    taskID: z.ZodString;
+}, z.core.$strip>;
+/**
+ * Editor state
+ */
+export declare const zGetTaskEditorResponse: z.ZodObject<{
+    state: z.ZodEnum<{
+        ready: "ready";
+        stopped: "stopped";
+        unavailable: "unavailable";
+        failed: "failed";
+    }>;
+    mode: z.ZodOptional<z.ZodEnum<{
+        ro: "ro";
+        rw: "rw";
+    }>>;
+    generation: z.ZodOptional<z.ZodString>;
+    launchUrl: z.ZodOptional<z.ZodString>;
+    missing: z.ZodOptional<z.ZodArray<z.ZodObject<{
+        registrationId: z.ZodString;
+        providerName: z.ZodString;
+        name: z.ZodString;
+    }, z.core.$strip>>>;
+}, z.core.$strip>;
+export declare const zOpenTaskEditorPath: z.ZodObject<{
+    orgID: z.ZodString;
+    workspaceID: z.ZodString;
+    taskID: z.ZodString;
+}, z.core.$strip>;
+/**
+ * Editor state
+ */
+export declare const zOpenTaskEditorResponse: z.ZodObject<{
+    state: z.ZodEnum<{
+        ready: "ready";
+        stopped: "stopped";
+        unavailable: "unavailable";
+        failed: "failed";
+    }>;
+    mode: z.ZodOptional<z.ZodEnum<{
+        ro: "ro";
+        rw: "rw";
+    }>>;
+    generation: z.ZodOptional<z.ZodString>;
+    launchUrl: z.ZodOptional<z.ZodString>;
+    missing: z.ZodOptional<z.ZodArray<z.ZodObject<{
+        registrationId: z.ZodString;
+        providerName: z.ZodString;
+        name: z.ZodString;
+    }, z.core.$strip>>>;
 }, z.core.$strip>;
 export declare const zReceiveWorkflowStageCallbackBody: z.ZodRecord<z.ZodString, z.ZodUnknown>;
 export declare const zReceiveWorkflowStageCallbackPath: z.ZodObject<{
@@ -2711,11 +2811,11 @@ export declare const zTransitionTaskResponse: z.ZodObject<{
     stageVersion: z.ZodOptional<z.ZodCoercedBigInt<unknown>>;
     automationPending: z.ZodOptional<z.ZodBoolean>;
     stageWorkState: z.ZodOptional<z.ZodEnum<{
+        failed: "failed";
         idle: "idle";
         queued: "queued";
         running: "running";
         completed: "completed";
-        failed: "failed";
     }>>;
     closed: z.ZodOptional<z.ZodBoolean>;
     status: z.ZodString;
@@ -2749,11 +2849,11 @@ export declare const zListTasksResponse: z.ZodArray<z.ZodObject<{
     stageVersion: z.ZodOptional<z.ZodCoercedBigInt<unknown>>;
     automationPending: z.ZodOptional<z.ZodBoolean>;
     stageWorkState: z.ZodOptional<z.ZodEnum<{
+        failed: "failed";
         idle: "idle";
         queued: "queued";
         running: "running";
         completed: "completed";
-        failed: "failed";
     }>>;
     closed: z.ZodOptional<z.ZodBoolean>;
     status: z.ZodString;
@@ -2804,11 +2904,11 @@ export declare const zCreateTaskResponse: z.ZodObject<{
     stageVersion: z.ZodOptional<z.ZodCoercedBigInt<unknown>>;
     automationPending: z.ZodOptional<z.ZodBoolean>;
     stageWorkState: z.ZodOptional<z.ZodEnum<{
+        failed: "failed";
         idle: "idle";
         queued: "queued";
         running: "running";
         completed: "completed";
-        failed: "failed";
     }>>;
     closed: z.ZodOptional<z.ZodBoolean>;
     status: z.ZodString;
@@ -2843,11 +2943,11 @@ export declare const zGetTaskResponse: z.ZodObject<{
     stageVersion: z.ZodOptional<z.ZodCoercedBigInt<unknown>>;
     automationPending: z.ZodOptional<z.ZodBoolean>;
     stageWorkState: z.ZodOptional<z.ZodEnum<{
+        failed: "failed";
         idle: "idle";
         queued: "queued";
         running: "running";
         completed: "completed";
-        failed: "failed";
     }>>;
     closed: z.ZodOptional<z.ZodBoolean>;
     status: z.ZodString;
@@ -2899,11 +2999,11 @@ export declare const zUpdateTaskResponse: z.ZodObject<{
     stageVersion: z.ZodOptional<z.ZodCoercedBigInt<unknown>>;
     automationPending: z.ZodOptional<z.ZodBoolean>;
     stageWorkState: z.ZodOptional<z.ZodEnum<{
+        failed: "failed";
         idle: "idle";
         queued: "queued";
         running: "running";
         completed: "completed";
-        failed: "failed";
     }>>;
     closed: z.ZodOptional<z.ZodBoolean>;
     status: z.ZodString;
