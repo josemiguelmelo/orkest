@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -75,7 +76,7 @@ func TestDockerEditorGatewayBrowser(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = executor.Close() }()
-	backend, err := executor.NewEditorBackend("orkest/task-editor-spike:4.145.2", "orkest/task-editor-spike:4.145.2-ro")
+	backend, err := executor.NewEditorBackend("orkest/task-editor:4.145.2", "orkest/task-editor:4.145.2-ro")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -95,6 +96,7 @@ func TestDockerEditorGatewayBrowser(t *testing.T) {
 	var gateway *EditorGateway
 	editor := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { gateway.ServeHTTP(w, r) }))
 	defer editor.Close()
+	editorOrigin := strings.Replace(editor.URL, "127.0.0.1", "editor.localhost", 1)
 	fixture := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case "/open":
@@ -116,7 +118,7 @@ func TestDockerEditorGatewayBrowser(t *testing.T) {
 			_ = json.NewEncoder(w).Encode(struct {
 				taskeditor.Status
 				LaunchURL string `json:"launchUrl"`
-			}{status, editor.URL + "/launch#" + token})
+			}{status, editorOrigin + "/launch#" + token})
 		case "/saved":
 			data, err := os.ReadFile(filepath.Join(repo, "browser.txt"))
 			if err != nil {
@@ -139,7 +141,7 @@ func TestDockerEditorGatewayBrowser(t *testing.T) {
 		}
 	}))
 	defer fixture.Close()
-	gateway, err = NewEditorGateway(service, editor.URL, fixture.URL)
+	gateway, err = NewEditorGateway(service, editorOrigin, fixture.URL)
 	if err != nil {
 		t.Fatal(err)
 	}

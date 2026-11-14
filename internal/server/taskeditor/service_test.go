@@ -16,6 +16,7 @@ type editorBackendFake struct {
 	found         bool
 	starts, stops int
 	stopError     error
+	inspectError  error
 }
 
 func (b *editorBackendFake) StartEditor(_ context.Context, s Spec) (Instance, error) {
@@ -28,7 +29,7 @@ func (b *editorBackendFake) StartEditor(_ context.Context, s Spec) (Instance, er
 }
 
 func (b *editorBackendFake) InspectEditor(context.Context, Scope) (Instance, bool, error) {
-	return b.current, b.found, nil
+	return b.current, b.found, b.inspectError
 }
 
 func (b *editorBackendFake) StopEditor(_ context.Context, i Instance) error {
@@ -247,4 +248,167 @@ func TestEditorSelectionAndRemovalRevokeAccessBeforeMutation(t *testing.T) {
 		t.Fatal("import removal retained editor")
 	}
 	unlock()
+}
+
+func TestEditorOwnerSurvivesHandoffGap(t *testing.T) {
+	s, _, _ := newEditorFixture(t)
+	ctx := context.Background()
+	if _, err := s.Open(ctx, "owner", editorTestScope); err != nil {
+		t.Fatal(err)
+	}
+	unlock, err := s.BeforeExecution(ctx, "org", "workspace", "task")
+	if err != nil {
+		t.Fatal(err)
+	}
+	unlock()
+	if _, err = s.Open(ctx, "other", editorTestScope); !errors.Is(err, ErrOwner) {
+		t.Fatalf("ownership lost while replacement pending: %v", err)
+	}
+	if err = s.Stop(ctx, "other", editorTestScope); !errors.Is(err, ErrOwner) {
+		t.Fatalf("other user stopped pending editor: %v", err)
+	}
+}
+
+func TestSuccessfulStopClearsEarlierFailure(t *testing.T) {
+	s, b, idle := newEditorFixture(t)
+	ctx := context.Background()
+	if _, err := s.Open(ctx, "owner", editorTestScope); err != nil {
+		t.Fatal(err)
+	}
+	b.stopError = errors.New("uncertain stop")
+	idle.idle = false
+	if _, err := s.Open(ctx, "owner", editorTestScope); err == nil {
+		t.Fatal("expected failure")
+	}
+	if _, err := s.Inspect(ctx, "other", editorTestScope); !errors.Is(err, ErrOwner) {
+		t.Fatalf("failed state bypassed owner: %v", err)
+	}
+	b.stopError = nil
+	if err := s.Stop(ctx, "owner", editorTestScope); err != nil {
+		t.Fatal(err)
+	}
+	status, err := s.Inspect(ctx, "owner", editorTestScope)
+	if err != nil || status.State != "stopped" {
+		t.Fatalf("stale failure after stop: %+v %v", status, err)
+	}
+}
+
+type revokedEditorTasks struct {
+	serviceTasks
+	denied bool
+}
+
+func (t *revokedEditorTasks) AuthorizeExecution(context.Context, string, string, string, string, bool) error {
+	if t.denied {
+		return errors.New("membership revoked")
+	}
+	return nil
+}
+
+func TestRevocationDoesNotDependOnBackendAvailability(t *testing.T) {
+	s, b, _ := newEditorFixture(t)
+	tasks := &revokedEditorTasks{}
+	s.tasks = tasks
+	ctx := context.Background()
+	status, err := s.Open(ctx, "owner", editorTestScope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, lease, err := s.Access(ctx, "owner", editorTestScope, status.Generation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tasks.denied = true
+	b.inspectError = errors.New("Docker unavailable")
+	runCtx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
+	go func() { defer close(done); s.Run(runCtx) }()
+	defer func() { cancel(); <-done }()
+	select {
+	case <-lease.Done():
+	case <-time.After(2 * time.Second):
+		t.Fatal("revoked connection retained while backend unavailable")
+	}
+}
+
+func TestWorkspaceRemovalWaitRespectsRequestCancellation(t *testing.T) {
+	s, _, _ := newEditorFixture(t)
+	unlock, err := s.BeforeImportedTaskRemoval(context.Background(), "workspace", "github", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	result := make(chan error, 1)
+	go func() { _, err := s.Open(ctx, "owner", editorTestScope); result <- err }()
+	select {
+	case err := <-result:
+		unlock()
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("canceled wait: %v", err)
+		}
+	case <-time.After(200 * time.Millisecond):
+		unlock()
+		receivedErr := <-result
+		t.Fatalf("workspace lock ignored request cancellation: %v", receivedErr)
+	}
+}
+
+func TestFailedStopIsRetriedWithoutReopening(t *testing.T) {
+	s, b, _ := newEditorFixture(t)
+	ctx := context.Background()
+	if _, err := s.Open(ctx, "owner", editorTestScope); err != nil {
+		t.Fatal(err)
+	}
+	b.stopError = errors.New("daemon unavailable")
+	if err := s.Stop(ctx, "owner", editorTestScope); err == nil {
+		t.Fatal("expected unconfirmed stop")
+	}
+	if _, err := s.Open(ctx, "owner", editorTestScope); err == nil {
+		t.Fatal("reopened before cleanup confirmed")
+	}
+	b.stopError = nil
+	if err := s.reconcile(ctx, editorTestScope); err != nil {
+		t.Fatal(err)
+	}
+	if b.found || b.starts != 1 {
+		t.Fatalf("cleanup reopened editor: %+v", b)
+	}
+	status, err := s.Inspect(ctx, "owner", editorTestScope)
+	if err != nil || status.State != "stopped" {
+		t.Fatalf("cleanup status: %+v %v", status, err)
+	}
+	if _, err := s.Open(ctx, "new-owner", editorTestScope); err != nil {
+		t.Fatalf("completed stop retained ownership: %v", err)
+	}
+}
+
+func TestWorkspaceRemovalDoesNotBlockAnotherWorkspace(t *testing.T) {
+	s, _, _ := newEditorFixture(t)
+	ctx := context.Background()
+	unlock, err := s.BeforeImportedTaskRemoval(ctx, "workspace", "github", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer unlock()
+	otherCtx, cancel := context.WithTimeout(ctx, 100*time.Millisecond)
+	defer cancel()
+	release, err := s.BeforeExecution(otherCtx, "org", "other-workspace", "other-task")
+	if err != nil {
+		t.Fatalf("unrelated workspace blocked: %v", err)
+	}
+	release()
+}
+
+func TestInspectionDoesNotRetainInactiveTaskLocks(t *testing.T) {
+	s, _, _ := newEditorFixture(t)
+	for i := range 200 {
+		scope := Scope{"org", "workspace", fmt.Sprint(i)}
+		if _, err := s.Inspect(context.Background(), "user", scope); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if len(s.entries) != 0 {
+		t.Fatalf("retained %d inactive task locks", len(s.entries))
+	}
 }

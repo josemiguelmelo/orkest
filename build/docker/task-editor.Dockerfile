@@ -19,7 +19,7 @@ RUN apt-get update \
     && rm /tmp/code-server.tar.gz \
     && rm -rf /var/lib/apt/lists/* /root/.config
 
-COPY tools/task-editor/entrypoint.sh /opt/editor/
+COPY tools/task-editor/entrypoint.sh tools/task-editor/relay.cjs /opt/editor/
 COPY tools/task-editor/extensions.json /opt/extensions/extensions.json
 ENV HOME=/home/editor
 USER 1000:1000

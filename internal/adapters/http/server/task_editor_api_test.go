@@ -49,6 +49,7 @@ type gatewayBackend struct {
 }
 
 func (b *gatewayBackend) StartEditor(_ context.Context, s taskeditor.Spec) (taskeditor.Instance, error) {
+	s.GatewayToken = "fixture-editor-token"
 	s.ID = "id"
 	s.Endpoint = b.endpoint
 	b.instance = s.Instance
@@ -108,6 +109,9 @@ func TestEditorGatewayGrantAndCredentialIsolation(t *testing.T) {
 		if r.Header.Get("Authorization") != "" || r.Header.Get("Cookie") != "" || r.Header.Get("X-Forwarded-Host") != "" {
 			t.Error("browser credentials reached code-server")
 		}
+		if r.Header.Get("X-Orkest-Editor-Relay") != "fixture-editor-token" {
+			t.Error("gateway relay credential was not derived server-side")
+		}
 		w.Header().Set("Set-Cookie", "private=secret")
 		_, _ = io.WriteString(w, r.URL.Path)
 	}))
@@ -124,6 +128,7 @@ func TestEditorGatewayGrantAndCredentialIsolation(t *testing.T) {
 	request := httptest.NewRequest(http.MethodGet, gateway.origin+path+"static/file", nil)
 	request.AddCookie(cookie)
 	request.AddCookie(&http.Cookie{Name: sessionCookie, Value: "platform-token"})
+	request.Header.Set("X-Orkest-Editor-Relay", "forged-relay-token")
 	request.Header.Set("Authorization", "Bearer secret")
 	request.Header.Set("X-Forwarded-Host", "private-platform")
 	rec = httptest.NewRecorder()
@@ -210,5 +215,32 @@ func TestEditorGatewayClosesWebSocketOnHandoff(t *testing.T) {
 	unlock()
 	if _, _, err = conn.Read(ctx); err == nil || errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("websocket not revoked promptly: %v", err)
+	}
+}
+
+func TestEditorGatewayRequiresDistinctRoutingAuthorities(t *testing.T) {
+	gateway, service, _, _ := gatewayFixture(t, "http://127.0.0.1:1")
+	for _, origins := range [][2]string{
+		{"https://localhost:8089", "http://localhost:8089"},
+		{"https://editor.example:443", "https://editor.example"},
+		{"https://EDITOR.example", "https://editor.example"},
+	} {
+		if _, err := NewEditorGateway(service, origins[0], origins[1]); err == nil {
+			t.Fatalf("ambiguous origin routing accepted: %v", origins)
+		}
+	}
+	if _, err := NewEditorGateway(service, gateway.origin, gateway.platformOrigin); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestEditorGatewayHostRoutingUsesCanonicalAuthority(t *testing.T) {
+	_, service, _, _ := gatewayFixture(t, "http://127.0.0.1:1")
+	gateway, err := NewEditorGateway(service, "https://EDITOR.example:443", "https://app.example")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !gateway.MatchesHost("editor.example") || !gateway.MatchesHost("EDITOR.example:443") || gateway.MatchesHost("editor.example.attacker.invalid") {
+		t.Fatal("gateway authority routing differs from origin normalization")
 	}
 }

@@ -1,6 +1,6 @@
 # Task VS Code and terminal implementation plan
 
-Status: Docker backend implemented behind a default-off gate; frontend and release qualification remain.
+Status: backend always wired by explicit user instruction; frontend and production qualification remain.
 Last updated: 2026-11-14.
 
 This document is the implementation checklist and cross-session handoff for task
@@ -448,8 +448,8 @@ PR 2 discovery and its current/legacy model continuation evidence are complete.
 The [backend implementation and operator notes](task-editor-backend.md) describe
 lifecycle, conservative idle proof, execution/recovery guards, selection/removal
 fencing, gateway, API and configuration. No frontend task actions or automatic
-reconnect flow have been added. Keep the feature disabled pending release
-qualification. Next action: finish recorded backend checks and review the one-PR
+reconnect flow have been added. The feature is always wired; the production review
+records remaining isolation and release qualification blockers. Next action: finish recorded backend checks and review the one-PR
 diff; then implement the frontend and outstanding cross-component qualification.
 
 | Date | Slice | Changes / decisions | Verification actually run | Blockers / next action |
@@ -493,3 +493,40 @@ including a file written through the real integrated terminal. Server wiring was
 corrected to consume optional executor-factory editor capabilities: it no longer
 imports or type-asserts the Docker executor. Factory tests cover disabled editing,
 Docker capability selection and unsupported Local execution.
+
+### Production review and always-available editor correction
+
+The user explicitly requires the editor feature to always be enabled, superseding
+the earlier proposed default-off gate. Removed the gate from configuration,
+factory selection, service wiring, routes and API descriptions. Supported Docker
+executors always expose editor capabilities, using the pinned default image pair;
+unsupported executors keep the same always-present API and return unavailable.
+The server remains independent of concrete executor implementations.
+
+Regression tests reproduced lost ownership during handoff, stale failure status,
+revocation dependent on backend inspection, and non-cancellable workspace-removal
+waits. The refactor preserves pending ownership, retries failed Stop intent,
+revokes leases before inspection and uses cancellable per-workspace admission.
+A set replaces nested imported-source membership scans. Gateway handlers are
+separated and normalized HTTP authorities are validated for unambiguous routing.
+See [the full review](task-editor-review.md) for unresolved production blockers and
+verification evidence; always-available routes do not certify production readiness.
+
+The critical network finding was reproduced against real Docker twice: direct
+peer-editor access, then a host-alias bypass after separating bridge networks.
+The corrected implementation keeps editors on internal-only networks; native-host
+access uses a token-authenticated fixed-upstream relay, while a containerized
+platform joins the private editor network directly. Strict peer/worker/host-alias
+probes now pass; unauthenticated relay access is denied. The image pair includes
+the relay asset, and Compose passes editor images/origins unconditionally. The
+local default editor hostname is `editor.localhost` on the existing HTTP port.
+
+Final review follow-up verification: ordinary Go tests and the focused race suite
+passed; lint passed both normally and with Docker/security build tags. Generated
+client consistency, frontend typecheck, relay syntax/format, Compose validation
+and architecture boundaries passed. Real Colima lifecycle (including failed-relay
+cleanup), peer/worker/host-alias isolation, unauthenticated relay denial and the
+Chromium terminal/mode-transition flow passed using `editor.localhost` routing.
+Pinned OpenCode 2.1.4 recovery and current/v1-manifest successful follow-ups passed
+again using the same explicit free model. The prior full-check scheduled-job UI
+failures remain unrelated and unchanged; no production qualification is implied.

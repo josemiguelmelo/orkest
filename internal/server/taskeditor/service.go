@@ -9,6 +9,8 @@ import (
 	"errors"
 	"sync"
 	"time"
+
+	"golang.org/x/sync/semaphore"
 )
 
 var (
@@ -28,6 +30,7 @@ const (
 )
 
 type Instance struct {
+	GatewayToken                                  string `json:"-"`
 	Scope                                         Scope
 	ID, UserID, Generation, Fingerprint, Endpoint string
 	Mode                                          Mode
@@ -60,16 +63,18 @@ type (
 )
 
 type entry struct {
-	lock      chan struct{}
-	instance  Instance
-	cancel    context.CancelFunc
-	access    context.Context
-	requested bool
-	failed    bool
-	user      string
+	refs          int // protected by TaskEditorService.mu
+	lock          chan struct{}
+	instance      Instance
+	cancel        context.CancelFunc
+	access        context.Context
+	requested     bool
+	stopRequested bool
+	failed        bool
+	user          string
 }
 type TaskEditorService struct {
-	barrier   sync.RWMutex
+	gates     map[string]*semaphore.Weighted
 	tasks     TaskReader
 	inspector CheckoutInspector
 	backend   Backend
@@ -82,7 +87,7 @@ func NewTaskEditorService(tasks TaskReader, inspector CheckoutInspector, backend
 	if tasks == nil || inspector == nil || backend == nil || idle == nil {
 		return nil, errors.New("task editor dependencies required")
 	}
-	return &TaskEditorService{tasks: tasks, inspector: inspector, backend: backend, idle: idle, entries: make(map[Scope]*entry)}, nil
+	return &TaskEditorService{tasks: tasks, inspector: inspector, backend: backend, idle: idle, entries: make(map[Scope]*entry), gates: make(map[string]*semaphore.Weighted)}, nil
 }
 
 func (s *TaskEditorService) entry(scope Scope) *entry {
@@ -110,24 +115,28 @@ func (s *TaskEditorService) authorize(ctx context.Context, user string, scope Sc
 }
 
 func (s *TaskEditorService) Open(ctx context.Context, user string, scope Scope) (Status, error) {
-	s.barrier.RLock()
-	defer s.barrier.RUnlock()
 	if err := s.authorize(ctx, user, scope); err != nil {
 		return Status{}, err
 	}
-	e := s.entry(scope)
-	if err := acquire(ctx, e); err != nil {
+	e, unlock, err := s.lockEntry(ctx, scope)
+	if err != nil {
 		return Status{}, err
 	}
-	defer release(e)
+	defer unlock()
 	status, err := s.open(ctx, e, user, scope)
 	if !errors.Is(err, ErrOwner) {
-		e.failed = err != nil
+		e.failed = e.stopRequested || (err != nil && !errors.Is(err, ErrUnavailable))
 	}
 	return status, err
 }
 
 func (s *TaskEditorService) open(ctx context.Context, e *entry, user string, scope Scope) (Status, error) {
+	if err := checkOwner(e, user); err != nil {
+		return Status{}, err
+	}
+	if e.stopRequested {
+		return Status{}, ErrUnavailable
+	}
 	current, found, err := s.backend.InspectEditor(ctx, scope)
 	if err != nil {
 		if e.cancel != nil {
@@ -142,8 +151,7 @@ func (s *TaskEditorService) open(ctx context.Context, e *entry, user string, sco
 	}
 	discovery, err := Discover(ctx, s.tasks, s.inspector, user, scope.OrganizationID, scope.WorkspaceID, scope.TaskID)
 	if err != nil {
-		_ = s.stop(ctx, e, current, found)
-		return Status{}, err
+		return Status{}, errors.Join(err, s.stop(ctx, e, current, found))
 	}
 	if len(discovery.Roots) == 0 {
 		if err = s.stop(ctx, e, current, found); err != nil {
@@ -174,6 +182,8 @@ func (s *TaskEditorService) open(ctx context.Context, e *entry, user string, sco
 				mode = ReadOnly
 			}
 		}
+		e.user = user
+		e.requested = true
 		current, err = s.backend.StartEditor(ctx, Spec{Instance: Instance{Scope: scope, UserID: user, Generation: hex.EncodeToString(randomBytes()), Fingerprint: hex.EncodeToString(fingerprint[:]), Mode: mode}, Discovery: discovery})
 		if err != nil {
 			if current.ID != "" {
@@ -194,14 +204,33 @@ func (s *TaskEditorService) open(ctx context.Context, e *entry, user string, sco
 	return Status{State: "ready", Mode: current.Mode, Generation: current.Generation, Missing: discovery.Missing}, nil
 }
 func randomBytes() []byte { b := make([]byte, 32); _, _ = rand.Read(b); return b }
-func (s *TaskEditorService) stop(ctx context.Context, e *entry, current Instance, found bool) error {
+func revoke(e *entry) {
 	if e.cancel != nil {
 		e.cancel()
-		e.cancel = nil
-		e.access = nil
+	}
+	e.cancel = nil
+	e.access = nil
+}
+
+func checkOwner(e *entry, user string) error {
+	if (e.requested || e.stopRequested) && e.user != "" && e.user != user {
+		return ErrOwner
+	}
+	return nil
+}
+
+func (s *TaskEditorService) stop(ctx context.Context, e *entry, current Instance, found bool) error {
+	revoke(e)
+	if !found && e.instance.ID != "" {
+		current = e.instance
+		found = true
 	}
 	if found {
+		e.instance = current
 		if err := s.backend.StopEditor(ctx, current); err != nil {
+			e.stopRequested = true
+			e.requested = false
+			e.failed = true
 			return err
 		}
 	}
@@ -209,17 +238,35 @@ func (s *TaskEditorService) stop(ctx context.Context, e *entry, current Instance
 	return nil
 }
 
+// finishStop retains cleanup intent until resource termination is confirmed.
+func (s *TaskEditorService) finishStop(ctx context.Context, e *entry, scope Scope) error {
+	revoke(e)
+	current, found, err := s.backend.InspectEditor(ctx, scope)
+	if err == nil {
+		err = s.stop(ctx, e, current, found)
+	} else if e.instance.ID != "" {
+		err = s.stop(ctx, e, e.instance, true)
+	}
+	e.failed = err != nil
+	if err == nil {
+		e.stopRequested = false
+		e.user = ""
+	}
+	return err
+}
+
 func (s *TaskEditorService) Inspect(ctx context.Context, user string, scope Scope) (Status, error) {
-	s.barrier.RLock()
-	defer s.barrier.RUnlock()
 	if err := s.authorize(ctx, user, scope); err != nil {
 		return Status{}, err
 	}
-	e := s.entry(scope)
-	if err := acquire(ctx, e); err != nil {
+	e, unlock, err := s.lockEntry(ctx, scope)
+	if err != nil {
 		return Status{}, err
 	}
-	defer release(e)
+	defer unlock()
+	if err := checkOwner(e, user); err != nil {
+		return Status{}, err
+	}
 	if e.failed {
 		return Status{State: "failed"}, nil
 	}
@@ -233,64 +280,66 @@ func (s *TaskEditorService) Inspect(ctx context.Context, user string, scope Scop
 	if current.UserID != user {
 		return Status{}, ErrOwner
 	}
+	if current.Endpoint == "" {
+		return Status{State: "failed"}, nil
+	}
 	return Status{State: "ready", Mode: current.Mode, Generation: current.Generation}, nil
 }
 
 func (s *TaskEditorService) Stop(ctx context.Context, user string, scope Scope) error {
-	s.barrier.RLock()
-	defer s.barrier.RUnlock()
 	if err := s.authorize(ctx, user, scope); err != nil {
 		return err
 	}
-	e := s.entry(scope)
-	if err := acquire(ctx, e); err != nil {
+	e, unlock, err := s.lockEntry(ctx, scope)
+	if err != nil {
 		return err
 	}
-	defer release(e)
+	defer unlock()
+	if err = checkOwner(e, user); err != nil {
+		return err
+	}
+	// Known owners can revoke access immediately even if inspection is unavailable.
+	if e.user == user {
+		e.requested = false
+		e.stopRequested = true
+		revoke(e)
+	}
 	current, found, err := s.backend.InspectEditor(ctx, scope)
 	if err != nil {
+		e.failed = true
 		return err
 	}
 	if found && current.UserID != user {
 		return ErrOwner
 	}
+	e.user = user
 	e.requested = false
-	return s.stop(ctx, e, current, found)
+	e.stopRequested = true
+	err = s.stop(ctx, e, current, found)
+	e.failed = err != nil
+	if err == nil {
+		e.stopRequested = false
+		e.user = ""
+	}
+	return err
 }
 
 // BeforeExecution holds the task lock through work delivery. Already accepted
 // worker commands are covered by denying write access while any owner survives.
 func (s *TaskEditorService) BeforeExecution(ctx context.Context, org, workspace, task string) (func(), error) {
-	s.barrier.RLock()
-	e := s.entry(Scope{org, workspace, task})
-	if err := acquire(ctx, e); err != nil {
-		s.barrier.RUnlock()
-		return nil, err
-	}
-	current, found, err := s.backend.InspectEditor(ctx, Scope{org, workspace, task})
-	if err == nil && found && current.Mode == ReadWrite {
-		err = s.stop(ctx, e, current, true)
-	}
-	if err != nil {
-		release(e)
-		s.barrier.RUnlock()
-		return nil, err
-	}
-	return func() { release(e); s.barrier.RUnlock() }, nil
+	return s.beforeTransition(ctx, Scope{org, workspace, task}, false)
 }
 
 // Access binds each proxy request to a currently authorized user and generation.
 func (s *TaskEditorService) Access(ctx context.Context, user string, scope Scope, generation string) (Instance, context.Context, error) {
-	s.barrier.RLock()
-	defer s.barrier.RUnlock()
 	if err := s.authorize(ctx, user, scope); err != nil {
 		return Instance{}, nil, err
 	}
-	e := s.entry(scope)
-	if err := acquire(ctx, e); err != nil {
+	e, unlock, err := s.lockEntry(ctx, scope)
+	if err != nil {
 		return Instance{}, nil, err
 	}
-	defer release(e)
+	defer unlock()
 	if e.instance.Generation != generation || e.instance.UserID != user || e.access == nil {
 		return Instance{}, nil, ErrGeneration
 	}
@@ -314,6 +363,29 @@ func (s *TaskEditorService) ReconcileStartup(ctx context.Context) error {
 
 // Run refreshes only explicitly opened editors. Revoked authority tears down an
 // editor; a missing task is therefore cleaned up even after imported-task removal.
+func (s *TaskEditorService) reconcile(ctx context.Context, scope Scope) error {
+	e, unlock, err := s.lockEntry(ctx, scope)
+	if err != nil {
+		return err
+	}
+	defer unlock()
+	if e.stopRequested {
+		return s.finishStop(ctx, e, scope)
+	}
+	if !e.requested {
+		return nil
+	}
+	if err = s.authorize(ctx, e.user, scope); err != nil {
+		revoke(e)
+		e.requested = false
+		e.stopRequested = true
+		return errors.Join(err, s.finishStop(ctx, e, scope))
+	}
+	_, err = s.open(ctx, e, e.user, scope)
+	e.failed = err != nil
+	return err
+}
+
 func (s *TaskEditorService) Run(ctx context.Context) {
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
@@ -330,66 +402,54 @@ func (s *TaskEditorService) Run(ctx context.Context) {
 		}
 		s.mu.Unlock()
 		for _, scope := range scopes {
-			s.barrier.RLock()
-			e := s.entry(scope)
 			opCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
-			if acquire(opCtx, e) == nil {
-				if e.requested {
-					user := e.user
-					// Handoff clears the concrete instance but keeps the requesting user.
-					if user != "" {
-						if err := s.authorize(opCtx, user, scope); err != nil {
-							current, found, inspectErr := s.backend.InspectEditor(opCtx, scope)
-							if inspectErr == nil {
-								if stopErr := s.stop(opCtx, e, current, found); stopErr == nil {
-									e.requested = false
-								} else {
-									e.failed = true
-								}
-							}
-						} else {
-							_, openErr := s.open(opCtx, e, user, scope)
-							e.failed = openErr != nil
-						}
-					}
-				}
-				release(e)
-			}
+			_ = s.reconcile(opCtx, scope)
 			cancel()
-			s.barrier.RUnlock()
+			if ctx.Err() != nil {
+				return
+			}
 		}
 	}
 }
 
 // BeforeTaskMutation prevents a saved selection from racing mounted checkouts.
 func (s *TaskEditorService) BeforeTaskMutation(ctx context.Context, org, workspace, task string) (func(), error) {
-	s.barrier.RLock()
-	e := s.entry(Scope{org, workspace, task})
-	if err := acquire(ctx, e); err != nil {
-		s.barrier.RUnlock()
+	return s.beforeTransition(ctx, Scope{org, workspace, task}, true)
+}
+
+func (s *TaskEditorService) beforeTransition(ctx context.Context, scope Scope, stopReadOnly bool) (func(), error) {
+	e, unlock, err := s.lockEntry(ctx, scope)
+	if err != nil {
 		return nil, err
 	}
-	current, found, err := s.backend.InspectEditor(ctx, Scope{org, workspace, task})
-	if err == nil {
-		err = s.stop(ctx, e, current, found)
+	current, found, err := s.backend.InspectEditor(ctx, scope)
+	if err == nil && found && (current.Mode == ReadWrite || stopReadOnly) {
+		err = s.stop(ctx, e, current, true)
 	}
 	if err != nil {
-		release(e)
-		s.barrier.RUnlock()
+		revoke(e)
+		unlock()
 		return nil, err
 	}
-	return func() { release(e); s.barrier.RUnlock() }, nil
+	return unlock, nil
 }
 
 // BeforeImportedTaskRemoval fences bulk source deletion without discovering task
 // IDs through new persistence queries. Retained/manual tasks stay connected.
 // Another source of the same provider may reconnect when its ID is absent here.
 func (s *TaskEditorService) BeforeImportedTaskRemoval(ctx context.Context, workspace, provider string, seen []string) (func(), error) {
-	s.barrier.Lock()
+	unlock, err := s.lockWorkspace(ctx, workspace, true)
+	if err != nil {
+		return nil, err
+	}
 	instances, err := s.backend.ListEditors(ctx)
 	if err != nil {
-		s.barrier.Unlock()
+		unlock()
 		return nil, err
+	}
+	retainedIDs := make(map[string]struct{}, len(seen))
+	for _, id := range seen {
+		retainedIDs[id] = struct{}{}
 	}
 	for _, instance := range instances {
 		if instance.Scope.WorkspaceID != workspace {
@@ -400,22 +460,75 @@ func (s *TaskEditorService) BeforeImportedTaskRemoval(ctx context.Context, works
 			if task.SourceProvider != provider {
 				continue
 			}
-			retained := false
-			for _, sourceID := range seen {
-				if task.SourceID == sourceID {
-					retained = true
-					break
-				}
-			}
+			_, retained := retainedIDs[task.SourceID]
 			if retained {
 				continue
 			}
 		}
 		e := s.entry(instance.Scope)
 		if err = s.stop(ctx, e, instance, true); err != nil {
-			s.barrier.Unlock()
+			unlock()
 			return nil, err
 		}
 	}
-	return s.barrier.Unlock, nil
+	return unlock, nil
+}
+
+const workspaceGateCapacity int64 = 1 << 30
+
+func (s *TaskEditorService) lockWorkspace(ctx context.Context, workspace string, exclusive bool) (func(), error) {
+	s.mu.Lock()
+	gate := s.gates[workspace]
+	if gate == nil {
+		gate = semaphore.NewWeighted(workspaceGateCapacity)
+		s.gates[workspace] = gate
+	}
+	s.mu.Unlock()
+	weight := int64(1)
+	if exclusive {
+		weight = workspaceGateCapacity
+	}
+	if err := gate.Acquire(ctx, weight); err != nil {
+		return nil, err
+	}
+	return func() { gate.Release(weight) }, nil
+}
+
+// borrowEntry counts holders and waiters before exposing a lock. This avoids
+// deleting a lock while another caller is waiting on the same task.
+func (s *TaskEditorService) borrowEntry(scope Scope) *entry {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	e := s.entries[scope]
+	if e == nil {
+		e = &entry{lock: make(chan struct{}, 1)}
+		s.entries[scope] = e
+	}
+	e.refs++
+	return e
+}
+
+func (s *TaskEditorService) returnEntry(scope Scope, e *entry) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	e.refs--
+	// With no holders/waiters, and while workspace admission is held, no other
+	// lifecycle operation can mutate this entry. Keep failed/pending state visible.
+	if e.refs == 0 && !e.requested && !e.stopRequested && !e.failed && e.instance.ID == "" && e.access == nil {
+		delete(s.entries, scope)
+	}
+}
+
+func (s *TaskEditorService) lockEntry(ctx context.Context, scope Scope) (*entry, func(), error) {
+	unlockWorkspace, err := s.lockWorkspace(ctx, scope.WorkspaceID, false)
+	if err != nil {
+		return nil, nil, err
+	}
+	e := s.borrowEntry(scope)
+	if err = acquire(ctx, e); err != nil {
+		s.returnEntry(scope, e)
+		unlockWorkspace()
+		return nil, nil, err
+	}
+	return e, func() { s.returnEntry(scope, e); release(e); unlockWorkspace() }, nil
 }

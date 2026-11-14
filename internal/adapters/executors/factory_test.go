@@ -12,12 +12,12 @@ func TestFactorySelectsEditorCapabilitiesWithoutStartingResources(t *testing.T) 
 	for _, tc := range []struct {
 		name   string
 		kind   Kind
-		editor *EditorConfig
+		editor EditorConfig
 		want   bool
 	}{
-		{name: "Docker disabled", kind: Docker},
-		{name: "Docker editor", kind: Docker, editor: &EditorConfig{Image: "editor:qualified", ReadOnlyImage: "editor:qualified-ro"}, want: true},
-		{name: "Local unsupported", kind: Local, editor: &EditorConfig{Image: "editor:qualified", ReadOnlyImage: "editor:qualified-ro"}},
+		{name: "Docker defaults always expose editor", kind: Docker, want: true},
+		{name: "Docker editor", kind: Docker, editor: EditorConfig{Image: "editor:qualified", ReadOnlyImage: "editor:qualified-ro"}, want: true},
+		{name: "Local unsupported", kind: Local, editor: EditorConfig{Image: "editor:qualified", ReadOnlyImage: "editor:qualified-ro"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			binary, err := os.Executable()

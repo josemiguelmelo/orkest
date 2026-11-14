@@ -8,13 +8,15 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"net/netip"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/containerd/errdefs"
+	"github.com/josemiguelmelo/orkest/internal/platform/taskstorage"
 	"github.com/josemiguelmelo/orkest/internal/server/taskeditor"
 	"github.com/moby/moby/api/types/container"
 	"github.com/moby/moby/api/types/mount"
@@ -22,19 +24,31 @@ import (
 	client "github.com/moby/moby/client"
 )
 
-const editorLabel = "io.orkest.editor"
+const (
+	editorLabel                = "io.orkest.editor"
+	DefaultEditorImage         = "orkest/task-editor:4.145.2"
+	DefaultReadonlyEditorImage = "orkest/task-editor:4.145.2-ro"
+)
 
 type editorEngine interface {
 	EngineClient
 	ContainerList(context.Context, client.ContainerListOptions) (client.ContainerListResult, error)
+	NetworkCreate(context.Context, string, client.NetworkCreateOptions) (client.NetworkCreateResult, error)
+	NetworkInspect(context.Context, string, client.NetworkInspectOptions) (client.NetworkInspectResult, error)
+	NetworkConnect(context.Context, string, client.NetworkConnectOptions) (client.NetworkConnectResult, error)
+	NetworkDisconnect(context.Context, string, client.NetworkDisconnectOptions) (client.NetworkDisconnectResult, error)
+	NetworkRemove(context.Context, string, client.NetworkRemoveOptions) (client.NetworkRemoveResult, error)
+	NetworkList(context.Context, client.NetworkListOptions) (client.NetworkListResult, error)
 }
 
 // EditorBackend shares the existing Engine client, task data root and networking.
 // It never receives RunConfig, agent environment, credentials or host mounts.
 type EditorBackend struct {
+	starting                           sync.Map
 	executor                           *Executor
 	engine                             editorEngine
 	installation, image, readonlyImage string
+	user                               string
 }
 
 func (e *Executor) NewEditorBackend(image, readonlyImage string) (*EditorBackend, error) {
@@ -42,14 +56,22 @@ func (e *Executor) NewEditorBackend(image, readonlyImage string) (*EditorBackend
 	if !ok {
 		return nil, errors.New("docker editor discovery requires container listing")
 	}
-	if strings.HasPrefix(e.config.ContainerUser, "0:") {
-		return nil, errors.New("editor requires non-root container UID")
+	uidText, _, _ := strings.Cut(e.config.ContainerUser, ":")
+	uid, uidErr := strconv.ParseUint(uidText, 10, 32)
+	if uidErr != nil {
+		return nil, errors.New("invalid editor container UID")
+	}
+	user := e.config.ContainerUser
+	// An always-available editor capability must never inherit a root platform UID.
+	// Root-owned checkouts still need operator-provided non-root access permissions.
+	if uid == 0 {
+		user = "1000:1000"
 	}
 	if strings.TrimSpace(image) == "" || strings.TrimSpace(readonlyImage) == "" || image == readonlyImage {
 		return nil, errors.New("distinct editor and immutable readonly images are required")
 	}
 	hash := sha256.Sum256([]byte(e.config.DataRoot))
-	return &EditorBackend{executor: e, engine: engine, installation: hex.EncodeToString(hash[:]), image: image, readonlyImage: readonlyImage}, nil
+	return &EditorBackend{executor: e, engine: engine, installation: hex.EncodeToString(hash[:]), image: image, readonlyImage: readonlyImage, user: user}, nil
 }
 
 func (b *EditorBackend) name(scope taskeditor.Scope) string {
@@ -96,6 +118,9 @@ func (b *EditorBackend) InspectEditor(ctx context.Context, scope taskeditor.Scop
 		return i, false, errors.New("editor state unknown")
 	}
 	if result.Container.State.Running {
+		if b.executor.config.NetworkName == "" {
+			return b.inspectRelay(ctx, i)
+		}
 		i.Endpoint, err = publishedEndpoint(result.Container, 8080)
 		if b.executor.config.NetworkName != "" {
 			i.Endpoint = "http://" + b.name(scope) + ":8080"
@@ -120,7 +145,13 @@ func (b *EditorBackend) StartEditor(ctx context.Context, spec taskeditor.Spec) (
 	if rootErr != nil {
 		return taskeditor.Instance{}, rootErr
 	}
+	taskWork, _ := taskstorage.Directories(workRoot, spec.Scope.OrganizationID, spec.Scope.WorkspaceID, spec.Scope.TaskID)
 	for _, root := range spec.Discovery.Roots {
+		relative, relativeErr := filepath.Rel(taskWork, root.Source)
+		parts := strings.Split(filepath.ToSlash(relative), "/")
+		if relativeErr != nil || len(parts) != 3 || parts[0] != "repositories" || root.Path != "/workspace/"+filepath.ToSlash(relative) {
+			return taskeditor.Instance{}, errors.New("editor mount does not belong to the selected task")
+		}
 		if !filepath.IsAbs(root.Source) || !within(workRoot, root.Source) || !strings.HasPrefix(root.Path, "/workspace/repositories/") {
 			return taskeditor.Instance{}, errors.New("invalid editor mount")
 		}
@@ -155,18 +186,34 @@ func (b *EditorBackend) StartEditor(ctx context.Context, spec taskeditor.Spec) (
 	}
 	port := network.MustParsePort("8080/tcp")
 	pids := int64(256)
-	host := &container.HostConfig{Mounts: mounts, ReadonlyRootfs: true, CapDrop: []string{"ALL"}, SecurityOpt: []string{"no-new-privileges:true"}, Tmpfs: map[string]string{"/tmp": "rw,nosuid,nodev,size=256m,mode=1777", "/home/editor": "rw,nosuid,nodev,size=512m,mode=1777"}, Resources: container.Resources{Memory: 2 << 30, NanoCPUs: 2e9, PidsLimit: &pids}, PortBindings: network.PortMap{port: {{HostIP: netip.MustParseAddr("127.0.0.1")}}}, RestartPolicy: container.RestartPolicy{Name: container.RestartPolicyDisabled}}
-	if b.executor.config.NetworkName != "" {
-		host.NetworkMode = container.NetworkMode(b.executor.config.NetworkName)
-		host.PortBindings = nil
+	host := &container.HostConfig{Mounts: mounts, ReadonlyRootfs: true, CapDrop: []string{"ALL"}, SecurityOpt: []string{"no-new-privileges:true"}, Tmpfs: map[string]string{"/tmp": "rw,nosuid,nodev,size=256m,mode=1777", "/home/editor": "rw,nosuid,nodev,size=512m,mode=1777"}, Resources: container.Resources{Memory: 2 << 30, NanoCPUs: 2e9, PidsLimit: &pids}, RestartPolicy: container.RestartPolicy{Name: container.RestartPolicyDisabled}}
+	networkName := b.networkName(spec.Instance)
+	b.starting.Store(networkName, struct{}{})
+	defer b.starting.Delete(networkName)
+	containerCreated := false
+	defer func() {
+		if !containerCreated {
+			b.cleanupUncreatedNetwork(ctx, spec.Instance)
+		}
+	}()
+	if err = b.createNetwork(ctx, spec.Instance); err != nil {
+		return spec.Instance, err
 	}
-	created, err := b.engine.ContainerCreate(ctx, client.ContainerCreateOptions{Name: b.name(spec.Scope), Config: &container.Config{Image: image, User: b.executor.config.ContainerUser, Env: []string{"HOME=/home/editor", "EDITOR_MODE=" + string(spec.Mode)}, Labels: b.labels(spec.Instance), ExposedPorts: network.PortSet{port: {}}}, HostConfig: host})
+	host.NetworkMode = container.NetworkMode(networkName)
+
+	created, err := b.engine.ContainerCreate(ctx, client.ContainerCreateOptions{Name: b.name(spec.Scope), Config: &container.Config{Image: image, User: b.user, Env: []string{"HOME=/home/editor", "EDITOR_MODE=" + string(spec.Mode)}, Labels: b.labels(spec.Instance), ExposedPorts: network.PortSet{port: {}}}, HostConfig: host})
 	if err != nil {
 		return taskeditor.Instance{}, fmt.Errorf("create editor: %w", err)
 	}
+	containerCreated = true
 	spec.ID = created.ID
 	if _, err = b.engine.ContainerStart(ctx, created.ID, client.ContainerStartOptions{}); err != nil {
 		return spec.Instance, fmt.Errorf("start editor: %w", err)
+	}
+	if b.executor.config.NetworkName == "" {
+		if err = b.startRelay(ctx, spec.Instance); err != nil {
+			return spec.Instance, err
+		}
 	}
 	i, found, err := b.InspectEditor(ctx, spec.Scope)
 	if err != nil {
@@ -182,6 +229,9 @@ func (b *EditorBackend) StartEditor(ctx context.Context, spec taskeditor.Spec) (
 		request, reqErr := http.NewRequestWithContext(readyCtx, http.MethodGet, i.Endpoint+"/healthz", nil)
 		if reqErr != nil {
 			return i, reqErr
+		}
+		if i.GatewayToken != "" {
+			request.Header.Set("X-Orkest-Editor-Relay", i.GatewayToken)
 		}
 		response, requestErr := httpClient.Do(request)
 		if requestErr == nil {
@@ -202,9 +252,12 @@ func (b *EditorBackend) StopEditor(ctx context.Context, i taskeditor.Instance) e
 	if i.ID == "" {
 		return errors.New("concrete editor ID required")
 	}
+	if err := b.stopRelay(ctx, i); err != nil {
+		return err
+	}
 	result, err := b.engine.ContainerInspect(ctx, i.ID, client.ContainerInspectOptions{})
 	if errdefs.IsNotFound(err) {
-		return nil
+		return b.removeNetwork(ctx, i)
 	}
 	if err != nil {
 		return err
@@ -222,7 +275,7 @@ func (b *EditorBackend) StopEditor(ctx context.Context, i taskeditor.Instance) e
 	}
 	result, err = b.engine.ContainerInspect(ctx, i.ID, client.ContainerInspectOptions{})
 	if errdefs.IsNotFound(err) {
-		return nil
+		return b.removeNetwork(ctx, i)
 	}
 	if err != nil {
 		return err
@@ -232,9 +285,12 @@ func (b *EditorBackend) StopEditor(ctx context.Context, i taskeditor.Instance) e
 	}
 	_, err = b.engine.ContainerRemove(ctx, i.ID, client.ContainerRemoveOptions{})
 	if errdefs.IsNotFound(err) {
-		return nil
+		return b.removeNetwork(ctx, i)
 	}
-	return err
+	if err != nil && !errdefs.IsNotFound(err) {
+		return err
+	}
+	return b.removeNetwork(ctx, i)
 }
 
 func (b *EditorBackend) ListEditors(ctx context.Context) ([]taskeditor.Instance, error) {
@@ -251,11 +307,20 @@ func (b *EditorBackend) ListEditors(ctx context.Context) ([]taskeditor.Instance,
 		if err != nil {
 			return nil, err
 		}
+		if inspection.Container.Config != nil && inspection.Container.Config.Labels[editorLabel+".kind"] == "relay" {
+			continue
+		}
 		i, err := b.decode(inspection.Container)
 		if err != nil {
 			return nil, err
 		}
 		result = append(result, i)
+	}
+	if err = b.cleanupOrphanRelays(ctx, listed.Items, result); err != nil {
+		return nil, err
+	}
+	if err = b.cleanupOrphanNetworks(ctx, result); err != nil {
+		return nil, err
 	}
 	return result, nil
 }

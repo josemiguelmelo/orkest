@@ -35,3 +35,14 @@ func TestLoadServerConfigurationGitIdentity(t *testing.T) {
 		})
 	}
 }
+
+func TestEditorOriginsHaveAlwaysAvailableDefaults(t *testing.T) {
+	t.Setenv("ORKEST_PLATFORM_ORIGIN", "")
+	t.Setenv("ORKEST_EDITOR_ORIGIN", "")
+	// The former gate cannot disable the feature, even in an older environment file.
+	t.Setenv("ORKEST_EDITOR_ENABLED", "false")
+	config := loadServerConfiguration()
+	if config.PlatformOrigin != "http://localhost:8080" || config.EditorOrigin != "http://editor.localhost:8080" {
+		t.Fatalf("unexpected editor origin defaults: %q %q", config.PlatformOrigin, config.EditorOrigin)
+	}
+}

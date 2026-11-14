@@ -38,12 +38,12 @@ its own relevant checks, and updates the main plan's progress table. Keep unrela
 cleanup out of the stack. Split further if implementation reveals a change with
 an independent invariant or review concern; do not impose an arbitrary line limit.
 
-Introduce a default-off editor configuration gate when production wiring begins.
-Until release qualification, normal deployments neither create editors nor expose
-editor routes/actions. Only isolated development/test environments enable the
-incomplete stack. Disabled editor support must preserve existing agent behavior.
-The gate is not a safe rollback mechanism once writable editors exist: reconcile
-and confirm their termination before disabling handoff enforcement or downgrading.
+The user subsequently required the editor feature to always be enabled. The
+service, lifecycle API and supported executor capability are therefore always
+wired; no enable/disable flag remains. Unsupported executors return an explicit
+unavailable result. Stop and reconcile editors before downgrading handoff
+enforcement. Always exposing the feature does not qualify unresolved production
+isolation concerns; see the [review](task-editor-review.md).
 
 | PR | Review focus | Depends on | Existing slice |
 | --- | --- | --- | --- |
@@ -125,7 +125,7 @@ requesting-user attachment, lifecycle/status results and a per-task coordinator.
 Derive mode through a consumer-owned execution-state reader backed by existing
 durable state and reconciled worker ownership. Revoke generation access, stop and
 confirm termination, then replace. Recheck execution state before granting writable
-access; pending starts take precedence. Add the default-off wiring gate here.
+access; pending starts take precedence. Wire the editor capability unconditionally.
 
 **Acceptance:** race tests cover duplicate Open, Open/Stop, concurrent transitions,
 stale generations and repository selection changes. A task stage, missing output,
@@ -162,7 +162,7 @@ prompts, worker queues, approval/input waits, lost acknowledgements, uncertain s
 and restart at each transition boundary. A writable terminal never overlaps agent
 execution. Real Docker verifies the stop-before-delivery ordering. Run pinned
 OpenCode restore and successful follow-up; session reload alone is insufficient.
-Default-off regression coverage confirms existing launches remain unchanged.
+Unsupported-executor regression coverage confirms existing launches remain unchanged.
 
 ## PR 6 — Secure browser access and proxying
 
@@ -230,8 +230,7 @@ unnecessarily require a model; that command does not replace live continuation.
 Missing infrastructure/credentials keep the associated qualification incomplete.
 
 Before enablement, stop old platform writers: they cannot enforce editor handoff.
-Reconcile discovered resources before delivering work. Before rollback or disabling
-the gate, revoke access and confirm all writable editors have terminated while the
+Reconcile discovered resources before delivering work. Before rollback, revoke access and confirm all writable editors have terminated while the
 new handoff guards still operate. Do not stop independent agentctl workers merely
 to upgrade the platform. Publishing/deployment needs separate authorization.
 

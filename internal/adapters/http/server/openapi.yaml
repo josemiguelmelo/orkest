@@ -48,7 +48,7 @@ paths:
     get:
       tags: [Tasks]
       operationId: getTaskEditor
-      description: Inspect the editor without creating resources. Requires task mutation authority and requesting-user ownership. Disabled deployments do not expose this endpoint.
+      description: Inspect the editor without creating resources. Requires task mutation authority and requesting-user ownership. Editor routes are always exposed; unsupported executors return unavailable.
       security: [{bearerAuth: []}, {cookieAuth: []}]
       responses:
         "200": {description: Editor state, content: {application/json: {schema: {$ref: "#/components/schemas/TaskEditorStatus"}}}}
@@ -60,7 +60,7 @@ paths:
     post:
       tags: [Tasks]
       operationId: openTaskEditor
-      description: Open or reuse an editor. Returns a one-use launch URL valid for one minute. Cookie callers must send the configured platform Origin. Does not start an agent or prepare repositories. Disabled deployments do not expose this endpoint.
+      description: Open or reuse an editor. Returns a one-use launch URL valid for one minute. Cookie callers must send the configured platform Origin. Does not start an agent or prepare repositories. Editor routes are always exposed; unsupported executors return unavailable.
       security: [{bearerAuth: []}, {cookieAuth: []}]
       responses:
         "200": {description: Editor state, content: {application/json: {schema: {$ref: "#/components/schemas/TaskEditorStatus"}}}}
@@ -72,7 +72,7 @@ paths:
     delete:
       tags: [Tasks]
       operationId: stopTaskEditor
-      description: Stop the requesting user's editor and terminal processes; saved files remain. Cookie callers must send the configured platform Origin. Disabled deployments do not expose this endpoint.
+      description: Stop the requesting user's editor and terminal processes; saved files remain. Cookie callers must send the configured platform Origin. Editor routes are always exposed; unsupported executors return unavailable.
       security: [{bearerAuth: []}, {cookieAuth: []}]
       responses:
         "200": {description: Editor state, content: {application/json: {schema: {$ref: "#/components/schemas/TaskEditorStatus"}}}}

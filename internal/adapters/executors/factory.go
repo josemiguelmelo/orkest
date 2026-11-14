@@ -32,7 +32,7 @@ type Executor interface {
 }
 
 // EditorCapabilities exposes editor contracts without revealing the concrete
-// executor. Nil capabilities mean editing is disabled or unsupported.
+// executor. Nil capabilities mean the executor does not support editing.
 type EditorCapabilities struct {
 	Backend   taskeditor.Backend
 	Checkouts taskeditor.CheckoutInspector
@@ -49,7 +49,7 @@ type Selection struct {
 
 // Config holds the shared settings needed to construct either executor.
 type Config struct {
-	Editor                   *EditorConfig
+	Editor                   EditorConfig
 	Kind                     string
 	DataRoot                 string
 	DockerNetwork            string
@@ -82,14 +82,20 @@ func New(ctx context.Context, config Config) (Selection, error) {
 			return Selection{}, err
 		}
 		selection := Selection{Kind: kind, Executor: executor}
-		if config.Editor != nil {
-			backend, editorErr := executor.NewEditorBackend(config.Editor.Image, config.Editor.ReadOnlyImage)
-			if editorErr != nil {
-				_ = executor.Close()
-				return Selection{}, editorErr
-			}
-			selection.Editor = &EditorCapabilities{Backend: backend, Checkouts: dockerexecutor.TaskCheckoutInspector{DataRoot: config.DataRoot}}
+		image, readonlyImage := config.Editor.Image, config.Editor.ReadOnlyImage
+		if strings.TrimSpace(image) == "" {
+			image = dockerexecutor.DefaultEditorImage
 		}
+		if strings.TrimSpace(readonlyImage) == "" {
+			readonlyImage = dockerexecutor.DefaultReadonlyEditorImage
+		}
+		backend, editorErr := executor.NewEditorBackend(image, readonlyImage)
+		if editorErr != nil {
+			_ = executor.Close()
+			return Selection{}, editorErr
+		}
+		selection.Editor = &EditorCapabilities{Backend: backend, Checkouts: dockerexecutor.TaskCheckoutInspector{DataRoot: config.DataRoot}}
+
 		return selection, nil
 	case Local:
 		executor, err := localexecutor.New(localexecutor.Config{

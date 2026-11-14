@@ -14,15 +14,15 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
     meta?: keyof ClientMeta extends never ? Record<string, unknown> : ClientMeta;
 };
 /**
- * Stop the requesting user's editor and terminal processes; saved files remain. Cookie callers must send the configured platform Origin. Disabled deployments do not expose this endpoint.
+ * Stop the requesting user's editor and terminal processes; saved files remain. Cookie callers must send the configured platform Origin. Editor routes are always exposed; unsupported executors return unavailable.
  */
 export declare const stopTaskEditor: <ThrowOnError extends boolean = false>(options: Options<StopTaskEditorData, ThrowOnError>) => RequestResult<StopTaskEditorResponses, StopTaskEditorErrors, ThrowOnError>;
 /**
- * Inspect the editor without creating resources. Requires task mutation authority and requesting-user ownership. Disabled deployments do not expose this endpoint.
+ * Inspect the editor without creating resources. Requires task mutation authority and requesting-user ownership. Editor routes are always exposed; unsupported executors return unavailable.
  */
 export declare const getTaskEditor: <ThrowOnError extends boolean = false>(options: Options<GetTaskEditorData, ThrowOnError>) => RequestResult<GetTaskEditorResponses, GetTaskEditorErrors, ThrowOnError>;
 /**
- * Open or reuse an editor. Returns a one-use launch URL valid for one minute. Cookie callers must send the configured platform Origin. Does not start an agent or prepare repositories. Disabled deployments do not expose this endpoint.
+ * Open or reuse an editor. Returns a one-use launch URL valid for one minute. Cookie callers must send the configured platform Origin. Does not start an agent or prepare repositories. Editor routes are always exposed; unsupported executors return unavailable.
  */
 export declare const openTaskEditor: <ThrowOnError extends boolean = false>(options: Options<OpenTaskEditorData, ThrowOnError>) => RequestResult<OpenTaskEditorResponses, OpenTaskEditorErrors, ThrowOnError>;
 /**

@@ -72,10 +72,15 @@ rewriting their saved state; exact supported manifest fingerprints still restore
 
 The Docker editor backend, lifecycle coordination, conservative idle proof,
 execution/recovery handoff guards, scoped lifecycle API and separate-origin
-HTTP/WebSocket gateway are implemented behind `ORKEST_EDITOR_ENABLED=false`.
+HTTP/WebSocket gateway are always wired; no enable/disable flag is supported.
 Saved task checkouts are reused; no editor database or worker wire changes.
 Only the requesting mutating user may attach or explicitly Stop. One active
 platform coordinator is required. Local/Kubernetes editor configurations return
 unavailable. Task-page actions, automatic browser reconnect and production
 release qualification remain outstanding. See [implementation, checks and
 operator constraints](development/task-editor-backend.md).
+
+The subsequent [production code review](development/task-editor-review.md) records
+lifecycle fixes, the qualified native-network correction, and unresolved
+adversarial mount-path qualification. Always exposing
+the feature does not establish production isolation qualification.

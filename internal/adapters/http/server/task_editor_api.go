@@ -35,18 +35,51 @@ type EditorGateway struct {
 	sessions               map[string]editorTicket
 }
 
-func NewEditorGateway(service *taskeditor.TaskEditorService, origin, platformOrigin string) (*EditorGateway, error) {
-	for _, value := range []string{origin, platformOrigin} {
-		u, err := url.Parse(value)
-		allowedScheme := err == nil && (u.Scheme == "https" || u.Scheme == "http" && (u.Hostname() == "localhost" || u.Hostname() == "127.0.0.1"))
-		if err != nil || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.Path != "" || !allowedScheme {
-			return nil, errors.New("editor origins must be HTTPS origins (HTTP loopback allowed)")
+func parseEditorOrigin(value string) (*url.URL, error) {
+	u, err := url.Parse(value)
+	if err != nil {
+		return nil, errors.New("invalid editor origin")
+	}
+	loopback := strings.EqualFold(u.Hostname(), "localhost") || strings.HasSuffix(strings.ToLower(u.Hostname()), ".localhost")
+	if ip := net.ParseIP(u.Hostname()); ip != nil {
+		loopback = ip.IsLoopback()
+	}
+	if u.Host == "" || u.User != nil || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || u.Path != "" || u.Opaque != "" || (u.Scheme != "https" && (u.Scheme != "http" || !loopback)) {
+		return nil, errors.New("editor origins must be HTTPS origins (HTTP loopback allowed)")
+	}
+	u.Host = strings.ToLower(u.Host)
+	if (u.Scheme == "https" && u.Port() == "443") || (u.Scheme == "http" && u.Port() == "80") {
+		u.Host = u.Hostname()
+		if strings.Contains(u.Host, ":") {
+			u.Host = "[" + u.Host + "]"
 		}
 	}
-	if service == nil || origin == platformOrigin {
-		return nil, errors.New("editor requires a separate origin and service")
+	return u, nil
+}
+
+func NewEditorGateway(service *taskeditor.TaskEditorService, origin, platformOrigin string) (*EditorGateway, error) {
+	editorURL, err := parseEditorOrigin(origin)
+	if err != nil {
+		return nil, err
 	}
-	return &EditorGateway{service: service, origin: origin, platformOrigin: platformOrigin, grants: make(map[string]editorTicket), sessions: make(map[string]editorTicket)}, nil
+	platformURL, err := parseEditorOrigin(platformOrigin)
+	if err != nil {
+		return nil, err
+	}
+	if service == nil || editorURL.Host == platformURL.Host {
+		return nil, errors.New("editor and platform must use distinct HTTP authorities")
+	}
+	return &EditorGateway{service: service, origin: editorURL.String(), platformOrigin: platformURL.String(), grants: make(map[string]editorTicket), sessions: make(map[string]editorTicket)}, nil
+}
+
+// MatchesHost shares the constructor's canonical authority with server routing.
+func (g *EditorGateway) MatchesHost(host string) bool {
+	authority := strings.TrimPrefix(strings.TrimPrefix(g.origin, "https://"), "http://")
+	defaultPort := ":80"
+	if strings.HasPrefix(g.origin, "https://") {
+		defaultPort = ":443"
+	}
+	return strings.EqualFold(strings.TrimSuffix(host, defaultPort), authority)
 }
 
 func (g *EditorGateway) routes(r chi.Router) {
@@ -153,58 +186,69 @@ func (g *EditorGateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("Referrer-Policy", "no-referrer")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	if r.Host != strings.TrimPrefix(strings.TrimPrefix(g.origin, "https://"), "http://") {
+	if !g.MatchesHost(r.Host) {
 		http.NotFound(w, r)
 		return
 	}
-	if r.URL.Path == "/launch" && r.Method == http.MethodGet {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Header().Set("Content-Security-Policy", "default-src 'none'; script-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'")
-		_, _ = io.WriteString(w, `<!doctype html><title>Open task editor</title><p id="status">Opening editor…</p><script>const grant=location.hash.slice(1);history.replaceState(null,'','/launch');fetch('/exchange',{method:'POST',headers:{'Content-Type':'text/plain'},body:grant}).then(async r=>{if(!r.ok)throw Error();location.replace((await r.json()).path)}).catch(()=>document.getElementById('status').textContent='Editor access expired. Open VS Code again from the task.');</script>`)
+	switch {
+	case r.URL.Path == "/launch" && r.Method == http.MethodGet:
+		g.launch(w, r)
+	case r.URL.Path == "/exchange" && r.Method == http.MethodPost:
+		g.exchange(w, r)
+	default:
+		g.proxy(w, r)
+	}
+}
+
+func (g *EditorGateway) launch(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; script-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'")
+	_, _ = io.WriteString(w, `<!doctype html><title>Open task editor</title><p id="status">Opening editor…</p><script>const grant=location.hash.slice(1);history.replaceState(null,'','/launch');fetch('/exchange',{method:'POST',headers:{'Content-Type':'text/plain'},body:grant}).then(async r=>{if(!r.ok)throw Error();location.replace((await r.json()).path)}).catch(()=>document.getElementById('status').textContent='Editor access expired. Open VS Code again from the task.');</script>`)
+}
+
+func (g *EditorGateway) exchange(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("Origin") != g.origin {
+		writeError(w, http.StatusForbidden, "invalid_origin")
 		return
 	}
-	if r.URL.Path == "/exchange" && r.Method == http.MethodPost {
-		if r.Header.Get("Origin") != g.origin {
-			writeError(w, http.StatusForbidden, "invalid_origin")
-			return
-		}
-		raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 128))
-		if err != nil {
-			writeError(w, http.StatusBadRequest, "invalid_grant")
-			return
-		}
-		g.mu.Lock()
-		ticket, found := g.grants[string(raw)]
-		delete(g.grants, string(raw))
-		g.prune()
-		g.mu.Unlock()
-		if !found || time.Now().After(ticket.expires) {
-			writeError(w, http.StatusGone, "grant_expired")
-			return
-		}
-		if _, _, err = g.service.Access(r.Context(), ticket.user, ticket.scope, ticket.generation); err != nil {
-			writeError(w, http.StatusForbidden, "access_denied")
-			return
-		}
-		id, err := randomState()
-		if err != nil {
-			editorResult(w, nil, err)
-			return
-		}
-		secret, err := randomState()
-		if err != nil {
-			editorResult(w, nil, err)
-			return
-		}
-		ticket.expires = time.Now().Add(15 * time.Minute)
-		g.mu.Lock()
-		g.sessions[id+":"+secret] = ticket
-		g.mu.Unlock()
-		path := "/s/" + id + "/"
-		http.SetCookie(w, &http.Cookie{Name: "orkest_editor", Value: secret, Path: path, HttpOnly: true, Secure: strings.HasPrefix(g.origin, "https://"), SameSite: http.SameSiteStrictMode, MaxAge: 900})
-		respond(w, map[string]string{"path": path}, nil, http.StatusOK)
+	raw, err := io.ReadAll(http.MaxBytesReader(w, r.Body, 128))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_grant")
 		return
 	}
+	g.mu.Lock()
+	ticket, found := g.grants[string(raw)]
+	delete(g.grants, string(raw))
+	g.prune()
+	g.mu.Unlock()
+	if !found || time.Now().After(ticket.expires) {
+		writeError(w, http.StatusGone, "grant_expired")
+		return
+	}
+	if _, _, err = g.service.Access(r.Context(), ticket.user, ticket.scope, ticket.generation); err != nil {
+		writeError(w, http.StatusForbidden, "access_denied")
+		return
+	}
+	id, err := randomState()
+	if err != nil {
+		editorResult(w, nil, err)
+		return
+	}
+	secret, err := randomState()
+	if err != nil {
+		editorResult(w, nil, err)
+		return
+	}
+	ticket.expires = time.Now().Add(15 * time.Minute)
+	g.mu.Lock()
+	g.sessions[id+":"+secret] = ticket
+	g.mu.Unlock()
+	path := "/s/" + id + "/"
+	http.SetCookie(w, &http.Cookie{Name: "orkest_editor", Value: secret, Path: path, HttpOnly: true, Secure: strings.HasPrefix(g.origin, "https://"), SameSite: http.SameSiteStrictMode, MaxAge: 900})
+	respond(w, map[string]string{"path": path}, nil, http.StatusOK)
+}
+
+func (g *EditorGateway) proxy(w http.ResponseWriter, r *http.Request) {
 	parts := strings.SplitN(strings.TrimPrefix(r.URL.Path, "/"), "/", 3)
 	if len(parts) != 3 || parts[0] != "s" {
 		http.NotFound(w, r)
@@ -236,7 +280,7 @@ func (g *EditorGateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	upstream, err := url.Parse(instance.Endpoint)
-	if err != nil || upstream.Host == "" {
+	if err != nil || upstream.Host == "" || upstream.User != nil || upstream.RawQuery != "" || upstream.Fragment != "" || (upstream.Scheme != "http" && upstream.Scheme != "https") {
 		writeError(w, http.StatusServiceUnavailable, "editor_unavailable")
 		return
 	}
@@ -262,6 +306,10 @@ func (g *EditorGateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			pr.Out.URL.Path = strings.TrimPrefix(pr.In.URL.Path, prefix)
 			pr.Out.URL.RawPath = ""
 			pr.Out.Host = upstream.Host
+			pr.Out.Header.Del("X-Orkest-Editor-Relay")
+			if instance.GatewayToken != "" {
+				pr.Out.Header.Set("X-Orkest-Editor-Relay", instance.GatewayToken)
+			}
 			if pr.In.Header.Get("Origin") != "" {
 				pr.Out.Header.Set("Origin", upstream.Scheme+"://"+upstream.Host)
 			}

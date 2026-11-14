@@ -12,8 +12,13 @@ single-use grant and opens the current editor. This is not release enablement.
 capabilities; server wiring has no Docker import or concrete executor assertion.
 The editor service and gateway depend only on consumer-owned contracts, independently
 of the agent runtime, model or Git provider. The
-Docker adapter shares the existing Engine client, data root, container UID/GID and
-network. Only selected existing checkouts and a generated workspace manifest are
+Docker adapter shares the existing Engine client and data root, using a numeric
+non-root container UID/GID. Each generation has an internal-only bridge; it never
+joins the worker control network. A containerized platform joins that editor
+bridge directly as the trusted gateway. A native-host platform uses a fixed-upstream,
+token-authenticated relay; only that relay has an external network attachment.
+The shell has no route to peer editors or Docker host aliases. The private relay
+token is never forwarded to code-server or returned by the lifecycle API. Only selected existing checkouts and a generated workspace manifest are
 mounted. Temporary manifests live beneath `agent-executions/editor-workspaces`
 so the daemon can see them; they are deleted after startup. Editor home/cache use
 bounded tmpfs. No agent state, credentials, configured host mounts, Docker socket,
@@ -64,7 +69,7 @@ connections are revoked on that pass. Database unavailability is fail closed.
 
 ## API and browser access
 
-When enabled, the platform exposes authenticated
+The platform always exposes authenticated
 `GET`, `POST`, `DELETE /api/organizations/{orgID}/workspaces/{workspaceID}/tasks/{taskID}/editor`.
 GET inspects only. POST opens/reuses and returns state, mode, generation, missing
 checkouts and a `launchUrl`. DELETE stops. Failures are sanitized; private upstream
@@ -89,7 +94,11 @@ the future frontend reconnect flow must use the authenticated lifecycle API.
 
 ## Configuration and operations
 
-Keep `ORKEST_EDITOR_ENABLED=false` until the intended environment is qualified.
+The editor service and API are always wired. There is no enable/disable flag;
+legacy `ORKEST_EDITOR_ENABLED` values are ignored. Unsupported executors return
+an explicit unavailable result. Image defaults are the pinned tags below; custom
+images and origins remain configurable. Production readiness is assessed in
+[the code review](task-editor-review.md), including unresolved isolation blockers.
 Build the two pinned code-server 4.145.2 targets with
 `make docker-task-editor-images`. Configure distinct
 `ORKEST_EDITOR_IMAGE` and `ORKEST_EDITOR_READONLY_IMAGE`; immutable deployment
@@ -99,25 +108,36 @@ The editor does not automatically inherit an agent's execution-profile toolchain
 Set `ORKEST_PLATFORM_ORIGIN` and `ORKEST_EDITOR_ORIGIN` to distinct absolute origins
 without trailing slashes. Route both hosts to the existing platform HTTP listener;
 the editor Host selects the dedicated gateway. HTTPS is required outside loopback.
-For local testing, forward the second loopback origin to that same listener.
+The local default is `http://editor.localhost:8080`, alongside platform
+`http://localhost:8080`, using the same listener and different Host headers.
+Override both origins when using a different public port or TLS hostnames.
 Do not route editor-host requests directly to code-server. TLS termination must
 preserve Host and support WebSocket upgrades. The gateway strips platform
 credentials even when development origins share a hostname.
 
-The platform must reach editor endpoints: with `ORKEST_AGENTCTL_NETWORK`, run the
-platform on that Docker network; otherwise use a local daemon with its published
-loopback ports. The daemon must see the configured data directory. Checkouts must
-already be accessible to the configured numeric non-root UID/GID; discovery never
-changes permissions to make them accessible. A remote Docker daemon without these
-path/network properties is unsupported. Local and Kubernetes editors are deferred.
+The containerized platform must use its Docker container ID/name as its hostname
+(the default container-ID hostname works) and be attached to
+`ORKEST_AGENTCTL_NETWORK`; the backend verifies that identity before attaching it
+to an editor's private bridge. No editor joins that worker network. Native-host
+mode publishes only the authenticated relay on loopback, never code-server itself.
+Both modes keep editor shells on internal-only networks; internet-dependent
+terminal commands require a future controlled-egress design. This is a current
+security constraint, not a newly confirmed product requirement.
+
+The daemon must see the configured data directory. Checkouts must already be
+accessible to the numeric non-root UID/GID; a root platform UID falls back to
+editor UID/GID 1000:1000. Discovery never changes checkout permissions. A remote
+Docker daemon without these path/network properties is unsupported. Local and
+Kubernetes editors are deferred. The relay and network are stopped/removed with
+the editor; discovery also reconciles orphan relays/networks after uncertain
+creation. Unrelated network endpoints are never forcibly removed.
 
 Exactly one active platform process may coordinate editors in an installation.
 There is no active-active fencing or distributed editor lock. Before enabling,
 stop old platform writers that lack handoff enforcement; leave independent workers
 running. Startup reconciliation must succeed before work delivery resumes. Before
-rollback or disabling the gate, use the guarded version to Stop all writable
-editors and verify termination. Disabling the gate alone is unsafe and is not a
-cleanup mechanism. Restart reconciliation preserves saved checkouts but stops old
+rollback, use the guarded version to Stop all writable editors and verify
+termination. There is no feature gate to use as a cleanup mechanism. Restart reconciliation preserves saved checkouts but stops old
 editor environments; users obtain new grants after restart.
 
 ## Verification and remaining release qualification
@@ -131,10 +151,8 @@ Chromium through the Go gateway/code-server verifies grant exchange, static asse
 WebSockets, terminal creation, handoff and readonly terminal denial.
 
 Run `make test-task-editor-backend` with a reachable Docker daemon and
-`TASK_EDITOR_BROWSER=/absolute/path/to/chromium`. Existing local spike image tags
-are the tests' defaults; the Docker lifecycle test accepts `ORKEST_EDITOR_IMAGE`
-and `ORKEST_EDITOR_READONLY_IMAGE` overrides. The browser test uses the qualified
-local image pair. Its test-only task/identity fixture is not production OIDC or a
+`TASK_EDITOR_BROWSER=/absolute/path/to/chromium`. The target builds the pinned production image pair locally; the Docker lifecycle test accepts `ORKEST_EDITOR_IMAGE`
+and `ORKEST_EDITOR_READONLY_IMAGE` overrides. The browser test uses the same local image pair. Its test-only task/identity fixture is not production OIDC or a
 PostgreSQL qualification. Run `make check`, the focused race suite and
 `make test-recovery` as well. Recorded commands/results are in the main plan.
 
@@ -154,3 +172,13 @@ empty state; the unchanged implementation renders `No scheduled jobs yet` and
 `make build` passed separately. These unrelated UI files were not changed.
 The final focused race suite and `make test-task-editor-backend` passed, including
 writing `browser.txt` from the real integrated terminal.
+
+Review follow-up: ownership and failed-stop intent survive recreation; leases are
+revoked before daemon inspection; task locks are cancellable and scoped per
+workspace, and inactive task entries are evicted without replacing locks held by
+waiters. The strict `make test-task-editor-security` target first reproduced
+cross-workspace editor access and host-alias access to an unauthenticated worker.
+With internal-only editor networks plus the authenticated native relay, both
+probes are denied, and unauthenticated relay access returns 403. The browser still
+saves a file through the terminal and reconnects through mode replacement.
+Remaining adversarial mount-path qualification is recorded in the review.

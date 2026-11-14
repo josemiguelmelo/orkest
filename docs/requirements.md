@@ -434,7 +434,9 @@ Saved files and branches persist across recreation.
 
 The proposed first release is Docker-only and restricted to the requesting user
 with task mutation authority; Viewer review and collaboration are deferred.
-The backend is default-off, and its deployment/verification constraints are in
+Confirmed user instruction: the editor feature is always enabled; there is no
+configuration gate. Unsupported executors return unavailable. Deployment and
+verification constraints are in
 [the implementation notes](development/task-editor-backend.md). Frontend delivery
 and release qualification remain outstanding; implementation does not establish
 production release readiness.

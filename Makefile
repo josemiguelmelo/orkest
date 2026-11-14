@@ -197,6 +197,10 @@ docker-task-editor-images:
 	$(DOCKER) build -f build/docker/task-editor.Dockerfile --target editor -t orkest/task-editor:4.145.2 .
 	$(DOCKER) build -f build/docker/task-editor.Dockerfile --target readonly -t orkest/task-editor:4.145.2-ro .
 
-test-task-editor-backend:
+test-task-editor-backend: docker-task-editor-images
 	go test -tags=docker ./internal/adapters/executors/docker -run '^TestDockerEditorLifecycle$$' -count=1 -timeout=3m -v
 	go test -tags=docker ./internal/adapters/http/server -run '^TestDockerEditorGatewayBrowser$$' -count=1 -timeout=4m -v
+
+.PHONY: test-task-editor-security
+test-task-editor-security: docker-task-editor-images
+	go test -tags=docker,security ./internal/adapters/executors/docker -run '^TestDockerEditorNetworkIsolation$$' -count=1 -timeout=3m -v

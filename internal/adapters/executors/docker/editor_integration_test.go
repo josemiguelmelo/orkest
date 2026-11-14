@@ -14,6 +14,7 @@ import (
 
 	"github.com/josemiguelmelo/orkest/internal/platform/taskstorage"
 	"github.com/josemiguelmelo/orkest/internal/server/taskeditor"
+	client "github.com/moby/moby/client"
 )
 
 func TestDockerEditorLifecycle(t *testing.T) {
@@ -54,7 +55,7 @@ func TestDockerEditorLifecycle(t *testing.T) {
 	defer func() { _ = executor.Close() }()
 	image := os.Getenv("ORKEST_EDITOR_IMAGE")
 	if image == "" {
-		image = "orkest/task-editor-spike:4.145.2"
+		image = "orkest/task-editor:4.145.2"
 	}
 	readonly := os.Getenv("ORKEST_EDITOR_READONLY_IMAGE")
 	if readonly == "" {
@@ -97,6 +98,20 @@ func TestDockerEditorLifecycle(t *testing.T) {
 		discovered, err := backend.ListEditors(ctx)
 		if err != nil || len(discovered) != 1 || discovered[0].ID != instance.ID {
 			t.Fatalf("discovery: %+v %v", discovered, err)
+		}
+		if mode == taskeditor.ReadOnly {
+			relay, err := executor.client.ContainerInspect(ctx, backend.relayName(instance), client.ContainerInspectOptions{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			timeout := 1
+			if _, err = executor.client.ContainerStop(ctx, relay.Container.ID, client.ContainerStopOptions{Timeout: &timeout}); err != nil {
+				t.Fatal(err)
+			}
+			broken, found, err := backend.InspectEditor(ctx, scope)
+			if err != nil || !found || broken.Endpoint != "" {
+				t.Fatalf("failed relay was not inspectable for cleanup: %v", err)
+			}
 		}
 		if err = backend.StopEditor(ctx, instance); err != nil {
 			t.Fatal(err)
