@@ -25,4 +25,4 @@ The configured model must also be confirmed through ACP before prompts on both
 create and restore. Unsupported confirmation preserves state and fails visibly.
 Deterministic conformance is covered; live model confirmation and continuation
 remain unverified for this provider. See [shared verification/recovery](README.md#verification-and-recovery)
-and [dated evidence](../../status.md#verification-record).
+and [runtime qualification](../../development/testing.md#runtime-qualification).

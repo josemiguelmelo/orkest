@@ -181,7 +181,12 @@ Confirmed capacity requirement; implementation unfinished:
 - Artifacts retain immutable revisions and optional run/stage-entry identity.
   Support text/JSON and external references. Required pinned inputs gate consumer
   startup; outputs do not gate producer completion.
-- PR-triggered rules/provider conditions remain future work.
+- Workspace-admin-configured stage integrations observe verified task PR artifacts.
+  GitHub submitted-review and merge actions can move the same task to a nonclosed
+  stage or call its currently assigned agent with a custom prompt. The latter is
+  an explicit opt-in exception to manual starts, authorized for this feature.
+  Preserve session compatibility, execution ownership and workspace authority;
+  connection/rule saves do not trigger work. See [stage integrations](guides/workflow-stage-integrations.md).
 
 See [workflow behavior](guides/workflows.md) and [transactions](development/workflows.md).
 

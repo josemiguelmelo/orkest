@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '../../app/context';
 import { CodingIntegrationsPanel } from './coding-integrations';
+import { WorkflowStageIntegrationsPanel } from './workflow-stage-integrations';
 import { WorkspaceHostMountsPanel } from './host-mounts';
 import { command, data } from '../../shared/api/client';
 import * as sdk from '../../shared/api/generated/sdk.gen';
@@ -195,7 +196,14 @@ export function OrganizationPage() {
                 key={ws.id}
                 to="/organizations/$orgId/workspaces/$workspaceId/tasks"
                 params={{ orgId: scope.orgID, workspaceId: ws.id }}
-                search={{ view: 'board', workflow: '', q: '', status: 'all', agent: '', sort: 'updated' }}
+                search={{
+                  view: 'board',
+                  workflow: '',
+                  q: '',
+                  status: 'all',
+                  agent: '',
+                  sort: 'updated',
+                }}
               >
                 <h3>{ws.name}</h3>
                 <div>
@@ -279,6 +287,7 @@ export function WorkspaceSettingsPage() {
       </PageHeader>
       <WorkspaceEnvironmentPanel />
       <CodingIntegrationsPanel />
+      <WorkflowStageIntegrationsPanel key={`${scope.orgID}/${scope.workspaceID}`} />
       <WorkspaceHostMountsPanel key={`${scope.orgID}/${scope.workspaceID}`} />
       <Members workspace />
       {permissions.workspaceAdmin && (

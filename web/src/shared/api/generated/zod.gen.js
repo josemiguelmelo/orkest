@@ -122,17 +122,80 @@ export const zWorkflowStage = z.object({
     customPrompt: z.string().max(32768).optional(),
     responsibleAgentId: z.string()
 });
+export const zWorkflowStageIntegrationAction = z.object({
+    id: z.string(),
+    name: z.string(),
+    parametersSchema: z.record(z.string(), z.unknown())
+});
+export const zWorkflowStageIntegrationProvider = z.object({
+    provider: z.string(),
+    configSchema: z.record(z.string(), z.unknown()),
+    actions: z.array(zWorkflowStageIntegrationAction)
+});
+export const zWorkflowStageIntegration = z.object({
+    id: z.string(),
+    workspaceId: z.string(),
+    provider: z.string(),
+    name: z.string(),
+    enabled: z.boolean(),
+    codingIntegrationId: z.string(),
+    repositoryIds: z.array(z.string()),
+    config: z.record(z.string(), z.unknown()),
+    version: z.coerce.bigint().min(BigInt('-9223372036854775808'), { error: 'Invalid value: Expected int64 to be >= -9223372036854775808' }).max(BigInt('9223372036854775807'), { error: 'Invalid value: Expected int64 to be <= 9223372036854775807' }),
+    configuredBy: z.string(),
+    updatedAt: z.iso.datetime()
+});
+export const zWorkflowStageIntegrationInput = z.object({
+    provider: z.string().min(1),
+    name: z.string().min(1).max(200),
+    enabled: z.boolean(),
+    codingIntegrationId: z.string().min(1),
+    repositoryIds: z.array(z.string()).min(1),
+    config: z.record(z.string(), z.unknown()),
+    version: z.coerce.bigint().gte(BigInt(0)).max(BigInt('9223372036854775807'), { error: 'Invalid value: Expected int64 to be <= 9223372036854775807' })
+});
+export const zWorkflowStageIngestionReceipt = z.object({
+    duplicate: z.boolean(),
+    ignored: z.boolean()
+});
+export const zWorkflowStageIntegrationStatus = z.object({
+    id: z.string(),
+    taskId: z.string(),
+    ruleId: z.string(),
+    stageVersion: z.coerce.bigint().min(BigInt('-9223372036854775808'), { error: 'Invalid value: Expected int64 to be >= -9223372036854775808' }).max(BigInt('9223372036854775807'), { error: 'Invalid value: Expected int64 to be <= 9223372036854775807' }),
+    actionId: z.string(),
+    state: z.string(),
+    error: z.string(),
+    createdAt: z.iso.datetime()
+});
+export const zWorkflowStageIntegrationStatusPage = z.object({
+    items: z.array(zWorkflowStageIntegrationStatus).max(50),
+    nextCursor: z.string().optional()
+});
+export const zWorkflowIntegrationTrigger = z.object({
+    connectionId: z.string().min(1),
+    actionId: z.string().min(1),
+    parameters: z.record(z.string(), z.unknown())
+});
 export const zWorkflowAutomationRule = z.object({
     id: z.string().min(1).max(100),
     enabled: z.boolean(),
     event: z.enum([
         'stage_entered',
         'run_succeeded',
-        'stage_completed'
+        'stage_completed',
+        'integration_action'
     ]),
     sourceStageId: z.string(),
-    action: z.enum(['move_task', 'start_work']),
-    targetStageId: z.string().optional()
+    action: z.enum([
+        'move_task',
+        'start_work',
+        'call_agent'
+    ]),
+    targetStageId: z.string().optional(),
+    integration: zWorkflowIntegrationTrigger.optional(),
+    promptText: z.string().max(32768).optional(),
+    sessionPolicy: z.enum(['continue_or_create_if_absent', 'new']).optional()
 });
 export const zWorkflowInput = z.object({
     name: z.string().min(1).max(200)
@@ -521,6 +584,16 @@ export const zCurrentUserWritable = z.object({
     user: zUser,
     organizations: z.array(zOrganization)
 });
+export const zWorkflowStageIntegrationInputWritable = z.object({
+    provider: z.string().min(1),
+    name: z.string().min(1).max(200),
+    enabled: z.boolean(),
+    codingIntegrationId: z.string().min(1),
+    repositoryIds: z.array(z.string()).min(1),
+    config: z.record(z.string(), z.unknown()),
+    webhookSecret: z.string().min(32).max(4096).optional(),
+    version: z.coerce.bigint().gte(BigInt(0)).max(BigInt('9223372036854775807'), { error: 'Invalid value: Expected int64 to be <= 9223372036854775807' })
+});
 export const zAgentRuntimeProfileInputWritable = z.object({
     name: z.string().min(1).max(200),
     runtime: z.enum([
@@ -624,6 +697,86 @@ export const zMcpServerInput = z.object({
 });
 export const zCodeRepositoryCreate2 = zCodeRepositoryCreate;
 export const zTaskIntegration2 = zTaskIntegrationInputWritable;
+export const zReceiveWorkflowStageCallbackBody = z.record(z.string(), z.unknown());
+export const zReceiveWorkflowStageCallbackPath = z.object({
+    connectionID: z.string()
+});
+/**
+ * Duplicate or authenticated ignored event
+ */
+export const zReceiveWorkflowStageCallbackResponse = zWorkflowStageIngestionReceipt;
+/**
+ * Provider and action catalog
+ */
+export const zListWorkflowStageIntegrationProvidersResponse = z.array(zWorkflowStageIntegrationProvider);
+export const zListWorkflowStageIntegrationsPath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string()
+});
+/**
+ * Workspace stage integration connections
+ */
+export const zListWorkflowStageIntegrationsResponse = z.array(zWorkflowStageIntegration);
+export const zCreateWorkflowStageIntegrationBody = zWorkflowStageIntegrationInputWritable;
+export const zCreateWorkflowStageIntegrationPath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string()
+});
+/**
+ * Stage integration created
+ */
+export const zCreateWorkflowStageIntegrationResponse = zWorkflowStageIntegration;
+export const zDeleteWorkflowStageIntegrationPath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string(),
+    connectionID: z.string()
+});
+/**
+ * Stage integration deleted
+ */
+export const zDeleteWorkflowStageIntegrationResponse = z.void();
+export const zUpdateWorkflowStageIntegrationBody = zWorkflowStageIntegrationInputWritable;
+export const zUpdateWorkflowStageIntegrationPath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string(),
+    connectionID: z.string()
+});
+/**
+ * Stage integration updated
+ */
+export const zUpdateWorkflowStageIntegrationResponse = zWorkflowStageIntegration;
+export const zValidateWorkflowStageIntegrationPath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string(),
+    connectionID: z.string()
+});
+/**
+ * Connection validated
+ */
+export const zValidateWorkflowStageIntegrationResponse = z.object({
+    status: z.string()
+});
+export const zListWorkflowStageIntegrationStatusPath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string(),
+    connectionID: z.string()
+});
+export const zListWorkflowStageIntegrationStatusQuery = z.object({
+    cursor: z.string().max(1024).optional()
+});
+/**
+ * Callback and observation diagnostics
+ */
+export const zListWorkflowStageIntegrationStatusResponse = zWorkflowStageIntegrationStatusPage;
+export const zRetryWorkflowStageIntegrationEventPath = z.object({
+    orgID: z.string(),
+    workspaceID: z.string(),
+    eventID: z.string()
+});
+/**
+ * Eligible blocked effect queued for explicit retry
+ */
+export const zRetryWorkflowStageIntegrationEventResponse = z.void();
 /**
  * Runtime providers and supported environment configuration
  */

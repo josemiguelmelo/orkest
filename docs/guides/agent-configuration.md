@@ -44,7 +44,7 @@ Built-in task/repository/artifact tools are supplied separately.
   saved values. **Removing an entry does not guarantee removal from an existing session.**
 - Every profile must confirm its configured model through ACP before a prompt.
   Unsupported confirmation fails startup or restore; live support for each
-  provider must be qualified separately. [Current evidence](../status.md#verification-record).
+  provider must be qualified separately. [Qualification prerequisites](../development/testing.md#runtime-qualification).
 - New sessions use current configuration. Missing credentials/incompatibility fail
   visibly; never substitute a model or conversation.
 

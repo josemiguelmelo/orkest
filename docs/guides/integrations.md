@@ -85,6 +85,9 @@ Credentials:
 | Incomplete discovery | Pagination, filters, token visibility |
 | Sync failure | Sanitized error and platform→source connectivity before manual retry |
 
-Outbound comments/status and PR webhooks are out of scope. Live private-repository
+Workflow stage integrations support signed GitHub PR webhooks and read-side
+reconciliation, with movement or custom-prompt callbacks. See
+[setup and behavior](workflow-stage-integrations.md). Outbound comments/status
+synchronization remains out of scope. Live private-repository
 access/source sync need credentials. See [status](../status.md), [testing](../development/testing.md),
 and [migrations](../operations/migrations.md).

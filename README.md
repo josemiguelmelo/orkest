@@ -8,16 +8,14 @@ answer approval requests, and review the resulting work. A Go API serves the Rea
 web app, while independent `agentctl` workers run coding agents through ACP.
 
 Start with the [local setup](#run-locally), browse the [documentation map](docs/README.md),
-or check the [implementation and verification status](docs/status.md) before choosing
+or check the [implementation status and limitations](docs/status.md) before choosing
 an execution mode.
 
 Orkest is an active prototype. Task management, workflow dispatch, scheduled jobs, and
 Docker, Local, and initial Kubernetes execution are implemented. Team-member capacity
-enforcement and platform-to-agentctl authentication remain unfinished. Runtime evidence
-is scenario-specific: OpenCode has limited continuation and MCP handshake coverage, while
-live approval and interrupted-tool recovery still need qualification. See the
-[status and verification record](docs/status.md#verification-record) for dated evidence
-and limits.
+enforcement and platform-to-agentctl authentication remain unfinished. Qualify
+continuation, approvals, MCP, and interrupted-tool recovery for each runtime. See
+[testing prerequisites](docs/development/testing.md) and [current limitations](docs/status.md).
 
 ## Features
 

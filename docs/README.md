@@ -8,7 +8,7 @@ Start with [local setup](../README.md).
 | Domain terms | [Glossary](glossary.md) |
 | Code organization | [Architecture](architecture.md), [technology stack](tech-stack.md) |
 | Runtime flows | [Architecture flow diagrams](architecture/flows/README.md) |
-| Implementation/verification | [Status](status.md) |
+| Implementation/limitations | [Status](status.md) |
 | Agent configuration | [Agent configuration](guides/agent-configuration.md), [runtimes](reference/runtimes/README.md) |
 | Task lifecycle | [Workflows](guides/workflows.md), [sessions](guides/sessions.md), [artifacts](guides/artifacts.md), [scheduled jobs](guides/scheduled-jobs.md) |
 | Repositories/imports | [Integrations](guides/integrations.md) |
@@ -21,7 +21,7 @@ Start with [local setup](../README.md).
 ## Developer references
 
 - [Architecture and package boundaries](architecture.md)
-- [Verification record and remaining limits](status.md#verification-record)
+- [Implementation status and limitations](status.md)
 - [Agentctl ownership and compatibility](development/agentctl.md)
 - [Session persistence and continuation](development/sessions.md)
 - [Artifact publication and input snapshots](development/artifacts.md)
@@ -36,8 +36,9 @@ Start with [local setup](../README.md).
 - One authoritative home per detail; link elsewhere. Keep cautions beside actions.
 - Requirements: labeled confirmed/proposed/open rules. Guides: current procedures.
   Reference: APIs. Development: mechanics. Operations: deployment/upgrade hazards.
-  [Status](status.md): implementation versus verification.
+  [Status](status.md): implementation coverage and operational limitations.
 - Short sentences, bullets for rules/steps, examples, comparison tables.
 - Label Mermaid arrows: calls, dependencies, state changes.
 - Versions: manifests; defaults: `.env.example`.
-- Evidence: date, commit, environment; past results are not unconditional guarantees.
+- Keep implementation history and verification results in task/PR evidence; document
+  enduring behavior, procedures, test prerequisites and operational limitations.

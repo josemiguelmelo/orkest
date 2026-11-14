@@ -43,7 +43,10 @@ Example:
 PR artifacts use `kind: "pull_request"`, `content.url`, and optional provider,
 repository, PR number/head commit metadata. Links are unverified references, never
 fetched snapshots. Publishing neither approves/merges PRs nor completes tasks.
-Provider validation, PR webhooks, and external-state automation remain deferred.
+Stage integrations separately verify and pin canonical external identities before
+using PR events for workflow callbacks. Publishing a reference alone grants no
+callback authority. `code_review` is the provider-neutral kind; `pull_request`
+remains supported. See [workflow stage integrations](workflow-stage-integrations.md).
 
 ## Stage handoffs
 

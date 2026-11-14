@@ -1,8 +1,8 @@
 # Testing and qualification
 
 Run commands from the repository root after [setup](../../README.md). This page
-lists available checks and prerequisites. [Status](../status.md#verification-record)
-records dated results; skipped, unavailable or failed checks are not passing results.
+lists available checks and prerequisites. Skipped, unavailable or failed checks
+are not passing results.
 
 ## Commands and prerequisites
 
@@ -174,6 +174,6 @@ model responses. Keep those evidence categories separate.
 
 Record the command, result, date, commit or working-tree base, environment and
 missing prerequisites in task/PR evidence. Distinguish fixtures, real local
-infrastructure and live providers. The [verification record](../status.md#verification-record)
-contains historical refactor results and remaining limits. Model catalogue
+infrastructure and live providers. Keep implementation-time results in task/PR
+evidence rather than product or developer documentation. Model catalogue
 availability and prior passing results are not unconditional guarantees.

@@ -369,6 +369,8 @@ type WorkflowEvent struct {
 	ProcessedAt          pgtype.Timestamptz `json:"processed_at"`
 	ConfigurationVersion pgtype.Int8        `json:"configuration_version"`
 	MatchedRuleID        pgtype.Text        `json:"matched_rule_id"`
+	Integration          []byte             `json:"integration"`
+	ProcessingError      string             `json:"processing_error"`
 }
 
 type WorkflowRule struct {
@@ -380,6 +382,10 @@ type WorkflowRule struct {
 	SourceStageID string      `json:"source_stage_id"`
 	ActionType    string      `json:"action_type"`
 	TargetStageID pgtype.Text `json:"target_stage_id"`
+	Integration   []byte      `json:"integration"`
+	PromptText    string      `json:"prompt_text"`
+	SessionPolicy string      `json:"session_policy"`
+	ConnectionID  pgtype.Text `json:"connection_id"`
 }
 
 type WorkflowStage struct {
@@ -393,6 +399,68 @@ type WorkflowStage struct {
 	ArtifactInputs     []byte      `json:"artifact_inputs"`
 	ArtifactOutputs    []byte      `json:"artifact_outputs"`
 	CustomPrompt       string      `json:"custom_prompt"`
+}
+
+type WorkflowStageIntegration struct {
+	ID                  string             `json:"id"`
+	WorkspaceID         string             `json:"workspace_id"`
+	Provider            string             `json:"provider"`
+	Name                string             `json:"name"`
+	Enabled             bool               `json:"enabled"`
+	CodingIntegrationID string             `json:"coding_integration_id"`
+	RepositoryIds       []string           `json:"repository_ids"`
+	Config              []byte             `json:"config"`
+	EncryptedSecret     string             `json:"encrypted_secret"`
+	ConfiguredBy        string             `json:"configured_by"`
+	Version             int64              `json:"version"`
+	CreatedAt           pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt           pgtype.Timestamptz `json:"updated_at"`
+}
+
+type WorkflowStageIntegrationAdmission struct {
+	ObservationID string `json:"observation_id"`
+	SemanticID    string `json:"semantic_id"`
+	EventID       string `json:"event_id"`
+}
+
+type WorkflowStageIntegrationEvent struct {
+	WorkspaceID  string             `json:"workspace_id"`
+	ConnectionID string             `json:"connection_id"`
+	SemanticID   string             `json:"semantic_id"`
+	ActionID     string             `json:"action_id"`
+	Subject      []byte             `json:"subject"`
+	OccurredAt   pgtype.Timestamptz `json:"occurred_at"`
+	Facts        []byte             `json:"facts"`
+	CreatedAt    pgtype.Timestamptz `json:"created_at"`
+}
+
+type WorkflowStageIntegrationObservation struct {
+	ID                   string             `json:"id"`
+	WorkspaceID          string             `json:"workspace_id"`
+	ConnectionID         string             `json:"connection_id"`
+	ConnectionVersion    int64              `json:"connection_version"`
+	TaskID               string             `json:"task_id"`
+	WorkflowID           string             `json:"workflow_id"`
+	RuleID               string             `json:"rule_id"`
+	StageID              string             `json:"stage_id"`
+	StageVersion         int64              `json:"stage_version"`
+	ConfigurationVersion int64              `json:"configuration_version"`
+	ActionID             string             `json:"action_id"`
+	ActivatedAt          pgtype.Timestamptz `json:"activated_at"`
+	ReconciledAt         pgtype.Timestamptz `json:"reconciled_at"`
+	AttemptedAt          pgtype.Timestamptz `json:"attempted_at"`
+	RevisionIds          []string           `json:"revision_ids"`
+	Subjects             []byte             `json:"subjects"`
+	LastError            string             `json:"last_error"`
+	CreatedAt            pgtype.Timestamptz `json:"created_at"`
+}
+
+type WorkflowStageIntegrationReceipt struct {
+	WorkspaceID       string             `json:"workspace_id"`
+	ConnectionID      string             `json:"connection_id"`
+	DeliveryID        string             `json:"delivery_id"`
+	ConnectionVersion int64              `json:"connection_version"`
+	CreatedAt         pgtype.Timestamptz `json:"created_at"`
 }
 
 type Workspace struct {

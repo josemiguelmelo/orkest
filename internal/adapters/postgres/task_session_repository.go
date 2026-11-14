@@ -70,8 +70,29 @@ func (r *AgentLaunchPostgresRepository) ReserveSessionRun(ctx context.Context, c
 			return fmt.Errorf("fence workflow run reservation: %w", err)
 		}
 	}
+	if config.IntegrationGuard != nil {
+		if err := guardIntegrationConfiguration(ctx, q, config); err != nil {
+			return err
+		}
+	}
 	if err := q.LockTaskSessionScope(ctx, sqlc.LockTaskSessionScopeParams{ID: config.TaskID, WorkspaceID: config.WorkspaceID}); err != nil {
 		return err
+	}
+	if config.GuardAssignment {
+		state, guardErr := q.LockWorkflowTask(ctx, sqlc.LockWorkflowTaskParams{WorkspaceID: config.WorkspaceID, ID: config.TaskID})
+		if guardErr != nil {
+			return guardErr
+		}
+		if state.Assignee != config.ExpectedAssigneeID || config.AgentDefinitionID != config.ExpectedAssigneeID || (config.IntegrationGuard != nil && state.WorkflowID != config.IntegrationWorkflowID) {
+			return modelerrors.ErrConflict
+		}
+		current, guardErr := q.CurrentTaskAgentSession(ctx, sqlc.CurrentTaskAgentSessionParams{OrganizationID: config.OrganizationID, WorkspaceID: config.WorkspaceID, TaskID: config.TaskID})
+		if guardErr != nil && !errors.Is(guardErr, pgx.ErrNoRows) {
+			return guardErr
+		}
+		if (errors.Is(guardErr, pgx.ErrNoRows) && config.ExpectedSessionID != "") || (guardErr == nil && current.ID != config.ExpectedSessionID) {
+			return modelerrors.ErrConflict
+		}
 	}
 	if expectedStageVersion > 0 {
 		state, e := q.TaskWorkflowState(ctx, sqlc.TaskWorkflowStateParams{WorkspaceID: config.WorkspaceID, ID: config.TaskID})

@@ -33,6 +33,5 @@
   HTTP MCP/headers and stdio MCP/environment, approvals, cancellation, restore plus follow-up.
 - Fixtures/loading alone do not qualify live continuation. Existing sessions keep
   model/configuration; incompatible restore fails visibly, preserving state.
-- [Sessions](../../guides/sessions.md): behavior; [dated verification](../../status.md#verification-record):
-  evidence and limits. OpenCode memory continuation does not qualify other
-  providers or their live approval/MCP behavior.
+- [Sessions](../../guides/sessions.md) documents recovery behavior. Qualify each
+  provider separately, including its live approval and MCP behavior.

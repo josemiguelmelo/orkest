@@ -42,7 +42,13 @@ func workflowDefinition(ctx context.Context, q *sqlc.Queries, row sqlc.Workspace
 		return workflowmodel.Definition{}, err
 	}
 	for _, r := range rules {
-		d.Rules = append(d.Rules, workflowmodel.AutomationRule{ID: r.ID, Enabled: r.Enabled, Event: workflowmodel.EventType(r.EventType), SourceStageID: r.SourceStageID, Action: workflowmodel.ActionType(r.ActionType), TargetStageID: r.TargetStageID.String})
+		rule := workflowmodel.AutomationRule{ID: r.ID, Enabled: r.Enabled, Event: workflowmodel.EventType(r.EventType), SourceStageID: r.SourceStageID, Action: workflowmodel.ActionType(r.ActionType), TargetStageID: r.TargetStageID.String, PromptText: r.PromptText, SessionPolicy: r.SessionPolicy}
+		if len(r.Integration) > 0 {
+			if err := json.Unmarshal(r.Integration, &rule.Integration); err != nil {
+				return workflowmodel.Definition{}, err
+			}
+		}
+		d.Rules = append(d.Rules, rule)
 	}
 	return d, nil
 }
@@ -179,7 +185,15 @@ func (r *WorkflowDefinitionPostgresRepository) saveStages(ctx context.Context, q
 		return mapError(err, modelerrors.ErrConflict, modelerrors.ErrConflict)
 	}
 	for _, r := range d.Rules {
-		if err := q.InsertWorkflowRule(ctx, sqlc.InsertWorkflowRuleParams{WorkspaceID: workspaceID, WorkflowID: d.ID, ID: r.ID, Enabled: r.Enabled, EventType: string(r.Event), SourceStageID: r.SourceStageID, ActionType: string(r.Action), TargetStageID: r.TargetStageID}); err != nil {
+		var integration []byte
+		if r.Integration != nil {
+			var err error
+			integration, err = json.Marshal(r.Integration)
+			if err != nil {
+				return err
+			}
+		}
+		if err := q.InsertWorkflowRule(ctx, sqlc.InsertWorkflowRuleParams{WorkspaceID: workspaceID, WorkflowID: d.ID, ID: r.ID, Enabled: r.Enabled, EventType: string(r.Event), SourceStageID: r.SourceStageID, ActionType: string(r.Action), TargetStageID: r.TargetStageID, Integration: integration, PromptText: r.PromptText, SessionPolicy: r.SessionPolicy}); err != nil {
 			return err
 		}
 	}

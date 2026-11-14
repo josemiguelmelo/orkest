@@ -31,6 +31,8 @@ tags:
     description: Workspace-scoped code repository registration and Git operations.
   - name: CodingIntegrations
     description: Workspace-scoped authenticated coding provider connections.
+  - name: WorkflowStageIntegrations
+    description: Provider-neutral external workflow stage triggers and callbacks.
   - name: TaskIntegrations
     description: Workspace-scoped external task source integrations.
   - name: Tasks
@@ -38,6 +40,139 @@ tags:
   - name: ScheduledJobs
     description: Repeatable agent jobs independent of task workflows.
 paths:
+  /callbacks/workflow-stage-integrations/{connectionID}:
+    parameters:
+      - {name: connectionID, in: path, required: true, schema: {type: string}}
+    post:
+      tags: [WorkflowStageIntegrations]
+      operationId: receiveWorkflowStageCallback
+      description: Provider-authenticated callback. The connection selects its adapter. Original bytes and headers are verified by that adapter; events are durably accepted before asynchronous processing. Maximum body size is 1048576 bytes.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json: {schema: {type: object, additionalProperties: true}}
+          application/octet-stream: {schema: {type: string, format: binary}}
+      responses:
+        "202": {description: Events durably accepted, content: {application/json: {schema: {$ref: "#/components/schemas/WorkflowStageIngestionReceipt"}}}}
+        "200": {description: Duplicate or authenticated ignored event, content: {application/json: {schema: {$ref: "#/components/schemas/WorkflowStageIngestionReceipt"}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
+        "413": {description: Callback body too large, content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}}
+        "503": {description: Callback persistence unavailable, content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}}
+  /api/workflow-stage-integration-providers:
+    get:
+      tags: [WorkflowStageIntegrations]
+      operationId: listWorkflowStageIntegrationProviders
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      responses:
+        "200": {description: Provider and action catalog, content: {application/json: {schema: {type: array, items: {$ref: "#/components/schemas/WorkflowStageIntegrationProvider"}}}}}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/workflow-stage-integrations:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [WorkflowStageIntegrations]
+      operationId: listWorkflowStageIntegrations
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      responses:
+        "200": {description: Workspace stage integration connections, content: {application/json: {schema: {type: array, items: {$ref: "#/components/schemas/WorkflowStageIntegration"}}}}}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+    post:
+      tags: [WorkflowStageIntegrations]
+      operationId: createWorkflowStageIntegration
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/WorkflowStageIntegrationInput"}}}
+      responses:
+        "201": {description: Stage integration created, content: {application/json: {schema: {$ref: "#/components/schemas/WorkflowStageIntegration"}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
+        "503": {description: Encryption unavailable, content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/workflow-stage-integrations/{connectionID}:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+      - {name: connectionID, in: path, required: true, schema: {type: string}}
+    put:
+      tags: [WorkflowStageIntegrations]
+      operationId: updateWorkflowStageIntegration
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      requestBody:
+        required: true
+        content: {application/json: {schema: {$ref: "#/components/schemas/WorkflowStageIntegrationInput"}}}
+      responses:
+        "200": {description: Stage integration updated, content: {application/json: {schema: {$ref: "#/components/schemas/WorkflowStageIntegration"}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
+    delete:
+      tags: [WorkflowStageIntegrations]
+      operationId: deleteWorkflowStageIntegration
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      responses:
+        "204": {description: Stage integration deleted}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/workflow-stage-integrations/{connectionID}/validate:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+      - {name: connectionID, in: path, required: true, schema: {type: string}}
+    post:
+      tags: [WorkflowStageIntegrations]
+      operationId: validateWorkflowStageIntegration
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      responses:
+        "200": {description: Connection validated, content: {application/json: {schema: {type: object, required: [status], properties: {status: {type: string}}}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/workflow-stage-integrations/{connectionID}/status:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+      - {name: connectionID, in: path, required: true, schema: {type: string}}
+      - {name: cursor, in: query, schema: {type: string, maxLength: 1024}, description: Opaque cursor for older activity}
+    get:
+      tags: [WorkflowStageIntegrations]
+      operationId: listWorkflowStageIntegrationStatus
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      responses:
+        "200": {description: Callback and observation diagnostics, content: {application/json: {schema: {$ref: "#/components/schemas/WorkflowStageIntegrationStatusPage"}}}}
+        "400": {$ref: "#/components/responses/BadRequest"}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+  /api/organizations/{orgID}/workspaces/{workspaceID}/workflow-stage-integrations/events/{eventID}/retry:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+      - {name: eventID, in: path, required: true, schema: {type: string}}
+    post:
+      tags: [WorkflowStageIntegrations]
+      operationId: retryWorkflowStageIntegrationEvent
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      responses:
+        "204": {description: Eligible blocked effect queued for explicit retry}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
   /api/runtime-providers:
     get:
       tags: [RuntimeProviders]
@@ -2362,6 +2497,75 @@ components:
         description: {type: string, maxLength: 2000}
         customPrompt: {type: string, maxLength: 32768, description: "Optional stage instructions; maximum 32768 UTF-8 bytes. Sent with task details at every work start."}
         responsibleAgentId: {type: string}
+    WorkflowStageIntegrationProvider:
+      type: object
+      required: [provider, configSchema, actions]
+      properties:
+        provider: {type: string}
+        configSchema: {type: object, additionalProperties: true}
+        actions: {type: array, items: {$ref: "#/components/schemas/WorkflowStageIntegrationAction"}}
+    WorkflowStageIntegrationAction:
+      type: object
+      required: [id, name, parametersSchema]
+      properties:
+        id: {type: string}
+        name: {type: string}
+        parametersSchema: {type: object, additionalProperties: true}
+    WorkflowStageIntegration:
+      type: object
+      required: [id, workspaceId, provider, name, enabled, codingIntegrationId, repositoryIds, config, version, configuredBy, updatedAt]
+      properties:
+        id: {type: string}
+        workspaceId: {type: string}
+        provider: {type: string}
+        name: {type: string}
+        enabled: {type: boolean}
+        codingIntegrationId: {type: string}
+        repositoryIds: {type: array, items: {type: string}}
+        config: {type: object, additionalProperties: true}
+        version: {type: integer, format: int64}
+        configuredBy: {type: string}
+        updatedAt: {type: string, format: date-time}
+    WorkflowStageIntegrationInput:
+      type: object
+      additionalProperties: false
+      required: [provider, name, enabled, codingIntegrationId, repositoryIds, config, version]
+      properties:
+        provider: {type: string, minLength: 1}
+        name: {type: string, minLength: 1, maxLength: 200}
+        enabled: {type: boolean}
+        codingIntegrationId: {type: string, minLength: 1}
+        repositoryIds: {type: array, minItems: 1, uniqueItems: true, items: {type: string}}
+        config: {type: object, additionalProperties: true}
+        webhookSecret: {type: string, minLength: 32, maxLength: 4096, writeOnly: true, description: Required on creation; omit to preserve on update.}
+        version: {type: integer, format: int64, minimum: 0, description: Zero on creation; current version required on update.}
+    WorkflowStageIngestionReceipt:
+      type: object
+      required: [duplicate, ignored]
+      properties:
+        duplicate: {type: boolean}
+        ignored: {type: boolean}
+    WorkflowStageIntegrationStatusPage:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 50
+          items: {$ref: "#/components/schemas/WorkflowStageIntegrationStatus"}
+        nextCursor: {type: string, description: Opaque cursor for the next page of older activity}
+    WorkflowStageIntegrationStatus:
+      type: object
+      required: [id, taskId, ruleId, stageVersion, actionId, state, error, createdAt]
+      properties:
+        id: {type: string}
+        taskId: {type: string}
+        ruleId: {type: string}
+        stageVersion: {type: integer, format: int64}
+        actionId: {type: string}
+        state: {type: string}
+        error: {type: string}
+        createdAt: {type: string, format: date-time}
     WorkflowAutomationRule:
       type: object
       additionalProperties: false
@@ -2369,10 +2573,21 @@ components:
       properties:
         id: {type: string, minLength: 1, maxLength: 100}
         enabled: {type: boolean}
-        event: {type: string, enum: [stage_entered, run_succeeded, stage_completed]}
+        event: {type: string, enum: [stage_entered, run_succeeded, stage_completed, integration_action]}
         sourceStageId: {type: string}
-        action: {type: string, enum: [move_task, start_work]}
+        action: {type: string, enum: [move_task, start_work, call_agent]}
         targetStageId: {type: string}
+        integration: {$ref: "#/components/schemas/WorkflowIntegrationTrigger"}
+        promptText: {type: string, maxLength: 32768}
+        sessionPolicy: {type: string, enum: [continue_or_create_if_absent, new]}
+    WorkflowIntegrationTrigger:
+      type: object
+      additionalProperties: false
+      required: [connectionId, actionId, parameters]
+      properties:
+        connectionId: {type: string, minLength: 1}
+        actionId: {type: string, minLength: 1}
+        parameters: {type: object, additionalProperties: true}
     WorkflowInput:
       type: object
       required: [name]

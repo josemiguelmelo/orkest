@@ -90,8 +90,8 @@ SELECT * FROM workflow_rules WHERE workspace_id=$1 AND workflow_id=$2 ORDER BY i
 DELETE FROM workflow_rules WHERE workspace_id=$1 AND workflow_id=$2;
 
 -- name: InsertWorkflowRule :exec
-INSERT INTO workflow_rules(workspace_id,workflow_id,id,enabled,event_type,source_stage_id,action_type,target_stage_id)
-VALUES($1,$2,$3,$4,$5,$6,$7,NULLIF(sqlc.arg(target_stage_id)::text,''));
+INSERT INTO workflow_rules(workspace_id,workflow_id,id,enabled,event_type,source_stage_id,action_type,target_stage_id,integration,prompt_text,session_policy)
+VALUES($1,$2,$3,$4,$5,$6,$7,NULLIF(sqlc.arg(target_stage_id)::text,''),sqlc.narg(integration),sqlc.arg(prompt_text),sqlc.arg(session_policy));
 
 -- name: EnqueueWorkflowEvent :exec
 INSERT INTO workflow_events(id,workspace_id,task_id,stage_version,actor_id,event_type,run_id,causation_id,correlation_id)
@@ -101,7 +101,7 @@ VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT(id) DO NOTHING;
 SELECT * FROM workflow_events WHERE processed_at IS NULL ORDER BY occurred_at,id LIMIT 1 FOR UPDATE SKIP LOCKED;
 
 -- name: AcknowledgeWorkflowEvent :exec
-UPDATE workflow_events SET processed_at=now(),configuration_version=$2,matched_rule_id=$3 WHERE id=$1;
+UPDATE workflow_events SET processed_at=now(),configuration_version=$2,matched_rule_id=$3,processing_error=$4 WHERE id=$1;
 
 -- name: WorkflowConfigurationAgents :many
 SELECT id FROM agents WHERE workspace_id=$1 ORDER BY id FOR KEY SHARE;
@@ -133,3 +133,6 @@ FOR UPDATE;
 -- name: AcknowledgeWorkflowDeliveryClaim :execrows
 UPDATE workflow_commands SET state=sqlc.arg(state),delivery_error=sqlc.arg(delivery_error),claim_until=NULL
 WHERE id=sqlc.arg(id) AND claim_token=sqlc.arg(claim_token) AND state='pending';
+
+-- name: WorkflowWorkspaceOrganization :one
+SELECT organization_id FROM workspaces WHERE id=$1;

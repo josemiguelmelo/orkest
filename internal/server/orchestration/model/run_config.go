@@ -4,14 +4,22 @@ import (
 	"slices"
 
 	"github.com/josemiguelmelo/orkest/internal/contracts/configvalidation"
+	workflowmodel "github.com/josemiguelmelo/orkest/internal/server/workflow/model"
 	mountmodel "github.com/josemiguelmelo/orkest/internal/server/workspacemount/model"
 )
 
 // RunConfig is the resolved configuration bound to one task execution run.
 // It is separate from reusable agent definitions and process startup options.
 type RunConfig struct {
-	DeliveryToken       string   `json:"-"`
-	ArtifactRevisionIDs []string `json:"-"`
+	IntegrationGuard      *workflowmodel.IntegrationEvent `json:"-"`
+	IntegrationWorkflowID string                          `json:"-"`
+	IntegrationActorID    string                          `json:"-"`
+	DeliveryToken         string                          `json:"-"`
+	AgentDefinitionID     string                          `json:"agentDefinitionId,omitempty"`
+	ExpectedAssigneeID    string                          `json:"-"`
+	ExpectedSessionID     string                          `json:"-"`
+	GuardAssignment       bool                            `json:"-"`
+	ArtifactRevisionIDs   []string                        `json:"-"`
 	RuntimeConfig
 	// Platform-only image selection is persisted with the session, excluded by ForRuntime.
 	ExecutionProfileID   string             `json:"executionProfileId,omitempty"`

@@ -20,6 +20,7 @@ import { ConfirmButton, ErrorState, Loading, PageHeader } from '../../shared/ui/
 import { Field } from '../../shared/ui/form';
 import { Dialog } from '../../shared/ui/dialog';
 import { useAction } from '../../shared/use-action';
+import { StageIntegrationRules } from './stage-integration-rules';
 
 export function useWorkflows() {
   const { scope } = useApp();
@@ -560,6 +561,12 @@ function WorkflowEditor({
                 </Field>
               ))}
             </div>
+            <StageIntegrationRules
+              definition={draft}
+              stageID={stage.id}
+              disabled={disabled}
+              onChange={(rules) => setDraft((current) => ({ ...current, rules }))}
+            />
             {permissions.workspaceAdmin && (
               <div className="workflow-stage-footer">
                 <Button
@@ -634,7 +641,7 @@ function WorkflowEditor({
 function normalizeDefinition(definition: WorkspaceWorkflow): WorkspaceWorkflow {
   return {
     ...definition,
-    stages: definition.stages.map((stage) => ({ ...stage })),
-    rules: definition.rules.map((rule) => ({ ...rule })),
+    stages: structuredClone(definition.stages),
+    rules: structuredClone(definition.rules),
   };
 }

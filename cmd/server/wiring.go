@@ -25,6 +25,7 @@ import (
 	gitlabprovider "github.com/josemiguelmelo/orkest/internal/adapters/integrations/coderepository/providers/gitlab"
 	githubcloud "github.com/josemiguelmelo/orkest/internal/adapters/integrations/taskintegration/providers/githubcloud"
 	jiraserver "github.com/josemiguelmelo/orkest/internal/adapters/integrations/taskintegration/providers/jiraserver"
+	githubstage "github.com/josemiguelmelo/orkest/internal/adapters/integrations/workflowstageintegration/providers/github"
 	appmcp "github.com/josemiguelmelo/orkest/internal/adapters/mcp"
 	"github.com/josemiguelmelo/orkest/internal/adapters/postgres"
 	coreruntime "github.com/josemiguelmelo/orkest/internal/contracts/runtimecatalog"
@@ -46,6 +47,7 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/server/taskintegration"
 	"github.com/josemiguelmelo/orkest/internal/server/workflow"
 	workflowautomation "github.com/josemiguelmelo/orkest/internal/server/workflowautomation"
+	"github.com/josemiguelmelo/orkest/internal/server/workflowstageintegration"
 	"github.com/josemiguelmelo/orkest/internal/server/workspace"
 	"github.com/josemiguelmelo/orkest/internal/server/workspaceenv"
 	"github.com/josemiguelmelo/orkest/internal/server/workspacemount"
@@ -227,7 +229,8 @@ func runServer(ctx context.Context, logger *slog.Logger) error {
 		return err
 	}
 	taskRepository := postgres.NewTaskPostgresRepository(database)
-	workflows := workflow.NewWorkflowConfigurationService(postgres.NewWorkflowDefinitionPostgresRepository(database), workspaces)
+	stageIntegrations := workflowstageintegration.NewWorkflowStageIntegrationService(postgres.NewWorkflowStageIntegrationPostgresRepository(database), secretBox, workspaces, codeRepositories, logger, githubstage.NewProvider())
+	workflows := workflow.NewWorkflowConfigurationService(postgres.NewWorkflowDefinitionPostgresRepository(database), workspaces, stageIntegrations)
 	taskWorkflows := workflowautomation.NewWorkflowAutomationService(postgres.NewTaskTransitionPostgresRepository(database), postgres.NewAutomationEventPostgresRepository(database), workspaces, workflowautomation.WorkflowRuleEvaluator{})
 	tasks := task.NewTaskService(taskRepository, postgres.NewTaskCreationPostgresRepository(database), postgres.NewTaskUpdatePostgresRepository(database), taskWorkflows, workspaces)
 	artifacts := artifact.NewArtifactService(postgres.NewArtifactPostgresRepository(database), tasks)
@@ -317,6 +320,8 @@ func runServer(ctx context.Context, logger *slog.Logger) error {
 	}
 	runnerWG.Add(1)
 	go func() { defer runnerWG.Done(); integrations.Run(runnerCtx) }()
+	runnerWG.Add(1)
+	go func() { defer runnerWG.Done(); stageIntegrations.Run(runnerCtx) }()
 	execution := workflowautomation.NewWorkflowExecutionService(postgres.NewExecutionCommandPostgresRepository(database), tasks, dispatcher, logger)
 	worker := workflowautomation.NewWorkflowAutomationWorker(taskWorkflows, execution, logger)
 	runnerWG.Add(1)
@@ -326,25 +331,26 @@ func runServer(ctx context.Context, logger *slog.Logger) error {
 	go func() { defer runnerWG.Done(); jobWorker.Run(runnerCtx) }()
 	router, err := httpapi.NewRouter(ctx, httpapi.RouterDependencies{
 		ScheduledJobs: jobService, JobDispatcher: jobDispatcher,
-		Users:            users,
-		Organizations:    organizations,
-		Workspaces:       workspaces,
-		Agents:           agents,
-		CodeRepositories: codeRepositories,
-		Tasks:            tasks,
-		Integrations:     integrations,
-		MCPServers:       mcpServerService,
-		SkillCatalog:     skillCatalog,
-		Launches:         launchService,
-		Profiles:         executionProfileService,
-		RuntimeProfiles:  agentRuntimeProfiles,
-		DirectChats:      directChats,
-		Workflows:        workflows,
-		Automation:       taskWorkflows,
-		Environment:      workspaceEnvironment,
-		HostMounts:       workspaceMounts,
-		Artifacts:        artifacts,
-		AgentTools:       agentTools,
+		Users:             users,
+		Organizations:     organizations,
+		Workspaces:        workspaces,
+		Agents:            agents,
+		CodeRepositories:  codeRepositories,
+		Tasks:             tasks,
+		Integrations:      integrations,
+		StageIntegrations: stageIntegrations,
+		MCPServers:        mcpServerService,
+		SkillCatalog:      skillCatalog,
+		Launches:          launchService,
+		Profiles:          executionProfileService,
+		RuntimeProfiles:   agentRuntimeProfiles,
+		DirectChats:       directChats,
+		Workflows:         workflows,
+		Automation:        taskWorkflows,
+		Environment:       workspaceEnvironment,
+		HostMounts:        workspaceMounts,
+		Artifacts:         artifacts,
+		AgentTools:        agentTools,
 	})
 	if err != nil {
 		stopRunner()

@@ -72,9 +72,12 @@ Movement and delivery:
   change persisted command JSON or API shapes. Delivery claim metadata is added by
   migration 0038; see [upgrade and rollback](../operations/migrations.md#workflow-delivery-claims).
 - [Artifact snapshots](artifacts.md) commit with reservation; [stage bindings](../guides/artifacts.md) define inputs.
-- A future PR adapter should verify/deduplicate notifications, resolve artifact→workspace
-  task, and persist normalized events. Provider conditions/matchers belong in that adapter.
-  PR ingestion, output gates, and scripts remain deferred.
+- Stage integration adapters authenticate/deduplicate notifications, verify named
+  artifact inputs against selected workspace repositories, and admit normalized
+  events bound to observation/configuration/stage versions. Provider matchers stay
+  in adapters; movement and prompt callbacks reuse existing transaction/outbox
+  paths. See [workflow stage integrations](workflow-stage-integrations.md).
+  Output gates and scripts remain deferred.
 - Returning to In progress and starting revisions are separate; entry rules decide execution.
 
 ## Verification

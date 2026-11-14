@@ -13,12 +13,14 @@ import (
 // WorkflowCommand is the canonical identity payload for task workflow mutations.
 // Its JSON shape is retained for reconciliation of persisted commands.
 type WorkflowCommand struct {
-	StageID      string `json:"stageId"`
-	StageVersion int64  `json:"stageVersion"`
-	Action       string `json:"action"`
-	CommandID    string `json:"commandId"`
-	SessionMode  string `json:"sessionMode"`
-	PromptText   string `json:"promptText"`
+	StageID            string `json:"stageId"`
+	StageVersion       int64  `json:"stageVersion"`
+	Action             string `json:"action"`
+	CommandID          string `json:"commandId"`
+	SessionMode        string `json:"sessionMode"`
+	PromptText         string `json:"promptText"`
+	ExpectedAssigneeID string `json:"expectedAssigneeId,omitempty"`
+	GuardAssignment    bool   `json:"guardAssignment,omitempty"`
 }
 
 type TaskWorkflowSnapshot struct {

@@ -4,7 +4,10 @@ import (
 	workflowmodel "github.com/josemiguelmelo/orkest/internal/server/workflow/model"
 )
 
-type Event struct{ Type workflowmodel.EventType }
+type Event struct {
+	Type        workflowmodel.EventType
+	Integration *workflowmodel.IntegrationEvent
+}
 
 type AutomationEvaluator interface {
 	Evaluate(workflowmodel.Definition, StageTransitionPlan, Event) (StageTransitionPlan, error)
@@ -18,8 +21,11 @@ func (WorkflowRuleEvaluator) Evaluate(definition workflowmodel.Definition, plan 
 		if !rule.Enabled || rule.Event != event.Type || rule.SourceStageID != plan.StageID {
 			continue
 		}
+		if event.Type == workflowmodel.IntegrationAction && (event.Integration == nil || rule.Integration == nil || rule.ID != event.Integration.RuleID || rule.Integration.ConnectionID != event.Integration.ConnectionID) {
+			continue
+		}
 		trigger, targetID := Enter, rule.TargetStageID
-		if rule.Action == workflowmodel.StartWork {
+		if rule.Action == workflowmodel.StartWork || rule.Action == workflowmodel.CallAgent {
 			trigger, targetID = Start, ""
 		}
 		result, err := PlanStageTransition(definition, plan.StageID, targetID, plan.AssigneeAgentID, trigger)
