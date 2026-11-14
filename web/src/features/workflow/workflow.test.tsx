@@ -142,20 +142,36 @@ it('rejects custom prompts exceeding the UTF-8 byte limit', async () => {
 
 it('configures stage artifact outputs and required inputs', async () => {
   setup('admin');
+  api.saveWorkspaceWorkflow.mockImplementation(({ body }: { body: WorkspaceWorkflow }) =>
+    Promise.resolve({ data: { ...body, version: body.version + 1 } }),
+  );
   const user = userEvent.setup();
   const artifactSections = await screen.findAllByText('Artifacts');
-  const artifacts = artifactSections[0]?.closest('details');
-  if (!artifacts) throw new Error('Expected artifact editor');
+  const sourceArtifacts = artifactSections[0]?.closest('details');
+  const targetArtifacts = artifactSections[1]?.closest('details');
+  if (!sourceArtifacts || !targetArtifacts) throw new Error('Expected stage artifact editors');
   await user.click(artifactSections[0]!);
-  await user.click(within(artifacts).getByRole('button', { name: 'Add output' }));
-  await user.click(within(artifacts).getByRole('button', { name: 'Add input' }));
-  await user.type(within(artifacts).getByLabelText('Output name'), '-report');
-  await user.click(within(artifacts).getByRole('checkbox'));
+  await user.click(within(sourceArtifacts).getByRole('button', { name: 'Add output' }));
+  await user.type(within(sourceArtifacts).getByLabelText('Output name'), '-report');
+  await user.click(artifactSections[1]!);
+  await user.click(within(targetArtifacts).getByRole('button', { name: 'Add input' }));
+  await user.selectOptions(
+    within(targetArtifacts).getByLabelText('Source output'),
+    within(targetArtifacts).getByRole('option', { name: 'Ready / output-report' }),
+  );
+  expect(within(targetArtifacts).getByRole('checkbox')).toBeChecked();
   await user.click(screen.getByRole('button', { name: 'Save workflow' }));
   await waitFor(() => expect(api.saveWorkspaceWorkflow).toHaveBeenCalled());
   const call = api.saveWorkspaceWorkflow.mock.calls[0]?.[0] as { body: WorkspaceWorkflow };
   expect(call.body.stages[0]?.artifactOutputs).toEqual([{ name: 'output-report', kind: 'plan' }]);
-  expect(call.body.stages[0]?.artifactInputs).toEqual([
-    { name: 'input', sourceStageId: '', outputName: '', required: false },
+  expect(call.body.stages[1]?.artifactInputs).toEqual([
+    { name: 'input', sourceStageId: 'ready', outputName: 'output-report', required: true },
+  ]);
+  await user.click(within(targetArtifacts).getByRole('checkbox'));
+  await user.click(screen.getByRole('button', { name: 'Save workflow' }));
+  await waitFor(() => expect(api.saveWorkspaceWorkflow).toHaveBeenCalledTimes(2));
+  const optional = api.saveWorkspaceWorkflow.mock.calls[1]?.[0] as { body: WorkspaceWorkflow };
+  expect(optional.body.stages[1]?.artifactInputs).toEqual([
+    { name: 'input', sourceStageId: 'ready', outputName: 'output-report', required: false },
   ]);
 });
