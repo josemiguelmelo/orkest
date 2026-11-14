@@ -50,7 +50,7 @@ func (s *WorkflowStageIntegrationService) processCandidate(ctx context.Context, 
 	due := (o.ReconciledAt.IsZero() || now.Sub(o.ReconciledAt) >= 30*time.Second) && (o.AttemptedAt.IsZero() || now.Sub(o.AttemptedAt) >= 10*time.Second)
 	if due {
 		initial := len(o.Subjects) == 0
-		err := s.refreshObservation(ctx, p, c, &o, now)
+		err := s.refreshObservation(ctx, p, c, &o)
 		if err != nil && initial {
 			o.Subjects = []stageintegrationmodel.Subject{}
 			o.RevisionIDs = []string{}
@@ -149,7 +149,7 @@ func sameSubject(a, b stageintegrationmodel.Subject) bool {
 	return subjectKey(a) == subjectKey(b)
 }
 
-func (s *WorkflowStageIntegrationService) refreshObservation(ctx context.Context, p WorkflowStageIntegrationProvider, c Candidate, o *Observation, now time.Time) error {
+func (s *WorkflowStageIntegrationService) refreshObservation(ctx context.Context, p WorkflowStageIntegrationProvider, c Candidate, o *Observation) error {
 	if err := p.ValidateParameters(c.ActionID, c.Parameters); err != nil {
 		return err
 	}
@@ -211,7 +211,7 @@ func (s *WorkflowStageIntegrationService) refreshObservation(ctx context.Context
 		}
 		// Historical state is a baseline, not a trigger. Set activation only after
 		// every selected artifact has been verified successfully.
-		o.ActivatedAt = now
+		o.ActivatedAt = s.now()
 		return nil
 	}
 	for i, subject := range o.Subjects {

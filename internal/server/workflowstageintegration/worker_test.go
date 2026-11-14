@@ -67,6 +67,7 @@ type workerProvider struct {
 	err         error
 	resolutions int
 	reject      bool
+	onResolve   func()
 }
 
 func (*workerProvider) Provider() string                                 { return "test" }
@@ -77,6 +78,9 @@ func (p *workerProvider) MatchSubjects(string, json.RawMessage, stageintegration
 
 func (p *workerProvider) ResolveSubject(context.Context, json.RawMessage, string, string) (stageintegrationmodel.Subject, error) {
 	p.resolutions++
+	if p.onResolve != nil {
+		p.onResolve()
+	}
 	return p.subject, p.err
 }
 
@@ -100,6 +104,58 @@ func workerFixture() (*WorkflowStageIntegrationService, *workerRepository, *work
 	}}
 	access := &workerAccess{}
 	return NewWorkflowStageIntegrationService(repo, nil, access, workerCoding{}, nil, p), repo, p, access
+}
+
+func TestProcessActivatesAfterAllInitialSubjectsAreVerified(t *testing.T) {
+	for _, source := range []string{"webhook", "poll"} {
+		t.Run(source, func(t *testing.T) {
+			s, repo, provider, _ := workerFixture()
+			started := time.Date(2026, 11, 13, 12, 0, 0, 0, time.UTC)
+			now := started
+			s.now = func() time.Time { return now }
+			provider.onResolve = func() { now = now.Add(5 * time.Second) }
+			second := repo.candidate.AvailableArtifacts[0]
+			second.ID = "second-revision"
+			repo.candidate.AvailableArtifacts = append(repo.candidate.AvailableArtifacts, second)
+			baselineEvents := []stageintegrationmodel.ProviderEvent{
+				{ID: "during-first-read", Subject: provider.subject, OccurredAt: started.Add(time.Second)},
+				{ID: "during-last-read", Subject: provider.subject, OccurredAt: started.Add(6 * time.Second)},
+				{ID: "at-activation", Subject: provider.subject, OccurredAt: started.Add(10 * time.Second)},
+			}
+			if source == "webhook" {
+				repo.events = baselineEvents
+			} else {
+				provider.events = baselineEvents
+			}
+			if err := s.Process(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			activated := repo.candidate.Observation.ActivatedAt
+			if !activated.Equal(now) || provider.resolutions != 2 {
+				t.Fatalf("activation must follow all verification reads: activation=%s completed=%s reads=%d", activated, now, provider.resolutions)
+			}
+			if len(repo.admitted) != 0 {
+				t.Fatal("event preceding completed baseline verification was admitted")
+			}
+			// Reconciliation must keep the baseline and still admit later activity.
+			now = now.Add(31 * time.Second)
+			later := stageintegrationmodel.ProviderEvent{ID: "after-activation", Subject: provider.subject, OccurredAt: activated.Add(time.Second)}
+			if source == "webhook" {
+				repo.events = append(repo.events, later)
+			} else {
+				provider.events = append(provider.events, later)
+			}
+			if err := s.Process(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			if len(repo.admitted) != 1 || repo.admitted[0].ID != later.ID {
+				t.Fatalf("expected only post-activation activity: %+v", repo.admitted)
+			}
+			if !repo.candidate.Observation.ActivatedAt.Equal(activated) {
+				t.Fatal("reconciliation changed the activation baseline")
+			}
+		})
+	}
 }
 
 func TestProcessAdmitsEventsAcrossSlowScans(t *testing.T) {

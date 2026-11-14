@@ -152,3 +152,10 @@ transaction and can block writes while existing rows are indexed, so apply it
 with ingestion stopped as described above. Deploy the matching UI/API together:
 the status endpoint now returns a bounded `{items, nextCursor}` page rather than
 an unbounded array. Worker wire and native session formats remain unchanged.
+
+0051 permits integration movement rules targeting their source stage, matching
+the workflow editor's "Keep task in this stage" option. Existing rules and event
+history are preserved. Internal success/completion movement rules still require
+a different target. Constraint replacement validates existing rows and takes a
+table lock; apply it with ingestion stopped. Rollback refuses existing same-stage
+integration rules: remove them or select different targets before rolling back.

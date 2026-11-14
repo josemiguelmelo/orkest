@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/josemiguelmelo/orkest/db/migrations"
 	"github.com/josemiguelmelo/orkest/internal/adapters/postgres/sqlc"
@@ -101,6 +102,70 @@ func TestPostgresRepositoriesWorkflowStageIntegrations(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	sameStageMigration, err := migrations.FS.ReadFile("0051_workflow_integration_same_stage.sql")
+	if err != nil {
+		t.Fatal(err)
+	}
+	upSameStage, downSameStage, ok := strings.Cut(string(sameStageMigration), "-- +goose Down")
+	if !ok {
+		t.Fatal("missing same-stage migration rollback")
+	}
+	t.Run("same-stage migration rollback and reapply preserves existing rules", func(t *testing.T) {
+		tx, e := database.pool.Begin(ctx)
+		if e != nil {
+			t.Fatal(e)
+		}
+		defer func() { _ = tx.Rollback(ctx) }()
+		if _, e = tx.Exec(ctx, downSameStage); e != nil {
+			t.Fatal("rollback constraint", e)
+		}
+		if _, e = tx.Exec(ctx, upSameStage); e != nil {
+			t.Fatal("reapply constraint", e)
+		}
+		var count int
+		if e = tx.QueryRow(ctx, `SELECT count(*) FROM workflow_rules WHERE workspace_id=$1`, workspaceID).Scan(&count); e != nil || count != len(definition.Rules) {
+			t.Fatalf("migration changed existing rules: count=%d err=%v", count, e)
+		}
+	})
+	t.Run("save and reload a same-stage integration callback", func(t *testing.T) {
+		index := len(definition.Rules) - 1
+		definition.Rules[index].TargetStageID = definition.Rules[index].SourceStageID
+		saved, e := workflows.Save(ctx, workspaceID, definition, workflow.PlanConfigurationChange)
+		if e != nil {
+			t.Fatal("save same-stage callback", e)
+		}
+		loaded, e := workflows.Definition(ctx, workspaceID, workspaceID)
+		if e != nil {
+			t.Fatal("reload same-stage callback", e)
+		}
+		found := false
+		for _, rule := range loaded.Rules {
+			if rule.ID == "review-feedback" {
+				found = rule.TargetStageID == rule.SourceStageID
+			}
+		}
+		if !found {
+			t.Fatal("same-stage callback did not round-trip")
+		}
+		t.Run("rollback preserves unsupported rules by refusing", func(t *testing.T) {
+			tx, rollbackErr := database.pool.Begin(ctx)
+			if rollbackErr != nil {
+				t.Fatal(rollbackErr)
+			}
+			defer func() { _ = tx.Rollback(ctx) }()
+			_, rollbackErr = tx.Exec(ctx, downSameStage)
+			var constraintErr *pgconn.PgError
+			if !errors.As(rollbackErr, &constraintErr) || constraintErr.Code != "23514" {
+				t.Fatalf("expected rollback to refuse same-stage rules: %v", rollbackErr)
+			}
+		})
+		definition = saved
+		definition.Rules[index].TargetStageID = "todo"
+		definition, e = workflows.Save(ctx, workspaceID, definition, workflow.PlanConfigurationChange)
+		if e != nil {
+			t.Fatal("restore callback target", e)
+		}
+	})
 	taskID := newID()
 	_, err = database.pool.Exec(ctx, `INSERT INTO tasks(id,workspace_id,title,status,workflow_id) VALUES($1,$2,'Review task','in_review',$2)`, taskID, workspaceID)
 	if err != nil {
