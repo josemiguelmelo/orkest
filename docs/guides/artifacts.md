@@ -66,7 +66,12 @@ remains supported. See [workflow stage integrations](workflow-stage-integrations
   continued sessions. Inputs are pinned; recovery reuses saved prompt/identities.
   Runs without artifact bindings still receive publishing instructions.
 - External URLs may change; use immutable provider IDs in metadata for reproducibility.
-- UI: Markdown, text, links, revisions; workflow editor: output/input bindings.
+- UI: Markdown, text, links, revisions. In the workflow editor, expand **Artifacts**
+  to configure **Publish results** and **Use results from other stages**. Source
+  outputs are grouped by stage and show their kind. Each input summarizes its
+  binding and can require the artifact before work starts. Unavailable saved
+  sources remain visible so administrators can choose a replacement. Save the
+  workflow to apply changes.
   Render as task data; users open external links, never the platform.
 
 See [transactions](../development/artifacts.md), [rollback losses](../operations/migrations.md#artifacts),

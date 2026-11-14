@@ -20,6 +20,7 @@ import { ConfirmButton, ErrorState, Loading, PageHeader } from '../../shared/ui/
 import { Field } from '../../shared/ui/form';
 import { Dialog } from '../../shared/ui/dialog';
 import { useAction } from '../../shared/use-action';
+import { StageArtifacts } from './stage-artifacts';
 import { StageIntegrationRules } from './stage-integration-rules';
 
 export function useWorkflows() {
@@ -334,152 +335,12 @@ function WorkflowEditor({
                 ))}
               </select>
             </Field>
-            <details>
-              <summary>Artifacts</summary>
-              {(stage.artifactOutputs ?? []).map((output, i) => (
-                <div key={i}>
-                  <Field label="Output name">
-                    <input
-                      disabled={disabled}
-                      value={output.name}
-                      onChange={(e) =>
-                        patch(stage.id, {
-                          artifactOutputs: (stage.artifactOutputs ?? []).map((o, j) =>
-                            i === j ? { ...o, name: e.target.value } : o,
-                          ),
-                        })
-                      }
-                    />
-                  </Field>
-                  <Field label="Output kind">
-                    <input
-                      disabled={disabled}
-                      value={output.kind}
-                      onChange={(e) =>
-                        patch(stage.id, {
-                          artifactOutputs: (stage.artifactOutputs ?? []).map((o, j) =>
-                            i === j ? { ...o, kind: e.target.value } : o,
-                          ),
-                        })
-                      }
-                    />
-                  </Field>
-                  <Button
-                    disabled={disabled}
-                    variant="ghost"
-                    onClick={() =>
-                      patch(stage.id, {
-                        artifactOutputs: (stage.artifactOutputs ?? []).filter((_, j) => i !== j),
-                      })
-                    }
-                  >
-                    Remove output
-                  </Button>
-                </div>
-              ))}
-              <Button
-                disabled={disabled}
-                variant="ghost"
-                onClick={() =>
-                  patch(stage.id, {
-                    artifactOutputs: [
-                      ...(stage.artifactOutputs ?? []),
-                      { name: 'output', kind: 'plan' },
-                    ],
-                  })
-                }
-              >
-                Add output
-              </Button>
-              {(stage.artifactInputs ?? []).map((input, i) => (
-                <div key={i}>
-                  <Field label="Input name">
-                    <input
-                      disabled={disabled}
-                      value={input.name}
-                      onChange={(e) =>
-                        patch(stage.id, {
-                          artifactInputs: (stage.artifactInputs ?? []).map((o, j) =>
-                            i === j ? { ...o, name: e.target.value } : o,
-                          ),
-                        })
-                      }
-                    />
-                  </Field>
-                  <Field label="Source output">
-                    <select
-                      disabled={disabled}
-                      value={JSON.stringify([input.sourceStageId, input.outputName])}
-                      onChange={(e) => {
-                        const [sourceStageId, outputName] = JSON.parse(e.target.value) as [
-                          string,
-                          string,
-                        ];
-                        patch(stage.id, {
-                          artifactInputs: (stage.artifactInputs ?? []).map((o, j) =>
-                            i === j ? { ...o, sourceStageId, outputName } : o,
-                          ),
-                        });
-                      }}
-                    >
-                      <option value={JSON.stringify(['', ''])}>Select output</option>
-                      {draft.stages
-                        .filter((s) => s.id !== stage.id)
-                        .flatMap((s) =>
-                          (s.artifactOutputs ?? []).map((o) => (
-                            <option
-                              key={`${s.id}:${o.name}`}
-                              value={JSON.stringify([s.id, o.name])}
-                            >
-                              {s.name} / {o.name}
-                            </option>
-                          )),
-                        )}
-                    </select>
-                  </Field>
-                  <label>
-                    <input
-                      type="checkbox"
-                      disabled={disabled}
-                      checked={input.required}
-                      onChange={(e) =>
-                        patch(stage.id, {
-                          artifactInputs: (stage.artifactInputs ?? []).map((o, j) =>
-                            i === j ? { ...o, required: e.target.checked } : o,
-                          ),
-                        })
-                      }
-                    />{' '}
-                    Required before starting
-                  </label>
-                  <Button
-                    disabled={disabled}
-                    variant="ghost"
-                    onClick={() =>
-                      patch(stage.id, {
-                        artifactInputs: (stage.artifactInputs ?? []).filter((_, j) => i !== j),
-                      })
-                    }
-                  >
-                    Remove input
-                  </Button>
-                </div>
-              ))}
-              <Button
-                disabled={disabled}
-                variant="ghost"
-                onClick={() =>
-                  patch(stage.id, {
-                    artifactInputs: [
-                      ...(stage.artifactInputs ?? []),
-                      { name: 'input', sourceStageId: '', outputName: '', required: true },
-                    ],
-                  })
-                }
-              >
-                Add input
-              </Button>
-            </details>
+            <StageArtifacts
+              stage={stage}
+              stages={draft.stages}
+              disabled={disabled}
+              onChange={(values) => patch(stage.id, values)}
+            />
             <div className="workflow-automation">
               <div className="workflow-automation-heading">
                 <Bot size={14} />

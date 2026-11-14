@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AppContext } from '../../app/context';
@@ -16,6 +16,14 @@ const api = vi.hoisted(() => ({
 }));
 vi.mock('../../shared/api/generated/sdk.gen', () => api);
 import { WorkflowPage } from './workflow';
+for (const method of [
+  'hasPointerCapture',
+  'setPointerCapture',
+  'releasePointerCapture',
+  'scrollIntoView',
+]) {
+  Object.defineProperty(HTMLElement.prototype, method, { configurable: true, value: () => false });
+}
 const definition: WorkspaceWorkflow = {
   id: 'workspace',
   name: 'Default',
@@ -188,4 +196,38 @@ it('rejects custom prompts exceeding the UTF-8 byte limit', async () => {
   fireEvent.change(prompts[0]!, { target: { value: 'é'.repeat(16385) } });
   expect(screen.getByRole('alert')).toHaveTextContent('32,768 UTF-8 bytes');
   expect(screen.getByRole('button', { name: 'Save workflow' })).toBeDisabled();
+});
+
+it('configures stage artifact outputs and required inputs', async () => {
+  setup('admin');
+  api.saveWorkspaceWorkflow.mockImplementation(({ body }: { body: WorkspaceWorkflow }) =>
+    Promise.resolve({ data: { ...body, version: body.version + 1 } }),
+  );
+  const user = userEvent.setup();
+  const artifactSections = await screen.findAllByText('Artifacts');
+  const sourceArtifacts = artifactSections[0]?.closest('details');
+  const targetArtifacts = artifactSections[1]?.closest('details');
+  if (!sourceArtifacts || !targetArtifacts) throw new Error('Expected stage artifact editors');
+  await user.click(artifactSections[0]!);
+  await user.click(within(sourceArtifacts).getByRole('button', { name: 'Add output' }));
+  await user.type(within(sourceArtifacts).getByLabelText('Output name'), '-report');
+  await user.click(artifactSections[1]!);
+  await user.click(within(targetArtifacts).getByRole('button', { name: 'Add input' }));
+  await user.click(within(targetArtifacts).getByLabelText('Source output'));
+  await user.click(screen.getByRole('option', { name: 'Ready / output-report' }));
+  expect(within(targetArtifacts).getByRole('checkbox')).toBeChecked();
+  await user.click(screen.getByRole('button', { name: 'Save workflow' }));
+  await waitFor(() => expect(api.saveWorkspaceWorkflow).toHaveBeenCalled());
+  const call = api.saveWorkspaceWorkflow.mock.calls[0]?.[0] as { body: WorkspaceWorkflow };
+  expect(call.body.stages[0]?.artifactOutputs).toEqual([{ name: 'output-report', kind: 'plan' }]);
+  expect(call.body.stages[1]?.artifactInputs).toEqual([
+    { name: 'input', sourceStageId: 'ready', outputName: 'output-report', required: true },
+  ]);
+  await user.click(within(targetArtifacts).getByRole('checkbox'));
+  await user.click(screen.getByRole('button', { name: 'Save workflow' }));
+  await waitFor(() => expect(api.saveWorkspaceWorkflow).toHaveBeenCalledTimes(2));
+  const optional = api.saveWorkspaceWorkflow.mock.calls[1]?.[0] as { body: WorkspaceWorkflow };
+  expect(optional.body.stages[1]?.artifactInputs).toEqual([
+    { name: 'input', sourceStageId: 'ready', outputName: 'output-report', required: false },
+  ]);
 });
