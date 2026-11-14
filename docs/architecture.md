@@ -193,7 +193,7 @@ Saved answers and runtime consumption are distinct facts. See the
 
 Extensions need wiring, validation, documentation and behavior tests. Runtimes also
 need saved-session compatibility and live qualification with explicit model/settings
-and credentials where required. See [dated verification and remaining limits](status.md#verification-record).
+and credentials where required. See [runtime qualification](development/testing.md#runtime-qualification).
 
 ## Preserve during refactoring
 

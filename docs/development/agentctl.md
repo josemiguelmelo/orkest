@@ -163,5 +163,5 @@ preserving saved state. Real support must be qualified per provider.
 
 Fixtures share `opencodetest.NewHost`. Deterministic v1-manifest tests and real
 current/v1-manifest continuation tests establish different evidence. See the
-[dated verification record](../status.md#verification-record), [test commands](testing.md),
+[test commands and prerequisites](testing.md)
 and [runtime setup](../reference/runtimes/README.md).

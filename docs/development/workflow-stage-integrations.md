@@ -1,13 +1,6 @@
 # Workflow stage integrations
 
-Implementation branch: `feat/workflow-stage-integrations`, created from freshly
-fetched `main` at `058aeaef258c7452e43dc6625e52d01df74d6ab8` on 2026-11-11.
-Worktree: `.worktrees/workflow-stage-integrations`. The original temporary
-worktree was recovered from edit records after host cleanup on 2026-11-12.
-
 User behavior and setup: [guide](../guides/workflow-stage-integrations.md).
-Verification below distinguishes deterministic tests, real PostgreSQL and live
-provider/runtime qualification.
 
 ## Ownership and contracts
 
@@ -215,50 +208,3 @@ cannot interpret new event/rule kinds. Independent agentctl processes continue.
 Validate new connections before enabling them. Before rollback, stop ingestion,
 reconcile commands, export relevant history/configuration and honor down-migration
 guards. See [operations](../operations/migrations.md).
-
-## Verification record — 2026-11-12
-
-- `make check` passed: Go lint and tests, runtime/architecture boundaries,
-  generated API consistency, frontend lint, 89 Vitest tests, type checks and
-  production builds.
-- `make sqlc` and `make fmt` passed. `git diff --check` passed.
-- Focused GitHub provider and HTTP API tests passed. Deterministic orchestration,
-  workflow and session guard tests are included in `make check`.
-- PostgreSQL integration tests were not run: this environment has no configured
-  `DATABASE_URL`/`POSTGRES_*` credentials or running project database. Run
-  `make db-up` with local settings, then `make test-postgres` before deployment.
-
-Live GitHub notifications/private repositories and credentialed pinned OpenCode
-restore/follow-up are not verified: required live model/provider settings and an
-OpenCode executable are unavailable. Fixture/local-infrastructure evidence must
-not be presented as live qualification. Existing team-member capacity and transport
-security limitations in [status](../status.md) remain outside this feature.
-
-## PR 89 review verification — 2026-11-13
-
-- Added deterministic clock-controlled worker coverage for webhook and polled event
-  admission over repeated 31-second scans, failed verification backoff/recovery,
-  revoked authorization, and changed artifact output kinds.
-- Shared resolver coverage retains the existing handoff tests and checks exact
-  declared kinds, latest matching stage entries, optional/required bindings and
-  missing source/output declarations.
-- `make fmt`, Go lint, runtime/architecture boundaries, all Go unit packages,
-  generated API consistency, frontend lint/type checks and `make build` passed.
-- `make check` stopped at three existing scheduled-jobs frontend test failures
-  (97 frontend tests passed). The unchanged tests expect `No scheduled jobs` and
-  `New job`, while the unchanged empty-state UI displays `No scheduled jobs yet`
-  and `Create your first job`.
-- `make test-postgres` remains blocked by missing database settings. Live GitHub
-  and credentialed runtime continuation were not qualified by these changes.
-
-## Package organization follow-up — 2026-11-13
-
-Aligned public data with the leaf-model convention and separated provider and
-repository contracts from service operations. Updated HTTP/provider/persistence
-consumers directly, without forwarding aliases. Existing service and repository
-function bodies retain their behavior after type/field renames and relocation.
-
-`make fmt`, `make lint`, `make check-runtime-boundaries`, the focused integration
-provider/API/domain suites, all Go unit packages and `git diff --check` passed.
-`make test-postgres` remains blocked by missing database settings. This structural
-change adds no live GitHub or runtime continuation qualification.

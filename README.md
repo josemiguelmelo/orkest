@@ -10,9 +10,8 @@ Active prototype; see [status](docs/status.md):
 - Implemented: management, dispatch, Docker/Local execution, initial Kubernetes
   Pod execution, durable sessions.
 - Unfinished: member capacity, worker transport authentication.
-- Live qualification is scenario-specific: OpenCode memory continuation has a dated
-  verification record; other providers, real approvals, MCP, and full platform
-  restart journeys still need qualification. See [evidence and limits](docs/status.md#verification-record).
+- Live qualification is scenario-specific: qualify continuation, approvals, MCP,
+  and platform restart behavior for each runtime. See [testing prerequisites](docs/development/testing.md).
 
 ## Features
 
