@@ -113,6 +113,8 @@ activation do not trigger callbacks. Activation is asynchronous: there is no cla
 that a webhook arriving before initial verification will trigger. Re-entry and
 configuration changes create new observations/baselines. Configuration saves never
 execute historical activity or send agent prompts. Empty PR sets cannot satisfy all.
+Activation uses the time after all selected subjects have been verified; events
+at or before that boundary remain baseline data, including during slow API reads.
 
 GitHub review actions mean `pull_request_review` / `submitted`, with selected review
 states and optional current-head filtering. Comments/requests/edits/dismissals are
