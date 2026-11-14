@@ -1,6 +1,6 @@
 # Task VS Code and terminal implementation plan
 
-Status: planned; implementation has not started.
+Status: PR 1 Docker/browser feasibility verified; production implementation planned.
 Last updated: 2026-11-14.
 
 This document is the implementation checklist and cross-session handoff for task
@@ -254,6 +254,12 @@ Docker editor implementation for Local agents.
 - Do not extend execution-profile image composition in this release.
 - Do not automatically share agent credentials or expose port previews.
 
+PR 1 finding: the isolated spike uses separate read/write and read-only image
+targets. Read-only PTY creation requires an immutable upstream module guard;
+settings or an inherited Node preload were insufficient. Carry equivalent
+qualified enforcement into PR 3. See [evidence](task-editor-pr1-evidence.md) for
+versions, browser cookies/reconnect and daemon-visible permission assumptions.
+
 ## 9. API, gateway and browser access
 
 Proposed control endpoints:
@@ -305,18 +311,24 @@ contract unchanged unless an implementation finding demonstrates a concrete need
 
 ## 12. Delivery checklist
 
+The proposed [first delivery and PR breakdown](task-editor-first-delivery.md)
+expands slices 1–3 and the Docker-relevant parts of slice 6 into nine focused PRs.
+The first user-facing milestone is Docker-only; Local and Kubernetes follow in
+separate deliveries. PR 1 is the initial feasibility deliverable. This sequencing
+is a planning proposal and does not mark any implementation work complete.
+
 Each slice must update this document with changes, checks actually executed,
 limitations and the next action. Do not mark unavailable checks passed.
 
 ### Slice 1 — Docker feasibility spike
 
-- [ ] Pin code-server and prepare an editor image.
-- [ ] Open a real existing checkout and multi-root workspace.
-- [ ] Verify Git inspection, editing and integrated terminal.
-- [ ] Prove read-only mounts reject repository writes.
-- [ ] Prove recreation terminates terminal processes and preserves saved files.
-- [ ] Prove authenticated proxy and browser reconnection behavior.
-- [ ] Record unsaved-buffer behavior and any implementation changes needed.
+- [x] Pin code-server and prepare an editor image.
+- [x] Open a real existing checkout and multi-root workspace.
+- [x] Verify Git inspection, editing and integrated terminal.
+- [x] Prove read-only mounts reject repository writes.
+- [x] Prove recreation terminates terminal processes and preserves saved files.
+- [x] Prove authenticated proxy and browser reconnection behavior.
+- [x] Record unsaved-buffer behavior and any implementation changes needed.
 
 Acceptance: real Docker demonstrates both access modes and a safe transition;
 mock-only checks do not satisfy this slice.
@@ -431,13 +443,18 @@ product requirements. Record decisions here rather than silently changing scope.
 
 ## 16. Cross-session progress and handoff
 
-Current slice: none started.
-Next action: begin Slice 1; read the current repository instructions and inspect
-the live working tree before changing files.
+Current slice: Slice 1 / PR 1 verified in the isolated Docker/browser harness.
+[Evidence and exit decision](task-editor-pr1-evidence.md) record the real results,
+read-only image variant, browser-session approach and UID/GID limitations.
+Next action: PR 2 existing-checkout discovery in the
+[first-delivery breakdown](task-editor-first-delivery.md). Production editing
+remains unavailable; preserve task storage/session compatibility in that increment.
 
 | Date | Slice | Changes / decisions | Verification actually run | Blockers / next action |
 | --- | --- | --- | --- | --- |
 | 2026-11-14 | Planning | Recorded simple design, automatic mode transitions and no new database storage | Documentation review only; no feature implementation/tests | Start Docker feasibility spike |
+| 2026-11-14 | First-delivery planning | Proposed Docker-only first release in nine focused PRs, with dependencies, per-PR acceptance and enablement/rollback gates | Reviewed requirements, stack, status, delivery/testing guidance, executor paths and worker prompt/queue code; no feature checks run | Implement PR 1 feasibility spike; qualify idle boundary and browser/session approach before enablement |
+| 2026-11-14 | Slice 1 / PR 1 | Added pinned editor image pair, isolated two-repository browser/proxy harness and focused Make targets; immutable read-only PTY guard required | Real Docker arm64 + Chromium passed `make test-task-editor`; mount/Git write rejection, terminal descendants stopped, offline extension denied, generation reconnect, saved files/branches retained, unsaved edit lost; lint 0 issues; syntax/format/diff checks passed | [Full evidence](task-editor-pr1-evidence.md); proceed to PR 2; production HTTPS, authorization, execution handoff and amd64 remain unqualified |
 
 At each handoff, update the current slice, next action and table. Record relevant
 files/commits and exact meaningful check results. Preserve unrelated user changes.
