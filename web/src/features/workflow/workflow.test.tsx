@@ -1,5 +1,5 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AppContext } from '../../app/context';
@@ -138,4 +138,24 @@ it('rejects custom prompts exceeding the UTF-8 byte limit', async () => {
   fireEvent.change(prompts[0]!, { target: { value: 'é'.repeat(16385) } });
   expect(screen.getByRole('alert')).toHaveTextContent('32,768 UTF-8 bytes');
   expect(screen.getByRole('button', { name: 'Save workflow' })).toBeDisabled();
+});
+
+it('configures stage artifact outputs and required inputs', async () => {
+  setup('admin');
+  const user = userEvent.setup();
+  const artifactSections = await screen.findAllByText('Artifacts');
+  const artifacts = artifactSections[0]?.closest('details');
+  if (!artifacts) throw new Error('Expected artifact editor');
+  await user.click(artifactSections[0]!);
+  await user.click(within(artifacts).getByRole('button', { name: 'Add output' }));
+  await user.click(within(artifacts).getByRole('button', { name: 'Add input' }));
+  await user.type(within(artifacts).getByLabelText('Output name'), '-report');
+  await user.click(within(artifacts).getByRole('checkbox'));
+  await user.click(screen.getByRole('button', { name: 'Save workflow' }));
+  await waitFor(() => expect(api.saveWorkspaceWorkflow).toHaveBeenCalled());
+  const call = api.saveWorkspaceWorkflow.mock.calls[0]?.[0] as { body: WorkspaceWorkflow };
+  expect(call.body.stages[0]?.artifactOutputs).toEqual([{ name: 'output-report', kind: 'plan' }]);
+  expect(call.body.stages[0]?.artifactInputs).toEqual([
+    { name: 'input', sourceStageId: '', outputName: '', required: false },
+  ]);
 });
