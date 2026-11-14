@@ -1,3 +1,4 @@
+import './integration-parameters.css';
 import { Field } from '../../shared/ui/form';
 import type { JsonValue } from '../integrations/schema';
 import { WorkflowChoiceSelect, WorkflowMultiChoiceSelect } from './workflow-choice-select';
@@ -51,7 +52,12 @@ export function IntegrationParameters({
       {Object.entries(object(schema.properties)).map(([name, raw]) => {
         const field = object(raw);
         const label = typeof field.title === 'string' ? field.title : name;
-        const hint = typeof field.description === 'string' ? field.description : undefined;
+        const hint =
+          typeof field.description === 'string'
+            ? field.description
+            : name === 'requireCurrentHead'
+              ? 'Ignore reviews on older commits of the pull request.'
+              : undefined;
         const change = (next: JsonValue) => onChange({ ...value, [name]: next });
         const choices = Array.isArray(field.enum)
           ? field.enum.filter((entry): entry is string => typeof entry === 'string')
@@ -88,6 +94,8 @@ export function IntegrationParameters({
             <Field key={name} label={label} {...(hint ? { hint } : {})}>
               <input
                 type="checkbox"
+                role="switch"
+                className="workflow-parameter-toggle"
                 disabled={disabled}
                 checked={value[name] === true}
                 onChange={(event) => change(event.target.checked)}

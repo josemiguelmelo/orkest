@@ -158,7 +158,7 @@ it('configures provider parameters and switches between movement and a custom ag
   const user = userEvent.setup();
   setup();
   await user.click(await screen.findByRole('button', { name: 'Add integration callback' }));
-  await user.click(await screen.findByRole('combobox', { name: 'Integration connection' }));
+  await user.click(await screen.findByRole('combobox', { name: 'Connection' }));
   await user.click(await screen.findByRole('option', { name: /Review events/ }));
   await user.click(screen.getByRole('combobox', { name: 'PR input' }));
   await user.click(screen.getByRole('option', { name: 'prs' }));
@@ -168,7 +168,7 @@ it('configures provider parameters and switches between movement and a custom ag
   expect(screen.queryByRole('menuitemcheckbox', { name: 'plan' })).not.toBeInTheDocument();
   await user.click(screen.getByRole('menuitemcheckbox', { name: 'Changes requested' }));
   await user.keyboard('{Escape}');
-  await user.click(screen.getByRole('combobox', { name: 'Callback target stage' }));
+  await user.click(screen.getByRole('combobox', { name: 'Destination stage' }));
   expect(screen.getByRole('group', { name: 'Keep task in this stage' })).toContainElement(
     screen.getByRole('option', { name: /Work/ }),
   );
@@ -197,9 +197,9 @@ it('configures provider parameters and switches between movement and a custom ag
       },
     },
   });
-  await user.click(screen.getByRole('combobox', { name: 'Workflow callback' }));
+  await user.click(screen.getByRole('combobox', { name: 'Response' }));
   await user.click(screen.getByRole('option', { name: /Call assigned agent/ }));
-  await user.type(screen.getByLabelText('Agent callback prompt'), 'Address review feedback.');
+  await user.type(screen.getByLabelText('Agent prompt'), 'Address review feedback.');
   rules = JSON.parse(screen.getByTestId('rules').textContent ?? '[]') as WorkflowAutomationRule[];
   expect(rules[0]).toMatchObject({
     action: 'call_agent',
@@ -207,7 +207,7 @@ it('configures provider parameters and switches between movement and a custom ag
     sessionPolicy: 'continue_or_create_if_absent',
   });
   expect(rules[0]?.targetStageId).toBeUndefined();
-  await user.click(screen.getByRole('combobox', { name: 'Workflow callback' }));
+  await user.click(screen.getByRole('combobox', { name: 'Response' }));
   await user.click(screen.getByRole('option', { name: /Move task to a stage/ }));
   rules = JSON.parse(screen.getByTestId('rules').textContent ?? '[]') as WorkflowAutomationRule[];
   expect(rules[0]?.promptText).toBeUndefined();
@@ -218,9 +218,9 @@ it('explains merge policy choices in plain language', async () => {
   const user = userEvent.setup();
   setup();
   await user.click(await screen.findByRole('button', { name: 'Add integration callback' }));
-  await user.click(await screen.findByRole('combobox', { name: 'Integration connection' }));
+  await user.click(await screen.findByRole('combobox', { name: 'Connection' }));
   await user.click(await screen.findByRole('option', { name: /Review events/ }));
-  await user.click(screen.getByRole('combobox', { name: 'Integration action' }));
+  await user.click(screen.getByRole('combobox', { name: 'Event' }));
   await user.click(screen.getByRole('option', { name: 'PR merged' }));
   await user.click(screen.getByRole('combobox', { name: 'PR input' }));
   await user.click(screen.getByRole('option', { name: 'prs' }));
@@ -265,12 +265,34 @@ it('keeps unavailable connection and action identities visible until explicitly 
     ],
   };
   setup(false, definition);
-  expect(await screen.findByRole('combobox', { name: 'Integration connection' })).toHaveTextContent(
+  expect(await screen.findByRole('combobox', { name: 'Connection' })).toHaveTextContent(
     /Unavailable connection/,
   );
-  expect(screen.getByRole('combobox', { name: 'Integration action' })).toHaveTextContent(
-    /Unavailable action/,
-  );
-  expect(screen.getByLabelText('Agent callback prompt')).toHaveValue('Keep saved prompt');
+  expect(screen.getByRole('combobox', { name: 'Event' })).toHaveTextContent(/Unavailable action/);
+  expect(screen.getByLabelText('Agent prompt')).toHaveValue('Keep saved prompt');
   expect(JSON.parse(screen.getByTestId('rules').textContent ?? '[]')).toEqual(definition.rules);
+});
+
+it('guides the first rule and previews its response without saving or starting work', async () => {
+  const user = userEvent.setup();
+  setup();
+  expect(await screen.findByText('No integration rules yet')).toBeInTheDocument();
+  await user.click(screen.getByRole('button', { name: 'Add integration callback' }));
+  expect(screen.queryByText('No integration rules yet')).not.toBeInTheDocument();
+  expect(screen.getByRole('group', { name: '1 When this happens' })).toBeInTheDocument();
+  expect(screen.getByRole('group', { name: '2 Then do this' })).toBeInTheDocument();
+  await user.click(screen.getByRole('combobox', { name: 'Connection' }));
+  await user.click(screen.getByRole('option', { name: /Review events/ }));
+  await user.click(screen.getByRole('combobox', { name: 'Destination stage' }));
+  await user.click(screen.getByRole('option', { name: 'Review' }));
+  expect(screen.getByText(/move to Review/)).toHaveTextContent(
+    'When Review added, move to Review.',
+  );
+  await user.click(screen.getByLabelText('Enabled'));
+  expect(screen.getByText(/move to Review/)).toHaveTextContent(
+    'Paused: when Review added, move to Review.',
+  );
+  await user.click(screen.getByRole('button', { name: 'Remove callback' }));
+  expect(screen.getByText('No integration rules yet')).toBeInTheDocument();
+  expect(JSON.parse(screen.getByTestId('rules').textContent ?? '[]')).toEqual([]);
 });
