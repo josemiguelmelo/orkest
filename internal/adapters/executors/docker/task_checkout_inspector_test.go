@@ -45,13 +45,13 @@ func TestTaskCheckoutInspectorReturnsWholeTaskWorkspaceWithoutAgentState(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got.Roots) != 1 || got.Roots[0].Source != canonicalWork || got.Roots[0].Path != "/task" {
+	if len(got.Roots) != 1 || got.Roots[0].StorageRef != canonicalWork || got.Roots[0].Path != "/task" {
 		t.Fatalf("unexpected roots: %#v", got.Roots)
 	}
 	if len(got.Missing) != 0 {
 		t.Fatalf("unexpected missing checkouts: %#v", got.Missing)
 	}
-	if within(got.Roots[0].Source, stateDir) {
+	if within(got.Roots[0].StorageRef, stateDir) {
 		t.Fatal("agent state is inside the exposed task workspace")
 	}
 	if runGit(t, checkout, "branch", "--show-current") != beforeBranch || runGit(t, checkout, "status", "--porcelain") != beforeStatus {

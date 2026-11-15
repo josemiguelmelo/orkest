@@ -9,11 +9,15 @@ frame policy to that origin. This is not release enablement.
 
 ## Implementation and ownership
 
-`internal/server/taskeditor` owns authorization and per-task serialization. The executor factory exposes optional editor backend and checkout-inspector
-capabilities; server wiring has no Docker import or concrete executor assertion.
+`internal/server/taskeditor` owns authorization and per-task serialization. The
+executor factory exposes one optional editor backend that includes checkout
+inspection; server wiring has no Docker import or concrete executor assertion.
 The editor service and gateway depend only on consumer-owned contracts, independently
 of the agent runtime, model or Git provider. The
-Docker adapter shares the existing Engine client and data root, using a numeric
+Docker adapter borrows the same Engine client as the agent adapter and holds its
+own resolved settings, without retaining the agent executor. `Selection.Close`
+owns shared-client cleanup; standalone agent constructors keep their existing
+ownership. The editor uses the task data root and a numeric
 non-root container UID/GID. Each generation has an internal-only bridge; it never
 joins the worker control network. A containerized platform joins that editor
 bridge directly as the trusted gateway. A native-host platform uses a fixed-upstream,
@@ -34,7 +38,8 @@ Read-only containers use the separately built immutable PTY-denial image, a
 read-only `/task` mount, disabled extensions and disabled automatic tasks. Saved
 files and branches remain in task storage. Recreation and Stop terminate the
 container and terminal descendants; terminal commands and unsaved buffers are not
-retained. Closing the browser leaves the editor running.
+retained. Leaving or refreshing the task page requests editor shutdown; browser
+exit delivery is best effort and does not itself prove resource termination.
 
 The requesting user owns attachment and explicit Stop. Every lifecycle/access
 request rechecks task mutation authority; Viewers cannot open either mode. Another
@@ -159,15 +164,16 @@ The containerized platform must use its Docker container ID/name as its hostname
 `ORKEST_AGENTCTL_NETWORK`; the backend verifies that identity before attaching it
 to an editor's private bridge. No editor joins that worker network. Native-host
 mode publishes only the authenticated relay on loopback, never code-server itself.
-Both modes keep editor shells on internal-only networks; internet-dependent
-terminal commands require a future controlled-egress design. This is a current
-security constraint, not a newly confirmed product requirement.
+Both modes keep editor shells on internal-only networks with no internet egress.
+This is the expected current behavior; controlled egress is deferred.
 
 The daemon must see the configured data directory. Checkouts must already be
 accessible to the numeric non-root UID/GID; a root platform UID falls back to
 editor UID/GID 1000:1000. Discovery never changes checkout permissions. A remote
 Docker daemon without these path/network properties is unsupported. Local and
-Kubernetes editors are deferred. The relay and network are stopped/removed with
+Kubernetes agent executors are in the product support target, but their editor
+adapters are not implemented yet; they return unavailable until delivered and
+qualified. The relay and network are stopped/removed with
 the editor; discovery also reconciles orphan relays/networks after uncertain
 creation. Cleanup claims generation admission and re-inspects concrete ownership;
 independent list snapshots never establish absence. Networks with execution endpoints

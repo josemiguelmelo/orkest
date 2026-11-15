@@ -81,7 +81,7 @@ func TestDockerEditorGatewayBrowser(t *testing.T) {
 		t.Fatal(err)
 	}
 	idle := &browserIdle{}
-	service, err := taskeditor.NewTaskEditorService(&browserTasks{}, dockerexecutor.TaskCheckoutInspector{DataRoot: data}, backend, idle)
+	service, err := taskeditor.NewTaskEditorService(&browserTasks{}, backend, idle)
 	if err != nil {
 		t.Fatal(err)
 	}

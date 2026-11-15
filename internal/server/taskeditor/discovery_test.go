@@ -4,8 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"os"
-	"path/filepath"
+	"strings"
 	"testing"
 
 	taskmodel "github.com/josemiguelmelo/orkest/internal/server/task/model"
@@ -42,7 +41,7 @@ func (s *inspectorStub) Inspect(_ context.Context, _, _, _ string, selected []Ch
 
 func TestDiscoverAuthorizesAndPassesOnlyTaskSelections(t *testing.T) {
 	reader := &taskReaderStub{task: taskmodel.Task{Repositories: []taskmodel.RepositoryRef{{ID: "r2", ProviderName: "github", Name: "worker"}, {ID: "r1", ProviderName: "github", Name: "service"}}}}
-	inspector := &inspectorStub{inspection: Inspection{Roots: []Root{{Name: "service", Path: "/workspace/repositories/github/r1", Source: "/private/source"}}, Missing: []MissingCheckout{{RegistrationID: "missing", ProviderName: "github", Name: "missing"}}}}
+	inspector := &inspectorStub{inspection: Inspection{CompatibilityKey: "private-config-key", Roots: []Root{{Name: "service", Path: "/workspace/repositories/github/r1", StorageRef: "/private/source"}}, Missing: []MissingCheckout{{RegistrationID: "missing", ProviderName: "github", Name: "missing"}}}}
 	got, err := Discover(context.Background(), reader, inspector, "user", "org", "workspace", "task")
 	if err != nil {
 		t.Fatal(err)
@@ -59,11 +58,23 @@ func TestDiscoverAuthorizesAndPassesOnlyTaskSelections(t *testing.T) {
 	if err := json.Unmarshal(got.Manifest, &manifest); err != nil {
 		t.Fatal(err)
 	}
-	if len(manifest.Folders) != 1 || manifest.Folders[0].Path != "/workspace/repositories/github/r1" || manifest.Folders[0].Source != "" {
+	if len(manifest.Folders) != 1 || manifest.Folders[0].Path != "/workspace/repositories/github/r1" || manifest.Folders[0].StorageRef != "" {
 		t.Fatalf("unexpected manifest: %#v", manifest.Folders)
 	}
 	if len(got.Missing) != 1 || got.Missing[0].RegistrationID != "missing" {
 		t.Fatalf("unexpected missing set: %#v", got.Missing)
+	}
+	if got.CompatibilityKey != inspector.inspection.CompatibilityKey {
+		t.Fatal("lost adapter compatibility identity")
+	}
+	for _, value := range []any{got, inspector.inspection} {
+		encoded, err := json.Marshal(value)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if strings.Contains(string(encoded), "/private/source") || strings.Contains(string(encoded), "private-config-key") {
+			t.Fatal("serialized private storage or configuration identity")
+		}
 	}
 }
 
@@ -75,32 +86,6 @@ func TestDiscoverAuthorizesBeforeTaskReadOrInspection(t *testing.T) {
 	}
 	if reader.read || inspector.called {
 		t.Fatal("task read or filesystem inspection occurred before authorization")
-	}
-}
-
-func TestMaterializeManifestUsesPrivateTemporaryStorage(t *testing.T) {
-	path, cleanup, err := MaterializeManifest([]byte(`{"folders":[]}`))
-	if err != nil {
-		t.Fatal(err)
-	}
-	dir := filepath.Dir(path)
-	info, err := os.Stat(dir)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if info.Mode().Perm() != 0o700 {
-		t.Fatalf("temporary directory mode = %o", info.Mode().Perm())
-	}
-	info, err = os.Stat(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if info.Mode().Perm() != 0o600 {
-		t.Fatalf("manifest mode = %o", info.Mode().Perm())
-	}
-	cleanup()
-	if _, err := os.Stat(dir); !os.IsNotExist(err) {
-		t.Fatalf("temporary manifest directory remains: %v", err)
 	}
 }
 

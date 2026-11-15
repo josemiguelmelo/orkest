@@ -1,7 +1,7 @@
 # Task editor: first delivery and PR breakdown
 
-Status: PRs 1–2 complete; backend PRs 3–7 combined by user request; frontend and release qualification remain.
-Last updated: 2026-11-14.
+Status: Docker backend and task-page implementation exist; Local/Kubernetes executor support and release qualification remain.
+Last updated: 2026-11-15.
 
 This expands the [task editor plan](task-editor-plan.md), which remains the source
 of confirmed behavior and overall scope. PR numbers below are local planning IDs,
@@ -9,27 +9,29 @@ not GitHub pull requests. No external PRs or resources have been created.
 
 ## Delivery boundary
 
-The proposed first user-facing delivery is **VS Code with its integrated terminal
-for Docker-backed tasks**, opened in a separate tab. An authorized requesting user
+The task editor target supports **Docker, Local, and Kubernetes-backed tasks**.
+The current UI embeds VS Code with its integrated terminal in the task page. An authorized requesting user
 can edit existing selected checkouts while the agent is demonstrably idle. During
 pending or active agent work, approval/input waits, or uncertain ownership,
 repositories are read-only and the terminal is disabled. Starting work stops the
 writable editor before any executable work reaches the worker; the browser
-reconnects automatically. Saved files and task branches survive recreation.
+reconnects automatically. Leaving or refreshing the task page requests editor
+shutdown. Saved files and task branches survive recreation.
 
-Local and Kubernetes editors follow in separate deliveries. So do Viewer access,
-collaboration, a standalone terminal, previews, and editor toolchain composition.
-Unsupported executor configurations return an explicit unavailable result.
+Docker is implemented. Local and Kubernetes editor backends are still required;
+until each backend is implemented and qualified, it returns an explicit
+unavailable result. Viewer access, collaboration, a standalone terminal,
+previews, and editor toolchain composition remain deferred.
 
 This first delivery requires one active platform process coordinating task editor
 transitions. That deployment restriction is a proposal to validate before enabling
 the feature. Independent agentctl workers continue through platform restarts.
 There is no new editor database storage or planned worker/ACP contract change.
 
-The first mergeable increment is PR 1, the Docker feasibility spike. It is an
-engineering deliverable, not the complete user-facing feature. The first release
-requires PRs 1–9 and their acceptance evidence. Existing slices 1–3 and the
-Docker-relevant parts of slice 6 are covered here; slices 4–5 remain later work.
+The first mergeable increment was PR 1, the Docker feasibility spike. It is an
+engineering deliverable, not the complete executor-support goal. Overall
+completion requires Docker, Local, and Kubernetes implementations plus their
+acceptance evidence. A Docker-only rollout must be described as partial support.
 
 ## Review and merge strategy
 

@@ -1,7 +1,7 @@
 # Task VS Code and terminal implementation plan
 
-Status: backend always wired by explicit user instruction; frontend and production qualification remain.
-Last updated: 2026-11-14.
+Status: Docker backend is implemented and always wired; Local/Kubernetes backends and production qualification remain.
+Last updated: 2026-11-15.
 
 This document is the implementation checklist and cross-session handoff for task
 browser editing. It records the agreed direction, proposed implementation choices,
@@ -22,12 +22,14 @@ Confirmed user instructions:
   opening VS Code because an agent is working.
 - Avoid new editor database storage. Reuse task files and execution state, and
   discover editor resources through the executor.
+- Support Docker, Local, and Kubernetes agent executors. Docker support exists;
+  Local and Kubernetes editor backends remain implementation work.
 - Preserve implementation context and track delivery in this document.
 
 This plan does not authorize deployment, publishing images or other external
 resource creation. Runtime integration tests need their normal prerequisites.
 
-## 2. Proposed first-release behavior
+## 2. First-release behavior
 
 | Task condition | Repository access | Integrated terminal |
 | --- | --- | --- |
@@ -37,16 +39,19 @@ resource creation. Runtime integration tests need their normal prerequisites.
 | Execution state uncertain | Read-only | Disabled |
 
 - One editor environment per task, initially owned by the requesting user.
+- Target agent executors are Docker, Local, and Kubernetes. Backend behavior is
+  executor-specific but must preserve the same editor access and handoff rules.
 - Only users with task mutation authority can open either mode. Viewer-facing
   review and collaborative terminal sharing are deferred.
-- Open in a separate tab initially. A stable Orkest launch page reconnects the
-  browser after environment recreation.
+- Embed VS Code in the task page. Selecting the VS Code view opens/connects the
+  editor; leaving the task page or refreshing it requests editor shutdown. A
+  stable Orkest launch flow reconnects after environment recreation.
 - Opening Code never starts an agent, clones repositories, changes branches or
   changes workflow state. Missing checkouts produce an explanatory empty state.
 - Saved repository changes survive recreation. Editor settings/cache are
   temporary; terminal processes and unsaved browser buffers are not guaranteed
   to survive recreation.
-- Closing the tab leaves the editor running. Explicit Stop terminates it.
+- Editor networks have no internet egress. Controlled egress is deferred.
 - Starting agent work automatically stops editor terminal commands and changes
   the editor to read-only; no separate user confirmation is planned.
 
@@ -291,14 +296,15 @@ contract unchanged unless an implementation finding demonstrates a concrete need
 
 ## 10. Task UI and shutdown
 
-- Add Open VS Code and Stop editor actions with mode and lifecycle status.
-- Use a stable launch page to reconnect after recreation.
+- [x] Add task-page VS Code view and Stop editor action with mode and lifecycle status.
+- [x] Use a stable launch flow to reconnect after recreation.
 - Display switching, starting, ready, stopping, failed and unavailable states.
 - Explain that starting agent work stops terminal commands and reconnects the
   editor read-only, without an extra confirmation flow.
 - Explain saved-file persistence and possible unsaved-buffer loss.
 - Keep Start agent available while the editor is open.
-- Closing the tab leaves the editor running; explicit Stop terminates it.
+- Leaving or refreshing the task page requests editor shutdown; explicit Stop
+  remains available.
 - Automatic idle shutdown and custom terminal components are deferred.
 
 ## 11. Restart and deletion reconciliation
@@ -313,11 +319,15 @@ contract unchanged unless an implementation finding demonstrates a concrete need
 
 ## 12. Delivery checklist
 
-The proposed [first delivery and PR breakdown](task-editor-first-delivery.md)
-expands slices 1–3 and the Docker-relevant parts of slice 6 into nine focused PRs.
-The first user-facing milestone is Docker-only; Local and Kubernetes follow in
-separate deliveries. PR 1 is the initial feasibility deliverable. This sequencing
-is a planning proposal and does not mark any implementation work complete.
+The [delivery breakdown](task-editor-first-delivery.md) records completed Docker
+work and the remaining Local, Kubernetes, UI-journey, and release-qualification
+work. Docker is the implemented backend; the overall executor-support goal covers
+Docker, Local, and Kubernetes. PR 1 was the initial feasibility deliverable.
+The proposed adapter refactor and executor rollout sequence are detailed in the
+[executor extensibility plan](task-editor-executor-extensibility-plan.md).
+That plan defines separate agent/editor contracts, explicit shared-client
+ownership, backend behavior guarantees, and the limited factory/configuration
+changes expected when adding an executor.
 
 Each slice must update this document with changes, checks actually executed,
 limitations and the next action. Do not mark unavailable checks passed.
@@ -353,16 +363,18 @@ worker-side queues and restart scenarios; no editor database storage is added.
 - [x] Complete Docker resource lifecycle, networking and cleanup.
 - [x] Add lifecycle endpoints and authenticated HTTP/WebSocket gateway.
 - [x] Update OpenAPI and regenerate the frontend client.
-- [ ] Add task actions, launch page, mode/status and automatic reconnect.
+- [x] Add task actions, embedded VS Code view, mode/status and launch/reconnect flow.
 - [x] Enforce authority, requesting-user access and stale-session revocation.
 - [x] Cover missing checkouts, failure messages and explicit Stop.
 
 Acceptance: a user edits a task, starts its agent without manually closing Code,
 sees read-only reconnect, and regains editing/terminal access when work finishes.
+Page refresh or exit requests editor shutdown, as the current task-page behavior
+requires; verify this in the end-to-end browser journey.
 
-### Slice 4 — Local agent with Docker editor
+### Slice 4 — Local executor support
 
-- [ ] Reuse Docker editor support with Local task paths.
+- [ ] Reuse Docker editor support with Local task paths where daemon-visible.
 - [ ] Validate Docker availability and daemon-visible paths.
 - [ ] Report unsupported configuration precisely.
 - [ ] Verify Local agent/editor transitions and document prerequisites.
@@ -370,7 +382,7 @@ sees read-only reconnect, and regains editing/terminal access when work finishes
 Acceptance: real Local execution and Docker editing share task files with the
 same enforced access-mode behavior.
 
-### Slice 5 — Kubernetes editor
+### Slice 5 — Kubernetes executor support
 
 - [ ] Implement Pod/Service discovery and lifecycle with existing client.
 - [ ] Implement PVC subpath mount modes, readiness and resource limits.
@@ -420,7 +432,8 @@ from real runtime continuation.
 
 - New editor database storage, durable editor history and lease frameworks.
 - Viewer-facing review mode and collaborative terminal sharing.
-- Native sandboxed Local editor.
+- Native sandboxed Local editor; Local support uses the Docker-backed editor
+  where task paths are visible to the daemon.
 - Embedded task-page editor and standalone Terminal tab.
 - Automatic idle shutdown, port previews and credential sharing.
 - Automatic execution-profile/editor-image composition.
@@ -432,27 +445,32 @@ from real runtime continuation.
 These are implementation proposals/qualification points, not additional confirmed
 product requirements. Record decisions here rather than silently changing scope.
 
-| Topic | Proposed starting point / required finding |
+| Topic | Decision / remaining work |
 | --- | --- |
-| Mode switch | Recreate environment; verify browser buffers/reconnect in spike |
-| Deployment | One active transition coordinator; confirm acceptable operational scope |
-| Local | Docker-backed editor; verify paths for supported Local deployments |
-| Browser origin | Separate editor origin; verify cookies/grants/proxy configuration |
-| Ownership | Requesting user attaches; specify who may stop another user's editor using existing authority policy |
-| True idle boundary | Trace queue/worker ownership; identify when write access is demonstrably safe |
-| Terminal cleanup | Confirm descendants cannot keep writing after stop is acknowledged |
-| Inspection vs full task diff | Git working-tree inspection initially; base-commit comparisons deferred |
+| Mode switch | Recreate the environment; Docker/browser transition has been verified. Qualify for Local and Kubernetes. |
+| Deployment | One active transition coordinator is required. Decide whether this is an accepted rollout constraint or implement distributed fencing before active-active operation. |
+| Local | Use the Docker-backed editor where it can see Local task paths; implement and qualify daemon-visible path handling. |
+| Kubernetes | Use a separate Pod/Service and the existing shared PVC; implement and qualify storage access, networking, identity and cleanup on a real cluster. |
+| Browser origin | Separate editor origin and embedded task-page flow are implemented; production TLS/OIDC/cookie routing remains to qualify. |
+| Ownership | Only the requesting user with task mutation authority may attach or Stop. |
+| True idle boundary | Writable access requires durable execution completion and confirmed worker termination; implemented, with PostgreSQL/crash-boundary qualification outstanding. |
+| Terminal cleanup | Stop must confirm terminal process termination before agent delivery; Docker path verified, repeat for Local/Kubernetes. |
+| Network egress | No internet egress for now; controlled egress is deferred. |
+| Inspection vs full task diff | Git working-tree inspection is in scope; base-commit comparisons are deferred. |
 
 ## 16. Cross-session progress and handoff
 
-Current slice: task editor embedded workspace and task-page UX polish. The task
-page has a clear task header with Task and VS Code views. Selecting VS Code
-connects automatically; the tab indicates whether the editor is online. Leaving
-or refreshing the task page requests editor stop. The editor gateway is embedded
-as a full-page workspace surface. The Docker editor mounts the entire durable
-`work` tree at `/task`; `agentctl-state` remains outside the mount. Production
-isolation and release qualification remain outstanding. Next action: restart the
-local backend and qualify the embedded editor against the current task checkout.
+Current slice: Local/Kubernetes executor support and production qualification.
+The executor extensibility refactor (increment A) is implemented: one editor
+capability, independent Docker editor construction, and explicit shared-client
+ownership. Its ordinary/race, lint, architecture, real Docker security, and
+Chromium terminal/handoff checks passed; see the
+[implementation evidence](task-editor-executor-extensibility-plan.md#implementation-evidence-2026-11-15).
+The task-page VS Code view opens automatically and requests editor shutdown on
+page exit or refresh. The Docker editor mounts the task's durable `work` tree at
+`/task`; `agentctl-state` remains outside the mount. Next actions: implement the
+Local and Kubernetes editor backends, then qualify page-exit/refresh, mode
+transitions, and release requirements on each supported executor.
 
 | Date | Slice | Changes / decisions | Verification actually run | Blockers / next action |
 | --- | --- | --- | --- | --- |

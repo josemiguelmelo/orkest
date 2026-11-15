@@ -13,6 +13,7 @@ import (
 )
 
 type editorBackendFake struct {
+	CheckoutInspector
 	current       Instance
 	found         bool
 	starts, stops int
@@ -63,9 +64,9 @@ func (f *editorIdleFake) EditorIdle(context.Context, string, string, string) (bo
 
 func newEditorFixture(t *testing.T) (*TaskEditorService, *editorBackendFake, *editorIdleFake) {
 	t.Helper()
-	backend := &editorBackendFake{}
+	backend := &editorBackendFake{CheckoutInspector: &inspectorStub{inspection: Inspection{Roots: []Root{{Name: "repo", Path: "/workspace/repositories/github/repo", StorageRef: "/data/repo"}}}}}
 	idle := &editorIdleFake{idle: true}
-	service, err := NewTaskEditorService(serviceTasks{}, &inspectorStub{inspection: Inspection{Roots: []Root{{Name: "repo", Path: "/workspace/repositories/github/repo", Source: "/data/repo"}}}}, backend, idle)
+	service, err := NewTaskEditorService(serviceTasks{}, backend, idle)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -74,6 +75,49 @@ func newEditorFixture(t *testing.T) (*TaskEditorService, *editorBackendFake, *ed
 }
 
 var editorTestScope = Scope{"org", "workspace", "task"}
+
+func TestEditorReusesOnlyCompatibleWorkspace(t *testing.T) {
+	s, backend, _ := newEditorFixture(t)
+	ctx := context.Background()
+	first, err := s.Open(ctx, "user", editorTestScope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	again, err := s.Open(ctx, "user", editorTestScope)
+	if err != nil || again.Generation != first.Generation || backend.starts != 1 {
+		t.Fatalf("compatible open recreated editor: %+v %v", again, err)
+	}
+	inspection := backend.CheckoutInspector.(*inspectorStub)
+	for _, change := range []func(){
+		func() { inspection.inspection.Roots[0].StorageRef = "/data/replacement" },
+		func() { inspection.inspection.CompatibilityKey = "changed-adapter-config" },
+	} {
+		_, lease, err := s.Access(ctx, "user", editorTestScope, again.Generation)
+		if err != nil {
+			t.Fatal(err)
+		}
+		change()
+		next, err := s.Open(ctx, "user", editorTestScope)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if next.Generation == again.Generation || lease.Err() == nil {
+			t.Fatal("changed workspace retained old generation access")
+		}
+		again = next
+	}
+}
+
+func TestWorkspaceFingerprintPreservesReferenceBoundaries(t *testing.T) {
+	first := Discovery{Roots: []Root{{Name: "a", Path: "/a", StorageRef: "ab"}, {Name: "b", Path: "/b", StorageRef: "c"}}}
+	second := Discovery{Roots: []Root{{Name: "a", Path: "/a", StorageRef: "a"}, {Name: "b", Path: "/b", StorageRef: "bc"}}}
+	if workspaceFingerprint(first, ReadOnly) == workspaceFingerprint(second, ReadOnly) {
+		t.Fatal("ambiguous storage references shared compatibility fingerprint")
+	}
+	if workspaceFingerprint(first, ReadOnly) == workspaceFingerprint(first, ReadWrite) {
+		t.Fatal("different modes shared compatibility fingerprint")
+	}
+}
 
 func TestEditorHandoffRevokesGenerationAndPreservesRequest(t *testing.T) {
 	s, b, idle := newEditorFixture(t)

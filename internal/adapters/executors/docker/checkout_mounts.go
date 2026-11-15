@@ -65,7 +65,7 @@ func (b *EditorBackend) requireProtectedWorkers(ctx context.Context, spec tasked
 	if err != nil {
 		return err
 	}
-	work, _ := taskstorage.Directories(b.executor.config.DataRoot, spec.Scope.OrganizationID, spec.Scope.WorkspaceID, spec.Scope.TaskID)
+	work, _ := taskstorage.Directories(b.config.DataRoot, spec.Scope.OrganizationID, spec.Scope.WorkspaceID, spec.Scope.TaskID)
 	work, err = filepath.EvalSymlinks(work)
 	if err != nil {
 		return err
@@ -125,7 +125,7 @@ func protectedWorker(worker container.InspectResponse, work string, roots []task
 			return errors.New("worker has a writable alias to task workspace ancestry")
 		}
 		for _, root := range roots {
-			if source != root.Source && within(source, root.Source) {
+			if source != root.StorageRef && within(source, root.StorageRef) {
 				return errors.New("worker has a writable alias to checkout ancestry")
 			}
 		}

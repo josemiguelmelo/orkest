@@ -218,6 +218,18 @@ binds temporary browser access to user/task/generation and revokes existing
 connections on replacement. This initially supports one active platform
 coordinator. See [backend and deployment constraints](development/task-editor-backend.md).
 
+Executor selection composes separate agent-control and editor-backend contracts.
+The editor backend combines lifecycle and read-only storage inspection; shared
+policy services have no executor-kind branches. Docker adapters borrow the same
+Engine client through narrow interfaces, and the editor retains only its resolved
+configuration rather than the agent executor. Selection owns infrastructure
+cleanup, including construction failures, and closes clients after services stop.
+Standalone Docker agent constructors retain their existing client ownership.
+Private storage references and adapter configuration identity participate in a
+structured editor compatibility hash without appearing in public workspace JSON.
+New adapters are added at executor composition and configuration boundaries; see
+the [extension procedure](development/task-editor-executor-extensibility-plan.md#adding-the-next-executor).
+
 Editor containers use one internal Docker bridge per generation. A containerized
 platform is the only trusted gateway attached to each bridge. Native-host mode
 uses a small fixed-upstream authenticated relay with a loopback-published port;

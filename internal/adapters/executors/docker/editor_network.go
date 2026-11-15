@@ -24,7 +24,7 @@ func (b *EditorBackend) networkName(i taskeditor.Instance) string {
 // worker control network, and different editor generations never share a bridge.
 func (b *EditorBackend) createNetwork(ctx context.Context, i taskeditor.Instance) error {
 	gateway := ""
-	if b.executor.config.NetworkName != "" {
+	if b.config.NetworkName != "" {
 		hostname, err := os.Hostname()
 		if err != nil {
 			return err
@@ -33,7 +33,7 @@ func (b *EditorBackend) createNetwork(ctx context.Context, i taskeditor.Instance
 		if err != nil {
 			return fmt.Errorf("resolve containerized editor gateway: %w", err)
 		}
-		if inspected.Container.NetworkSettings == nil || inspected.Container.NetworkSettings.Networks[b.executor.config.NetworkName] == nil {
+		if inspected.Container.NetworkSettings == nil || inspected.Container.NetworkSettings.Networks[b.config.NetworkName] == nil {
 			return errors.New("editor gateway is not attached to the configured platform network")
 		}
 		gateway = inspected.Container.ID

@@ -208,7 +208,7 @@ func runServer(ctx context.Context, logger *slog.Logger) error {
 	executor := executorSelection.Executor
 	executorKind := executorSelection.Kind
 	workspaceMounts := workspacemount.New(postgres.NewWorkspaceHostMountsRepository(database), workspaces, executorKind == executors.Docker)
-	defer func() { _ = executor.Close() }()
+	defer func() { _ = executorSelection.Close() }()
 	completion, completionErr := orchestration.NewLaunchCompletionService(ctx, launchRepo, executor)
 	if completionErr != nil {
 		return completionErr
@@ -234,12 +234,10 @@ func runServer(ctx context.Context, logger *slog.Logger) error {
 	taskWorkflows := workflowautomation.NewWorkflowAutomationService(postgres.NewTaskTransitionPostgresRepository(database), postgres.NewAutomationEventPostgresRepository(database), workspaces, workflowautomation.WorkflowRuleEvaluator{})
 	tasks := task.NewTaskService(taskRepository, postgres.NewTaskCreationPostgresRepository(database), postgres.NewTaskUpdatePostgresRepository(database), taskWorkflows, workspaces)
 	var backend taskeditor.Backend = taskeditor.UnavailableBackend{}
-	var inspector taskeditor.CheckoutInspector = taskeditor.UnavailableBackend{}
 	if executorSelection.Editor != nil {
-		backend = executorSelection.Editor.Backend
-		inspector = executorSelection.Editor.Checkouts
+		backend = executorSelection.Editor
 	}
-	editorService, err := taskeditor.NewTaskEditorService(tasks, inspector, backend, launchService)
+	editorService, err := taskeditor.NewTaskEditorService(tasks, backend, launchService)
 	if err != nil {
 		return err
 	}

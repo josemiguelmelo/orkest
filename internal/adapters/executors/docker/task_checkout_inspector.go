@@ -50,7 +50,7 @@ func (i TaskCheckoutInspector) Inspect(ctx context.Context, organizationID, work
 		return taskeditor.Inspection{}, fmt.Errorf("inspect task work directory: %w", err)
 	}
 	return taskeditor.Inspection{
-		Roots:   []taskeditor.Root{{Name: "Task workspace", Path: "/task", Source: canonicalWork}},
+		Roots:   []taskeditor.Root{{Name: "Task workspace", Path: "/task", StorageRef: canonicalWork}},
 		Missing: []taskeditor.MissingCheckout{},
 	}, nil
 }

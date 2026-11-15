@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 
@@ -24,15 +22,18 @@ type Checkout struct {
 	Name           string
 }
 
+// Root pairs an editor-visible path with a private executor-owned storage reference.
+// StorageRef is deterministic and non-secret; only the producing backend resolves it.
 type Root struct {
-	Name   string `json:"name"`
-	Path   string `json:"path"`
-	Source string `json:"-"`
+	Name       string `json:"name"`
+	Path       string `json:"path"`
+	StorageRef string `json:"-"`
 }
 
 type Inspection struct {
-	Roots   []Root
-	Missing []MissingCheckout
+	CompatibilityKey string `json:"-"` // Private adapter configuration identity; never a credential.
+	Roots            []Root
+	Missing          []MissingCheckout
 }
 
 type MissingCheckout struct {
@@ -46,9 +47,10 @@ type CheckoutInspector interface {
 }
 
 type Discovery struct {
-	Roots    []Root            `json:"roots"`
-	Missing  []MissingCheckout `json:"missing"`
-	Manifest []byte            `json:"-"`
+	CompatibilityKey string            `json:"-"`
+	Roots            []Root            `json:"roots"`
+	Missing          []MissingCheckout `json:"missing"`
+	Manifest         []byte            `json:"-"`
 }
 
 // Discover authorizes the task and inspects its durable work directory.
@@ -86,30 +88,7 @@ func Discover(ctx context.Context, tasks TaskReader, inspector CheckoutInspector
 	if err != nil {
 		return Discovery{}, fmt.Errorf("encode workspace manifest: %w", err)
 	}
-	return Discovery{Roots: inspection.Roots, Missing: inspection.Missing, Manifest: manifest}, nil
-}
-
-// MaterializeManifest writes manifest bytes to a private disposable directory.
-func MaterializeManifest(manifest []byte) (string, func(), error) {
-	return MaterializeManifestAt("", manifest)
-}
-
-// MaterializeManifestAt uses a daemon-visible temporary base for Docker mounts.
-func MaterializeManifestAt(base string, manifest []byte) (string, func(), error) {
-	dir, err := os.MkdirTemp(base, "orkest-editor-workspace-")
-	if err != nil {
-		return "", nil, err
-	}
-	if err = os.Chmod(dir, 0o700); err != nil {
-		_ = os.RemoveAll(dir)
-		return "", nil, err
-	}
-	path := filepath.Join(dir, "task.code-workspace")
-	if err = os.WriteFile(path, manifest, 0o600); err != nil {
-		_ = os.RemoveAll(dir)
-		return "", nil, err
-	}
-	return path, func() { _ = os.RemoveAll(dir) }, nil
+	return Discovery{CompatibilityKey: inspection.CompatibilityKey, Roots: inspection.Roots, Missing: inspection.Missing, Manifest: manifest}, nil
 }
 
 // DisplayName keeps readable repository labels while disambiguating duplicates.

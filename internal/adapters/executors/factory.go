@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/josemiguelmelo/orkest/internal/adapters/executors/checkout"
 	dockerexecutor "github.com/josemiguelmelo/orkest/internal/adapters/executors/docker"
@@ -24,27 +25,33 @@ const (
 	Kubernetes Kind = "kubernetes"
 )
 
-// Executor is the application-facing lifecycle contract for an executor.
+// Executor is the agent-control contract. Selection owns infrastructure cleanup.
 type Executor interface {
 	orchestration.AgentctlStarter
 	orchestration.AgentProcessController
-	Close() error
-}
-
-// EditorCapabilities exposes editor contracts without revealing the concrete
-// executor. Nil capabilities mean the executor does not support editing.
-type EditorCapabilities struct {
-	Backend   taskeditor.Backend
-	Checkouts taskeditor.CheckoutInspector
 }
 
 type EditorConfig struct{ Image, ReadOnlyImage string }
 
 // Selection pairs the executor with its optional editor capabilities.
 type Selection struct {
-	Editor   *EditorCapabilities
+	Editor   taskeditor.Backend
 	Kind     Kind
 	Executor Executor
+	close    func() error
+}
+
+// Close releases infrastructure resources after services have drained. It never
+// terminates independent agent processes and is safe across copies of Selection.
+func (s Selection) Close() error {
+	if s.close == nil {
+		return nil
+	}
+	return s.close()
+}
+
+func selection(kind Kind, executor Executor, editor taskeditor.Backend, cleanup func() error) Selection {
+	return Selection{Kind: kind, Executor: executor, Editor: editor, close: sync.OnceValue(cleanup)}
 }
 
 // Config holds the shared settings needed to construct either executor.
@@ -71,32 +78,11 @@ func New(ctx context.Context, config Config) (Selection, error) {
 	}
 	switch kind {
 	case Docker:
-		executor, err := dockerexecutor.New(ctx, dockerexecutor.Config{
-			DataRoot: config.DataRoot, NetworkName: config.DockerNetwork,
-			CodexAuthFile: config.CodexAuthFile, Images: config.DockerImages,
-			ProviderEnv: config.ProviderEnv, CodingProviders: config.CodingProviders,
-			Environment:              config.Environment,
-			CodingCredentialResolver: config.CodingCredentialResolver,
-		})
+		engine, err := dockerexecutor.NewEngineClient()
 		if err != nil {
-			return Selection{}, err
+			return Selection{}, fmt.Errorf("configure Docker Engine client: %w", err)
 		}
-		selection := Selection{Kind: kind, Executor: executor}
-		image, readonlyImage := config.Editor.Image, config.Editor.ReadOnlyImage
-		if strings.TrimSpace(image) == "" {
-			image = dockerexecutor.DefaultEditorImage
-		}
-		if strings.TrimSpace(readonlyImage) == "" {
-			readonlyImage = dockerexecutor.DefaultReadonlyEditorImage
-		}
-		backend, editorErr := executor.NewEditorBackend(image, readonlyImage)
-		if editorErr != nil {
-			_ = executor.Close()
-			return Selection{}, editorErr
-		}
-		selection.Editor = &EditorCapabilities{Backend: backend, Checkouts: dockerexecutor.TaskCheckoutInspector{DataRoot: config.DataRoot}}
-
-		return selection, nil
+		return newDockerSelection(ctx, config, engine)
 	case Local:
 		executor, err := localexecutor.New(localexecutor.Config{
 			DataRoot: config.DataRoot, AgentctlBinary: config.AgentctlBinary,
@@ -107,7 +93,7 @@ func New(ctx context.Context, config Config) (Selection, error) {
 		if err != nil {
 			return Selection{}, err
 		}
-		return Selection{Kind: kind, Executor: executor}, nil
+		return selection(kind, executor, nil, executor.Close), nil
 	case Kubernetes:
 		if strings.TrimSpace(config.CodexAuthFile) != "" {
 			return Selection{}, fmt.Errorf("ORKEST_CODEX_AUTH_FILE is not supported with the Kubernetes executor; configure the Kubernetes Codex auth Secret and key")
@@ -122,8 +108,32 @@ func New(ctx context.Context, config Config) (Selection, error) {
 		if err != nil {
 			return Selection{}, err
 		}
-		return Selection{Kind: kind, Executor: executor}, nil
+		return selection(kind, executor, nil, executor.Close), nil
 	default:
 		return Selection{}, fmt.Errorf("unsupported ORKEST_EXECUTOR %q (expected %q, %q, or %q)", config.Kind, Docker, Local, Kubernetes)
 	}
+}
+
+// newDockerSelection takes ownership of engine, including on construction failure.
+func newDockerSelection(ctx context.Context, config Config, engine dockerexecutor.Engine) (Selection, error) {
+	executor, err := dockerexecutor.NewWithBorrowedClient(ctx, dockerexecutor.Config{
+		DataRoot: config.DataRoot, NetworkName: config.DockerNetwork,
+		CodexAuthFile: config.CodexAuthFile, Images: config.DockerImages,
+		ProviderEnv: config.ProviderEnv, CodingProviders: config.CodingProviders,
+		Environment:              config.Environment,
+		CodingCredentialResolver: config.CodingCredentialResolver,
+	}, engine)
+	if err != nil {
+		_ = engine.Close()
+		return Selection{}, err
+	}
+	backend, err := dockerexecutor.NewEditorBackendWithClient(dockerexecutor.EditorConfig{
+		DataRoot: config.DataRoot, NetworkName: config.DockerNetwork,
+		Image: config.Editor.Image, ReadOnlyImage: config.Editor.ReadOnlyImage,
+	}, engine)
+	if err != nil {
+		_ = engine.Close()
+		return Selection{}, err
+	}
+	return selection(Docker, executor, backend, engine.Close), nil
 }

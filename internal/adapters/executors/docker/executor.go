@@ -39,16 +39,6 @@ const (
 	codexAuthFileEnvironment = "ORKEST_CODEX_AUTH_FILE"
 )
 
-type EngineClient interface {
-	ContainerCreate(context.Context, mobyclient.ContainerCreateOptions) (mobyclient.ContainerCreateResult, error)
-	ContainerStart(context.Context, string, mobyclient.ContainerStartOptions) (mobyclient.ContainerStartResult, error)
-	ContainerStop(context.Context, string, mobyclient.ContainerStopOptions) (mobyclient.ContainerStopResult, error)
-	ContainerInspect(context.Context, string, mobyclient.ContainerInspectOptions) (mobyclient.ContainerInspectResult, error)
-	ContainerLogs(context.Context, string, mobyclient.ContainerLogsOptions) (mobyclient.ContainerLogsResult, error)
-	ContainerRemove(context.Context, string, mobyclient.ContainerRemoveOptions) (mobyclient.ContainerRemoveResult, error)
-	Close() error
-}
-
 type Config struct {
 	DataRoot                 string
 	NetworkName              string
@@ -66,10 +56,11 @@ type Executor struct {
 	client              EngineClient
 	config              Config
 	repositoryProviders map[string]checkout.Provider
+	closeClient         func() error
 }
 
 func New(ctx context.Context, config Config) (*Executor, error) {
-	client, err := mobyclient.New(mobyclient.FromEnv)
+	client, err := NewEngineClient()
 	if err != nil {
 		return nil, fmt.Errorf("configure Docker Engine client: %w", err)
 	}
@@ -81,7 +72,18 @@ func New(ctx context.Context, config Config) (*Executor, error) {
 	return executor, nil
 }
 
+// NewWithClient transfers ownership of client to the returned executor on success.
 func NewWithClient(ctx context.Context, config Config, client EngineClient) (*Executor, error) {
+	executor, err := NewWithBorrowedClient(ctx, config, client)
+	if err != nil {
+		return nil, err
+	}
+	executor.closeClient = client.Close
+	return executor, nil
+}
+
+// NewWithBorrowedClient leaves client cleanup to the caller.
+func NewWithBorrowedClient(ctx context.Context, config Config, client EngineClient) (*Executor, error) {
 	if ctx == nil || client == nil {
 		return nil, errors.New("context and Docker Engine client are required")
 	}
@@ -313,7 +315,12 @@ func (e *Executor) providerEnvironment() []string {
 	return values
 }
 
-func (e *Executor) Close() error { return e.client.Close() }
+func (e *Executor) Close() error {
+	if e.closeClient != nil {
+		return e.closeClient()
+	}
+	return nil
+}
 
 // TerminateAgentctl gracefully stops agentctl so it can close its runtime
 // subprocess, then removes the stopped container while retaining bind-mounted data.

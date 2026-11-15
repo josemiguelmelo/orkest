@@ -41,7 +41,11 @@ type (
 		Instance
 		Discovery Discovery
 	}
+	// Backend couples storage inspection with the matching editor lifecycle.
+	// Absence is distinct from uncertain observation; Stop must confirm termination
+	// and reject stale identity. Implementations borrow their infrastructure clients.
 	Backend interface {
+		CheckoutInspector
 		StartEditor(context.Context, Spec) (Instance, error)
 		InspectEditor(context.Context, Scope) (Instance, bool, error)
 		StopEditor(context.Context, Instance) error
@@ -80,19 +84,18 @@ type TaskEditorService struct {
 	authorizations *semaphore.Weighted
 	gates          map[string]*semaphore.Weighted
 	tasks          TaskReader
-	inspector      CheckoutInspector
 	backend        Backend
 	idle           IdleReader
 	mu             sync.Mutex
 	entries        map[Scope]*entry
 }
 
-func NewTaskEditorService(tasks TaskReader, inspector CheckoutInspector, backend Backend, idle IdleReader) (*TaskEditorService, error) {
-	if tasks == nil || inspector == nil || backend == nil || idle == nil {
+func NewTaskEditorService(tasks TaskReader, backend Backend, idle IdleReader) (*TaskEditorService, error) {
+	if tasks == nil || backend == nil || idle == nil {
 		return nil, errors.New("task editor dependencies required")
 	}
 	lifetime, cancel := context.WithCancel(context.Background())
-	return &TaskEditorService{lifetime: lifetime, close: cancel, authorizations: semaphore.NewWeighted(8), tasks: tasks, inspector: inspector, backend: backend, idle: idle, entries: make(map[Scope]*entry), gates: make(map[string]*semaphore.Weighted)}, nil
+	return &TaskEditorService{lifetime: lifetime, close: cancel, authorizations: semaphore.NewWeighted(8), tasks: tasks, backend: backend, idle: idle, entries: make(map[Scope]*entry), gates: make(map[string]*semaphore.Weighted)}, nil
 }
 
 // Close revokes active leases and stops their authorization watchdogs.
@@ -157,7 +160,7 @@ func (s *TaskEditorService) open(ctx context.Context, e *entry, user string, sco
 	if found && current.UserID != user {
 		return Status{}, ErrOwner
 	}
-	discovery, err := Discover(ctx, s.tasks, s.inspector, user, scope.OrganizationID, scope.WorkspaceID, scope.TaskID)
+	discovery, err := Discover(ctx, s.tasks, s.backend, user, scope.OrganizationID, scope.WorkspaceID, scope.TaskID)
 	if err != nil {
 		return Status{}, errors.Join(err, s.stop(ctx, e, current, found))
 	}
@@ -172,13 +175,8 @@ func (s *TaskEditorService) open(ctx context.Context, e *entry, user string, sco
 	if idleErr == nil && idle {
 		mode = ReadWrite
 	}
-	fingerprintBytes, _ := json.Marshal(discovery.Roots)
-	// Sources are deliberately excluded from public JSON, but included in compatibility.
-	for _, root := range discovery.Roots {
-		fingerprintBytes = append(fingerprintBytes, []byte(root.Source)...)
-	}
-	fingerprint := sha256.Sum256(fingerprintBytes)
-	compatible := found && current.Endpoint != "" && current.Mode == mode && current.Fingerprint == hex.EncodeToString(fingerprint[:])
+	fingerprint := workspaceFingerprint(discovery, mode)
+	compatible := found && current.Endpoint != "" && current.Mode == mode && current.Fingerprint == fingerprint
 	// A revoked lease cannot be renewed under the same generation: old browser
 	// tickets must stay invalid even if authority is subsequently restored.
 	if e.instance.Generation == current.Generation && (e.access == nil || e.access.Err() != nil) {
@@ -195,9 +193,10 @@ func (s *TaskEditorService) open(ctx context.Context, e *entry, user string, sco
 				mode = ReadOnly
 			}
 		}
+		fingerprint = workspaceFingerprint(discovery, mode)
 		e.user = user
 		e.requested = true
-		current, err = s.backend.StartEditor(ctx, Spec{Instance: Instance{Scope: scope, UserID: user, Generation: hex.EncodeToString(randomBytes()), Fingerprint: hex.EncodeToString(fingerprint[:]), Mode: mode}, Discovery: discovery})
+		current, err = s.backend.StartEditor(ctx, Spec{Instance: Instance{Scope: scope, UserID: user, Generation: hex.EncodeToString(randomBytes()), Fingerprint: fingerprint, Mode: mode}, Discovery: discovery})
 		if err != nil {
 			if current.ID != "" {
 				err = errors.Join(err, s.stop(ctx, e, current, true))
@@ -217,6 +216,24 @@ func (s *TaskEditorService) open(ctx context.Context, e *entry, user string, sco
 	e.user = user
 	return Status{State: "ready", Mode: current.Mode, Generation: current.Generation, Missing: discovery.Missing}, nil
 }
+
+// workspaceFingerprint includes private references without exposing them in the
+// public manifest. Structured encoding prevents ambiguous concatenated references.
+func workspaceFingerprint(discovery Discovery, mode Mode) string {
+	type rootIdentity struct{ Name, Path, StorageRef string }
+	roots := make([]rootIdentity, len(discovery.Roots))
+	for index, root := range discovery.Roots {
+		roots[index] = rootIdentity(root)
+	}
+	encoded, _ := json.Marshal(struct {
+		Roots            []rootIdentity
+		Mode             Mode
+		CompatibilityKey string
+	}{roots, mode, discovery.CompatibilityKey})
+	fingerprint := sha256.Sum256(encoded)
+	return hex.EncodeToString(fingerprint[:])
+}
+
 func randomBytes() []byte { b := make([]byte, 32); _, _ = rand.Read(b); return b }
 func revoke(e *entry) {
 	if e.cancel != nil {

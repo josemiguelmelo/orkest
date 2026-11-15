@@ -44,6 +44,7 @@ func (gatewayIdle) EditorIdle(context.Context, string, string, string) (bool, er
 }
 
 type gatewayBackend struct {
+	gatewayInspector
 	instance taskeditor.Instance
 	found    bool
 	endpoint string
@@ -72,7 +73,7 @@ func (b *gatewayBackend) ListEditors(context.Context) ([]taskeditor.Instance, er
 func gatewayFixture(t *testing.T, upstream string) (*EditorGateway, *taskeditor.TaskEditorService, *gatewayTasks, string) {
 	t.Helper()
 	tasks := &gatewayTasks{}
-	service, err := taskeditor.NewTaskEditorService(tasks, gatewayInspector{}, &gatewayBackend{endpoint: upstream}, gatewayIdle{})
+	service, err := taskeditor.NewTaskEditorService(tasks, &gatewayBackend{endpoint: upstream}, gatewayIdle{})
 	if err != nil {
 		t.Fatal(err)
 	}

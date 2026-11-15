@@ -44,7 +44,7 @@ try {
   const terminal = page.locator(".terminal-wrapper textarea").first();
   await terminal.focus();
   await page.keyboard.type(
-    "echo browser-saved > /workspace/repositories/github/repo/browser.txt",
+    "echo browser-saved > /task/repositories/github/repo/browser.txt",
   );
   await page.keyboard.press("Enter");
   await expect

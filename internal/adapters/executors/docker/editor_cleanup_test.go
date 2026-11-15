@@ -14,7 +14,7 @@ import (
 )
 
 type cleanupEngine struct {
-	editorEngine
+	EditorEngineClient
 	network               network.Network
 	current               container.InspectResponse
 	inspectErr            error

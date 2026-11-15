@@ -19,7 +19,7 @@ func TestEditorRequiresProtectedWorkerAncestry(t *testing.T) {
 	if err := os.MkdirAll(repo, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	roots := []taskeditor.Root{{Source: repo}}
+	roots := []taskeditor.Root{{StorageRef: repo}}
 	for _, tc := range []struct {
 		name    string
 		change  func(*container.InspectResponse)

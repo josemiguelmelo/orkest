@@ -30,49 +30,90 @@ const (
 	DefaultReadonlyEditorImage = "orkest/task-editor:4.145.2-ro"
 )
 
-type editorEngine interface {
-	EngineClient
-	ContainerList(context.Context, client.ContainerListOptions) (client.ContainerListResult, error)
-	NetworkCreate(context.Context, string, client.NetworkCreateOptions) (client.NetworkCreateResult, error)
-	NetworkInspect(context.Context, string, client.NetworkInspectOptions) (client.NetworkInspectResult, error)
-	NetworkConnect(context.Context, string, client.NetworkConnectOptions) (client.NetworkConnectResult, error)
-	NetworkDisconnect(context.Context, string, client.NetworkDisconnectOptions) (client.NetworkDisconnectResult, error)
-	NetworkRemove(context.Context, string, client.NetworkRemoveOptions) (client.NetworkRemoveResult, error)
-	NetworkList(context.Context, client.NetworkListOptions) (client.NetworkListResult, error)
+// EditorConfig contains only editor resource settings, never agent credentials.
+type EditorConfig struct {
+	DataRoot, NetworkName, ContainerUser string
+	Image, ReadOnlyImage                 string
 }
 
 // EditorBackend shares the existing Engine client, task data root and networking.
 // It never receives RunConfig, agent environment, credentials or host mounts.
 type EditorBackend struct {
-	starting                           sync.Map
-	executor                           *Executor
-	engine                             editorEngine
-	installation, image, readonlyImage string
-	user                               string
+	starting     sync.Map
+	config       EditorConfig
+	engine       EditorEngineClient
+	installation string
 }
 
+// NewEditorBackend borrows the executor client without retaining the executor.
+// NewEditorBackendWithClient also supports composition with non-Docker agents.
 func (e *Executor) NewEditorBackend(image, readonlyImage string) (*EditorBackend, error) {
-	engine, ok := e.client.(editorEngine)
+	engine, ok := e.client.(EditorEngineClient)
 	if !ok {
-		return nil, errors.New("docker editor discovery requires container listing")
+		return nil, errors.New("docker editor requires container listing and networking")
 	}
-	uidText, _, _ := strings.Cut(e.config.ContainerUser, ":")
+	return NewEditorBackendWithClient(EditorConfig{DataRoot: e.config.DataRoot, NetworkName: e.config.NetworkName, ContainerUser: e.config.ContainerUser, Image: image, ReadOnlyImage: readonlyImage}, engine)
+}
+
+// NewEditorBackendWithClient borrows engine. The caller owns its lifetime.
+func NewEditorBackendWithClient(config EditorConfig, engine EditorEngineClient) (*EditorBackend, error) {
+	if engine == nil {
+		return nil, errors.New("docker editor Engine client is required")
+	}
+	if strings.TrimSpace(config.DataRoot) == "" {
+		return nil, errors.New("editor data root is required")
+	}
+	root, err := filepath.Abs(config.DataRoot)
+	if err != nil {
+		return nil, fmt.Errorf("resolve editor data root: %w", err)
+	}
+	config.DataRoot = root
+	config.NetworkName = strings.TrimSpace(config.NetworkName)
+	if config.ContainerUser == "" {
+		config.ContainerUser, err = currentContainerUser()
+		if err != nil {
+			return nil, err
+		}
+	}
+	if err := validateContainerUser(config.ContainerUser); err != nil {
+		return nil, err
+	}
+	uidText, _, _ := strings.Cut(config.ContainerUser, ":")
 	uid, uidErr := strconv.ParseUint(uidText, 10, 32)
 	if uidErr != nil {
 		return nil, errors.New("invalid editor container UID")
 	}
-	user := e.config.ContainerUser
-	// An always-available editor capability must never inherit a root platform UID.
-	// Root-owned checkouts still need operator-provided non-root access permissions.
 	if uid == 0 {
-		user = "1000:1000"
+		config.ContainerUser = "1000:1000"
 	}
-	if strings.TrimSpace(image) == "" || strings.TrimSpace(readonlyImage) == "" || image == readonlyImage {
+	config.Image = strings.TrimSpace(config.Image)
+	config.ReadOnlyImage = strings.TrimSpace(config.ReadOnlyImage)
+	if config.Image == "" {
+		config.Image = DefaultEditorImage
+	}
+	if config.ReadOnlyImage == "" {
+		config.ReadOnlyImage = DefaultReadonlyEditorImage
+	}
+	if config.Image == config.ReadOnlyImage {
 		return nil, errors.New("distinct editor and immutable readonly images are required")
 	}
-	hash := sha256.Sum256([]byte(e.config.DataRoot))
-	return &EditorBackend{executor: e, engine: engine, installation: hex.EncodeToString(hash[:]), image: image, readonlyImage: readonlyImage, user: user}, nil
+	hash := sha256.Sum256([]byte(root))
+	return &EditorBackend{config: config, engine: engine, installation: hex.EncodeToString(hash[:])}, nil
 }
+
+// Inspect resolves existing storage through the same configuration used at start.
+func (b *EditorBackend) Inspect(ctx context.Context, org, workspace, task string, selected []taskeditor.Checkout) (taskeditor.Inspection, error) {
+	inspection, err := (TaskCheckoutInspector{DataRoot: b.config.DataRoot}).Inspect(ctx, org, workspace, task, selected)
+	if err != nil {
+		return taskeditor.Inspection{}, err
+	}
+	configuration, _ := json.Marshal(b.config)
+	fingerprint := sha256.Sum256(configuration)
+	inspection.CompatibilityKey = hex.EncodeToString(fingerprint[:])
+	return inspection, nil
+}
+
+var _ taskeditor.Backend = (*EditorBackend)(nil)
 
 func (b *EditorBackend) name(scope taskeditor.Scope) string {
 	data, _ := json.Marshal([]string{b.installation, scope.OrganizationID, scope.WorkspaceID, scope.TaskID})
@@ -87,7 +128,7 @@ func (b *EditorBackend) manifestDirectory(i taskeditor.Instance) (string, error)
 	if _, err := hex.DecodeString(i.Generation); err != nil {
 		return "", errors.New("invalid editor generation")
 	}
-	return filepath.Join(b.executor.config.DataRoot, "editor-workspaces", b.name(i.Scope), i.Generation), nil
+	return filepath.Join(b.config.DataRoot, "editor-workspaces", b.name(i.Scope), i.Generation), nil
 }
 
 func (b *EditorBackend) labels(i taskeditor.Instance) map[string]string {
@@ -128,7 +169,7 @@ func (b *EditorBackend) InspectEditor(ctx context.Context, scope taskeditor.Scop
 		return i, false, errors.New("editor state unknown")
 	}
 	if result.Container.State.Running {
-		if b.executor.config.NetworkName == "" {
+		if b.config.NetworkName == "" {
 			return b.inspectRelay(ctx, i)
 		}
 		i.Endpoint = "http://" + b.name(scope) + ":8080"
@@ -144,7 +185,7 @@ func (b *EditorBackend) StartEditor(ctx context.Context, spec taskeditor.Spec) (
 	if len(spec.Discovery.Roots) != 1 || spec.Discovery.Roots[0].Path != "/task" {
 		return taskeditor.Instance{}, taskeditor.ErrUnavailable
 	}
-	workRoot, rootErr := filepath.EvalSymlinks(b.executor.config.DataRoot)
+	workRoot, rootErr := filepath.EvalSymlinks(b.config.DataRoot)
 	if rootErr != nil {
 		return taskeditor.Instance{}, rootErr
 	}
@@ -153,7 +194,7 @@ func (b *EditorBackend) StartEditor(ctx context.Context, spec taskeditor.Spec) (
 		return taskeditor.Instance{}, errors.New("invalid task workspace mount")
 	}
 	resolvedWork, err := existingDirectory(workRoot, taskWork)
-	if err != nil || resolvedWork != taskWork {
+	if err != nil || resolvedWork != taskWork || spec.Discovery.Roots[0].StorageRef != resolvedWork {
 		return taskeditor.Instance{}, errors.New("task workspace mount changed")
 	}
 	if err := b.requireProtectedWorkers(ctx, spec); err != nil {
@@ -181,9 +222,9 @@ func (b *EditorBackend) StartEditor(ctx context.Context, spec taskeditor.Spec) (
 		{Type: mount.TypeBind, Source: manifest, Target: "/workspace/task.code-workspace", ReadOnly: true},
 		{Type: mount.TypeBind, Source: taskWork, Target: "/task", ReadOnly: spec.Mode == taskeditor.ReadOnly},
 	}
-	image := b.image
+	image := b.config.Image
 	if spec.Mode == taskeditor.ReadOnly {
-		image = b.readonlyImage
+		image = b.config.ReadOnlyImage
 	}
 	port := network.MustParsePort("8080/tcp")
 	pids := int64(256)
@@ -205,7 +246,7 @@ func (b *EditorBackend) StartEditor(ctx context.Context, spec taskeditor.Spec) (
 	}
 	host.NetworkMode = container.NetworkMode(networkName)
 
-	created, err := b.engine.ContainerCreate(ctx, client.ContainerCreateOptions{Name: b.name(spec.Scope), Config: &container.Config{Image: image, User: b.user, Env: []string{"HOME=/home/editor", "EDITOR_MODE=" + string(spec.Mode)}, Labels: b.labels(spec.Instance), ExposedPorts: network.PortSet{port: {}}}, HostConfig: host})
+	created, err := b.engine.ContainerCreate(ctx, client.ContainerCreateOptions{Name: b.name(spec.Scope), Config: &container.Config{Image: image, User: b.config.ContainerUser, Env: []string{"HOME=/home/editor", "EDITOR_MODE=" + string(spec.Mode)}, Labels: b.labels(spec.Instance), ExposedPorts: network.PortSet{port: {}}}, HostConfig: host})
 	if err != nil {
 		return taskeditor.Instance{}, fmt.Errorf("create editor: %w", err)
 	}
@@ -215,7 +256,7 @@ func (b *EditorBackend) StartEditor(ctx context.Context, spec taskeditor.Spec) (
 	if _, err = b.engine.ContainerStart(ctx, created.ID, client.ContainerStartOptions{}); err != nil {
 		return spec.Instance, fmt.Errorf("start editor: %w", err)
 	}
-	if b.executor.config.NetworkName == "" {
+	if b.config.NetworkName == "" {
 		if err = b.startRelay(ctx, spec.Instance); err != nil {
 			return spec.Instance, err
 		}
