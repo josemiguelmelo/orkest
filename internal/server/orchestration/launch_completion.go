@@ -134,11 +134,11 @@ func (s *LaunchCompletionService) runCleanup(ctx context.Context) {
 			ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 			defer cancel()
 			if err := s.repo.SetLaunchStatus(ctx, PlanLaunchStatus(launch.RunID, launch.Status)); err != nil {
-				s.reportCleanupFailure(launch, "terminal_intent_unavailable")
+				s.reportCleanupFailure(launch, "terminal_intent_unavailable", err)
 				return
 			}
 			if err := s.ClosePending(ctx, launch); err != nil {
-				s.reportCleanupFailure(launch, "cleanup_unavailable")
+				s.reportCleanupFailure(launch, "cleanup_unavailable", err)
 				return
 			}
 			s.mu.Lock()
@@ -188,12 +188,12 @@ func (s *LaunchCompletionService) ClosePending(ctx context.Context, launch orche
 	return nil
 }
 
-func (s *LaunchCompletionService) reportCleanupFailure(launch orchestrationmodel.Launch, reason string) {
+func (s *LaunchCompletionService) reportCleanupFailure(launch orchestrationmodel.Launch, reason string, err error) {
 	s.mu.Lock()
 	report := !s.reported[launch.RunID]
 	s.reported[launch.RunID] = true
 	s.mu.Unlock()
 	if report {
-		slog.Default().Warn("terminal cleanup deferred", "run_id", launch.RunID, "workspace_id", launch.WorkspaceID, "reason", reason)
+		slog.Default().Warn("terminal cleanup deferred", "run_id", launch.RunID, "workspace_id", launch.WorkspaceID, "reason", reason, "failure_type", fmt.Sprintf("%T", err))
 	}
 }
