@@ -55,7 +55,7 @@ flowchart LR
     UI -->|Sign in| Auth[Keycloak]
     API -->|Verify identity| Auth
     API -->|Persist state| DB[(PostgreSQL)]
-    API -->|Launch or inspect| Executor[Docker or Local executor]
+    API -->|Launch or inspect| Executor[Executor selection and infrastructure engine]
     Executor -->|Create environment| Worker[Independent agentctl process]
     API <-->|REST and activity WebSocket| Worker
     Worker <-->|ACP over stdio| Runtime[Coding runtime]
@@ -96,7 +96,7 @@ flowchart TD
 | `internal/server/orchestration` | Dispatch, run/session identity, launch and reconnect |
 | `internal/server/artifact` | Task outputs, immutable revisions, publication checks |
 | `internal/adapters/postgres` | Persistence adapters and transaction boundaries |
-| `internal/adapters/executors` | Docker or Local environment selection and lifecycle |
+| `internal/adapters/executors` | Executor planning, engine selection and infrastructure lifecycle |
 | `web/` | UI, scoped query caches, generated platform API client |
 
 `TaskService` receives `TaskRepository`/`TaskWorkflowPlanner` through its constructor,
@@ -207,37 +207,67 @@ and credentials where required. See [runtime qualification](development/testing.
 
 See [unfinished work](status.md) and [verification](development/testing.md).
 
+## Executor-agnostic infrastructure engines
+
+Agent and editor executors express launches as `engine.WorkloadPlan` values and
+depend on `engine.InfrastructureEngine`. Executors choose artifacts, arguments,
+environment, credentials, storage attachments, network topology and readiness
+policy. Engines validate and realize supported infrastructure primitives; they
+do not import agent, editor, runtime-catalog or server packages, and caller metadata
+never selects provider behavior.
+
+Plans describe workload groups with stable owner/generation identity, workloads,
+typed endpoint references, endpoints and exposure, networks, generated files,
+storage bindings, credentials, mounts, security, limits, restart policy and probes.
+Providers reject plan features they cannot enforce before creating resources.
+`Capabilities` describes provider facts used to choose a topology; requested
+requirements are derived from plan fields and validated by each engine.
+
+| Engine | Current infrastructure role |
+| --- | --- |
+| Docker | Container workload groups, endpoints, private networks, storage/mount admission, credentials, generated files, limits, restart policy and durable reconciliation |
+| Kubernetes | Supported single-container Pod/Service, storage, credentials and generated-file plans; unsupported network isolation and workload shapes fail validation |
+| Local | Native process lifecycle and durable task storage; container-only features fail validation |
+
+Shared manifest helpers persist start/stop/cleanup transitions. Manifests hold
+stable component identities, a plan fingerprint and provider handles, not plan
+contents or secret values. Uncertain state does not authorize replacement or
+cleanup. Generic group reconciliation covers resources created with the current
+manifest format; removed executor-specific resource formats are outside this
+boundary.
+
+The task editor planner chooses direct private routing when the engine advertises
+it. Otherwise, the engine must support denied egress and platform ingress for the
+planner to include its authenticated forwarding workload. Docker supports both
+topologies depending on whether the platform is attached to the configured Docker
+network. Editor shells have no internet egress; forwarding credentials remain
+outside manifests, metadata and public lifecycle responses. Providers that cannot
+enforce the required topology report the editor unavailable.
+
+Docker storage admission inspects all containers before allowing shared access.
+Unrelated mounts are ignored; any workload touching the protected root must have
+verifiable Orkest ownership and safe mount ancestry. Unknown ownership, privileged
+access, aliases or unverifiable mount paths deny admission. Server/editor policy
+still owns authorization and task handoff locking; engine admission enforces the
+infrastructure boundary.
+
 ## Task editor coordination
 
 The always-wired task editor uses a task-editor service without a persistence
-repository. Docker resource labels provide discovery; existing task storage and
-launch state provide files and execution ownership. All platform execution sends
-and restores share its task handoff guard; writable access requires durable
-terminal launches and confirmed worker absence. The separate-origin gateway
-binds temporary browser access to user/task/generation and revokes existing
+repository. Engine group metadata and manifests provide discovery; existing task
+storage and launch state provide files and execution ownership. All platform
+execution sends and restores share its task handoff guard; writable access
+requires durable terminal launches and confirmed worker absence. The separate-origin
+gateway binds temporary browser access to user/task/generation and revokes existing
 connections on replacement. This initially supports one active platform
 coordinator. See [backend and deployment constraints](development/task-editor-backend.md).
 
 Executor selection composes separate agent-control and editor-backend contracts.
 The editor backend combines lifecycle and read-only storage inspection; shared
-policy services have no executor-kind branches. Docker adapters borrow the same
-Engine client through narrow interfaces, and the editor retains only its resolved
-configuration rather than the agent executor. Selection owns infrastructure
+policy services have no executor-kind branches. Selection owns infrastructure
 cleanup, including construction failures, and closes clients after services stop.
-Standalone Docker agent constructors retain their existing client ownership.
 Private storage references and adapter configuration identity participate in a
 structured editor compatibility hash without appearing in public workspace JSON.
-New adapters are added at executor composition and configuration boundaries; see
-the [extension procedure](development/task-editor-executor-extensibility-plan.md#adding-the-next-executor).
-
-Editor containers use one internal Docker bridge per generation. A containerized
-platform is the only trusted gateway attached to each bridge. Native-host mode
-uses a small fixed-upstream authenticated relay with a loopback-published port;
-the editor shell has no external route. This additional relay is necessary because
-publishing an internal-only Docker bridge does not provide a native-host endpoint,
-and a routable editor can reach unauthenticated worker ports through host aliases.
-Relay credentials remain private to the backend and relay process; lifecycle APIs
-never serialize them. Editor resources and orphan cleanup remain executor-owned.
 
 Workers protect `/workspace/repositories` with a read-only parent bind and overlay
 selected writable checkout roots without changing session paths. Editor admission

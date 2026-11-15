@@ -432,13 +432,13 @@ prepares repositories. Starting an agent automatically terminates the writable
 editor/terminal before execution, without an additional user confirmation.
 Saved files and branches persist across recreation.
 
-The supported-executor target is Docker, Local, and Kubernetes; backend delivery
-and qualification are tracked in the implementation plan. The editor is restricted
-to the requesting user with task mutation authority; Viewer review and collaboration are deferred.
+The supported-executor target is Docker, Local, and Kubernetes. The editor is
+restricted to the requesting user with task mutation authority; Viewer review and
+collaboration are deferred.
 Confirmed user instruction: the editor feature is always enabled; there is no
 configuration gate. Unsupported executors return unavailable. Deployment and
 verification constraints are in
-[the implementation notes](development/task-editor-backend.md). The task-page UI
-is implemented; full browser journeys, Local/Kubernetes support, and production
-qualification remain outstanding. Implementation does not establish production
-release readiness.
+[the current backend architecture](development/task-editor-backend.md). The
+task-page UI is implemented; full browser journeys, Local/Kubernetes support, and
+production qualification remain outstanding. Implementation does not establish
+production release readiness.
