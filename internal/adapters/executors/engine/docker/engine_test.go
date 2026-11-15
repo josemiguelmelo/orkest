@@ -313,7 +313,7 @@ func TestGenericStorageAccessAdmissionInspectsManagedWorkloads(t *testing.T) {
 	}
 	worker := container.InspectResponse{
 		ID:         "managed-worker",
-		Config:     &container.Config{Labels: map[string]string{groupInstallLabel: instance.installation, groupLabel: "worker-group"}},
+		Config:     &container.Config{Labels: map[string]string{groupInstallLabel: instance.installation, groupLabel: "worker-group", groupOwnerLabel: "owner", groupGenerationLabel: "generation", "orkest.infrastructure.component": "worker"}},
 		HostConfig: &container.HostConfig{},
 		Mounts: []container.MountPoint{
 			{Source: work, Destination: "/workspace", RW: false},

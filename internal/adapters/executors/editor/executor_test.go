@@ -17,17 +17,18 @@ import (
 
 type fakeEditorInfrastructure struct {
 	engine.InfrastructureEngine
-	storagePath   string
-	plan          engine.WorkloadPlan
-	group         engine.ResourceGroup
-	storageAccess engine.StorageAccessRequest
-	endpoint      string
-	stopped       bool
-	cleaned       bool
+	storagePath    string
+	plan           engine.WorkloadPlan
+	group          engine.ResourceGroup
+	storageAccess  engine.StorageAccessRequest
+	endpoint       string
+	stopped        bool
+	cleaned        bool
+	privateRouting bool
 }
 
 func (f *fakeEditorInfrastructure) Capabilities() engine.Capabilities {
-	return engine.Capabilities{Modes: []engine.ExecutionMode{engine.ExecutionModeContainer}, DurableWork: true, ReadOnlyRoot: true, ReadOnlyMounts: true, TemporaryMounts: true, ProtectedStorageSharing: true, PlatformIngress: true, DeniedEgress: true, PrivateServiceRouting: true, ConfirmedProcessTreeStop: true}
+	return engine.Capabilities{Modes: []engine.ExecutionMode{engine.ExecutionModeContainer}, DurableWork: true, ReadOnlyRoot: true, ReadOnlyMounts: true, TemporaryMounts: true, ProtectedStorageSharing: true, PlatformIngress: true, DeniedEgress: true, PrivateServiceRouting: f.privateRouting, ConfirmedProcessTreeStop: true}
 }
 
 func (f *fakeEditorInfrastructure) ResolveStorage(_ context.Context, request engine.StorageRequest) ([]engine.StorageBinding, error) {
@@ -53,7 +54,7 @@ func (f *fakeEditorInfrastructure) ValidateStorageAccess(_ context.Context, requ
 func (f *fakeEditorInfrastructure) StartPlan(_ context.Context, plan engine.WorkloadPlan) (engine.ResourceGroup, error) {
 	f.group = engine.ResourceGroup{
 		Ref:       engine.GroupRef{Identity: engine.GroupIdentity{InstallationID: "installation", Owner: plan.Group.Owner, Generation: plan.Group.Generation}, Provider: "provider-group"},
-		Endpoints: map[string]string{"gateway": f.endpoint}, Metadata: plan.Metadata,
+		Endpoints: map[string]string{"gateway": f.endpoint, "editor.http": f.endpoint}, Metadata: plan.Metadata,
 	}
 	return f.group, nil
 }
@@ -195,5 +196,27 @@ func TestEditorExecutorPlansGenericPrivateWorkloadGroup(t *testing.T) {
 	}
 	if err = executor.StopEditor(context.Background(), instance); err != nil || !infrastructure.stopped || !infrastructure.cleaned {
 		t.Fatalf("generic editor stop/cleanup = %v, stopped=%v cleaned=%v", err, infrastructure.stopped, infrastructure.cleaned)
+	}
+}
+
+func TestEditorInfrastructurePlannerUsesPrivateRoutingWithoutGateway(t *testing.T) {
+	infrastructure := &fakeEditorInfrastructure{privateRouting: true}
+	executor, err := New(infrastructure, Config{Image: "editor:rw", ReadOnlyImage: "editor:ro", RunAsUser: 1000, RunAsGroup: 1000})
+	if err != nil {
+		t.Fatal(err)
+	}
+	instance := taskeditor.Instance{
+		Scope:  taskeditor.Scope{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task"},
+		UserID: "user", Generation: strings.Repeat("d", 64), Fingerprint: "fingerprint", Mode: taskeditor.ReadWrite,
+	}
+	plan, token, err := executor.infrastructurePlan(instance, "opaque-storage", []byte(`{"folders":[]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if token != "" || len(plan.Workloads) != 1 || len(plan.Networks) != 1 || !plan.Networks[0].DenyEgress {
+		t.Fatalf("private editor plan = %#v (token present: %v)", plan, token != "")
+	}
+	if plan.Metadata["endpoint"] != "editor.http" || plan.Metadata["gateway-token-required"] != "false" {
+		t.Fatalf("private editor route metadata = %#v", plan.Metadata)
 	}
 }

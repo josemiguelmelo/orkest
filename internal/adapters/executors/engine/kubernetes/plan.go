@@ -49,18 +49,6 @@ func (e *Engine) ValidatePlan(ctx context.Context, plan engine.WorkloadPlan) err
 	if workload.Mode != engine.ExecutionModeContainer {
 		return engine.Unsupported("Kubernetes native workloads")
 	}
-	requirements := engine.Requirements{Mode: workload.Mode, ReadOnlyRoot: workload.Security.ReadOnlyRoot, RestartModes: workload.Restart != engine.RestartNever, CredentialBindings: len(workload.Credentials) != 0}
-	for _, attachment := range plan.Storage {
-		requirements.DurableWork = requirements.DurableWork || attachment.Durable
-		requirements.DurableState = requirements.DurableState || attachment.Durable
-		requirements.ReadOnlyMounts = requirements.ReadOnlyMounts || attachment.ReadOnly
-	}
-	for _, binding := range workload.Credentials {
-		requirements.ReadOnlyMounts = requirements.ReadOnlyMounts || binding.ReadOnly
-	}
-	if err := engine.ValidateCapabilities(e.Capabilities(), requirements); err != nil {
-		return err
-	}
 	if workload.WorkingPath != "" && !strings.HasPrefix(workload.WorkingPath, "/") {
 		return fmt.Errorf("%w: container working directory must be absolute", engine.ErrInvalidSpec)
 	}
@@ -184,28 +172,15 @@ func (e *Engine) ResolveStorage(ctx context.Context, request engine.StorageReque
 	return bindings, nil
 }
 
-func (e *Engine) StartPlan(ctx context.Context, plan engine.WorkloadPlan) (result engine.ResourceGroup, resultErr error) {
+func (e *Engine) StartPlan(ctx context.Context, plan engine.WorkloadPlan) (engine.ResourceGroup, error) {
 	if err := e.ValidatePlan(ctx, plan); err != nil {
 		return engine.ResourceGroup{}, err
 	}
 	plan.Group.InstallationID = e.config.InstallationID
-	manifests := e.manifests
-	if err := manifests.Record(ctx, plan, "starting", nil); err != nil {
-		return engine.ResourceGroup{}, err
-	}
-	defer func() {
-		providerIDs := map[string]string{}
-		for _, component := range result.Components {
-			providerIDs[component.Ref.Key.ComponentID+"/"+component.Ref.Key.ResourceID] = component.Ref.ConcreteID
-		}
-		state := "uncertain"
-		if resultErr == nil {
-			state = "active"
-		}
-		if manifestErr := manifests.Record(context.WithoutCancel(ctx), plan, state, providerIDs); manifestErr != nil {
-			resultErr = errors.Join(resultErr, fmt.Errorf("persist Kubernetes operation result: %w", manifestErr))
-		}
-	}()
+	return engine.RunRecordedStart(ctx, e.manifests, plan, "Kubernetes", e.startPlanResources)
+}
+
+func (e *Engine) startPlanResources(ctx context.Context, plan engine.WorkloadPlan) (engine.ResourceGroup, error) {
 	identity := plan.Group
 	name := infrastructurePodName(identity)
 	ref := engine.GroupRef{Identity: identity, Provider: e.processID(name, "")}
@@ -546,65 +521,59 @@ func (e *Engine) ListGroups(ctx context.Context, selector engine.Selector) ([]en
 	return groups, nil
 }
 
-func (e *Engine) StopGroup(ctx context.Context, ref engine.GroupRef) (resultErr error) {
-	defer func() {
-		if resultErr == nil {
-			resultErr = e.manifests.Update(context.WithoutCancel(ctx), ref.Identity, "stopped", nil)
+func (e *Engine) StopGroup(ctx context.Context, ref engine.GroupRef) error {
+	return engine.RunRecordedLifecycle(ctx, e.manifests, ref.Identity, "stopped", "Kubernetes", func() error {
+		observation, err := e.InspectGroup(ctx, ref)
+		if err != nil || observation.State == engine.GroupAbsent || observation.State == engine.GroupStopped {
+			return err
 		}
-	}()
-	observation, err := e.InspectGroup(ctx, ref)
-	if err != nil || observation.State == engine.GroupAbsent || observation.State == engine.GroupStopped {
-		return err
-	}
-	name, _, err := e.parseID(observation.Group.Ref.Provider)
-	if err != nil {
-		return err
-	}
-	_, status, err := e.client.Do(ctx, http.MethodDelete, e.resourcePath("pods", name), map[string]any{"apiVersion": "v1", "kind": "DeleteOptions"})
-	if err != nil || status >= 300 && status != http.StatusNotFound {
-		return fmt.Errorf("stop Kubernetes infrastructure workload: HTTP %d: %w", status, err)
-	}
-	ticker := time.NewTicker(100 * time.Millisecond)
-	defer ticker.Stop()
-	for {
-		observation, inspectErr := e.InspectGroup(ctx, ref)
-		if inspectErr != nil {
-			return inspectErr
+		name, _, err := e.parseID(observation.Group.Ref.Provider)
+		if err != nil {
+			return err
 		}
-		if observation.State == engine.GroupAbsent || observation.State == engine.GroupStopped {
-			return nil
+		_, status, err := e.client.Do(ctx, http.MethodDelete, e.resourcePath("pods", name), map[string]any{"apiVersion": "v1", "kind": "DeleteOptions"})
+		if err != nil || status >= 300 && status != http.StatusNotFound {
+			return fmt.Errorf("stop Kubernetes infrastructure workload: HTTP %d: %w", status, err)
 		}
-		select {
-		case <-ctx.Done():
-			return errors.Join(ctx.Err(), engine.ErrUncertain)
-		case <-ticker.C:
+		ticker := time.NewTicker(100 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			observation, inspectErr := e.InspectGroup(ctx, ref)
+			if inspectErr != nil {
+				return inspectErr
+			}
+			if observation.State == engine.GroupAbsent || observation.State == engine.GroupStopped {
+				return nil
+			}
+			select {
+			case <-ctx.Done():
+				return errors.Join(ctx.Err(), engine.ErrUncertain)
+			case <-ticker.C:
+			}
 		}
-	}
+	})
 }
 
-func (e *Engine) CleanupGroup(ctx context.Context, ref engine.GroupRef) (resultErr error) {
-	defer func() {
-		if resultErr == nil {
-			resultErr = e.manifests.Update(context.WithoutCancel(ctx), ref.Identity, "cleaned", nil)
+func (e *Engine) CleanupGroup(ctx context.Context, ref engine.GroupRef) error {
+	return engine.RunRecordedLifecycle(ctx, e.manifests, ref.Identity, "cleaned", "Kubernetes", func() error {
+		observation, err := e.InspectGroup(ctx, ref)
+		if err != nil || observation.State == engine.GroupAbsent {
+			return err
 		}
-	}()
-	observation, err := e.InspectGroup(ctx, ref)
-	if err != nil || observation.State == engine.GroupAbsent {
-		return err
-	}
-	if observation.State == engine.GroupActive || observation.State == engine.GroupUncertain {
-		return errors.New("refusing to clean active or uncertain Kubernetes infrastructure group")
-	}
-	if err = e.deleteOwned(ctx, "pods", infrastructurePodName(ref.Identity)); err != nil {
-		return err
-	}
-	if err = e.deleteOwned(ctx, "services", infrastructurePodName(ref.Identity)); err != nil {
-		return err
-	}
-	if err = e.deleteOwned(ctx, "configmaps", infrastructurePodName(ref.Identity)+"-files"); err != nil {
-		return err
-	}
-	return e.deleteOwned(ctx, "secrets", infrastructurePodName(ref.Identity)+"-env")
+		if observation.State == engine.GroupActive || observation.State == engine.GroupUncertain {
+			return errors.New("refusing to clean active or uncertain Kubernetes infrastructure group")
+		}
+		if err = e.deleteOwned(ctx, "pods", infrastructurePodName(ref.Identity)); err != nil {
+			return err
+		}
+		if err = e.deleteOwned(ctx, "services", infrastructurePodName(ref.Identity)); err != nil {
+			return err
+		}
+		if err = e.deleteOwned(ctx, "configmaps", infrastructurePodName(ref.Identity)+"-files"); err != nil {
+			return err
+		}
+		return e.deleteOwned(ctx, "secrets", infrastructurePodName(ref.Identity)+"-env")
+	})
 }
 
 func infrastructureGroupHash(identity engine.GroupIdentity) string {

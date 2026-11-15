@@ -534,23 +534,6 @@ const (
 	RestartOnFailure
 )
 
-type Requirements struct {
-	Mode                     ExecutionMode
-	DurableWork              bool
-	DurableState             bool
-	ReadOnlyRoot             bool
-	ReadOnlyMounts           bool
-	TemporaryMounts          bool
-	ProtectedStorageSharing  bool
-	PlatformIngress          bool
-	DeniedEgress             bool
-	PrivateServiceRouting    bool
-	ConfirmedProcessTreeStop bool
-	ExplicitHostBinds        bool
-	CredentialBindings       bool
-	RestartModes             bool
-}
-
 type Capabilities struct {
 	Modes                    []ExecutionMode
 	DurableWork              bool
@@ -566,58 +549,6 @@ type Capabilities struct {
 	ConfirmedProcessTreeStop bool
 	ExplicitHostBinds        bool
 	CredentialBindings       bool
-	RestartModes             bool
-}
-
-// MissingCapabilities reports each requested guarantee the engine does not
-// advertise. Live provider health remains a separate runtime qualification.
-func (c Capabilities) Missing(r Requirements) []string {
-	var missing []string
-	if r.Mode != ExecutionModeUnknown && !containsMode(c.Modes, r.Mode) {
-		missing = append(missing, "requested execution mode")
-	}
-	checks := []struct {
-		name      string
-		required  bool
-		supported bool
-	}{
-		{"durable work storage", r.DurableWork, c.DurableWork},
-		{"durable state storage", r.DurableState, c.DurableState},
-		{"read-only root filesystem", r.ReadOnlyRoot, c.ReadOnlyRoot},
-		{"read-only mounts", r.ReadOnlyMounts, c.ReadOnlyMounts},
-		{"temporary mounts", r.TemporaryMounts, c.TemporaryMounts},
-		{"protected storage sharing", r.ProtectedStorageSharing, c.ProtectedStorageSharing},
-		{"platform ingress", r.PlatformIngress, c.PlatformIngress},
-		{"denied egress", r.DeniedEgress, c.DeniedEgress},
-		{"private service routing", r.PrivateServiceRouting, c.PrivateServiceRouting},
-		{"confirmed process-tree stop", r.ConfirmedProcessTreeStop, c.ConfirmedProcessTreeStop},
-		{"explicit host binds", r.ExplicitHostBinds, c.ExplicitHostBinds},
-		{"credential bindings", r.CredentialBindings, c.CredentialBindings},
-		{"restart modes", r.RestartModes, c.RestartModes},
-	}
-	for _, check := range checks {
-		if check.required && !check.supported {
-			missing = append(missing, check.name)
-		}
-	}
-	return missing
-}
-
-func ValidateCapabilities(capabilities Capabilities, requirements Requirements) error {
-	missing := capabilities.Missing(requirements)
-	if len(missing) == 0 {
-		return nil
-	}
-	return fmt.Errorf("%w: %s", ErrUnsupported, strings.Join(missing, ", "))
-}
-
-func containsMode(modes []ExecutionMode, mode ExecutionMode) bool {
-	for _, candidate := range modes {
-		if candidate == mode {
-			return true
-		}
-	}
-	return false
 }
 
 type ResourceState uint8

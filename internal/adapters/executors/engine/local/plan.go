@@ -118,28 +118,15 @@ func (e *Engine) ResolveStorage(ctx context.Context, request engine.StorageReque
 	return bindings, nil
 }
 
-func (e *Engine) StartPlan(ctx context.Context, plan engine.WorkloadPlan) (result engine.ResourceGroup, resultErr error) {
+func (e *Engine) StartPlan(ctx context.Context, plan engine.WorkloadPlan) (engine.ResourceGroup, error) {
 	if err := e.ValidatePlan(ctx, plan); err != nil {
 		return engine.ResourceGroup{}, err
 	}
 	plan.Group.InstallationID = e.installation
-	manifests := e.manifests
-	if err := manifests.Record(ctx, plan, "starting", nil); err != nil {
-		return engine.ResourceGroup{}, err
-	}
-	defer func() {
-		providerIDs := map[string]string{}
-		for _, component := range result.Components {
-			providerIDs[component.Ref.Key.ComponentID+"/"+component.Ref.Key.ResourceID] = component.Ref.ConcreteID
-		}
-		state := "uncertain"
-		if resultErr == nil {
-			state = "active"
-		}
-		if manifestErr := manifests.Record(context.WithoutCancel(ctx), plan, state, providerIDs); manifestErr != nil {
-			resultErr = errors.Join(resultErr, fmt.Errorf("persist local operation result: %w", manifestErr))
-		}
-	}()
+	return engine.RunRecordedStart(ctx, e.manifests, plan, "local", e.startPlanResources)
+}
+
+func (e *Engine) startPlanResources(ctx context.Context, plan engine.WorkloadPlan) (engine.ResourceGroup, error) {
 	groupID := groupID(plan.Group)
 	if current, err := e.readGroup(groupID); err == nil {
 		observation, inspectErr := e.inspectGroupRecord(ctx, groupID, current)
@@ -329,67 +316,61 @@ func (e *Engine) ListGroups(ctx context.Context, selector engine.Selector) ([]en
 	return groups, nil
 }
 
-func (e *Engine) StopGroup(ctx context.Context, ref engine.GroupRef) (resultErr error) {
-	defer func() {
-		if resultErr == nil {
-			resultErr = e.manifests.Update(context.WithoutCancel(ctx), ref.Identity, "stopped", nil)
+func (e *Engine) StopGroup(ctx context.Context, ref engine.GroupRef) error {
+	return engine.RunRecordedLifecycle(ctx, e.manifests, ref.Identity, "stopped", "local", func() error {
+		observation, err := e.InspectGroup(ctx, ref)
+		if err != nil || observation.State == engine.GroupAbsent || observation.State == engine.GroupStopped {
+			return err
 		}
-	}()
-	observation, err := e.InspectGroup(ctx, ref)
-	if err != nil || observation.State == engine.GroupAbsent || observation.State == engine.GroupStopped {
-		return err
-	}
-	component := observation.Group.Components[0]
-	pid, token, parseErr := parseIdentity(component.Ref.ConcreteID)
-	if parseErr != nil {
-		return engine.ErrIdentityMismatch
-	}
-	identity, inspectErr := processIdentity(ctx, pid)
-	if errors.Is(inspectErr, errProcessMissing) {
-		return nil
-	}
-	if inspectErr != nil || identity != token {
-		return engine.ErrIdentityMismatch
-	}
-	if err = signalProcess(pid); err != nil && !errors.Is(err, os.ErrProcessDone) {
-		return err
-	}
-	deadline := time.NewTicker(25 * time.Millisecond)
-	defer deadline.Stop()
-	for {
-		terminated, stateErr := processTerminated(ctx, pid)
-		if stateErr != nil {
-			return stateErr
+		component := observation.Group.Components[0]
+		pid, token, parseErr := parseIdentity(component.Ref.ConcreteID)
+		if parseErr != nil {
+			return engine.ErrIdentityMismatch
 		}
-		if terminated {
+		identity, inspectErr := processIdentity(ctx, pid)
+		if errors.Is(inspectErr, errProcessMissing) {
 			return nil
 		}
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-deadline.C:
+		if inspectErr != nil || identity != token {
+			return engine.ErrIdentityMismatch
 		}
-	}
+		if err = signalProcess(pid); err != nil && !errors.Is(err, os.ErrProcessDone) {
+			return err
+		}
+		deadline := time.NewTicker(25 * time.Millisecond)
+		defer deadline.Stop()
+		for {
+			terminated, stateErr := processTerminated(ctx, pid)
+			if stateErr != nil {
+				return stateErr
+			}
+			if terminated {
+				return nil
+			}
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-deadline.C:
+			}
+		}
+	})
 }
 
-func (e *Engine) CleanupGroup(ctx context.Context, ref engine.GroupRef) (resultErr error) {
-	defer func() {
-		if resultErr == nil {
-			resultErr = e.manifests.Update(context.WithoutCancel(ctx), ref.Identity, "cleaned", nil)
+func (e *Engine) CleanupGroup(ctx context.Context, ref engine.GroupRef) error {
+	return engine.RunRecordedLifecycle(ctx, e.manifests, ref.Identity, "cleaned", "local", func() error {
+		observation, err := e.InspectGroup(ctx, ref)
+		if err != nil || observation.State == engine.GroupAbsent {
+			return err
 		}
-	}()
-	observation, err := e.InspectGroup(ctx, ref)
-	if err != nil || observation.State == engine.GroupAbsent {
-		return err
-	}
-	if observation.State != engine.GroupStopped {
-		return errors.New("refusing to remove active native workload group")
-	}
-	id := groupID(ref.Identity)
-	if err = os.Remove(e.groupPath(id)); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return err
-	}
-	return nil
+		if observation.State != engine.GroupStopped {
+			return errors.New("refusing to remove active native workload group")
+		}
+		id := groupID(ref.Identity)
+		if err = os.Remove(e.groupPath(id)); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		return nil
+	})
 }
 
 func groupResource(record groupRecord, id, installation string, state engine.ResourceState) engine.ResourceGroup {

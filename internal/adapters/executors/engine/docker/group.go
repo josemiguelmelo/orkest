@@ -388,6 +388,22 @@ func (e *Engine) inspectWorkloadGroup(ctx context.Context, ref engine.GroupRef) 
 			}
 		}
 	}
+	manifest, manifestErr := e.manifests.Read(ctx, ref.Identity)
+	if manifestErr != nil {
+		return engine.GroupObservation{State: engine.GroupUncertain, Group: group}, nil
+	}
+	if len(manifest.Components) != len(group.Components) {
+		return engine.GroupObservation{State: engine.GroupUncertain, Group: group}, nil
+	}
+	observed := make(map[string]struct{}, len(group.Components))
+	for _, component := range group.Components {
+		observed[component.Ref.Key.ComponentID] = struct{}{}
+	}
+	for _, expected := range manifest.Components {
+		if _, exists := observed[expected]; !exists {
+			return engine.GroupObservation{State: engine.GroupUncertain, Group: group}, nil
+		}
+	}
 	if active == len(group.Components) {
 		return engine.GroupObservation{State: engine.GroupActive, Group: group}, nil
 	}

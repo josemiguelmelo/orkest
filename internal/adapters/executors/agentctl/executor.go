@@ -53,9 +53,6 @@ func NewSharedAgentCtlExecutor(config ExecutorConfig) (*AgentCtlExecutor, error)
 	if config.Mode != engine.ExecutionModeContainer && config.Mode != engine.ExecutionModeNative {
 		return nil, errors.New("agentctl execution mode is required")
 	}
-	if !hasMode(config.Engine.Capabilities(), config.Mode) {
-		return nil, engine.Unsupported("configured agent execution mode")
-	}
 	if config.Mode == engine.ExecutionModeNative {
 		binary := strings.TrimSpace(config.AgentctlBinary)
 		if !filepath.IsAbs(binary) {
@@ -105,18 +102,6 @@ func (e *AgentCtlExecutor) StartAgentctl(ctx context.Context, run model.RunConfi
 		return model.Process{}, fmt.Errorf("validate agent host mounts: %w", err)
 	}
 	useCodexBinding := e.config.Mode == engine.ExecutionModeContainer && run.Runtime == runtimecatalog.Codex && (e.config.CodexAuthFile != "" || e.config.CodexAuthBinding)
-	requirements := engine.Requirements{
-		Mode:               e.config.Mode,
-		DurableWork:        true,
-		DurableState:       true,
-		CredentialBindings: useCodexBinding,
-	}
-	if len(run.HostMounts) != 0 {
-		requirements.ExplicitHostBinds = true
-	}
-	if err := engine.ValidateCapabilities(e.engine.Capabilities(), requirements); err != nil {
-		return model.Process{}, err
-	}
 	storageID := taskstorage.Identity(run.OrganizationID, run.WorkspaceID, run.TaskID)
 	bindings, err := e.engine.ResolveStorage(ctx, engine.StorageRequest{Owner: run.RunID, Generation: run.RunID, Bindings: []engine.StorageBindingRequest{
 		{Name: "work", StorageID: storageID, Subpath: "work", Durable: true, Create: true, PlatformIO: true},
@@ -156,7 +141,7 @@ func (e *AgentCtlExecutor) StartAgentctl(ctx context.Context, run model.RunConfi
 		credentials = append(credentials, engine.CredentialBinding{Name: "codex-auth", Target: codexContainerAuthPath, ReadOnly: true, EnvironmentName: codexAuthEnvironment})
 	}
 	restart := engine.RestartNever
-	if e.config.Mode == engine.ExecutionModeContainer && run.TaskSessionID != "" && e.engine.Capabilities().RestartModes {
+	if e.config.Mode == engine.ExecutionModeContainer && run.TaskSessionID != "" {
 		restart = engine.RestartOnFailure
 	}
 	workTarget, stateTarget := workPath, statePath
@@ -397,15 +382,6 @@ func typedArguments(run model.RunConfig, workPath, statePath string, environment
 func containsName(names []string, target string) bool {
 	for _, name := range names {
 		if name == target {
-			return true
-		}
-	}
-	return false
-}
-
-func hasMode(capabilities engine.Capabilities, mode engine.ExecutionMode) bool {
-	for _, candidate := range capabilities.Modes {
-		if candidate == mode {
 			return true
 		}
 	}

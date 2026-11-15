@@ -119,10 +119,10 @@ func (e *Engine) Capabilities() engine.Capabilities {
 		DurableWork: true, DurableState: true, PlatformStorageSetup: true, ReadOnlyRoot: true, ReadOnlyMounts: true,
 		TemporaryMounts: true, ProtectedStorageSharing: true,
 		ConfirmedProcessTreeStop: true,
-		ExplicitHostBinds:        true, CredentialBindings: len(e.config.CredentialSources) > 0, RestartModes: true,
+		ExplicitHostBinds:        true, CredentialBindings: len(e.config.CredentialSources) > 0,
 		PlatformIngress:       e.networkClient != nil,
 		DeniedEgress:          e.networkClient != nil,
-		PrivateServiceRouting: e.networkClient != nil,
+		PrivateServiceRouting: e.config.NetworkName != "" && e.networkClient != nil,
 	}
 }
 

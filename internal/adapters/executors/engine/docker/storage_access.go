@@ -29,53 +29,41 @@ func (e *Engine) ValidateStorageAccess(ctx context.Context, request engine.Stora
 	if err != nil {
 		return fmt.Errorf("resolve protected Docker storage root: %w", err)
 	}
-	filters := []client.Filters{client.Filters{}.Add("label", groupLabel)}
-	seen := make(map[string]struct{})
-	for _, filter := range filters {
-		listed, listErr := e.networkClient.ContainerList(ctx, client.ContainerListOptions{All: true, Filters: filter})
-		if listErr != nil {
-			return fmt.Errorf("list managed Docker workloads for storage admission: %w", listErr)
+	listed, listErr := e.networkClient.ContainerList(ctx, client.ContainerListOptions{All: true})
+	if listErr != nil {
+		return fmt.Errorf("list Docker workloads for storage admission: %w", listErr)
+	}
+	for _, item := range listed.Items {
+		current, inspectErr := e.networkClient.ContainerInspect(ctx, item.ID, client.ContainerInspectOptions{})
+		if errdefs.IsNotFound(inspectErr) {
+			continue
 		}
-		for _, item := range listed.Items {
-			if _, exists := seen[item.ID]; exists {
-				continue
-			}
-			seen[item.ID] = struct{}{}
-			current, inspectErr := e.networkClient.ContainerInspect(ctx, item.ID, client.ContainerInspectOptions{})
-			if errdefs.IsNotFound(inspectErr) {
-				continue
-			}
-			if inspectErr != nil {
-				return fmt.Errorf("inspect managed Docker workload during storage admission: %w", inspectErr)
-			}
-			if err = validateManagedStorageWorkload(current.Container, work); err != nil {
-				return fmt.Errorf("%w: managed Docker workload storage access cannot be proven safe: %v", engine.ErrUnsupported, err)
-			}
+		if inspectErr != nil {
+			return fmt.Errorf("inspect Docker workload during storage admission: %w", inspectErr)
+		}
+		if err = validateManagedStorageWorkload(current.Container, work); err != nil {
+			return fmt.Errorf("%w: Docker workload storage access cannot be proven safe: %v", engine.ErrUnsupported, err)
 		}
 	}
 	return nil
 }
 
 func validateManagedStorageWorkload(workload container.InspectResponse, work string) error {
-	if workload.Config == nil || workload.HostConfig == nil {
-		return errors.New("managed workload ownership or security settings are unavailable")
-	}
-	intersects, writable := false, false
+	intersects := false
 	for _, item := range workload.Mounts {
 		source, err := filepath.EvalSymlinks(item.Source)
 		if err != nil {
-			if item.RW {
-				return fmt.Errorf("resolve writable workload mount source: %w", err)
-			}
-			continue
+			return fmt.Errorf("resolve workload mount source: %w", err)
 		}
 		if pathWithin(work, source) || pathWithin(source, work) {
 			intersects = true
-			writable = writable || item.RW
 		}
 	}
 	if !intersects {
 		return nil
+	}
+	if workload.Config == nil || workload.HostConfig == nil || !managedStorageLabels(workload.Config.Labels) {
+		return errors.New("workload ownership or security settings are unavailable")
 	}
 	if workload.HostConfig.Privileged {
 		return errors.New("managed workload can alter storage mount ownership")
@@ -85,10 +73,11 @@ func validateManagedStorageWorkload(workload container.InspectResponse, work str
 			return errors.New("managed workload can alter storage mount ownership")
 		}
 	}
-	if !writable {
-		return nil
-	}
 	return validateProtectedWorkloadMounts(workload, work)
+}
+
+func managedStorageLabels(labels map[string]string) bool {
+	return labels[groupLabel] != "" && labels[groupOwnerLabel] != "" && labels[groupGenerationLabel] != "" && labels[groupInstallLabel] != "" && labels["orkest.infrastructure.component"] != ""
 }
 
 func validateProtectedWorkloadMounts(workload container.InspectResponse, work string) error {
@@ -110,29 +99,24 @@ func validateProtectedWorkloadMounts(workload container.InspectResponse, work st
 	if rootTarget == "" {
 		return errors.New("managed workload has no read-only storage root")
 	}
-	repositories := filepath.Join(work, "repositories")
 	for _, item := range workload.Mounts {
 		source, resolveErr := filepath.EvalSymlinks(item.Source)
 		if resolveErr != nil {
 			return fmt.Errorf("resolve workload mount source: %w", resolveErr)
 		}
-		if source == repositories && !item.RW && filepath.Clean(item.Destination) == filepath.Join(rootTarget, "repositories") {
+		if source == work && !item.RW && filepath.Clean(item.Destination) == rootTarget {
 			protected = true
 		}
 		if !item.RW || source == work {
 			continue
 		}
 		if pathWithin(work, source) {
-			if !pathWithin(repositories, source) || source == repositories {
-				return errors.New("workload has a writable task storage alias")
-			}
 			relative, relErr := filepath.Rel(work, source)
 			if relErr != nil || filepath.Clean(item.Destination) != filepath.Join(rootTarget, relative) {
 				return errors.New("workload has a writable checkout ancestry alias")
 			}
-			parts := strings.Split(filepath.ToSlash(relative), "/")
-			if len(parts) != 3 || parts[0] != "repositories" {
-				return errors.New("workload has an invalid writable storage child")
+			if relative == "." || strings.HasPrefix(relative, ".."+string(filepath.Separator)) {
+				return errors.New("workload has a writable protected root or ancestor")
 			}
 		}
 		if pathWithin(source, work) {

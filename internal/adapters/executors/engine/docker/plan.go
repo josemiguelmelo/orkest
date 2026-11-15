@@ -147,23 +147,7 @@ func (e *Engine) StartPlan(ctx context.Context, plan engine.WorkloadPlan) (resul
 		return engine.ResourceGroup{}, err
 	}
 	plan.Group.InstallationID = e.installation
-	if err := e.manifests.Record(ctx, plan, "starting", nil); err != nil {
-		return engine.ResourceGroup{}, err
-	}
-	defer func() {
-		providerIDs := make(map[string]string, len(result.Components))
-		for _, component := range result.Components {
-			providerIDs[component.Ref.Key.ResourceID+"/"+component.Ref.Key.ComponentID] = component.Ref.ConcreteID
-		}
-		state := "uncertain"
-		if resultErr == nil {
-			state = "active"
-		}
-		if manifestErr := e.manifests.Record(context.WithoutCancel(ctx), plan, state, providerIDs); manifestErr != nil {
-			resultErr = errors.Join(resultErr, fmt.Errorf("persist Docker operation result: %w", manifestErr))
-		}
-	}()
-	return e.startInfrastructureWorkloadGroup(ctx, plan)
+	return engine.RunRecordedStart(ctx, e.manifests, plan, "Docker", e.startInfrastructureWorkloadGroup)
 }
 
 func (e *Engine) ensureInfrastructureNetwork(ctx context.Context, identity engine.GroupIdentity, plan engine.NetworkPlan) (string, error) {
@@ -339,36 +323,30 @@ func (e *Engine) ListGroups(ctx context.Context, selector engine.Selector) ([]en
 	return groups, nil
 }
 
-func (e *Engine) StopGroup(ctx context.Context, ref engine.GroupRef) (resultErr error) {
-	defer func() {
-		if resultErr == nil {
-			resultErr = e.manifests.Update(context.WithoutCancel(ctx), ref.Identity, "stopped", nil)
+func (e *Engine) StopGroup(ctx context.Context, ref engine.GroupRef) error {
+	return engine.RunRecordedLifecycle(ctx, e.manifests, ref.Identity, "stopped", "Docker", func() error {
+		observation, err := e.InspectGroup(ctx, ref)
+		if err != nil || observation.State == engine.GroupAbsent || observation.State == engine.GroupStopped {
+			return err
 		}
-	}()
-	observation, err := e.InspectGroup(ctx, ref)
-	if err != nil || observation.State == engine.GroupAbsent || observation.State == engine.GroupStopped {
-		return err
-	}
-	if err = e.stopWorkloadGroup(ctx, observation.Group); err != nil {
-		return err
-	}
-	return e.waitForWorkloadGroupStop(ctx, ref)
+		if err = e.stopWorkloadGroup(ctx, observation.Group); err != nil {
+			return err
+		}
+		return e.waitForWorkloadGroupStop(ctx, ref)
+	})
 }
 
-func (e *Engine) CleanupGroup(ctx context.Context, ref engine.GroupRef) (resultErr error) {
-	defer func() {
-		if resultErr == nil {
-			resultErr = e.manifests.Update(context.WithoutCancel(ctx), ref.Identity, "cleaned", nil)
+func (e *Engine) CleanupGroup(ctx context.Context, ref engine.GroupRef) error {
+	return engine.RunRecordedLifecycle(ctx, e.manifests, ref.Identity, "cleaned", "Docker", func() error {
+		observation, err := e.InspectGroup(ctx, ref)
+		if err != nil || observation.State == engine.GroupAbsent {
+			return err
 		}
-	}()
-	observation, err := e.InspectGroup(ctx, ref)
-	if err != nil || observation.State == engine.GroupAbsent {
-		return err
-	}
-	if observation.State != engine.GroupStopped {
-		return errors.New("refusing to remove active or uncertain Docker workload group")
-	}
-	return e.cleanupWorkloadGroup(ctx, observation.Group, ref)
+		if observation.State != engine.GroupStopped {
+			return errors.New("refusing to remove active or uncertain Docker workload group")
+		}
+		return e.cleanupWorkloadGroup(ctx, observation.Group, ref)
+	})
 }
 
 func (e *Engine) inspectInfrastructureNetwork(ctx context.Context, identity engine.GroupIdentity) (bool, error) {

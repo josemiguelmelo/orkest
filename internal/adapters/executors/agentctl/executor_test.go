@@ -45,7 +45,7 @@ func (e *planInfrastructure) StartPlan(_ context.Context, plan engine.WorkloadPl
 }
 
 func (e *planInfrastructure) Capabilities() engine.Capabilities {
-	return engine.Capabilities{Modes: []engine.ExecutionMode{engine.ExecutionModeContainer}, DurableWork: true, DurableState: true, PlatformStorageSetup: true, ExplicitHostBinds: true, CredentialBindings: true, RestartModes: true}
+	return engine.Capabilities{Modes: []engine.ExecutionMode{engine.ExecutionModeContainer}, DurableWork: true, DurableState: true, PlatformStorageSetup: true, ExplicitHostBinds: true, CredentialBindings: true}
 }
 
 func (*planInfrastructure) ValidatePlan(context.Context, engine.WorkloadPlan) error { return nil }
@@ -122,7 +122,7 @@ func TestSharedExecutorPlansHostAndSessionHomeMountsWithoutMutatingRun(t *testin
 }
 
 func (e *planningEngine) Capabilities() engine.Capabilities {
-	return engine.Capabilities{Modes: []engine.ExecutionMode{engine.ExecutionModeContainer}, DurableWork: true, DurableState: true, PlatformStorageSetup: true, ExplicitHostBinds: true, CredentialBindings: true, RestartModes: true}
+	return engine.Capabilities{Modes: []engine.ExecutionMode{engine.ExecutionModeContainer}, DurableWork: true, DurableState: true, PlatformStorageSetup: true, ExplicitHostBinds: true, CredentialBindings: true}
 }
 
 func (e *planningEngine) ValidatePlan(context.Context, engine.WorkloadPlan) error { return nil }

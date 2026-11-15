@@ -2,43 +2,8 @@ package engine
 
 import (
 	"errors"
-	"reflect"
 	"testing"
 )
-
-func TestCapabilitiesMissingReportsOnlyUnsupportedRequirements(t *testing.T) {
-	capabilities := Capabilities{
-		Modes:              []ExecutionMode{ExecutionModeContainer},
-		DurableWork:        true,
-		DurableState:       true,
-		ReadOnlyMounts:     true,
-		CredentialBindings: true,
-	}
-	requirements := Requirements{
-		Mode:            ExecutionModeNative,
-		DurableWork:     true,
-		DurableState:    true,
-		ReadOnlyMounts:  true,
-		PlatformIngress: true,
-		DeniedEgress:    true,
-	}
-	want := []string{"requested execution mode", "platform ingress", "denied egress"}
-	if got := capabilities.Missing(requirements); !reflect.DeepEqual(got, want) {
-		t.Fatalf("Missing() = %v, want %v", got, want)
-	}
-}
-
-func TestCapabilitiesUnknownModeDoesNotRequireModeSupport(t *testing.T) {
-	if got := (Capabilities{}).Missing(Requirements{}); len(got) != 0 {
-		t.Fatalf("Missing() = %v, want no missing capabilities", got)
-	}
-	if err := ValidateCapabilities(Capabilities{}, Requirements{}); err != nil {
-		t.Fatalf("ValidateCapabilities() = %v, want nil", err)
-	}
-	if err := ValidateCapabilities(Capabilities{}, Requirements{DeniedEgress: true}); !errors.Is(err, ErrUnsupported) {
-		t.Fatalf("ValidateCapabilities() = %v, want ErrUnsupported", err)
-	}
-}
 
 func TestValidateWorkloadPlanUsesOnlyInfrastructureIdentity(t *testing.T) {
 	plan := WorkloadPlan{

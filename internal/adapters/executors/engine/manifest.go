@@ -5,12 +5,48 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
 	"time"
 )
+
+// RunRecordedStart owns the manifest state transitions shared by every
+// provider. The callback contains only provider resource operations.
+func RunRecordedStart(ctx context.Context, store *ManifestStore, plan WorkloadPlan, provider string, start func(context.Context, WorkloadPlan) (ResourceGroup, error)) (result ResourceGroup, resultErr error) {
+	if err := store.Record(ctx, plan, "starting", nil); err != nil {
+		return ResourceGroup{}, err
+	}
+	defer func() {
+		providerIDs := make(map[string]string, len(result.Components))
+		for _, component := range result.Components {
+			providerIDs[component.Ref.Key.ResourceID+"/"+component.Ref.Key.ComponentID] = component.Ref.ConcreteID
+		}
+		state := "uncertain"
+		if resultErr == nil {
+			state = "active"
+		}
+		if err := store.Record(context.WithoutCancel(ctx), plan, state, providerIDs); err != nil {
+			resultErr = errors.Join(resultErr, fmt.Errorf("persist %s operation result: %w", provider, err))
+		}
+	}()
+	return start(ctx, plan)
+}
+
+// RunRecordedLifecycle applies a provider operation and persists its resulting
+// state using the same cancellation-safe policy for every provider.
+func RunRecordedLifecycle(ctx context.Context, store *ManifestStore, identity GroupIdentity, state, provider string, operation func() error) (resultErr error) {
+	defer func() {
+		if resultErr == nil {
+			if err := store.Update(context.WithoutCancel(ctx), identity, state, nil); err != nil {
+				resultErr = fmt.Errorf("persist %s %s state: %w", provider, state, err)
+			}
+		}
+	}()
+	return operation()
+}
 
 // OperationManifest is a secret-free durable record used to reconcile an
 // infrastructure operation after the coordinator or provider client restarts.

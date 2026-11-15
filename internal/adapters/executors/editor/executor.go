@@ -148,12 +148,14 @@ func (e *EditorExecutor) StartEditor(ctx context.Context, spec taskeditor.Spec) 
 	if err != nil {
 		return instance, err
 	}
-	instance.Endpoint = group.Endpoints["gateway"]
+	instance.Endpoint = group.Endpoints[plan.Metadata["endpoint"]]
 	instance.GatewayToken = token
-	instance.GatewayTokenRequired = true
-	e.tokenMu.Lock()
-	e.tokens[instance.Generation] = token
-	e.tokenMu.Unlock()
+	instance.GatewayTokenRequired = plan.Metadata["gateway-token-required"] == "true"
+	if instance.GatewayTokenRequired {
+		e.tokenMu.Lock()
+		e.tokens[instance.Generation] = token
+		e.tokenMu.Unlock()
+	}
 	if startErr != nil {
 		return instance, fmt.Errorf("start editor infrastructure plan: %w", startErr)
 	}
@@ -167,26 +169,42 @@ func (e *EditorExecutor) StartEditor(ctx context.Context, spec taskeditor.Spec) 
 }
 
 func (e *EditorExecutor) infrastructurePlan(instance taskeditor.Instance, storageID string, manifest []byte) (engine.WorkloadPlan, string, error) {
-	tokenBytes := make([]byte, 32)
-	if _, err := rand.Read(tokenBytes); err != nil {
-		return engine.WorkloadPlan{}, "", fmt.Errorf("generate editor gateway credential: %w", err)
+	privateRouting := e.engine.Capabilities().PrivateServiceRouting
+	token := ""
+	if !privateRouting {
+		if !e.engine.Capabilities().DeniedEgress || !e.engine.Capabilities().PlatformIngress {
+			return engine.WorkloadPlan{}, "", engine.Unsupported("editor private routing or authenticated platform ingress")
+		}
+		tokenBytes := make([]byte, 32)
+		if _, err := rand.Read(tokenBytes); err != nil {
+			return engine.WorkloadPlan{}, "", fmt.Errorf("generate editor gateway credential: %w", err)
+		}
+		token = hex.EncodeToString(tokenBytes)
 	}
-	token := hex.EncodeToString(tokenBytes)
 	mode := string(instance.Mode)
 	metadata := map[string]string{
 		"executor": "task-editor", "organization": instance.Scope.OrganizationID,
 		"workspace": instance.Scope.WorkspaceID, "task": instance.Scope.TaskID,
 		"user": instance.UserID, "mode": mode, "fingerprint": instance.Fingerprint,
+		"endpoint": "editor.http", "gateway-token-required": "false",
+	}
+	if !privateRouting {
+		metadata["endpoint"] = "gateway"
+		metadata["gateway-token-required"] = "true"
 	}
 	image := e.config.Image
 	if instance.Mode == taskeditor.ReadOnly {
 		image = e.config.ReadOnlyImage
 	}
 	security := engine.SecurityRequirements{ReadOnlyRoot: true, RunAsUser: e.config.RunAsUser, RunAsGroup: e.config.RunAsGroup, DropAllCapabilities: true, NoPrivilegeEscalation: true}
+	members := []string{"editor"}
+	if !privateRouting {
+		members = append(members, "gateway")
+	}
 	plan := engine.WorkloadPlan{
 		Group:    engine.GroupIdentity{Owner: storageID, Generation: instance.Generation},
 		Metadata: metadata,
-		Networks: []engine.NetworkPlan{{ID: "private", Members: []string{"editor", "gateway"}, DenyEgress: true}},
+		Networks: []engine.NetworkPlan{{ID: "private", Members: members, DenyEgress: true}},
 		Files: []engine.GeneratedFile{{
 			Name: "task.code-workspace", WorkloadID: "editor", Target: manifestTarget,
 			Contents: append([]byte(nil), manifest...), Mode: 0o444,
@@ -200,19 +218,21 @@ func (e *EditorExecutor) infrastructurePlan(instance taskeditor.Instance, storag
 			{
 				ID: "editor", Mode: engine.ExecutionModeContainer, Artifact: engine.Artifact{ContainerImage: image},
 				Environment:     map[string]string{"HOME": "/home/editor", "EDITOR_MODE": mode},
-				Endpoints:       []engine.Endpoint{{Name: "http", Protocol: "http", ListenHost: "0.0.0.0", ListenPort: 8080}},
+				Endpoints:       []engine.Endpoint{{Name: "http", Protocol: "http", ListenHost: "0.0.0.0", ListenPort: 8080, Exposure: engine.ExposurePrivate}},
 				TemporaryMounts: []engine.TemporaryMount{{Target: "/tmp", SizeBytes: 256 << 20, Mode: 0o1777, NoSUID: true, NoDevice: true}, {Target: "/home/editor", SizeBytes: 512 << 20, Mode: 0o1777, NoSUID: true, NoDevice: true}},
 				Security:        security, Limits: engine.ResourceLimits{MemoryBytes: 2 << 30, NanoCPUs: 2_000_000_000, ProcessCount: 256}, Restart: engine.RestartNever,
 			},
-			{
-				ID: "gateway", Mode: engine.ExecutionModeContainer,
-				Artifact:                engine.Artifact{ContainerImage: image, ContainerEntrypoint: []string{"/opt/code-server/lib/node", "/opt/editor/relay.cjs"}},
-				Environment:             map[string]string{"ORKEST_EDITOR_RELAY_TOKEN": token},
-				EnvironmentEndpointRefs: map[string]engine.EndpointReference{"ORKEST_EDITOR_RELAY_UPSTREAM": {Workload: "editor", Endpoint: "http"}},
-				Endpoints:               []engine.Endpoint{{Name: "gateway", Protocol: "http", ListenHost: "0.0.0.0", ListenPort: 8081, Exposure: engine.ExposurePlatform}},
-				Security:                security, Limits: engine.ResourceLimits{MemoryBytes: 128 << 20, NanoCPUs: 1_000_000_000, ProcessCount: 32}, Restart: engine.RestartNever,
-			},
 		},
+	}
+	if !privateRouting {
+		plan.Workloads = append(plan.Workloads, engine.Workload{
+			ID: "gateway", Mode: engine.ExecutionModeContainer,
+			Artifact:                engine.Artifact{ContainerImage: image, ContainerEntrypoint: []string{"/opt/code-server/lib/node", "/opt/editor/relay.cjs"}},
+			Environment:             map[string]string{"ORKEST_EDITOR_RELAY_TOKEN": token},
+			EnvironmentEndpointRefs: map[string]engine.EndpointReference{"ORKEST_EDITOR_RELAY_UPSTREAM": {Workload: "editor", Endpoint: "http"}},
+			Endpoints:               []engine.Endpoint{{Name: "gateway", Protocol: "http", ListenHost: "0.0.0.0", ListenPort: 8081, Exposure: engine.ExposurePlatform}},
+			Security:                security, Limits: engine.ResourceLimits{MemoryBytes: 128 << 20, NanoCPUs: 1_000_000_000, ProcessCount: 32}, Restart: engine.RestartNever,
+		})
 	}
 	return plan, token, nil
 }
@@ -224,7 +244,9 @@ func waitForEditorReady(ctx context.Context, endpoint, token string) error {
 	for {
 		request, requestErr := http.NewRequestWithContext(readyCtx, http.MethodGet, endpoint+"/healthz", nil)
 		if requestErr == nil {
-			request.Header.Set("X-Orkest-Editor-Relay", token)
+			if token != "" {
+				request.Header.Set("X-Orkest-Editor-Relay", token)
+			}
 			response, doErr := probe.Do(request)
 			if doErr == nil {
 				_ = response.Body.Close()
@@ -313,7 +335,7 @@ func (e *EditorExecutor) infrastructureInstance(group engine.ResourceGroup) task
 		},
 		UserID: group.Metadata["user"], Generation: ref.Identity.Generation,
 		Fingerprint: group.Metadata["fingerprint"], Mode: taskeditor.Mode(group.Metadata["mode"]),
-		Endpoint: group.Endpoints["gateway"], GatewayToken: token, GatewayTokenRequired: true,
+		Endpoint: group.Endpoints[group.Metadata["endpoint"]], GatewayToken: token, GatewayTokenRequired: group.Metadata["gateway-token-required"] == "true",
 	}
 }
 
