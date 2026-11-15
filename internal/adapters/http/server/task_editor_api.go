@@ -202,7 +202,7 @@ func (g *EditorGateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (g *EditorGateway) launch(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.Header().Set("Content-Security-Policy", "default-src 'none'; script-src 'unsafe-inline'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'")
+	w.Header().Set("Content-Security-Policy", "default-src 'none'; script-src 'unsafe-inline'; connect-src 'self'; frame-ancestors "+g.platformOrigin+"; base-uri 'none'")
 	_, _ = io.WriteString(w, `<!doctype html><title>Open task editor</title><p id="status">Opening editor…</p><script>const grant=location.hash.slice(1);history.replaceState(null,'','/launch');fetch('/exchange',{method:'POST',headers:{'Content-Type':'text/plain'},body:grant}).then(async r=>{if(!r.ok)throw Error();location.replace((await r.json()).path)}).catch(()=>document.getElementById('status').textContent='Editor access expired. Open VS Code again from the task.');</script>`)
 }
 
@@ -324,6 +324,14 @@ func (g *EditorGateway) proxy(w http.ResponseWriter, r *http.Request) {
 		ModifyResponse: func(response *http.Response) error {
 			response.Header.Del("Set-Cookie")
 			response.Header.Del("Access-Control-Allow-Origin")
+			response.Header.Del("X-Frame-Options")
+			policies := response.Header.Values("Content-Security-Policy")
+			if len(policies) > 0 {
+				response.Header.Del("Content-Security-Policy")
+				for _, policy := range policies {
+					response.Header.Add("Content-Security-Policy", frameAncestorsPolicy(policy, g.platformOrigin))
+				}
+			}
 			if location := response.Header.Get("Location"); strings.HasPrefix(location, "/") {
 				response.Header.Set("Location", prefix+location)
 			} else if location != "" {
@@ -336,6 +344,23 @@ func (g *EditorGateway) proxy(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 	proxy.ServeHTTP(w, r.WithContext(ctx))
+}
+
+func frameAncestorsPolicy(policy, platformOrigin string) string {
+	directives := strings.Split(policy, ";")
+	found := false
+	for index, directive := range directives {
+		fields := strings.Fields(directive)
+		if len(fields) == 0 || !strings.EqualFold(fields[0], "frame-ancestors") {
+			continue
+		}
+		directives[index] = " frame-ancestors 'self' " + platformOrigin
+		found = true
+	}
+	if !found {
+		directives = append(directives, " frame-ancestors 'self' "+platformOrigin)
+	}
+	return strings.Join(directives, ";")
 }
 
 func isEditorAuthorizationError(err error) bool {

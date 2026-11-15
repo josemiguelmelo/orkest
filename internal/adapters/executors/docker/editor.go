@@ -80,6 +80,16 @@ func (b *EditorBackend) name(scope taskeditor.Scope) string {
 	return "orkest-editor-" + hex.EncodeToString(hash[:])[:40]
 }
 
+func (b *EditorBackend) manifestDirectory(i taskeditor.Instance) (string, error) {
+	if len(i.Generation) != 64 {
+		return "", errors.New("invalid editor generation")
+	}
+	if _, err := hex.DecodeString(i.Generation); err != nil {
+		return "", errors.New("invalid editor generation")
+	}
+	return filepath.Join(b.executor.config.DataRoot, "editor-workspaces", b.name(i.Scope), i.Generation), nil
+}
+
 func (b *EditorBackend) labels(i taskeditor.Instance) map[string]string {
 	return map[string]string{editorLabel: b.installation, editorLabel + ".org": i.Scope.OrganizationID, editorLabel + ".workspace": i.Scope.WorkspaceID, editorLabel + ".task": i.Scope.TaskID, editorLabel + ".user": i.UserID, editorLabel + ".generation": i.Generation, editorLabel + ".mode": string(i.Mode), editorLabel + ".fingerprint": i.Fingerprint}
 }
@@ -131,7 +141,7 @@ func (b *EditorBackend) StartEditor(ctx context.Context, spec taskeditor.Spec) (
 	if spec.Mode != taskeditor.ReadOnly && spec.Mode != taskeditor.ReadWrite {
 		return taskeditor.Instance{}, errors.New("invalid editor mode")
 	}
-	if len(spec.Discovery.Roots) == 0 {
+	if len(spec.Discovery.Roots) != 1 || spec.Discovery.Roots[0].Path != "/task" {
 		return taskeditor.Instance{}, taskeditor.ErrUnavailable
 	}
 	workRoot, rootErr := filepath.EvalSymlinks(b.executor.config.DataRoot)
@@ -139,42 +149,37 @@ func (b *EditorBackend) StartEditor(ctx context.Context, spec taskeditor.Spec) (
 		return taskeditor.Instance{}, rootErr
 	}
 	taskWork, _ := taskstorage.Directories(workRoot, spec.Scope.OrganizationID, spec.Scope.WorkspaceID, spec.Scope.TaskID)
-	for _, root := range spec.Discovery.Roots {
-		relative, relativeErr := filepath.Rel(taskWork, root.Source)
-		parts := strings.Split(filepath.ToSlash(relative), "/")
-		if relativeErr != nil || len(parts) != 3 || parts[0] != "repositories" || root.Path != "/workspace/"+filepath.ToSlash(relative) {
-			return taskeditor.Instance{}, errors.New("editor mount does not belong to the selected task")
-		}
-		if !filepath.IsAbs(root.Source) || !within(workRoot, root.Source) || !strings.HasPrefix(root.Path, "/workspace/repositories/") {
-			return taskeditor.Instance{}, errors.New("invalid editor mount")
-		}
-		resolved, err := existingDirectory(workRoot, root.Source)
-		if err != nil || resolved != root.Source {
-			return taskeditor.Instance{}, errors.New("editor mount changed")
-		}
-		if err = validateGitMetadata(ctx, filepath.Join(root.Source, ".git")); err != nil {
-			return taskeditor.Instance{}, err
-		}
+	if !filepath.IsAbs(taskWork) || !within(workRoot, taskWork) {
+		return taskeditor.Instance{}, errors.New("invalid task workspace mount")
+	}
+	resolvedWork, err := existingDirectory(workRoot, taskWork)
+	if err != nil || resolvedWork != taskWork {
+		return taskeditor.Instance{}, errors.New("task workspace mount changed")
 	}
 	if err := b.requireProtectedWorkers(ctx, spec); err != nil {
 		return taskeditor.Instance{}, err
 	}
-	manifestRoot := filepath.Join(b.executor.config.DataRoot, "editor-workspaces")
-	if err := os.MkdirAll(manifestRoot, 0o700); err != nil {
-		return taskeditor.Instance{}, err
-	}
-	manifest, cleanup, err := taskeditor.MaterializeManifestAt(manifestRoot, spec.Discovery.Manifest)
+	manifestDir, err := b.manifestDirectory(spec.Instance)
 	if err != nil {
 		return taskeditor.Instance{}, err
 	}
-	defer cleanup()
-	// The manifest contains only names/container paths. No host paths or secrets.
-	if err = os.Chmod(manifest, 0o444); err != nil {
+	if err := os.MkdirAll(manifestDir, 0o700); err != nil {
 		return taskeditor.Instance{}, err
 	}
-	mounts := []mount.Mount{{Type: mount.TypeBind, Source: manifest, Target: "/workspace/task.code-workspace", ReadOnly: true}}
-	for _, root := range spec.Discovery.Roots {
-		mounts = append(mounts, mount.Mount{Type: mount.TypeBind, Source: root.Source, Target: root.Path, ReadOnly: spec.Mode == taskeditor.ReadOnly})
+	manifest := filepath.Join(manifestDir, "task.code-workspace")
+	manifestRetained := false
+	defer func() {
+		if !manifestRetained {
+			_ = os.RemoveAll(manifestDir)
+		}
+	}()
+	// The manifest contains only names/container paths. No host paths or secrets.
+	if err = os.WriteFile(manifest, spec.Discovery.Manifest, 0o444); err != nil {
+		return taskeditor.Instance{}, err
+	}
+	mounts := []mount.Mount{
+		{Type: mount.TypeBind, Source: manifest, Target: "/workspace/task.code-workspace", ReadOnly: true},
+		{Type: mount.TypeBind, Source: taskWork, Target: "/task", ReadOnly: spec.Mode == taskeditor.ReadOnly},
 	}
 	image := b.image
 	if spec.Mode == taskeditor.ReadOnly {
@@ -192,6 +197,7 @@ func (b *EditorBackend) StartEditor(ctx context.Context, spec taskeditor.Spec) (
 	defer func() {
 		if !containerCreated {
 			b.cleanupUncreatedNetwork(ctx, spec.Instance)
+			_ = os.RemoveAll(manifestDir)
 		}
 	}()
 	if err = b.createNetwork(ctx, spec.Instance); err != nil {
@@ -204,6 +210,7 @@ func (b *EditorBackend) StartEditor(ctx context.Context, spec taskeditor.Spec) (
 		return taskeditor.Instance{}, fmt.Errorf("create editor: %w", err)
 	}
 	containerCreated = true
+	manifestRetained = true
 	spec.ID = created.ID
 	if _, err = b.engine.ContainerStart(ctx, created.ID, client.ContainerStartOptions{}); err != nil {
 		return spec.Instance, fmt.Errorf("start editor: %w", err)
@@ -255,7 +262,10 @@ func (b *EditorBackend) StopEditor(ctx context.Context, i taskeditor.Instance) e
 	}
 	result, err := b.engine.ContainerInspect(ctx, i.ID, client.ContainerInspectOptions{})
 	if errdefs.IsNotFound(err) {
-		return b.removeNetwork(ctx, i)
+		if err := b.removeNetwork(ctx, i); err != nil {
+			return err
+		}
+		return b.removeManifest(i)
 	}
 	if err != nil {
 		return err
@@ -273,7 +283,10 @@ func (b *EditorBackend) StopEditor(ctx context.Context, i taskeditor.Instance) e
 	}
 	result, err = b.engine.ContainerInspect(ctx, i.ID, client.ContainerInspectOptions{})
 	if errdefs.IsNotFound(err) {
-		return b.removeNetwork(ctx, i)
+		if err := b.removeNetwork(ctx, i); err != nil {
+			return err
+		}
+		return b.removeManifest(i)
 	}
 	if err != nil {
 		return err
@@ -283,12 +296,26 @@ func (b *EditorBackend) StopEditor(ctx context.Context, i taskeditor.Instance) e
 	}
 	_, err = b.engine.ContainerRemove(ctx, i.ID, client.ContainerRemoveOptions{})
 	if errdefs.IsNotFound(err) {
-		return b.removeNetwork(ctx, i)
+		if err := b.removeNetwork(ctx, i); err != nil {
+			return err
+		}
+		return b.removeManifest(i)
 	}
 	if err != nil && !errdefs.IsNotFound(err) {
 		return err
 	}
-	return b.removeNetwork(ctx, i)
+	if err = b.removeNetwork(ctx, i); err != nil {
+		return err
+	}
+	return b.removeManifest(i)
+}
+
+func (b *EditorBackend) removeManifest(i taskeditor.Instance) error {
+	directory, err := b.manifestDirectory(i)
+	if err != nil {
+		return err
+	}
+	return os.RemoveAll(directory)
 }
 
 func (b *EditorBackend) ListEditors(ctx context.Context) ([]taskeditor.Instance, error) {

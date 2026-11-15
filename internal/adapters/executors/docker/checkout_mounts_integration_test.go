@@ -128,7 +128,7 @@ func TestDockerProtectedCheckoutMounts(t *testing.T) {
 		defer stop()
 		_ = backend.StopEditor(cleanup, editor)
 	}()
-	if output, err := exec.CommandContext(ctx, "docker", "exec", editor.ID, "cat", "/workspace/repositories/test/repo/untracked.txt").CombinedOutput(); err != nil || string(output) != "retained" {
+	if output, err := exec.CommandContext(ctx, "docker", "exec", editor.ID, "cat", "/task/repositories/test/repo/untracked.txt").CombinedOutput(); err != nil || string(output) != "retained" {
 		t.Fatalf("readonly editor lost worker changes: %v %s", err, output)
 	}
 	if branch := runGit(t, repo, "branch", "--show-current"); strings.TrimSpace(branch) != "retained-branch" {

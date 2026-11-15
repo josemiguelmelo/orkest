@@ -11,7 +11,7 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/server/taskeditor"
 )
 
-func TestTaskCheckoutInspectorFindsSelectedGitCheckoutWithoutMutation(t *testing.T) {
+func TestTaskCheckoutInspectorReturnsWholeTaskWorkspaceWithoutAgentState(t *testing.T) {
 	dataRoot := t.TempDir()
 	workDir, stateDir := taskstorage.Directories(dataRoot, "org", "workspace", "task")
 	checkout := filepath.Join(workDir, "repositories", "github", "registration")
@@ -41,15 +41,18 @@ func TestTaskCheckoutInspectorFindsSelectedGitCheckoutWithoutMutation(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	canonicalCheckout, err := filepath.EvalSymlinks(checkout)
+	canonicalWork, err := filepath.EvalSymlinks(workDir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got.Roots) != 1 || got.Roots[0].Source != canonicalCheckout || got.Roots[0].Path != "/workspace/repositories/github/registration" {
+	if len(got.Roots) != 1 || got.Roots[0].Source != canonicalWork || got.Roots[0].Path != "/task" {
 		t.Fatalf("unexpected roots: %#v", got.Roots)
 	}
-	if len(got.Missing) != 1 || got.Missing[0].RegistrationID != "not-selected-existing" {
+	if len(got.Missing) != 0 {
 		t.Fatalf("unexpected missing checkouts: %#v", got.Missing)
+	}
+	if within(got.Roots[0].Source, stateDir) {
+		t.Fatal("agent state is inside the exposed task workspace")
 	}
 	if runGit(t, checkout, "branch", "--show-current") != beforeBranch || runGit(t, checkout, "status", "--porcelain") != beforeStatus {
 		t.Fatal("inspection changed Git state")
@@ -101,83 +104,8 @@ func TestTaskCheckoutInspectorRejectsSymlinkStoragePaths(t *testing.T) {
 	}
 }
 
-func TestTaskCheckoutInspectorRejectsCheckoutAndDanglingSymlinks(t *testing.T) {
-	for _, targetExists := range []bool{true, false} {
-		t.Run(map[bool]string{true: "checkout", false: "dangling"}[targetExists], func(t *testing.T) {
-			dataRoot := t.TempDir()
-			workDir, _ := taskstorage.Directories(dataRoot, "org", "workspace", "task")
-			parent := filepath.Join(workDir, "repositories", "github")
-			if err := os.MkdirAll(parent, 0o700); err != nil {
-				t.Fatal(err)
-			}
-			target := filepath.Join(t.TempDir(), "external-checkout")
-			if targetExists {
-				initInspectorCheckout(t, target)
-			}
-			if err := os.Symlink(target, filepath.Join(parent, "repo")); err != nil {
-				t.Fatal(err)
-			}
-			inspector := TaskCheckoutInspector{DataRoot: dataRoot}
-			if _, err := inspector.Inspect(context.Background(), "org", "workspace", "task", []taskeditor.Checkout{{RegistrationID: "repo", ProviderName: "github", Name: "repo"}}); err == nil {
-				t.Fatal("expected checkout symlink rejection")
-			}
-		})
-	}
-}
-
-func TestTaskCheckoutInspectorRejectsSymlinkParentForMissingRepository(t *testing.T) {
-	dataRoot := t.TempDir()
-	workDir, _ := taskstorage.Directories(dataRoot, "org", "workspace", "task")
-	if err := os.MkdirAll(filepath.Join(workDir, "repositories"), 0o700); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Symlink(t.TempDir(), filepath.Join(workDir, "repositories", "github")); err != nil {
-		t.Fatal(err)
-	}
-	inspector := TaskCheckoutInspector{DataRoot: dataRoot}
-	if _, err := inspector.Inspect(context.Background(), "org", "workspace", "task", []taskeditor.Checkout{{RegistrationID: "missing", ProviderName: "github", Name: "repo"}}); err == nil {
-		t.Fatal("expected symlink parent rejection")
-	}
-}
-
-func TestTaskCheckoutInspectorRejectsExternalGitAlternates(t *testing.T) {
-	dataRoot := t.TempDir()
-	workDir, _ := taskstorage.Directories(dataRoot, "org", "workspace", "task")
-	checkout := filepath.Join(workDir, "repositories", "github", "repo")
-	initInspectorCheckout(t, checkout)
-	if err := os.MkdirAll(filepath.Join(checkout, ".git", "objects", "info"), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(checkout, ".git", "objects", "info", "alternates"), []byte("/outside/objects\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	inspector := TaskCheckoutInspector{DataRoot: dataRoot}
-	if _, err := inspector.Inspect(context.Background(), "org", "workspace", "task", []taskeditor.Checkout{{RegistrationID: "repo", ProviderName: "github", Name: "repo"}}); err == nil {
-		t.Fatal("expected external Git alternates rejection")
-	}
-}
-
-func TestTaskCheckoutInspectorRejectsGitFileWorktreeMetadata(t *testing.T) {
-	dataRoot := t.TempDir()
-	workDir, _ := taskstorage.Directories(dataRoot, "org", "workspace", "task")
-	checkout := filepath.Join(workDir, "repositories", "github", "repo")
-	if err := os.MkdirAll(checkout, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(checkout, ".git"), []byte("gitdir: /outside/worktree\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	inspector := TaskCheckoutInspector{DataRoot: dataRoot}
-	if _, err := inspector.Inspect(context.Background(), "org", "workspace", "task", []taskeditor.Checkout{{RegistrationID: "repo", ProviderName: "github", Name: "repo"}}); err == nil {
-		t.Fatal("expected linked worktree metadata rejection")
-	}
-}
-
-func TestTaskCheckoutInspectorRejectsInvalidIdentityAndHonorsCancellation(t *testing.T) {
+func TestTaskCheckoutInspectorHonorsCancellation(t *testing.T) {
 	inspector := TaskCheckoutInspector{DataRoot: t.TempDir()}
-	if _, err := inspector.Inspect(context.Background(), "org", "workspace", "task", []taskeditor.Checkout{{RegistrationID: "../escape", ProviderName: "github", Name: "repo"}}); err == nil {
-		t.Fatal("expected invalid identity rejection")
-	}
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	if _, err := inspector.Inspect(ctx, "org", "workspace", "task", []taskeditor.Checkout{{RegistrationID: "r", ProviderName: "github", Name: "repo"}}); err == nil {

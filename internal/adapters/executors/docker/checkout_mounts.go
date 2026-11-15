@@ -96,6 +96,7 @@ func protectedWorker(worker container.InspectResponse, work string, roots []task
 		}
 	}
 	protected := false
+	repositories := filepath.Join(work, "repositories")
 	for _, m := range worker.Mounts {
 		source, err := filepath.EvalSymlinks(m.Source)
 		if err != nil {
@@ -106,6 +107,22 @@ func protectedWorker(worker container.InspectResponse, work string, roots []task
 		}
 		if !m.RW || (m.Destination == workMountPath && source == work) {
 			continue
+		}
+		if within(work, source) {
+			if !within(repositories, source) || source == repositories {
+				return errors.New("worker has a writable alias to task workspace")
+			}
+			relative, relErr := filepath.Rel(work, source)
+			if relErr != nil || m.Destination != workMountPath+"/"+filepath.ToSlash(relative) {
+				return errors.New("worker has a writable alias to checkout ancestry")
+			}
+			parts := strings.Split(filepath.ToSlash(relative), "/")
+			if len(parts) != 3 || parts[0] != "repositories" {
+				return errors.New("worker has a writable alias to checkout ancestry")
+			}
+		}
+		if within(source, work) {
+			return errors.New("worker has a writable alias to task workspace ancestry")
 		}
 		for _, root := range roots {
 			if source != root.Source && within(source, root.Source) {

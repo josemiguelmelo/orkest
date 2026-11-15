@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	modelerrors "github.com/josemiguelmelo/orkest/internal/contracts/problem"
-	"github.com/josemiguelmelo/orkest/internal/platform/repositorypath"
 	"github.com/josemiguelmelo/orkest/internal/platform/taskstorage"
 	"github.com/josemiguelmelo/orkest/internal/server/taskeditor"
 )
@@ -26,11 +25,6 @@ func (i TaskCheckoutInspector) Inspect(ctx context.Context, organizationID, work
 	}
 	if err := ctx.Err(); err != nil {
 		return taskeditor.Inspection{}, err
-	}
-	for _, repository := range selected {
-		if _, err := repositorypath.Relative(repository.ProviderName, repository.RegistrationID); err != nil {
-			return taskeditor.Inspection{}, modelerrors.ErrInvalid
-		}
 	}
 	dataRoot, err := filepath.Abs(i.DataRoot)
 	if err != nil {
@@ -55,91 +49,22 @@ func (i TaskCheckoutInspector) Inspect(ctx context.Context, organizationID, work
 	if err != nil {
 		return taskeditor.Inspection{}, fmt.Errorf("inspect task work directory: %w", err)
 	}
-	result := taskeditor.Inspection{Roots: []taskeditor.Root{}, Missing: []taskeditor.MissingCheckout{}}
-	for _, repository := range selected {
-		if err := ctx.Err(); err != nil {
-			return taskeditor.Inspection{}, err
-		}
-		rel, _ := repositorypath.Relative(repository.ProviderName, repository.RegistrationID)
-		candidate := filepath.Join(canonicalWork, rel)
-		resolved, resolveErr := existingDirectory(canonicalWork, candidate)
-		if errors.Is(resolveErr, os.ErrNotExist) {
-			result.Missing = append(result.Missing, taskeditor.MissingCheckout(repository))
-			continue
-		}
-		if resolveErr != nil {
-			return taskeditor.Inspection{}, fmt.Errorf("resolve checkout %q: %w", repository.RegistrationID, resolveErr)
-		}
-		if !within(canonicalWork, resolved) {
-			return taskeditor.Inspection{}, modelerrors.ErrInvalid
-		}
-		gitDir := filepath.Join(resolved, ".git")
-		gitInfo, gitErr := os.Lstat(gitDir)
-		if gitErr != nil {
-			return taskeditor.Inspection{}, fmt.Errorf("checkout %q has unsupported Git metadata: %w", repository.RegistrationID, gitErr)
-		}
-		if gitInfo.Mode()&os.ModeSymlink != 0 || !gitInfo.IsDir() {
-			return taskeditor.Inspection{}, fmt.Errorf("checkout %q has unsupported Git metadata", repository.RegistrationID)
-		}
-		if err := validateGitMetadata(ctx, gitDir); err != nil {
-			return taskeditor.Inspection{}, fmt.Errorf("checkout %q has unsupported Git metadata: %w", repository.RegistrationID, err)
-		}
-		name := taskeditor.DisplayName(result.Roots, repository.Name, repository.ProviderName, repository.RegistrationID)
-		result.Roots = append(result.Roots, taskeditor.Root{Name: name, Path: "/workspace/" + filepath.ToSlash(rel), Source: resolved})
-	}
-	return result, nil
+	return taskeditor.Inspection{
+		Roots:   []taskeditor.Root{{Name: "Task workspace", Path: "/task", Source: canonicalWork}},
+		Missing: []taskeditor.MissingCheckout{},
+	}, nil
 }
 
 func missingCheckouts(selected []taskeditor.Checkout) []taskeditor.MissingCheckout {
 	missing := make([]taskeditor.MissingCheckout, 0, len(selected))
 	for _, checkout := range selected {
-		missing = append(missing, taskeditor.MissingCheckout(checkout))
+		missing = append(missing, missingCheckout(checkout))
 	}
 	return missing
 }
 
-func validateGitMetadata(ctx context.Context, gitDir string) error {
-	if err := filepath.WalkDir(gitDir, func(path string, entry os.DirEntry, walkErr error) error {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		if walkErr != nil {
-			return walkErr
-		}
-		if entry.Type()&os.ModeSymlink != 0 {
-			return fmt.Errorf("%s contains a symlink", filepath.Base(path))
-		}
-		if !entry.IsDir() && !entry.Type().IsRegular() {
-			return fmt.Errorf("%s contains a non-regular file", filepath.Base(path))
-		}
-		return nil
-	}); err != nil {
-		return fmt.Errorf("inspect Git metadata tree: %w", err)
-	}
-	for _, relative := range []string{"commondir", filepath.Join("objects", "info", "alternates")} {
-		path := filepath.Join(gitDir, relative)
-		info, err := os.Lstat(path)
-		if errors.Is(err, os.ErrNotExist) {
-			continue
-		}
-		if err != nil {
-			return fmt.Errorf("inspect %s: %w", relative, err)
-		}
-		if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
-			return fmt.Errorf("%s is not an ordinary file", relative)
-		}
-		return fmt.Errorf("%s is unsupported", relative)
-	}
-	for _, relative := range []string{"objects", "refs"} {
-		info, err := os.Lstat(filepath.Join(gitDir, relative))
-		if err != nil {
-			return fmt.Errorf("inspect %s: %w", relative, err)
-		}
-		if info.Mode()&os.ModeSymlink != 0 || !info.IsDir() {
-			return fmt.Errorf("%s is not an ordinary directory", relative)
-		}
-	}
-	return nil
+func missingCheckout(checkout taskeditor.Checkout) taskeditor.MissingCheckout {
+	return taskeditor.MissingCheckout(checkout)
 }
 
 func existingDirectory(root, target string) (string, error) {

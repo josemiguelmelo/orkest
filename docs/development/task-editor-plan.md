@@ -125,11 +125,13 @@ No new database table, migration, editor event journal or persisted lease system
 
 - Preserve the exact existing task scope hash and path format when extracting
   shared helpers. Do not migrate worktrees or session state.
-- Mount only authorized existing task repositories, including Git metadata.
-  Do not expose every retained directory automatically.
-- Generate a temporary multi-root `.code-workspace` file with readable names.
+- Mount the complete task-scoped durable `work` directory at `/task`, including
+  agent-created clones and non-Git files. `agentctl-state` is a sibling directory
+  and must never be mounted.
+- Generate a `.code-workspace` file for `/task` and retain it for the editor
+  container's lifetime.
 - Validate resolved paths and mount sources. Recreate the editor when the
-  exposed repository list changes.
+  requested read/write mode changes.
 - Never mount agent state, runtime homes, provider credentials, workspace secret
   environment values or configured agent host credential mounts.
 - Never reset, clean or switch branches as a side effect of opening the editor.
@@ -443,14 +445,14 @@ product requirements. Record decisions here rather than silently changing scope.
 
 ## 16. Cross-session progress and handoff
 
-Current slice: the user requested one backend PR combining planned PRs 3–7.
-PR 2 discovery and its current/legacy model continuation evidence are complete.
-The [backend implementation and operator notes](task-editor-backend.md) describe
-lifecycle, conservative idle proof, execution/recovery guards, selection/removal
-fencing, gateway, API and configuration. No frontend task actions or automatic
-reconnect flow have been added. The feature is always wired; the production review
-records remaining isolation and release qualification blockers. Next action: finish recorded backend checks and review the one-PR
-diff; then implement the frontend and outstanding cross-component qualification.
+Current slice: task editor embedded workspace and task-page UX polish. The task
+page has a clear task header with Task and VS Code views. Selecting VS Code
+connects automatically; the tab indicates whether the editor is online. Leaving
+or refreshing the task page requests editor stop. The editor gateway is embedded
+as a full-page workspace surface. The Docker editor mounts the entire durable
+`work` tree at `/task`; `agentctl-state` remains outside the mount. Production
+isolation and release qualification remain outstanding. Next action: restart the
+local backend and qualify the embedded editor against the current task checkout.
 
 | Date | Slice | Changes / decisions | Verification actually run | Blockers / next action |
 | --- | --- | --- | --- | --- |
@@ -458,6 +460,9 @@ diff; then implement the frontend and outstanding cross-component qualification.
 | 2026-11-14 | First-delivery planning | Proposed Docker-only first release in nine focused PRs, with dependencies, per-PR acceptance and enablement/rollback gates | Reviewed requirements, stack, status, delivery/testing guidance, executor paths and worker prompt/queue code; no feature checks run | Implement PR 1 feasibility spike; qualify idle boundary and browser/session approach before enablement |
 | 2026-11-14 | Slice 1 / PR 1 | Added pinned editor image pair, isolated two-repository browser/proxy harness and focused Make targets; immutable read-only PTY guard required | Real Docker arm64 + Chromium passed `make test-task-editor`; mount/Git write rejection, terminal descendants stopped, offline extension denied, generation reconnect, saved files/branches retained, unsaved edit lost; lint 0 issues; syntax/format/diff checks passed | [Full evidence](task-editor-pr1-evidence.md); proceed to PR 2; production HTTPS, authorization, execution handoff and amd64 remain unqualified |
 | 2026-11-14 | PR 2 / discovery | Extracted historical task storage path calculation; shared repository path validation; added authorized task selection resolver and Docker checkout inspector, symlink/Git metadata checks, structured missing roots, deterministic container manifest paths, private materialization; updated continuation fixture to use extracted storage | Focused tests passed with real `git init` fixtures and non-mutation checks; `make lint` and architecture checks passed. PostgreSQL bounded task-listing subtest passed against a disposable DB; broader repository suite hit unrelated delivery/migration failures. `make test-recovery-unit` passed outside sandbox with race detection. Docker images, launch smoke, and `TestDockerSessionRestore` passed on Colima with bundled `opencode/beam-free` selection; no model prompt sent. OpenCode continuation skipped without explicit binary/model settings | Real pinned OpenCode restore plus successful follow-up remains unverified; complete after explicit model configuration is available |
+| 2026-11-14 | Embedded task editor and work summary | Added task detail status/open/stop controls and Task / Changes / VS Code tabs. Changes shows the latest agent response, tool file references, and reported before/after diffs. VS Code embeds the authenticated gateway in the task page; frame policy allows only the configured platform origin. The editor mounts the task's whole durable `work` tree at `/task`; sibling `agentctl-state` is excluded, and the manifest persists until stop. | `npm run typecheck`, `npm run lint`, `make fmt`, `make lint` (0 issues), and `git diff --check` passed. Tests were not run. Docker/browser embedding remains unverified in this sandbox. | Restart backend and qualify the embedded editor against the current task checkout. Production qualification remains outstanding |
+| 2026-11-15 | Task page UX polish | Reworked task header hierarchy and task navigation into a segmented tab bar; strengthened run/change status and diff readability; tuned the embedded editor workspace and responsive layout. | `npm run typecheck`, `npm run lint`, and `git diff --check` passed. Tests and live browser rendering were not run. | Review in the browser and adjust from live feedback |
+| 2026-11-15 | Task editor interaction | Removed the Changes tab, added online/offline status to the VS Code tab, connected automatically on selection, and requested editor shutdown on task-page exit or refresh. The embedded editor now fills the task workspace surface with compact controls. | `npm run typecheck`, `npm run lint`, `make fmt`, `make lint` (0 issues), and `git diff --check` passed. Tests and live browser lifecycle behavior were not run. | Restart the backend and qualify auto-open and page-exit shutdown in the browser |
 
 At each handoff, update the current slice, next action and table. Record relevant
 files/commits and exact meaningful check results. Preserve unrelated user changes.

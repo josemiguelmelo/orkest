@@ -51,7 +51,7 @@ type Discovery struct {
 	Manifest []byte            `json:"-"`
 }
 
-// Discover authorizes first, then resolves only repositories selected on the task.
+// Discover authorizes the task and inspects its durable work directory.
 func Discover(ctx context.Context, tasks TaskReader, inspector CheckoutInspector, userID, orgID, workspaceID, taskID string) (Discovery, error) {
 	if tasks == nil || inspector == nil {
 		return Discovery{}, errors.New("task reader and checkout inspector are required")

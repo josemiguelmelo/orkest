@@ -2,9 +2,10 @@
 
 The backend increment combines the Docker lifecycle, mode coordinator, execution
 handoff, browser gateway and lifecycle API (planned PRs 3–7) in one review unit.
-It reuses PR 2 discovery. Task-page actions and automatic browser reconnection
-across generations remain frontend work; the backend launch page exchanges a
-single-use grant and opens the current editor. This is not release enablement.
+It reuses PR 2 discovery. The task page embeds the editor gateway in its VS Code
+tab; the launch page exchanges a single-use grant inside that frame. The gateway
+allows framing only from the configured platform origin and rewrites the upstream
+frame policy to that origin. This is not release enablement.
 
 ## Implementation and ownership
 
@@ -18,15 +19,19 @@ joins the worker control network. A containerized platform joins that editor
 bridge directly as the trusted gateway. A native-host platform uses a fixed-upstream,
 token-authenticated relay; only that relay has an external network attachment.
 The shell has no route to peer editors or Docker host aliases. The private relay
-token is never forwarded to code-server or returned by the lifecycle API. Only selected existing checkouts and a generated workspace manifest are
-mounted. Temporary manifests live beneath `agent-executions/editor-workspaces`
-so the daemon can see them; they are deleted after startup. Editor home/cache use
+token is never forwarded to code-server or returned by the lifecycle API. The
+task's entire durable `work` directory is mounted at `/task`, alongside a
+generated workspace manifest. `agentctl-state` is a sibling of `work` and is not
+mounted. This exposes agent-created clones and other task files without requiring
+repository registration. The manifest lives beneath
+`agent-executions/editor-workspaces` for the editor's lifetime and is removed
+after the container stops. Editor home/cache use
 bounded tmpfs. No agent state, credentials, configured host mounts, Docker socket,
 privileged mode or agent environment is supplied. Containers have memory/CPU/PID
 limits, a read-only root filesystem and no added capabilities.
 
-Read-only containers use the separately built immutable PTY-denial image, readonly
-repository/Git mounts, disabled extensions and disabled automatic tasks. Saved
+Read-only containers use the separately built immutable PTY-denial image, a
+read-only `/task` mount, disabled extensions and disabled automatic tasks. Saved
 files and branches remain in task storage. Recreation and Stop terminate the
 container and terminal descendants; terminal commands and unsaved buffers are not
 retained. Closing the browser leaves the editor running.
@@ -137,7 +142,14 @@ without trailing slashes. Route both hosts to the existing platform HTTP listene
 the editor Host selects the dedicated gateway. HTTPS is required outside loopback.
 The local default is `http://editor.localhost:8080`, alongside platform
 `http://localhost:8080`, using the same listener and different Host headers.
-Override both origins when using a different public port or TLS hostnames.
+`ORKEST_PLATFORM_ORIGIN` must exactly match the origin in the browser's `Origin`
+header for editor open/stop requests. When using Vite on its default
+`http://127.0.0.1:5173` origin, set `ORKEST_PLATFORM_ORIGIN` to that value before
+starting the server; using `localhost` instead is also valid if that is the exact
+browser URL. Override both origins when using a different public port or TLS hostnames.
+For embedded editor cookies, serve the platform and editor on the same site (for
+example `localhost` and `editor.localhost`); browsers may block the editor session
+when the platform and editor are on unrelated sites.
 Do not route editor-host requests directly to code-server. TLS termination must
 preserve Host and support WebSocket upgrades. The gateway strips platform
 credentials even when development origins share a hostname.

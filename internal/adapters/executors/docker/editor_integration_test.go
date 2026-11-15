@@ -87,7 +87,7 @@ func TestDockerEditorLifecycle(t *testing.T) {
 		if startErr != nil {
 			t.Fatal(startErr)
 		}
-		command := exec.CommandContext(ctx, "docker", "exec", instance.ID, "bash", "-c", "echo saved > /workspace/repositories/github/repo/saved.txt")
+		command := exec.CommandContext(ctx, "docker", "exec", instance.ID, "bash", "-c", "echo saved > /task/repositories/github/repo/saved.txt")
 		output, writeErr := command.CombinedOutput()
 		if mode == taskeditor.ReadWrite && writeErr != nil {
 			t.Fatalf("write: %v %s", writeErr, output)

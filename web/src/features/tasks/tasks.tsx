@@ -1,6 +1,7 @@
 import { useWorkflow } from '../workflow/workflow';
 import { TaskArtifacts } from './artifacts';
 import { TaskChat } from './task-chat';
+import { TaskEditorAccess, taskEditorQuery } from './task-editor';
 import { Markdown } from '../../shared/ui/markdown';
 import type { JSX } from 'react';
 import { useEffect, useState } from 'react';
@@ -9,7 +10,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useSessionChoice } from './session-choice';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { ArrowLeft, Bot, GitBranch, LayoutGrid, List, Search, X } from 'lucide-react';
+import { ArrowLeft, Bot, Code2, GitBranch, LayoutGrid, List, Search, X } from 'lucide-react';
 import { useApp } from '../../app/context';
 import { command, data } from '../../shared/api/client';
 import * as sdk from '../../shared/api/generated/sdk.gen';
@@ -724,19 +725,39 @@ export function TaskPage(): JSX.Element {
   const agents = useQuery(agentsQuery(scope));
   const repositories = useQuery(repositoriesQuery(scope));
   const [edit, setEdit] = useState(false);
+  const [taskTab, setTaskTab] = useState<{
+    taskID: string;
+    selected: 'task' | 'vscode';
+    activation: number;
+  }>(() => ({ taskID: taskId, selected: 'task', activation: 0 }));
+  const activeTab =
+    taskTab.taskID === taskId && (taskTab.selected !== 'vscode' || permissions.editWorkspace)
+      ? taskTab.selected
+      : 'task';
   const startAction = useAction();
   const [startCommandID, setStartCommandID] = useState<string>();
   const sessionChoice = useSessionChoice();
   const runs = useQuery(taskRunsQuery(scope, taskId));
+  const editorStatus = useQuery({
+    ...taskEditorQuery(scope, taskId),
+    enabled: permissions.editWorkspace,
+  });
   const refresh = useRefresh();
   if (task.isPending) return <Loading />;
   if (task.isError) return <ErrorState error={task.error} />;
   const item = task.data;
+  function selectTab(selected: typeof taskTab.selected) {
+    setTaskTab((current) => ({
+      taskID: taskId,
+      selected,
+      activation: current.taskID === taskId ? current.activation + 1 : 1,
+    }));
+  }
   return (
     <>
       {sessionChoice.dialog}
       <Link
-        className="text-link"
+        className="text-link task-back-link"
         to="/organizations/$orgId/workspaces/$workspaceId/tasks"
         params={{ orgId: scope.orgID, workspaceId: scope.workspaceID }}
         search={{
@@ -750,8 +771,22 @@ export function TaskPage(): JSX.Element {
       >
         <ArrowLeft size={13} style={{ display: 'inline' }} /> Back to workflow
       </Link>
-      <div className="spacer">
-        <PageHeader title={item.title} description={`Task ${item.id.slice(0, 8)}`}>
+      <header className="task-page-header">
+        <div className="task-page-heading-copy">
+          <p className="eyebrow">TASK {item.id.slice(0, 8)}</p>
+          <h1>{item.title}</h1>
+          <div className="task-page-heading-meta">
+            <Badge>{statusNames[item.status] ?? item.status}</Badge>
+            {item.stageWorkState && (
+              <span className="task-work-state">{stageWorkStateLabels[item.stageWorkState]}</span>
+            )}
+            {item.automationPending && (
+              <span className="task-automation-state">Automation pending</span>
+            )}
+            <span className="muted">Updated {date(item.updatedAt)}</span>
+          </div>
+        </div>
+        <div className="actions task-page-actions">
           {permissions.editWorkspace &&
             !item.closed &&
             !['queued', 'running'].includes(item.stageWorkState ?? '') &&
@@ -822,16 +857,76 @@ export function TaskPage(): JSX.Element {
               </Button>
             )}
           {permissions.editWorkspace && <Button onClick={() => setEdit(true)}>Edit task</Button>}
-        </PageHeader>
-      </div>
+        </div>
+      </header>
       {startAction.error && <ErrorState error={startAction.error} />}
-      {item.automationPending && <Badge>Automation pending</Badge>}
-      {item.stageWorkState && (
-        <p>
-          <Badge>{stageWorkStateLabels[item.stageWorkState]}</Badge>
-        </p>
+      <div className="task-page-tabs" role="tablist" aria-label="Task workspace">
+        <button
+          className="task-page-tab"
+          id="task-tab"
+          role="tab"
+          aria-selected={activeTab === 'task'}
+          aria-controls="task-tab-panel"
+          onClick={() => selectTab('task')}
+        >
+          Task
+        </button>
+        {permissions.editWorkspace && (
+          <button
+            className="task-page-tab"
+            id="vscode-tab"
+            role="tab"
+            aria-selected={activeTab === 'vscode'}
+            aria-controls="vscode-tab-panel"
+            onClick={() => selectTab('vscode')}
+          >
+            <Code2 size={15} aria-hidden="true" /> VS Code
+            <span
+              className={`task-tab-presence ${editorStatus.data?.state === 'ready' ? 'is-online' : ''} ${editorStatus.data?.state === 'failed' || editorStatus.data?.state === 'unavailable' ? 'is-error' : ''}`}
+              title={
+                editorStatus.isPending
+                  ? 'Checking VS Code status'
+                  : editorStatus.data?.state === 'ready'
+                    ? 'VS Code is online'
+                    : editorStatus.data?.state === 'unavailable'
+                      ? 'VS Code is unavailable'
+                      : 'VS Code is offline'
+              }
+            >
+              <span aria-hidden="true" />
+              {editorStatus.isPending
+                ? 'Checking'
+                : editorStatus.data?.state === 'ready'
+                  ? 'Online'
+                  : editorStatus.data?.state === 'unavailable'
+                    ? 'Unavailable'
+                    : 'Offline'}
+            </span>
+          </button>
+        )}
+      </div>
+      {permissions.editWorkspace && (
+        <div
+          id="vscode-tab-panel"
+          role="tabpanel"
+          aria-labelledby="vscode-tab"
+          hidden={activeTab !== 'vscode'}
+        >
+          <TaskEditorAccess
+            key={item.id}
+            taskID={item.id}
+            active={activeTab === 'vscode'}
+            activation={taskTab.activation}
+          />
+        </div>
       )}
-      <div className="detail-layout">
+      <div
+        id="task-tab-panel"
+        role="tabpanel"
+        aria-labelledby="task-tab"
+        className="detail-layout"
+        hidden={activeTab !== 'task'}
+      >
         <div className="task-conversation-column">
           <div className="task-context">
             <details className="task-context-section">
