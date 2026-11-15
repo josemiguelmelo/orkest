@@ -2,93 +2,112 @@ package local
 
 import (
 	"context"
-	"errors"
-	"os"
+	"fmt"
 	"os/exec"
-	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/josemiguelmelo/orkest/internal/adapters/executors/engine"
 )
 
-func TestResolveWorkspaceInspectDoesNotCreateStorage(t *testing.T) {
+func TestInfrastructureEngineLifecycleForArbitraryNativeWorkload(t *testing.T) {
 	root := t.TempDir()
 	engineInstance, err := New(Config{DataRoot: root})
 	if err != nil {
 		t.Fatal(err)
 	}
-	request := engine.WorkspaceRequest{Scope: engine.Scope{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task"}, Intent: engine.WorkspaceInspect}
-	workspace, err := engineInstance.ResolveWorkspace(context.Background(), request)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if workspace.Exists {
-		t.Fatal("missing workspace reported as existing")
-	}
-	if _, err = os.Stat(filepath.Join(root, "tasks")); !errors.Is(err, os.ErrNotExist) {
-		t.Fatalf("inspect-only resolution created task storage: %v", err)
-	}
-}
-
-func TestNativeWorkloadIdentitySurvivesInspectionAndStops(t *testing.T) {
-	root := t.TempDir()
-	engineInstance, err := New(Config{DataRoot: root})
-	if err != nil {
-		t.Fatal(err)
-	}
-	scope := engine.Scope{OrganizationID: "org", WorkspaceID: "workspace", TaskID: "task"}
-	workspace, err := engineInstance.ResolveWorkspace(context.Background(), engine.WorkspaceRequest{Scope: scope, Intent: engine.WorkspaceEnsureForAgent})
-	if err != nil {
-		t.Fatal(err)
-	}
-	sleep, err := exec.LookPath("sleep")
+	defer func() {
+		if closeErr := engineInstance.Close(); closeErr != nil {
+			t.Errorf("close local engine: %v", closeErr)
+		}
+	}()
+	shell, err := exec.LookPath("sleep")
 	if err != nil {
 		t.Skip("sleep executable is not available")
 	}
-	spec := engine.LaunchSpec{
-		Key:   engine.ResourceKey{InstallationID: engineInstance.installation, Scope: scope, Class: engine.ResourceClassAgent, ExecutionID: "run-1"},
-		Class: engine.ResourceClassAgent, Mode: engine.ExecutionModeNative,
-		Artifact:     engine.Artifact{ExecutablePath: sleep},
-		Arguments:    []engine.Argument{{Kind: engine.ArgumentLiteral, Value: "60"}},
-		Workspace:    workspace,
-		Requirements: engine.Requirements{Mode: engine.ExecutionModeNative, DurableWork: true, DurableState: true},
+	storage, err := engineInstance.ResolveStorage(context.Background(), engine.StorageRequest{
+		Owner: "opaque-owner", Generation: "generation-1",
+		Bindings: []engine.StorageBindingRequest{{Name: "work", Create: true, Durable: true}},
+	})
+	if err != nil || len(storage) != 1 {
+		t.Fatalf("resolve storage = %#v, %v", storage, err)
 	}
-	resource, err := engineInstance.Start(context.Background(), spec)
+	plan := engine.WorkloadPlan{
+		Group:    engine.GroupIdentity{InstallationID: engineInstance.installation, Owner: "opaque-owner", Generation: "generation-1"},
+		Metadata: map[string]string{"kind": "custom-tool"},
+		Storage:  []engine.StorageAttachment{{WorkloadID: "arbitrary-component", Binding: "work", Target: storage[0].HostPath, Durable: true}},
+		Workloads: []engine.Workload{{
+			ID: "arbitrary-component", Mode: engine.ExecutionModeNative,
+			Artifact:    engine.Artifact{ExecutablePath: shell},
+			Endpoints:   []engine.Endpoint{{Name: "control", Protocol: "http", ListenHost: "127.0.0.1", Exposure: engine.ExposurePlatform}},
+			Arguments:   []engine.Argument{{Kind: engine.ArgumentLiteral, Value: "30"}},
+			WorkingPath: storage[0].HostPath,
+		}},
+	}
+	ctx := context.Background()
+	group, err := engineInstance.StartPlan(ctx, plan)
 	if err != nil {
 		t.Fatal(err)
 	}
-	recreated, err := New(Config{DataRoot: root})
+	if err = engineInstance.Close(); err != nil {
+		t.Fatal(err)
+	}
+	engineInstance, err = New(Config{DataRoot: root})
 	if err != nil {
+		t.Fatalf("recreate local engine: %v", err)
+	}
+	manifest, err := engineInstance.manifests.Read(ctx, group.Ref.Identity)
+	if err != nil || manifest.State != "active" || len(manifest.ProviderIDs) != 1 {
+		t.Fatalf("recovered operation manifest = %+v, %v", manifest, err)
+	}
+	if group.Ref.Identity != plan.Group || group.Components[0].State != engine.ResourceRunning {
+		t.Fatalf("unexpected group after start: %#v", group)
+	}
+	if !strings.HasPrefix(group.Endpoints["control"], "http://127.0.0.1:") {
+		t.Fatalf("endpoint map = %#v", group.Endpoints)
+	}
+	listed, err := engineInstance.ListGroups(ctx, engine.Selector{InstallationID: engineInstance.installation, GroupOwner: "opaque-owner"})
+	if err != nil || len(listed) != 1 {
+		t.Fatalf("list groups = %#v, %v", listed, err)
+	}
+	observed, err := engineInstance.InspectGroup(ctx, group.Ref)
+	if err != nil || observed.State != engine.GroupActive {
+		t.Fatalf("inspect group = %#v, %v", observed, err)
+	}
+	if observed.Group.Endpoints["control"] != group.Endpoints["control"] {
+		t.Fatalf("inspected endpoint map = %#v", observed.Group.Endpoints)
+	}
+	if err = engineInstance.StopGroup(ctx, group.Ref); err != nil {
 		t.Fatal(err)
 	}
-	lookup := engine.Lookup{Key: &spec.Key}
-	observation, err := recreated.Inspect(context.Background(), lookup)
-	if err != nil || observation.State != engine.ObservationActive || observation.Resource.Ref.ConcreteID != resource.Ref.ConcreteID {
-		t.Fatalf("Inspect() = %+v, %v", observation, err)
+	manifest, err = engineInstance.manifests.Read(ctx, group.Ref.Identity)
+	if err != nil || manifest.State != "stopped" {
+		t.Fatalf("stopped operation manifest = %+v, %v", manifest, err)
 	}
-	listed, err := recreated.List(context.Background(), engine.Selector{InstallationID: engineInstance.installation, Class: engine.ResourceClassAgent})
-	if err != nil || len(listed) != 1 || listed[0].Ref.ConcreteID != resource.Ref.ConcreteID {
-		t.Fatalf("List() = %+v, %v", listed, err)
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		observed, err = engineInstance.InspectGroup(ctx, group.Ref)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if observed.State == engine.GroupStopped {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
-	stopCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err = recreated.Stop(stopCtx, resource.Ref); err != nil {
+	if observed.State != engine.GroupStopped {
+		t.Fatal(fmt.Errorf("group did not stop: %#v", observed))
+	}
+	if err = engineInstance.CleanupGroup(ctx, group.Ref); err != nil {
 		t.Fatal(err)
 	}
-	observation, err = recreated.Inspect(context.Background(), lookup)
-	if err != nil || observation.State != engine.ObservationStopped {
-		t.Fatalf("Inspect() after stop = %+v, %v", observation, err)
+	manifest, err = engineInstance.manifests.Read(ctx, group.Ref.Identity)
+	if err != nil || manifest.State != "cleaned" {
+		t.Fatalf("cleaned operation manifest = %+v, %v", manifest, err)
 	}
-}
-
-func TestCapabilitiesDoNotClaimEditorIsolation(t *testing.T) {
-	engineInstance, err := New(Config{DataRoot: t.TempDir()})
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = engineInstance.Validate(context.Background(), engine.Requirements{Mode: engine.ExecutionModeNative, ReadOnlyMounts: true, DeniedEgress: true, ConfirmedProcessTreeStop: true})
-	if !errors.Is(err, engine.ErrUnsupported) {
-		t.Fatalf("Validate() error = %v, want unsupported isolation", err)
+	observed, err = engineInstance.InspectGroup(ctx, group.Ref)
+	if err != nil || observed.State != engine.GroupAbsent {
+		t.Fatalf("inspect cleaned group = %#v, %v", observed, err)
 	}
 }

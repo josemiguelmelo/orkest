@@ -32,6 +32,7 @@ const (
 
 type Instance struct {
 	GatewayToken                                  string `json:"-"`
+	GatewayTokenRequired                          bool   `json:"-"`
 	Scope                                         Scope
 	ID, UserID, Generation, Fingerprint, Endpoint string
 	Mode                                          Mode
@@ -176,7 +177,7 @@ func (s *TaskEditorService) open(ctx context.Context, e *entry, user string, sco
 		mode = ReadWrite
 	}
 	fingerprint := workspaceFingerprint(discovery, mode)
-	compatible := found && current.Endpoint != "" && current.Mode == mode && current.Fingerprint == fingerprint
+	compatible := found && current.Endpoint != "" && (!current.GatewayTokenRequired || current.GatewayToken != "") && current.Mode == mode && current.Fingerprint == fingerprint
 	// A revoked lease cannot be renewed under the same generation: old browser
 	// tickets must stay invalid even if authority is subsequently restored.
 	if e.instance.Generation == current.Generation && (e.access == nil || e.access.Err() != nil) {

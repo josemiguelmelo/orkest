@@ -1,5 +1,5 @@
 // Package kubernetes contains the infrastructure API client and engine
-// implementation for Kubernetes-backed executor workloads.
+// implementation for Kubernetes-backed infrastructure workloads.
 package kubernetes
 
 import (
@@ -21,7 +21,7 @@ type API interface {
 	Do(context.Context, string, string, any) (map[string]any, int, error)
 }
 
-// LogAPI exposes the optional pod log stream used for worker diagnostics.
+// LogAPI exposes the optional pod log stream used for workload diagnostics.
 type LogAPI interface {
 	PodLogs(context.Context, string) (io.ReadCloser, error)
 }
@@ -42,7 +42,7 @@ func NewInClusterAPI() (API, error) {
 	host := os.Getenv("KUBERNETES_SERVICE_HOST")
 	port := os.Getenv("KUBERNETES_SERVICE_PORT_HTTPS")
 	if host == "" {
-		return nil, errors.New("kubernetes executor requires in-cluster service discovery or an injected API client")
+		return nil, errors.New("kubernetes API requires in-cluster service discovery or an injected API client")
 	}
 	if port == "" {
 		port = "443"

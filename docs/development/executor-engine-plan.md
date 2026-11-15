@@ -1,5 +1,10 @@
 # Shared executors and infrastructure engines: implementation plan
 
+Design follow-up: [executor-agnostic engines](agnostic-executor-engines-plan.md)
+supersedes this document's engine-boundary design, including executor-class
+recognition inside engines. The follow-up records the implemented generic workload
+boundary and its remaining live qualification work.
+
 Status: structural redesign A–E implemented on `refactor/executor-engine`;
 editor capability extension F and live qualification remain separate open work.
 Last updated: 2026-11-15.

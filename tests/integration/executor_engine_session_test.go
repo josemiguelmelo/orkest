@@ -127,7 +127,7 @@ func testDockerSessionRestore(t *testing.T, continuation bool) {
 	executor, err := sharedagentctl.NewSharedAgentCtlExecutor(sharedagentctl.ExecutorConfig{
 		Engine: infrastructure, Mode: enginecontract.ExecutionModeContainer,
 		Images: map[coreruntime.Runtime]string{coreruntime.OpenCode: image},
-		Repositories: sharedagentctl.WorkspaceConfig{DataRoot: dataRoot, Repositories: checkout.Preparer{Providers: providers, Credentials: credentials}},
+		Repositories: sharedagentctl.WorkspaceConfig{Repositories: checkout.Preparer{Providers: providers, Credentials: credentials}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -178,11 +178,7 @@ func testDockerSessionRestore(t *testing.T, continuation bool) {
 	if continuation {
 		dockerMemoryPrompt(t, ctx, httpClient, first.Endpoint, "remember", "Remember this private test marker for our next turn: "+marker+". Reply only acknowledged.")
 	}
-	workspace, err := infrastructure.ResolveWorkspace(ctx, enginecontract.WorkspaceRequest{Scope: enginecontract.Scope{OrganizationID: run.OrganizationID, WorkspaceID: run.WorkspaceID, TaskID: run.TaskID}, Intent: enginecontract.WorkspaceEnsureForAgent})
-	if err != nil {
-		t.Fatal(err)
-	}
-	workDir := workspace.WorkPath
+	workDir, _ := taskstorage.Directories(dataRoot, run.OrganizationID, run.WorkspaceID, run.TaskID)
 	file := filepath.Join(workDir, "untracked.txt")
 	if continuation {
 		file = filepath.Join(workDir, "repositories", "test", "repo", "untracked.txt")
@@ -198,11 +194,15 @@ func testDockerSessionRestore(t *testing.T, continuation bool) {
 		if _, err := client.ContainerStart(ctx, first.ID, mobyclient.ContainerStartOptions{}); err != nil {
 			t.Fatal(err)
 		}
-		inspection, err := infrastructure.Inspect(ctx, enginecontract.Lookup{Ref: enginecontract.ResourceRef{Key: enginecontract.ResourceKey{Class: enginecontract.ResourceClassAgent}, ConcreteID: first.ID}})
+		groupRef, decodeErr := enginecontract.DecodeGroupRef(first.ID)
+		if decodeErr != nil {
+			t.Fatal(decodeErr)
+		}
+		inspection, err := infrastructure.InspectGroup(ctx, groupRef)
 		if err != nil {
 			t.Fatal(err)
 		}
-		first.Endpoint = inspection.Resource.Endpoint
+		first.Endpoint = inspection.Group.Endpoints["agentctl"]
 		if err := httpClient.WaitHealthy(ctx, first.Endpoint); err != nil {
 			t.Fatal(err)
 		}

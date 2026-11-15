@@ -16,6 +16,7 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/adapters/runnerclient/agentctlhttp"
 
 	"github.com/josemiguelmelo/orkest/internal/adapters/executors"
+	enginecontract "github.com/josemiguelmelo/orkest/internal/adapters/executors/engine"
 	kubernetesengine "github.com/josemiguelmelo/orkest/internal/adapters/executors/engine/kubernetes"
 	"github.com/josemiguelmelo/orkest/internal/adapters/http/server"
 	"github.com/josemiguelmelo/orkest/internal/adapters/imagebuild"
@@ -193,8 +194,7 @@ func runServer(ctx context.Context, logger *slog.Logger) error {
 			GID:                     parsePositiveInt64(config.Kubernetes.GID, int64(os.Getgid())),
 			StartupTimeout:          parseDuration(config.Kubernetes.StartupTimeout, 2*time.Minute),
 			TerminationGraceSeconds: parsePositiveInt64(config.Kubernetes.TerminationGrace, 10),
-			CodexAuthSecret:         config.Kubernetes.CodexAuthSecret,
-			CodexAuthSecretKey:      config.Kubernetes.CodexAuthSecretKey,
+			CredentialSources:       credentialSources(config.Kubernetes.CodexAuthSecret, config.Kubernetes.CodexAuthSecretKey),
 			ImagePullSecrets:        splitEnvironmentNames(config.Kubernetes.ImagePullSecrets),
 			CPURequest:              config.Kubernetes.CPURequest,
 			MemoryRequest:           config.Kubernetes.MemoryRequest,
@@ -411,4 +411,11 @@ func splitEnvironmentNames(value string) []string {
 		return nil
 	}
 	return strings.Split(value, ",")
+}
+
+func credentialSources(secret, key string) map[string]enginecontract.CredentialSource {
+	if strings.TrimSpace(secret) == "" || strings.TrimSpace(key) == "" {
+		return nil
+	}
+	return map[string]enginecontract.CredentialSource{"codex-auth": {Secret: secret, Key: key}}
 }

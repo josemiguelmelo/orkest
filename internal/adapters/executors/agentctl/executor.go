@@ -13,6 +13,7 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/adapters/executors/engine"
 	runtimecatalog "github.com/josemiguelmelo/orkest/internal/contracts/runtimecatalog"
 	"github.com/josemiguelmelo/orkest/internal/platform/sessionpath"
+	"github.com/josemiguelmelo/orkest/internal/platform/taskstorage"
 	"github.com/josemiguelmelo/orkest/internal/server/orchestration"
 	"github.com/josemiguelmelo/orkest/internal/server/orchestration/model"
 	mountmodel "github.com/josemiguelmelo/orkest/internal/server/workspacemount/model"
@@ -24,7 +25,7 @@ const (
 )
 
 type ExecutorConfig struct {
-	Engine           engine.ExecutorEngine
+	Engine           engine.InfrastructureEngine
 	Mode             engine.ExecutionMode
 	AgentctlBinary   string
 	Images           map[runtimecatalog.Runtime]string
@@ -39,7 +40,7 @@ type ExecutorConfig struct {
 // Concrete engines realize the generated launch requests and own infrastructure.
 type AgentCtlExecutor struct {
 	workspace WorkspaceConfig
-	engine    engine.ExecutorEngine
+	engine    engine.InfrastructureEngine
 	config    ExecutorConfig
 }
 
@@ -113,17 +114,21 @@ func (e *AgentCtlExecutor) StartAgentctl(ctx context.Context, run model.RunConfi
 	if len(run.HostMounts) != 0 {
 		requirements.ExplicitHostBinds = true
 	}
-	if err := e.engine.Validate(ctx, requirements); err != nil {
+	if err := engine.ValidateCapabilities(e.engine.Capabilities(), requirements); err != nil {
 		return model.Process{}, err
 	}
-	scope := engine.Scope{OrganizationID: run.OrganizationID, WorkspaceID: run.WorkspaceID, TaskID: run.TaskID}
-	workspace, err := e.engine.ResolveWorkspace(ctx, engine.WorkspaceRequest{
-		Scope: scope, Intent: engine.WorkspaceEnsureForAgent,
-		Required: engine.WorkspaceGuarantees{DurableWork: true, DurableState: true, PlatformSetup: true},
-	})
+	storageID := taskstorage.Identity(run.OrganizationID, run.WorkspaceID, run.TaskID)
+	bindings, err := e.engine.ResolveStorage(ctx, engine.StorageRequest{Owner: run.RunID, Generation: run.RunID, Bindings: []engine.StorageBindingRequest{
+		{Name: "work", StorageID: storageID, Subpath: "work", Durable: true, Create: true, PlatformIO: true},
+		{Name: "agentctl-state", StorageID: storageID, Subpath: "agentctl-state", Durable: true, Create: true, PlatformIO: true},
+	}})
 	if err != nil {
-		return model.Process{}, fmt.Errorf("resolve agent workspace: %w", err)
+		return model.Process{}, fmt.Errorf("resolve agent storage: %w", err)
 	}
+	if len(bindings) != 2 || bindings[0].HostPath == "" || bindings[1].HostPath == "" {
+		return model.Process{}, fmt.Errorf("%w: engine returned incomplete agent storage bindings", engine.ErrInvalidSpec)
+	}
+	workspace := resolvedWorkspace{Exists: true, Identity: storageID, PreparationDirectory: bindings[0].HostPath, WorkPath: bindings[0].HostPath, StatePath: bindings[1].HostPath}
 	if !workspace.Exists || workspace.WorkPath == "" || workspace.StatePath == "" || workspace.PreparationDirectory == "" {
 		return model.Process{}, fmt.Errorf("%w: engine returned incomplete agent workspace", engine.ErrInvalidSpec)
 	}
@@ -135,7 +140,7 @@ func (e *AgentCtlExecutor) StartAgentctl(ctx context.Context, run model.RunConfi
 		return model.Process{}, err
 	}
 	workPath, statePath, listenHost, listenPort := e.executionPaths(workspace)
-	environment, environmentNames, hostPolicy := e.resolveRunEnvironment(run)
+	environment, environmentNames := e.resolveRunEnvironment(run)
 	arguments := typedArguments(run, workPath, statePath, environmentNames, e.config.Mode == engine.ExecutionModeNative)
 	mounts := make([]engine.Mount, 0, len(run.HostMounts))
 	for _, hostMount := range run.HostMounts {
@@ -148,93 +153,177 @@ func (e *AgentCtlExecutor) StartAgentctl(ctx context.Context, run model.RunConfi
 	}
 	credentials := []engine.CredentialBinding(nil)
 	if useCodexBinding {
-		credentials = append(credentials, engine.CredentialBinding{Name: "codex-auth", Target: codexContainerAuthPath, ReadOnly: true})
-	}
-	writableRoots := make([]string, 0, len(run.Repositories))
-	for _, repository := range run.Repositories {
-		relative, relErr := checkout.RepositoryRelativePath(repository.ProviderName, repository.ID)
-		if relErr != nil {
-			return model.Process{}, relErr
-		}
-		writableRoots = append(writableRoots, relative)
+		credentials = append(credentials, engine.CredentialBinding{Name: "codex-auth", Target: codexContainerAuthPath, ReadOnly: true, EnvironmentName: codexAuthEnvironment})
 	}
 	restart := engine.RestartNever
 	if e.config.Mode == engine.ExecutionModeContainer && run.TaskSessionID != "" && e.engine.Capabilities().RestartModes {
 		restart = engine.RestartOnFailure
 	}
-	spec := engine.LaunchSpec{
-		Key:   engine.ResourceKey{Scope: scope, Class: engine.ResourceClassAgent, ExecutionID: run.RunID, Qualifier: string(run.Runtime)},
-		Class: engine.ResourceClassAgent, Mode: e.config.Mode, Artifact: artifact,
-		Arguments: arguments, Environment: environment, Workspace: workspace, Mounts: mounts,
-		CredentialBindings: credentials,
-		Sharing:            engine.WorkspaceSharing{ProtectedAncestry: e.config.Mode == engine.ExecutionModeContainer, WritableRoots: writableRoots},
-		HostEnvironment:    hostPolicy,
-		Endpoints:          []engine.Endpoint{{Name: "agentctl", Protocol: "http", ListenHost: listenHost, ListenPort: listenPort, ReadinessPath: "/health", Ingress: engine.IngressWorkerControl}},
-		Requirements:       requirements,
-		Restart:            restart,
+	workTarget, stateTarget := workPath, statePath
+	if e.config.Mode == engine.ExecutionModeContainer {
+		workTarget, stateTarget = "/workspace", "/agentctl-state"
 	}
-	resource, startErr := e.engine.Start(ctx, spec)
-	process := model.Process{ID: resource.Ref.ConcreteID, Endpoint: resource.Endpoint}
+	workload := engine.Workload{
+		ID: "agentctl", Mode: e.config.Mode, Artifact: artifact,
+		Endpoints: []engine.Endpoint{{Name: "agentctl", Protocol: "http", ListenHost: listenHost, ListenPort: listenPort, Exposure: engine.ExposurePlatform}},
+		Arguments: arguments, Environment: environment, WorkingPath: workTarget,
+		Mounts: mounts, Credentials: credentials, Restart: restart,
+	}
+	return e.startInfrastructure(ctx, run, workload, storageID, workspace.WorkPath, statePath, stateTarget)
+}
+
+type resolvedWorkspace struct {
+	Exists               bool
+	Identity             string
+	PreparationDirectory string
+	WorkPath             string
+	StatePath            string
+}
+
+func (e *AgentCtlExecutor) startInfrastructure(ctx context.Context, run model.RunConfig, workload engine.Workload, storageID, hostWorkPath, statePath, stateTarget string) (model.Process, error) {
+	containerMode := workload.Mode == engine.ExecutionModeContainer
+	workTarget := workload.WorkingPath
+	workReadOnly := containerMode
+	storage := []engine.StorageAttachment{
+		{WorkloadID: workload.ID, Binding: "work", StorageID: storageID, Subpath: "work", Target: workTarget, ReadOnly: workReadOnly, Create: true, Durable: true},
+		{WorkloadID: workload.ID, Binding: "agentctl-state", StorageID: storageID, Subpath: "agentctl-state", Target: stateTarget, Create: true, Durable: true},
+	}
+	if containerMode {
+		if len(run.Repositories) > 0 {
+			resolvedWorkPath, err := filepath.EvalSymlinks(hostWorkPath)
+			if err != nil {
+				return model.Process{}, fmt.Errorf("resolve task work storage before mount planning: %w", err)
+			}
+			repositoryParent := filepath.Join(resolvedWorkPath, "repositories")
+			if err := os.MkdirAll(repositoryParent, 0o700); err != nil {
+				return model.Process{}, fmt.Errorf("prepare protected repository mount parent: %w", err)
+			}
+			resolvedParent, err := filepath.EvalSymlinks(repositoryParent)
+			if err != nil || resolvedParent != filepath.Join(resolvedWorkPath, "repositories") {
+				return model.Process{}, fmt.Errorf("%w: repository mount parent has unstable ancestry", engine.ErrInvalidSpec)
+			}
+			workload.Mounts = append(workload.Mounts, engine.Mount{SourceKind: engine.MountSourceStorage, Source: repositoryParent, Target: "/workspace/repositories", ReadOnly: true})
+			for _, repository := range run.Repositories {
+				relative, relErr := checkout.RepositoryRelativePath(repository.ProviderName, repository.ID)
+				if relErr != nil {
+					return model.Process{}, relErr
+				}
+				source := filepath.Join(resolvedWorkPath, filepath.FromSlash(relative))
+				resolvedSource, sourceErr := filepath.EvalSymlinks(source)
+				if sourceErr != nil || resolvedSource != source || !pathIsWithin(repositoryParent, source) {
+					return model.Process{}, fmt.Errorf("%w: repository checkout has unstable mount ancestry", engine.ErrInvalidSpec)
+				}
+				workload.Mounts = append(workload.Mounts, engine.Mount{SourceKind: engine.MountSourceStorage, Source: source, Target: path.Join("/workspace", relative)})
+			}
+		}
+	}
+	plan := engine.WorkloadPlan{
+		Group:     engine.GroupIdentity{Owner: run.RunID, Generation: run.RunID},
+		Workloads: []engine.Workload{workload},
+		Storage:   storage,
+	}
+	group, startErr := e.engine.StartPlan(ctx, plan)
+	process := model.Process{}
+	if group.Ref.Identity.Owner != "" && group.Ref.Provider != "" {
+		process.ID, _ = engine.EncodeGroupRef(group.Ref)
+	}
+	process.Endpoint = group.Endpoints["agentctl"]
 	if startErr != nil {
-		return process, fmt.Errorf("start agentctl workload: %w", startErr)
+		return process, fmt.Errorf("start agentctl infrastructure plan: %w", startErr)
 	}
 	if process.ID == "" || process.Endpoint == "" {
-		return process, fmt.Errorf("%w: engine returned incomplete agent resource", engine.ErrUncertain)
+		return process, fmt.Errorf("%w: engine returned an incomplete agent workload group", engine.ErrUncertain)
 	}
 	return process, nil
+}
+
+func pathIsWithin(root, target string) bool {
+	relative, err := filepath.Rel(root, target)
+	return err == nil && relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
 }
 
 func (e *AgentCtlExecutor) AgentctlRunning(ctx context.Context, processID string) (bool, error) {
 	if strings.TrimSpace(processID) == "" {
 		return false, errors.New("agentctl process identity is required")
 	}
-	observation, err := e.engine.Inspect(ctx, engine.Lookup{Ref: engine.ResourceRef{
-		Key: engine.ResourceKey{Class: engine.ResourceClassAgent}, ConcreteID: strings.TrimSpace(processID),
-	}})
+	ref, err := engine.DecodeGroupRef(strings.TrimSpace(processID))
 	if err != nil {
 		return false, err
 	}
-	return observation.State == engine.ObservationActive, nil
+	observation, err := e.engine.InspectGroup(ctx, ref)
+	if err != nil {
+		return false, err
+	}
+	if observation.State == engine.GroupUncertain {
+		return false, engine.ErrUncertain
+	}
+	return observation.State == engine.GroupActive, nil
 }
 
 func (e *AgentCtlExecutor) AgentctlRunningByRunID(ctx context.Context, runID string) (bool, error) {
-	observation, err := e.inspectByRunID(ctx, runID)
+	observation, found, err := e.inspectInfrastructureByRunID(ctx, runID)
 	if err != nil {
 		return false, err
 	}
-	return observation.State == engine.ObservationActive, nil
+	if found {
+		if observation.State == engine.GroupUncertain {
+			return false, engine.ErrUncertain
+		}
+		return observation.State == engine.GroupActive, nil
+	}
+	return false, nil
 }
 
 func (e *AgentCtlExecutor) TerminateAgentctl(ctx context.Context, processID string) error {
-	ref := engine.ResourceRef{Key: engine.ResourceKey{Class: engine.ResourceClassAgent}, ConcreteID: strings.TrimSpace(processID)}
-	if ref.ConcreteID == "" {
-		return errors.New("agentctl process identity is required")
+	ref, err := engine.DecodeGroupRef(strings.TrimSpace(processID))
+	if err != nil {
+		return errors.New("agentctl process identity is invalid")
 	}
-	if err := e.engine.Stop(ctx, ref); err != nil {
+	if err := e.engine.StopGroup(ctx, ref); err != nil {
 		return err
 	}
-	return e.engine.Cleanup(ctx, ref)
+	return e.engine.CleanupGroup(ctx, ref)
 }
 
 func (e *AgentCtlExecutor) TerminateAgentctlByRunID(ctx context.Context, runID string) error {
-	observation, err := e.inspectByRunID(ctx, runID)
-	if err != nil || observation.State == engine.ObservationAbsent {
+	observation, found, err := e.inspectInfrastructureByRunID(ctx, runID)
+	if err != nil || !found || observation.State == engine.GroupAbsent {
 		return err
 	}
-	if observation.State == engine.ObservationActive {
-		if err = e.engine.Stop(ctx, observation.Resource.Ref); err != nil {
+	if observation.State == engine.GroupUncertain {
+		return engine.ErrUncertain
+	}
+	if observation.State == engine.GroupActive {
+		if err = e.engine.StopGroup(ctx, observation.Group.Ref); err != nil {
 			return err
 		}
 	}
-	return e.engine.Cleanup(ctx, observation.Resource.Ref)
+	return e.engine.CleanupGroup(ctx, observation.Group.Ref)
 }
 
-func (e *AgentCtlExecutor) inspectByRunID(ctx context.Context, runID string) (engine.Observation, error) {
+func (e *AgentCtlExecutor) inspectInfrastructureByRunID(ctx context.Context, runID string) (engine.GroupObservation, bool, error) {
 	if strings.TrimSpace(runID) == "" {
-		return engine.Observation{}, errors.New("agent run identity is required")
+		return engine.GroupObservation{}, false, errors.New("agent run identity is required")
 	}
-	key := engine.ResourceKey{Class: engine.ResourceClassAgent, ExecutionID: runID}
-	return e.engine.Inspect(ctx, engine.Lookup{Key: &key})
+	groups, err := e.engine.ListGroups(ctx, engine.Selector{GroupOwner: strings.TrimSpace(runID)})
+	if err != nil {
+		return engine.GroupObservation{}, false, err
+	}
+	var match *engine.ResourceGroup
+	for index := range groups {
+		if groups[index].Ref.Identity.Generation != strings.TrimSpace(runID) {
+			continue
+		}
+		if match != nil {
+			return engine.GroupObservation{}, false, engine.ErrUncertain
+		}
+		match = &groups[index]
+	}
+	if match == nil {
+		return engine.GroupObservation{}, false, nil
+	}
+	observation, err := e.engine.InspectGroup(ctx, match.Ref)
+	return observation, true, err
 }
 
 func (e *AgentCtlExecutor) selectArtifact(run model.RunConfig) (engine.Artifact, error) {
@@ -251,14 +340,14 @@ func (e *AgentCtlExecutor) selectArtifact(run model.RunConfig) (engine.Artifact,
 	return engine.Artifact{ContainerImage: image}, nil
 }
 
-func (e *AgentCtlExecutor) executionPaths(workspace engine.Workspace) (workPath, statePath, listenHost string, listenPort int) {
+func (e *AgentCtlExecutor) executionPaths(workspace resolvedWorkspace) (workPath, statePath, listenHost string, listenPort int) {
 	if e.config.Mode == engine.ExecutionModeNative {
 		return workspace.WorkPath, workspace.StatePath, "127.0.0.1", 0
 	}
 	return "/workspace", "/agentctl-state", "0.0.0.0", 8081
 }
 
-func (e *AgentCtlExecutor) resolveRunEnvironment(run model.RunConfig) (map[string]string, []string, engine.HostEnvironmentPolicy) {
+func (e *AgentCtlExecutor) resolveRunEnvironment(run model.RunConfig) (map[string]string, []string) {
 	allowed := append([]string(nil), e.config.ProviderEnv...)
 	if e.config.Mode == engine.ExecutionModeNative {
 		allowed = append(allowed, "PATH", "HOME", "TMPDIR", "TMP", "TEMP", "USER", "LOGNAME", "LANG", "LC_ALL", "SYSTEMROOT", "WINDIR", "APPDATA", "LOCALAPPDATA")
@@ -282,7 +371,7 @@ func (e *AgentCtlExecutor) resolveRunEnvironment(run model.RunConfig) (map[strin
 	if e.config.Mode == engine.ExecutionModeNative && !containsName(names, "PATH") {
 		names = append(names, "PATH")
 	}
-	return values, names, engine.HostEnvironmentPolicy{}
+	return values, names
 }
 
 func typedArguments(run model.RunConfig, workPath, statePath string, environmentNames []string, native bool) []engine.Argument {

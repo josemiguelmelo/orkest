@@ -1,5 +1,4 @@
-// Package agentctl contains execution policy shared by the infrastructure
-// engines.
+// Package agentctl contains agent workload planning and execution policy.
 package agentctl
 
 import "github.com/josemiguelmelo/orkest/internal/adapters/executors/checkout"

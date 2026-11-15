@@ -15,8 +15,8 @@ import (
 	"time"
 
 	sharededitor "github.com/josemiguelmelo/orkest/internal/adapters/executors/editor"
-	"github.com/josemiguelmelo/orkest/internal/adapters/executors/engine"
 	dockerengine "github.com/josemiguelmelo/orkest/internal/adapters/executors/engine/docker"
+	"github.com/josemiguelmelo/orkest/internal/platform/taskstorage"
 	"github.com/josemiguelmelo/orkest/internal/server/taskeditor"
 	mobyclient "github.com/moby/moby/client"
 )
@@ -85,10 +85,7 @@ func TestDockerEngineSharedEditorLifecycle(t *testing.T) {
 		}
 	}()
 	scope := taskeditor.Scope{OrganizationID: "engine-integration", WorkspaceID: "docker-editor", TaskID: "task"}
-	resolved, err := infrastructure.ResolveWorkspace(ctx, engine.WorkspaceRequest{Scope: engine.Scope{OrganizationID: scope.OrganizationID, WorkspaceID: scope.WorkspaceID, TaskID: scope.TaskID}, Intent: engine.WorkspaceEnsureForAgent})
-	if err != nil {
-		t.Fatal(err)
-	}
+	workPath, _ := taskstorage.Directories(root, scope.OrganizationID, scope.WorkspaceID, scope.TaskID)
 	if err = filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
@@ -134,7 +131,7 @@ func TestDockerEngineSharedEditorLifecycle(t *testing.T) {
 			t.Fatal(stopErr)
 		}
 	}
-	if saved, readErr := os.ReadFile(filepath.Join(resolved.WorkPath, "saved.txt")); readErr != nil || string(saved) != "saved\n" {
+	if saved, readErr := os.ReadFile(filepath.Join(workPath, "saved.txt")); readErr != nil || string(saved) != "saved\n" {
 		t.Fatalf("saved workspace file = %q, %v", saved, readErr)
 	}
 }
@@ -200,10 +197,6 @@ func TestDockerEngineEditorsUsePrivateNetworksAndRelayTokens(t *testing.T) {
 	instances := make([]taskeditor.Instance, 0, 2)
 	for _, workspaceID := range []string{"workspace-a", "workspace-b"} {
 		scope := taskeditor.Scope{OrganizationID: "engine-security", WorkspaceID: workspaceID, TaskID: "task"}
-		resolved, resolveErr := infrastructure.ResolveWorkspace(ctx, engine.WorkspaceRequest{Scope: engine.Scope{OrganizationID: scope.OrganizationID, WorkspaceID: scope.WorkspaceID, TaskID: scope.TaskID}, Intent: engine.WorkspaceEnsureForAgent})
-		if resolveErr != nil {
-			t.Fatal(resolveErr)
-		}
 		if walkErr := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
 			if walkErr != nil {
 				return walkErr
@@ -245,7 +238,6 @@ func TestDockerEngineEditorsUsePrivateNetworksAndRelayTokens(t *testing.T) {
 				t.Fatalf("editor private network %q = %#v, %v", networkName, privateNetwork.Network, networkErr)
 			}
 		}
-		_ = resolved
 		instances = append(instances, instance)
 	}
 	if instances[0].Endpoint == instances[1].Endpoint || instances[0].GatewayToken == instances[1].GatewayToken {

@@ -17,6 +17,7 @@ import (
 	kubernetesengine "github.com/josemiguelmelo/orkest/internal/adapters/executors/engine/kubernetes"
 	localengine "github.com/josemiguelmelo/orkest/internal/adapters/executors/engine/local"
 	coreruntime "github.com/josemiguelmelo/orkest/internal/contracts/runtimecatalog"
+	"github.com/josemiguelmelo/orkest/internal/platform/agentctllogs"
 	"github.com/josemiguelmelo/orkest/internal/server/coderepository"
 	"github.com/josemiguelmelo/orkest/internal/server/orchestration"
 	"github.com/josemiguelmelo/orkest/internal/server/taskeditor"
@@ -90,7 +91,7 @@ func New(ctx context.Context, config Config) (Selection, error) {
 		}
 		return newDockerSelection(ctx, config, engine)
 	case Local:
-		localEngine, err := localengine.New(localengine.Config{DataRoot: config.DataRoot})
+		localEngine, err := localengine.New(localengine.Config{DataRoot: config.DataRoot, LogForwarder: agentctllogs.Forward})
 		if err != nil {
 			return Selection{}, err
 		}
@@ -155,12 +156,13 @@ func newKubernetesSelection(ctx context.Context, config Config) (Selection, erro
 		DataRoot: kubernetesConfig.DataRoot, DataSubpath: kubernetesConfig.DataSubpath,
 		Namespace: kubernetesConfig.Namespace, InstallationID: kubernetesConfig.InstallationID,
 		DataPVC: kubernetesConfig.DataPVC, ServiceAccount: kubernetesConfig.ServiceAccount,
-		CodexAuthSecret: kubernetesConfig.CodexAuthSecret, CodexAuthSecretKey: kubernetesConfig.CodexAuthSecretKey,
-		ImagePullSecrets: kubernetesConfig.ImagePullSecrets,
-		CPURequest:       kubernetesConfig.CPURequest, MemoryRequest: kubernetesConfig.MemoryRequest,
+		CredentialSources: kubernetesConfig.CredentialSources,
+		ImagePullSecrets:  kubernetesConfig.ImagePullSecrets,
+		CPURequest:        kubernetesConfig.CPURequest, MemoryRequest: kubernetesConfig.MemoryRequest,
 		CPULimit: kubernetesConfig.CPULimit, MemoryLimit: kubernetesConfig.MemoryLimit,
 		UID: uid, GID: gid, TerminationGraceSeconds: kubernetesConfig.TerminationGraceSeconds,
 		StartupTimeout: kubernetesConfig.StartupTimeout, Client: api,
+		LogForwarder: agentctllogs.Forward,
 	})
 	if err != nil {
 		return Selection{}, err
@@ -173,7 +175,7 @@ func newKubernetesSelection(ctx context.Context, config Config) (Selection, erro
 	executor, err := sharedagentctl.NewSharedAgentCtlExecutor(sharedagentctl.ExecutorConfig{
 		Engine: infrastructure, Mode: enginecontract.ExecutionModeContainer,
 		Images: config.RuntimeImages, ProviderEnv: config.ProviderEnv, Environment: config.Environment,
-		CodexAuthBinding: kubernetesConfig.CodexAuthSecret != "",
+		CodexAuthBinding: kubernetesConfig.CredentialSources["codex-auth"].Secret != "",
 		Repositories:     sharedagentctl.WorkspaceConfig{Repositories: checkout.Preparer{Providers: providers, Credentials: config.CodingCredentialResolver}},
 	})
 	if err != nil {
@@ -188,7 +190,7 @@ func newKubernetesSelection(ctx context.Context, config Config) (Selection, erro
 	return selection(Kubernetes, executor, editorExecutor, infrastructure.Close), nil
 }
 
-func newSharedEditorExecutor(infrastructure enginecontract.ExecutorEngine, config EditorConfig) (*sharededitor.EditorExecutor, error) {
+func newSharedEditorExecutor(infrastructure enginecontract.InfrastructureEngine, config EditorConfig) (*sharededitor.EditorExecutor, error) {
 	uid, gid := os.Getuid(), os.Getgid()
 	if uid == 0 || gid == 0 {
 		uid, gid = 1000, 1000
@@ -198,9 +200,13 @@ func newSharedEditorExecutor(infrastructure enginecontract.ExecutorEngine, confi
 
 // newDockerSelection takes ownership of engine, including on construction failure.
 func newDockerSelection(ctx context.Context, config Config, engine dockerengine.Client) (Selection, error) {
+	credentialSources := make(map[string]enginecontract.CredentialSource)
+	if strings.TrimSpace(config.CodexAuthFile) != "" {
+		credentialSources["codex-auth"] = enginecontract.CredentialSource{FilePath: config.CodexAuthFile}
+	}
 	infrastructure, err := dockerengine.New(dockerengine.Config{
 		DataRoot: config.DataRoot, NetworkName: config.DockerNetwork,
-		CodexAuthFile: config.CodexAuthFile, Client: engine,
+		CredentialSources: credentialSources, LogForwarder: agentctllogs.Forward, Client: engine,
 	})
 	if err != nil {
 		_ = engine.Close()
