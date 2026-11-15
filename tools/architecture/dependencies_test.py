@@ -24,6 +24,30 @@ class DependencyRulesTest(unittest.TestCase):
                                ('internal/contracts/agentctl/v1', 'encoding/json')]:
             self.assertFalse(forbidden(source, target))
 
+    def test_shared_executors_and_engines_stay_provider_neutral(self):
+        for source, target in [
+            ('internal/adapters/executors/agentctl/executor',
+             'internal/adapters/executors/engine/docker'),
+            ('internal/adapters/executors/editor/executor',
+             'internal/adapters/executors/engine/local'),
+            ('internal/adapters/executors/engine/docker/engine',
+             'internal/server/orchestration'),
+            ('internal/adapters/executors/engine/kubernetes/engine',
+             'internal/server/taskeditor'),
+            ('internal/adapters/executors/engine/local/engine',
+             'internal/adapters/executors/checkout'),
+        ]:
+            with self.subTest(source=source, target=target):
+                self.assertTrue(forbidden(source, target))
+        for source, target in [
+            ('internal/adapters/executors/agentctl/executor',
+             'internal/adapters/executors/engine'),
+            ('internal/adapters/executors/engine/docker/engine',
+             'internal/adapters/executors/engine'),
+        ]:
+            with self.subTest(source=source, target=target):
+                self.assertFalse(forbidden(source, target))
+
     def test_exact_exceptions_do_not_allow_new_violations(self):
         packages = [{'ImportPath': 'internal/server/task', 'Imports': ['internal/adapters/postgres']}]
         key = 'internal/server/task -> internal/adapters/postgres'

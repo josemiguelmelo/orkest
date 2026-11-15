@@ -16,7 +16,9 @@ are not passing results.
 | `make test-recovery-unit` | Deterministic restore, queue, session and delivery contracts, with race detection | Go |
 | `make test-integration` | Real OpenCode handshake/create/load; model continuation when explicitly configured | Pinned executable through `ORKEST_OPENCODE_BINARY` |
 | `make test-recovery` | Recovery unit suite plus real OpenCode restore and successful follow-up | Pinned executable, explicit provider/model, credentials if required |
-| `make test-docker` | Real launch, daemon/container restart, fresh sessions and retained files | Docker Engine; builds runtime images; explicit Docker test model settings |
+| `make test-docker` | Shared executor launch and real host bind access | Docker Engine; builds runtime images |
+| `make test-docker-session-restore` | Runtime session storage restore, retained files and fresh-session separation without prompts | Docker Engine, pinned image and an explicitly selected model available to OpenCode |
+| `make test-docker-session-continuation` | Real Docker restore and successful follow-up through the shared executor | Docker Engine, pinned image, explicitly selected provider/model and credentials |
 | `make test-image-composition` | BuildKit/Docker composition, publishing, digest recovery | Docker, registry, foundation images and pinned buildctl/BuildKit for BuildKit cases |
 | `npm --prefix web run test:e2e` | Desktop/mobile journeys against API mocks | Installed Playwright Chromium |
 
@@ -45,10 +47,11 @@ go test -race ./internal/adapters/postgres \
 
 Docker clients in Go read `DOCKER_HOST` independently of the CLI's selected
 context. Export the [daemon socket](../operations/configuration.md#docker-networking-and-paths)
-for Docker tests. Also export `ORKEST_DOCKER_TEST_MODEL_PROVIDER` and
-`ORKEST_DOCKER_TEST_MODEL_ID` to an available explicit model before
-`make test-docker`. The storage test confirms selection but sends no model prompts;
-a stale hardcoded model cannot establish a successful restore.
+for Docker tests. Storage tests do not send model prompts. Set
+`ORKEST_DOCKER_TEST_MODEL_PROVIDER` and `ORKEST_DOCKER_TEST_MODEL_ID` before
+`make test-docker-session-restore` or `make test-docker-session-continuation`.
+The former launches the configured runtime but sends no prompt; the latter also
+proves a successful follow-up on the explicitly selected model.
 
 For Docker-only image composition without buildctl:
 

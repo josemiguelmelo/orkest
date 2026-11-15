@@ -191,7 +191,8 @@ func (d *TaskDispatcher) StartTask(ctx context.Context, userID, organizationID s
 	if err = d.refreshOrkestMCPServer(userID, organizationID, value.WorkspaceID, value.ID, &config); err != nil {
 		return taskStartFailure("refresh_orkest_tools", err)
 	}
-	artifact, err := d.artifactContext(ctx, userID, organizationID, value, &config)
+	allowMissingRequiredInputs := strings.TrimSpace(command.PromptText) != "" && !command.GuardAssignment
+	artifact, err := d.artifactContext(ctx, userID, organizationID, value, &config, allowMissingRequiredInputs)
 	if err != nil {
 		return taskStartFailure("resolve_artifact_context", err)
 	}

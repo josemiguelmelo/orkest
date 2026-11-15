@@ -8,9 +8,37 @@ import (
 	"sync/atomic"
 	"testing"
 
-	dockerexecutor "github.com/josemiguelmelo/orkest/internal/adapters/executors/docker"
+	sharedagentctl "github.com/josemiguelmelo/orkest/internal/adapters/executors/agentctl"
+	dockerengine "github.com/josemiguelmelo/orkest/internal/adapters/executors/engine/docker"
+	kubernetesengine "github.com/josemiguelmelo/orkest/internal/adapters/executors/engine/kubernetes"
 	"github.com/josemiguelmelo/orkest/internal/server/taskeditor"
 )
+
+type unusedKubernetesAPI struct{}
+
+func (unusedKubernetesAPI) Do(context.Context, string, string, any) (map[string]any, int, error) {
+	return nil, 404, nil
+}
+
+func TestKubernetesFactoryUsesSharedAgentExecutor(t *testing.T) {
+	selected, err := New(context.Background(), Config{
+		Kind: string(Kubernetes), DataRoot: t.TempDir(),
+		Kubernetes: kubernetesengine.EngineConfig{
+			Namespace: "orkest", InstallationID: "install", DataPVC: "task-data", UID: 1000, GID: 1000,
+			Client: unusedKubernetesAPI{},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = selected.Close() }()
+	if _, ok := selected.AgentCtlExecutor.(*sharedagentctl.AgentCtlExecutor); !ok {
+		t.Fatalf("Kubernetes agent executor = %T", selected.AgentCtlExecutor)
+	}
+	if selected.EditorExecutor == nil {
+		t.Fatal("Kubernetes did not construct the shared editor executor")
+	}
+}
 
 func TestFactorySelectsEditorCapabilitiesWithoutStartingResources(t *testing.T) {
 	for _, tc := range []struct {
@@ -21,23 +49,28 @@ func TestFactorySelectsEditorCapabilitiesWithoutStartingResources(t *testing.T) 
 	}{
 		{name: "Docker defaults always expose editor", kind: Docker, want: true},
 		{name: "Docker editor", kind: Docker, editor: EditorConfig{Image: "editor:qualified", ReadOnlyImage: "editor:qualified-ro"}, want: true},
-		{name: "Local unsupported", kind: Local, editor: EditorConfig{Image: "editor:qualified", ReadOnlyImage: "editor:qualified-ro"}},
+		{name: "Local editor policy remains available", kind: Local, editor: EditorConfig{Image: "editor:qualified", ReadOnlyImage: "editor:qualified-ro"}, want: true},
+		{name: "Kubernetes editor policy remains available", kind: Kubernetes, want: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			binary, err := os.Executable()
 			if err != nil {
 				t.Fatal(err)
 			}
-			selected, err := New(context.Background(), Config{Kind: string(tc.kind), DataRoot: t.TempDir(), AgentctlBinary: binary, Editor: tc.editor})
+			config := Config{Kind: string(tc.kind), DataRoot: t.TempDir(), AgentctlBinary: binary, Editor: tc.editor}
+			if tc.kind == Kubernetes {
+				config.Kubernetes = kubernetesengine.EngineConfig{DataRoot: config.DataRoot, Namespace: "orkest", InstallationID: "install", DataPVC: "task-data", UID: 1000, GID: 1000, Client: unusedKubernetesAPI{}}
+			}
+			selected, err := New(context.Background(), config)
 			if err != nil {
 				t.Fatal(err)
 			}
 			defer func() { _ = selected.Close() }()
-			if (selected.Editor != nil) != tc.want {
-				t.Fatalf("editor capability=%v want %v", selected.Editor != nil, tc.want)
+			if (selected.EditorExecutor != nil) != tc.want {
+				t.Fatalf("editor capability=%v want %v", selected.EditorExecutor != nil, tc.want)
 			}
-			if selected.Editor != nil {
-				result, err := selected.Editor.Inspect(context.Background(), "org", "workspace", "task", []taskeditor.Checkout{{ProviderName: "github", RegistrationID: "repo"}})
+			if selected.EditorExecutor != nil {
+				result, err := selected.EditorExecutor.Inspect(context.Background(), "org", "workspace", "task", []taskeditor.Checkout{{ProviderName: "github", RegistrationID: "repo"}})
 				if err != nil || len(result.Missing) != 1 {
 					t.Fatalf("selected inspector: %+v %v", result, err)
 				}
@@ -47,7 +80,7 @@ func TestFactorySelectsEditorCapabilitiesWithoutStartingResources(t *testing.T) 
 }
 
 type ownedEngine struct {
-	dockerexecutor.Engine
+	dockerengine.Client
 	closes atomic.Int32
 	err    error
 }
@@ -64,11 +97,8 @@ func TestSelectionOwnsSharedClientAcrossCopies(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err = selected.Executor.(*dockerexecutor.Executor).Close(); err != nil {
-		t.Fatal(err)
-	}
 	if engine.closes.Load() != 0 {
-		t.Fatal("borrowed agent closed shared client")
+		t.Fatal("shared agent executor closed the composition-owned client")
 	}
 	// Concurrent cleanup of copied selections must close the owned client once,
 	// preserving the result for every caller.

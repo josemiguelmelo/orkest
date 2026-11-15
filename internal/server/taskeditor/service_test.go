@@ -533,7 +533,7 @@ func TestCloseRevokesEditorLeases(t *testing.T) {
 }
 
 type stalledLifecycleBackend struct {
-	Backend
+	EditorExecutor
 	started chan Scope
 }
 

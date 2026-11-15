@@ -40,5 +40,6 @@ Start with [local setup](../README.md).
 - Short sentences, bullets for rules/steps, examples, comparison tables.
 - Label Mermaid arrows: calls, dependencies, state changes.
 - Versions: manifests; defaults: `.env.example`.
-- Keep implementation history and verification results in task/PR evidence; document
-  enduring behavior, procedures, test prerequisites and operational limitations.
+- Keep this tree focused on current behavior, architecture, procedures, test
+  prerequisites and operational limitations. Keep implementation plans and PR
+  history outside the maintained documentation set.

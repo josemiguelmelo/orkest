@@ -15,7 +15,8 @@ import (
 	"testing"
 	"time"
 
-	dockerexecutor "github.com/josemiguelmelo/orkest/internal/adapters/executors/docker"
+	sharededitor "github.com/josemiguelmelo/orkest/internal/adapters/executors/editor"
+	dockerengine "github.com/josemiguelmelo/orkest/internal/adapters/executors/engine/docker"
 	"github.com/josemiguelmelo/orkest/internal/platform/taskstorage"
 	taskmodel "github.com/josemiguelmelo/orkest/internal/server/task/model"
 	"github.com/josemiguelmelo/orkest/internal/server/taskeditor"
@@ -39,11 +40,15 @@ func TestDockerEditorGatewayBrowser(t *testing.T) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
-	root, err := filepath.Abs("../../../../tmp")
-	if err != nil {
-		t.Fatal(err)
+	root := os.Getenv("ORKEST_DOCKER_TEST_DATA_ROOT")
+	if root == "" {
+		var err error
+		root, err = filepath.Abs("../../../../tmp")
+		if err != nil {
+			t.Fatal(err)
+		}
 	}
-	if err = os.MkdirAll(root, 0o700); err != nil {
+	if err := os.MkdirAll(root, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	data, err := os.MkdirTemp(root, "editor-gateway-")
@@ -71,12 +76,21 @@ func TestDockerEditorGatewayBrowser(t *testing.T) {
 	}); err != nil {
 		t.Fatal(err)
 	}
-	executor, err := dockerexecutor.New(ctx, dockerexecutor.Config{DataRoot: data})
+	engineClient, err := dockerengine.NewClient()
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() { _ = executor.Close() }()
-	backend, err := executor.NewEditorBackend("orkest/task-editor:4.145.2", "orkest/task-editor:4.145.2-ro")
+	infrastructure, err := dockerengine.New(dockerengine.Config{DataRoot: data, Client: engineClient})
+	if err != nil {
+		_ = engineClient.Close()
+		t.Fatal(err)
+	}
+	defer func() { _ = infrastructure.Close() }()
+	uid, gid := uint32(os.Getuid()), uint32(os.Getgid())
+	if uid == 0 || gid == 0 {
+		uid, gid = 1000, 1000
+	}
+	backend, err := sharededitor.New(infrastructure, sharededitor.Config{Image: sharededitor.DefaultImage, ReadOnlyImage: sharededitor.DefaultReadOnlyImage, RunAsUser: uid, RunAsGroup: gid})
 	if err != nil {
 		t.Fatal(err)
 	}

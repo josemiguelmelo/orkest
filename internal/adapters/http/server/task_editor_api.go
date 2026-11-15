@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"log"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httputil"
@@ -318,7 +319,14 @@ func (g *EditorGateway) proxy(w http.ResponseWriter, r *http.Request) {
 			}
 		},
 		Transport: transport, ErrorLog: log.New(io.Discard, "", 0),
-		ErrorHandler: func(w http.ResponseWriter, _ *http.Request, _ error) {
+		ErrorHandler: func(w http.ResponseWriter, _ *http.Request, proxyErr error) {
+			slog.WarnContext(r.Context(), "task editor proxy connection failed",
+				"organization_id", ticket.scope.OrganizationID,
+				"workspace_id", ticket.scope.WorkspaceID,
+				"task_id", ticket.scope.TaskID,
+				"upstream_host", upstream.Host,
+				"error", proxyErr,
+			)
 			writeError(w, http.StatusBadGateway, "editor_connection_unavailable")
 		},
 		ModifyResponse: func(response *http.Response) error {
