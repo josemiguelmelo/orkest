@@ -206,3 +206,43 @@ and credentials where required. See [runtime qualification](development/testing.
 - Reconcile uncertain effects before retry; recovery never auto-answers approvals.
 
 See [unfinished work](status.md) and [verification](development/testing.md).
+
+## Task editor coordination
+
+The always-wired task editor uses a task-editor service without a persistence
+repository. Docker resource labels provide discovery; existing task storage and
+launch state provide files and execution ownership. All platform execution sends
+and restores share its task handoff guard; writable access requires durable
+terminal launches and confirmed worker absence. The separate-origin gateway
+binds temporary browser access to user/task/generation and revokes existing
+connections on replacement. This initially supports one active platform
+coordinator. See [backend and deployment constraints](development/task-editor-backend.md).
+
+Executor selection composes separate agent-control and editor-backend contracts.
+The editor backend combines lifecycle and read-only storage inspection; shared
+policy services have no executor-kind branches. Docker adapters borrow the same
+Engine client through narrow interfaces, and the editor retains only its resolved
+configuration rather than the agent executor. Selection owns infrastructure
+cleanup, including construction failures, and closes clients after services stop.
+Standalone Docker agent constructors retain their existing client ownership.
+Private storage references and adapter configuration identity participate in a
+structured editor compatibility hash without appearing in public workspace JSON.
+New adapters are added at executor composition and configuration boundaries; see
+the [extension procedure](development/task-editor-executor-extensibility-plan.md#adding-the-next-executor).
+
+Editor containers use one internal Docker bridge per generation. A containerized
+platform is the only trusted gateway attached to each bridge. Native-host mode
+uses a small fixed-upstream authenticated relay with a loopback-published port;
+the editor shell has no external route. This additional relay is necessary because
+publishing an internal-only Docker bridge does not provide a native-host endpoint,
+and a routable editor can reach unauthenticated worker ports through host aliases.
+Relay credentials remain private to the backend and relay process; lifecycle APIs
+never serialize them. Editor resources and orphan cleanup remain executor-owned.
+
+Workers protect `/workspace/repositories` with a read-only parent bind and overlay
+selected writable checkout roots without changing session paths. Editor admission
+refuses legacy/unprotected worker mounts while preserving those workers and sessions.
+Resource cleanup rechecks ownership under generation admission before mutation.
+Independent per-generation authorization watchdogs revoke gateway leases without
+waiting for lifecycle locks, Docker or Git traversal; both authorization and
+lifecycle I/O have bounded concurrency.

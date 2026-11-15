@@ -180,3 +180,16 @@ qualify-runtime:
 # Requires buildctl, built agentctl-base, registry:3, and moby/buildkit:v0.34.1.
 test-image-composition:
 	go test -tags=docker ./internal/adapters/imagebuild/docker -run '^TestDockerImageComposition$$' -count=1 -v
+
+.PHONY: docker-task-editor-images test-task-editor-backend
+docker-task-editor-images:
+	$(DOCKER) build -f build/docker/task-editor.Dockerfile --target editor -t orkest/task-editor:4.145.2 .
+	$(DOCKER) build -f build/docker/task-editor.Dockerfile --target readonly -t orkest/task-editor:4.145.2-ro .
+
+test-task-editor-backend: docker-task-editor-images
+	go test -tags=docker ./internal/adapters/executors/docker -run '^TestDockerEditorLifecycle$$' -count=1 -timeout=3m -v
+	go test -tags=docker ./internal/adapters/http/server -run '^TestDockerEditorGatewayBrowser$$' -count=1 -timeout=4m -v
+
+.PHONY: test-task-editor-security
+test-task-editor-security: docker-task-editor-images
+	go test -tags=docker,security ./internal/adapters/executors/docker -run '^TestDocker(EditorNetworkIsolation|ProtectedCheckoutMounts)$$' -count=1 -timeout=3m -v

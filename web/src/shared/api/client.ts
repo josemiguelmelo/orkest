@@ -20,6 +20,8 @@ export class ApiError extends Error {
   }
 }
 const messages: Record<string, string> = {
+  invalid_origin:
+    'The editor request was blocked because this site does not match ORKEST_PLATFORM_ORIGIN. Set it to the exact browser origin, including scheme, host, and port, then restart Orkest.',
   question_unavailable:
     'This question has closed or cannot receive an answer. Refresh the conversation before retrying.',
   invalid_question: 'Check the question and your answer, then try again.',

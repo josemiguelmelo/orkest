@@ -10,12 +10,19 @@ import (
 	taskmodel "github.com/josemiguelmelo/orkest/internal/server/task/model"
 )
 
+type EditorMutationGuard interface {
+	BeforeTaskMutation(context.Context, string, string, string) (func(), error)
+}
+
+func (s *TaskService) SetEditorMutationGuard(guard EditorMutationGuard) { s.editorGuard = guard }
+
 type TaskService struct {
-	repository TaskRepository
-	workspaces WorkspaceAccess
-	creations  TaskCreationRepository
-	updates    TaskUpdateRepository
-	workflow   TaskWorkflowPlanner
+	editorGuard EditorMutationGuard
+	repository  TaskRepository
+	workspaces  WorkspaceAccess
+	creations   TaskCreationRepository
+	updates     TaskUpdateRepository
+	workflow    TaskWorkflowPlanner
 }
 
 func NewTaskService(repository TaskRepository, creations TaskCreationRepository, updates TaskUpdateRepository, workflow TaskWorkflowPlanner, workspaces WorkspaceAccess) *TaskService {

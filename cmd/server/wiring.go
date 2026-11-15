@@ -44,6 +44,7 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/server/scheduledjob"
 	"github.com/josemiguelmelo/orkest/internal/server/skill"
 	"github.com/josemiguelmelo/orkest/internal/server/task"
+	"github.com/josemiguelmelo/orkest/internal/server/taskeditor"
 	"github.com/josemiguelmelo/orkest/internal/server/taskintegration"
 	"github.com/josemiguelmelo/orkest/internal/server/workflow"
 	workflowautomation "github.com/josemiguelmelo/orkest/internal/server/workflowautomation"
@@ -171,6 +172,7 @@ func runServer(ctx context.Context, logger *slog.Logger) error {
 	client := agentctlhttp.NewHTTPAgentctlClient(httplog.PropagatingHTTPClient(&http.Client{Timeout: 10 * time.Second}))
 	providers := []coderepository.CodingProvider{githubprovider.NewGitHubProvider(), gitlabprovider.NewGitLabCloudProvider(), gitlabprovider.NewGitLabServerProvider()}
 	executorSelection, executorErr := executors.New(ctx, executors.Config{
+		Editor:                   executors.EditorConfig{Image: config.EditorImage, ReadOnlyImage: config.EditorReadonlyImage},
 		Kind:                     config.Executor,
 		DataRoot:                 filepath.Join(dataRoot, "agent-executions"),
 		DockerNetwork:            config.AgentctlNetwork,
@@ -206,7 +208,7 @@ func runServer(ctx context.Context, logger *slog.Logger) error {
 	executor := executorSelection.Executor
 	executorKind := executorSelection.Kind
 	workspaceMounts := workspacemount.New(postgres.NewWorkspaceHostMountsRepository(database), workspaces, executorKind == executors.Docker)
-	defer func() { _ = executor.Close() }()
+	defer func() { _ = executorSelection.Close() }()
 	completion, completionErr := orchestration.NewLaunchCompletionService(ctx, launchRepo, executor)
 	if completionErr != nil {
 		return completionErr
@@ -221,9 +223,7 @@ func runServer(ctx context.Context, logger *slog.Logger) error {
 	}
 	defer communication.Close()
 	defer cancel()
-	if err = communication.ReconnectRecorded(); err != nil {
-		return err
-	}
+
 	launchService, err := orchestration.NewLaunchService(launchRepo, executor, client, communication, completion)
 	if err != nil {
 		return err
@@ -233,6 +233,30 @@ func runServer(ctx context.Context, logger *slog.Logger) error {
 	workflows := workflow.NewWorkflowConfigurationService(postgres.NewWorkflowDefinitionPostgresRepository(database), workspaces, stageIntegrations)
 	taskWorkflows := workflowautomation.NewWorkflowAutomationService(postgres.NewTaskTransitionPostgresRepository(database), postgres.NewAutomationEventPostgresRepository(database), workspaces, workflowautomation.WorkflowRuleEvaluator{})
 	tasks := task.NewTaskService(taskRepository, postgres.NewTaskCreationPostgresRepository(database), postgres.NewTaskUpdatePostgresRepository(database), taskWorkflows, workspaces)
+	var backend taskeditor.Backend = taskeditor.UnavailableBackend{}
+	if executorSelection.Editor != nil {
+		backend = executorSelection.Editor
+	}
+	editorService, err := taskeditor.NewTaskEditorService(tasks, backend, launchService)
+	if err != nil {
+		return err
+	}
+	defer editorService.Close()
+	if err = editorService.ReconcileStartup(ctx); err != nil {
+		return fmt.Errorf("reconcile editors before work recovery: %w", err)
+	}
+	if executorSelection.Editor != nil {
+		launchService.SetExecutionGuard(editorService)
+		tasks.SetEditorMutationGuard(editorService)
+		communication.SetExecutionGuard(editorService)
+	}
+	editorGateway, err := httpapi.NewEditorGateway(editorService, config.EditorOrigin, config.PlatformOrigin)
+	if err != nil {
+		return err
+	}
+	if err = communication.ReconnectRecorded(); err != nil {
+		return err
+	}
 	artifacts := artifact.NewArtifactService(postgres.NewArtifactPostgresRepository(database), tasks)
 	mcpEndpoint := strings.TrimSpace(config.AgentMCPURL)
 	if kubernetesExecutor {
@@ -281,8 +305,11 @@ func runServer(ctx context.Context, logger *slog.Logger) error {
 		return err
 	}
 	integrations := taskintegration.NewTaskIntegrationService(postgres.NewPostgresTaskIntegrationRepository(database), secretBox, workspaces, organizations, postgres.NewPostgresImportedTaskRepository(database), tasks, githubcloud.NewGitHubCloudProvider(), jiraserver.NewJiraServerProvider())
+	integrations.SetEditorRemovalGuard(editorService)
 	runnerCtx, stopRunner := context.WithCancel(ctx)
 	var runnerWG sync.WaitGroup
+	runnerWG.Add(1)
+	go func() { defer runnerWG.Done(); editorService.Run(runnerCtx) }()
 	if config.ExecutionImageRepository != "" && executorKind != executors.Kubernetes {
 		registry := imagebuild.RegistryMapping{
 			DockerHost:   config.DockerRegistryHost,
@@ -330,6 +357,7 @@ func runServer(ctx context.Context, logger *slog.Logger) error {
 	runnerWG.Add(1)
 	go func() { defer runnerWG.Done(); jobWorker.Run(runnerCtx) }()
 	router, err := httpapi.NewRouter(ctx, httpapi.RouterDependencies{
+		Editor:        editorGateway,
 		ScheduledJobs: jobService, JobDispatcher: jobDispatcher,
 		Users:             users,
 		Organizations:     organizations,
@@ -358,7 +386,14 @@ func runServer(ctx context.Context, logger *slog.Logger) error {
 		return err
 	}
 
-	server := &http.Server{Addr: addr, Handler: httplog.Middleware(logger)(router), ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if editorGateway.MatchesHost(r.Host) {
+			editorGateway.ServeHTTP(w, r)
+		} else {
+			router.ServeHTTP(w, r)
+		}
+	})
+	server := &http.Server{Addr: addr, Handler: httplog.Middleware(logger)(handler), ReadHeaderTimeout: 5 * time.Second, IdleTimeout: 60 * time.Second}
 	serverErr := httpserver.Run(ctx, logger, "platform", server)
 	stopRunner()
 	runnerWG.Wait()

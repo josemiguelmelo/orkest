@@ -18,7 +18,16 @@ import (
 	workspacemodel "github.com/josemiguelmelo/orkest/internal/server/workspace/model"
 )
 
+type EditorRemovalGuard interface {
+	BeforeImportedTaskRemoval(context.Context, string, string, []string) (func(), error)
+}
+
+func (s *TaskIntegrationService) SetEditorRemovalGuard(guard EditorRemovalGuard) {
+	s.editorGuard = guard
+}
+
 type TaskIntegrationService struct {
+	editorGuard   EditorRemovalGuard
 	repo          TaskIntegrationRepository
 	box           *secretbox.Box
 	providers     map[taskintegrationmodel.TaskIntegrationSourceProvider]SourceIntegrationProvider
@@ -277,7 +286,7 @@ func (s *TaskIntegrationService) sync(ctx context.Context, source taskintegratio
 			seen = append(seen, item.ID)
 		}
 		if err == nil {
-			err = s.importer.RemoveMissingImportedTasks(ctx, source.WorkspaceID, source.ID, seen)
+			err = s.removeMissingTasks(ctx, source.WorkspaceID, source.ID, string(source.Provider), seen)
 		}
 	}
 	message := ""
@@ -348,4 +357,15 @@ func normalizeCommonFields(in *taskintegrationmodel.TaskIntegrationInput) error 
 
 func toTaskIntegration(id, workspaceID string, in taskintegrationmodel.TaskIntegrationInput) taskintegrationmodel.TaskIntegration {
 	return taskintegrationmodel.TaskIntegration{ID: id, WorkspaceID: workspaceID, WorkflowID: in.WorkflowID, Provider: in.Provider, Name: in.Name, Enabled: in.Enabled, Config: in.Config, Labels: in.Labels, Interval: in.Interval}
+}
+
+func (s *TaskIntegrationService) removeMissingTasks(ctx context.Context, workspace, integration, provider string, seen []string) error {
+	if s.editorGuard != nil {
+		unlock, err := s.editorGuard.BeforeImportedTaskRemoval(ctx, workspace, provider, seen)
+		if err != nil {
+			return err
+		}
+		defer unlock()
+	}
+	return s.importer.RemoveMissingImportedTasks(ctx, workspace, integration, seen)
 }

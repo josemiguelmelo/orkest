@@ -42,7 +42,7 @@ func TestHostMountsValidatePathsAndPreserveAccessMode(t *testing.T) {
 				t.Fatal(err)
 			}
 			mounts := engine.created.HostConfig.Mounts
-			if len(mounts) != 3 || mounts[2].Source != test.source || mounts[2].Target != "/mnt/host/data" || mounts[2].ReadOnly != test.readOnly || mounts[2].Type != "bind" {
+			if len(mounts) != 4 || mounts[2].Source != test.source || mounts[2].Target != "/mnt/host/data" || mounts[2].ReadOnly != test.readOnly || mounts[2].Type != "bind" {
 				t.Fatalf("unexpected mounts %+v", mounts)
 			}
 			config.RestoreSession = true

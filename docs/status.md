@@ -67,3 +67,30 @@ server/worker models, wire DTOs, validation and adapters. Persistence converts o
 at the generated SQL boundary. The historical alternative credential-fingerprint
 fallback has been removed: sessions requiring it fail visibly without replacing or
 rewriting their saved state; exact supported manifest fingerprints still restore.
+
+## Task VS Code backend
+
+The Docker editor backend, lifecycle coordination, conservative idle proof,
+execution/recovery handoff guards, scoped lifecycle API and separate-origin
+HTTP/WebSocket gateway are always wired; no enable/disable flag is supported.
+Saved task checkouts are reused; no editor database or worker wire changes.
+Only the requesting mutating user may attach or explicitly Stop. The task page
+embeds VS Code and requests editor shutdown on page exit or refresh; full browser
+journeys remain to be qualified. Docker is implemented; Local and Kubernetes
+editor backends are required but still return unavailable. One active platform
+coordinator remains a deployment constraint. Editor networks have no internet
+egress; controlled egress is deferred. See [implementation, checks and operator
+constraints](development/task-editor-backend.md).
+
+The [executor extensibility refactor](development/task-editor-executor-extensibility-plan.md)
+is implemented for the shared contracts and Docker composition. Agent and editor
+adapters borrow clients with selection-owned cleanup; the editor retains no agent
+executor reference. Focused race, lint, architecture, real Docker security, and
+Chromium gateway checks passed. This does not implement Local/Kubernetes editors.
+
+The subsequent [production code review](development/task-editor-review.md) records
+lifecycle fixes, the qualified native-network correction, protected worker checkout
+ancestry, stale-snapshot cleanup and authorization revocation independent of slow
+reconciliation. Legacy-layout restoration followed by a successful message was
+verified against pinned OpenCode; deployment/PostgreSQL qualification remains open.
+Always exposing the feature does not establish production isolation qualification.

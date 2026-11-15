@@ -40,6 +40,47 @@ tags:
   - name: ScheduledJobs
     description: Repeatable agent jobs independent of task workflows.
 paths:
+  /api/organizations/{orgID}/workspaces/{workspaceID}/tasks/{taskID}/editor:
+    parameters:
+      - {name: orgID, in: path, required: true, schema: {type: string}}
+      - {name: workspaceID, in: path, required: true, schema: {type: string}}
+      - {name: taskID, in: path, required: true, schema: {type: string}}
+    get:
+      tags: [Tasks]
+      operationId: getTaskEditor
+      description: Inspect the editor without creating resources. Requires task mutation authority and requesting-user ownership. Editor routes are always exposed; unsupported executors return unavailable.
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      responses:
+        "200": {description: Editor state, content: {application/json: {schema: {$ref: "#/components/schemas/TaskEditorStatus"}}}}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
+        "503": {description: Editor backend unavailable, content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}}
+    post:
+      tags: [Tasks]
+      operationId: openTaskEditor
+      description: Open or reuse an editor. Returns a one-use launch URL valid for one minute. Cookie callers must send the configured platform Origin. Does not start an agent or prepare repositories. Editor routes are always exposed; unsupported executors return unavailable.
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      responses:
+        "200": {description: Editor state, content: {application/json: {schema: {$ref: "#/components/schemas/TaskEditorStatus"}}}}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
+        "503": {description: Editor backend unavailable, content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}}
+    delete:
+      tags: [Tasks]
+      operationId: stopTaskEditor
+      description: Stop the requesting user's editor and terminal processes; saved files remain. Cookie callers must send the configured platform Origin. Editor routes are always exposed; unsupported executors return unavailable.
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      responses:
+        "200": {description: Editor state, content: {application/json: {schema: {$ref: "#/components/schemas/TaskEditorStatus"}}}}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "403": {$ref: "#/components/responses/Forbidden"}
+        "404": {$ref: "#/components/responses/NotFound"}
+        "409": {$ref: "#/components/responses/Conflict"}
+        "503": {description: Editor backend unavailable, content: {application/json: {schema: {$ref: "#/components/schemas/Error"}}}}
   /callbacks/workflow-stage-integrations/{connectionID}:
     parameters:
       - {name: connectionID, in: path, required: true, schema: {type: string}}
@@ -2341,6 +2382,23 @@ components:
           schema:
             $ref: "#/components/schemas/Error"
   schemas:
+    TaskEditorStatus:
+      type: object
+      required: [state]
+      properties:
+        state: {type: string, enum: [ready, stopped, unavailable, failed]}
+        mode: {type: string, enum: [ro, rw]}
+        generation: {type: string}
+        launchUrl: {type: string, description: One-use launch URL; expires after one minute. Contains a grant in its fragment; do not log or persist it.}
+        missing:
+          type: array
+          items:
+            type: object
+            required: [registrationId, providerName, name]
+            properties:
+              registrationId: {type: string}
+              providerName: {type: string}
+              name: {type: string}
     SkillInput:
       type: object
       required: [skillMD]

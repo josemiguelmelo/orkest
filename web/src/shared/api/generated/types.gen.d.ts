@@ -1,6 +1,20 @@
 export type ClientOptions = {
     baseUrl: `${string}://${string}` | (string & {});
 };
+export type TaskEditorStatus = {
+    state: 'ready' | 'stopped' | 'unavailable' | 'failed';
+    mode?: 'ro' | 'rw';
+    generation?: string;
+    /**
+     * One-use launch URL; expires after one minute. Contains a grant in its fragment; do not log or persist it.
+     */
+    launchUrl?: string;
+    missing?: Array<{
+        registrationId: string;
+        providerName: string;
+        name: string;
+    }>;
+};
 export type SkillInput = {
     /**
      * Complete SKILL.md including required frontmatter
@@ -720,6 +734,126 @@ export type McpServerInput = {
 };
 export type CodeRepositoryCreate2 = CodeRepositoryCreate;
 export type TaskIntegration2 = TaskIntegrationInputWritable;
+export type StopTaskEditorData = {
+    body?: never;
+    path: {
+        orgID: string;
+        workspaceID: string;
+        taskID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/tasks/{taskID}/editor';
+};
+export type StopTaskEditorErrors = {
+    /**
+     * Missing or invalid credentials
+     */
+    401: Error;
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+    /**
+     * Resource is absent or inaccessible
+     */
+    404: Error;
+    /**
+     * Operation conflicts with an existing resource or invariant
+     */
+    409: Error;
+    /**
+     * Editor backend unavailable
+     */
+    503: Error;
+};
+export type StopTaskEditorError = StopTaskEditorErrors[keyof StopTaskEditorErrors];
+export type StopTaskEditorResponses = {
+    /**
+     * Editor state
+     */
+    200: TaskEditorStatus;
+};
+export type StopTaskEditorResponse = StopTaskEditorResponses[keyof StopTaskEditorResponses];
+export type GetTaskEditorData = {
+    body?: never;
+    path: {
+        orgID: string;
+        workspaceID: string;
+        taskID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/tasks/{taskID}/editor';
+};
+export type GetTaskEditorErrors = {
+    /**
+     * Missing or invalid credentials
+     */
+    401: Error;
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+    /**
+     * Resource is absent or inaccessible
+     */
+    404: Error;
+    /**
+     * Operation conflicts with an existing resource or invariant
+     */
+    409: Error;
+    /**
+     * Editor backend unavailable
+     */
+    503: Error;
+};
+export type GetTaskEditorError = GetTaskEditorErrors[keyof GetTaskEditorErrors];
+export type GetTaskEditorResponses = {
+    /**
+     * Editor state
+     */
+    200: TaskEditorStatus;
+};
+export type GetTaskEditorResponse = GetTaskEditorResponses[keyof GetTaskEditorResponses];
+export type OpenTaskEditorData = {
+    body?: never;
+    path: {
+        orgID: string;
+        workspaceID: string;
+        taskID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/workspaces/{workspaceID}/tasks/{taskID}/editor';
+};
+export type OpenTaskEditorErrors = {
+    /**
+     * Missing or invalid credentials
+     */
+    401: Error;
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+    /**
+     * Resource is absent or inaccessible
+     */
+    404: Error;
+    /**
+     * Operation conflicts with an existing resource or invariant
+     */
+    409: Error;
+    /**
+     * Editor backend unavailable
+     */
+    503: Error;
+};
+export type OpenTaskEditorError = OpenTaskEditorErrors[keyof OpenTaskEditorErrors];
+export type OpenTaskEditorResponses = {
+    /**
+     * Editor state
+     */
+    200: TaskEditorStatus;
+};
+export type OpenTaskEditorResponse = OpenTaskEditorResponses[keyof OpenTaskEditorResponses];
 export type ReceiveWorkflowStageCallbackData = {
     body: {
         [key: string]: unknown;

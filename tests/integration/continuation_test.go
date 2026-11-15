@@ -19,6 +19,8 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/agentctl/interaction"
 	agentruntime "github.com/josemiguelmelo/orkest/internal/agentctl/runtime"
 	"github.com/josemiguelmelo/orkest/internal/platform/ids"
+	"github.com/josemiguelmelo/orkest/internal/platform/sessionpath"
+	"github.com/josemiguelmelo/orkest/internal/platform/taskstorage"
 )
 
 func TestOpenCodeContinuation(t *testing.T) {
@@ -46,8 +48,20 @@ func testOpenCodeContinuation(t *testing.T, legacy bool) {
 			env = append(env, name+"="+value)
 		}
 	}
-	workDir, stateDir := t.TempDir(), t.TempDir()
-	host := runtimehost.New(opencode.Profile{Binary: binary}, sharedacp.Factory{}, runtimehost.Environment{WorkDir: workDir, StateDir: stateDir, GrantedEnv: env})
+	dataRoot := t.TempDir()
+	workDir, stateDir := taskstorage.Directories(dataRoot, "test-org", "test-workspace", "test-task")
+	if err := os.MkdirAll(workDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(stateDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	profile := opencode.Profile{Binary: binary}
+	var runtimeProfile agentruntime.RuntimeProfile = profile
+	if legacy {
+		runtimeProfile = legacyOpenCodeProfile{Profile: profile}
+	}
+	host := runtimehost.New(runtimeProfile, sharedacp.Factory{}, runtimehost.Environment{WorkDir: workDir, StateDir: stateDir, GrantedEnv: env})
 	config := configmodel.RunConfig{RuntimeConfig: configmodel.RuntimeConfig{OrganizationID: "test-org", WorkspaceID: "test-workspace", TaskID: "test-task", TaskSessionID: "test-session", RunID: "first", Runtime: "opencode", Agent: configmodel.AgentDefinition{Name: "Integration", Instructions: "Follow the user's instructions. Do not use tools for these memory tests."}, Model: configmodel.ModelSelection{Provider: modelProvider, ID: model}}}
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
@@ -73,6 +87,7 @@ func testOpenCodeContinuation(t *testing.T, legacy bool) {
 	if err := first.Close(); err != nil {
 		t.Fatal(err)
 	}
+	firstSessionID := first.SessionID()
 	if legacy {
 		installV1Manifest(t, stateDir, workDir, first.SessionID(), config.ForRuntime())
 	}
@@ -82,6 +97,9 @@ func testOpenCodeContinuation(t *testing.T, legacy bool) {
 		t.Fatal(err)
 	}
 	defer func() { _ = restored.Close() }()
+	if restored.SessionID() != firstSessionID || host.Version() != opencode.Version || config.Model.Provider != modelProvider || config.Model.ID != model {
+		t.Fatal("restored session runtime or model identity changed")
+	}
 	var answer strings.Builder
 	observer.Update = func(update interaction.Update) error { answer.WriteString(update.Text); return nil }
 	if _, err := restored.Prompt(ctx, interaction.Command{ID: "test-command", Text: "What exact private test marker did I ask you to remember? Reply with only the marker."}, observer); err != nil {
@@ -93,6 +111,15 @@ func testOpenCodeContinuation(t *testing.T, legacy bool) {
 	if data, err := os.ReadFile(path); err != nil || string(data) != "preserved" {
 		t.Fatal("working files were not preserved", err)
 	}
+}
+
+// Historical OpenCode sessions predate the Orkest question tool configuration.
+type legacyOpenCodeProfile struct{ opencode.Profile }
+
+func (p legacyOpenCodeProfile) Descriptor() agentruntime.RuntimeDescriptor {
+	descriptor := p.Profile.Descriptor()
+	descriptor.UseQuestionTool = false
+	return descriptor
 }
 
 // Pair the historical v1 envelope with a real pinned runtime's durable history.
@@ -107,11 +134,7 @@ func installV1Manifest(t *testing.T, stateDir, workDir, nativeID string, config 
 	if err = json.Unmarshal(fixture, &manifest); err != nil {
 		t.Fatal(err)
 	}
-	scope, err := json.Marshal([]string{config.OrganizationID, config.WorkspaceID, config.TaskID})
-	if err != nil {
-		t.Fatal(err)
-	}
-	root := filepath.Join(stateDir, fmt.Sprintf("%x", sha256.Sum256(scope)), "sessions", fmt.Sprintf("%x", sha256.Sum256([]byte(config.TaskSessionID))))
+	root := sessionpath.Root(stateDir, config.OrganizationID, config.WorkspaceID, config.TaskID, config.TaskSessionID)
 	config.RunID = ""
 	encoded, err := json.Marshal(config)
 	if err != nil {

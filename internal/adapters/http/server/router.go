@@ -34,6 +34,7 @@ import (
 
 // RouterDependencies names the services required by platform routes.
 type RouterDependencies struct {
+	Editor            *EditorGateway
 	ScheduledJobs     *scheduledjob.ScheduledJobService
 	JobDispatcher     *orchestration.JobDispatcher
 	Users             *identity.UserRegistrationService
@@ -60,6 +61,9 @@ type RouterDependencies struct {
 
 // NewRouter validates the served OpenAPI contract before exposing routes.
 func NewRouter(ctx context.Context, deps RouterDependencies) (*chi.Mux, error) {
+	if deps.Editor == nil {
+		return nil, fmt.Errorf("task editor gateway is required")
+	}
 	if deps.ScheduledJobs == nil {
 		return nil, fmt.Errorf("scheduled job service is required")
 	}
@@ -114,6 +118,7 @@ func NewRouter(ctx context.Context, deps RouterDependencies) (*chi.Mux, error) {
 		api.Use(auth.middleware)
 		api.Route("/api", func(api chi.Router) {
 			api.Get("/me", auth.currentUser)
+			deps.Editor.routes(api)
 			api.Get("/runtime-providers", listRuntimeProviders)
 			organizationAPI{organizations: deps.Organizations, workspaces: deps.Workspaces}.routes(api)
 			agentAPI{agents: deps.Agents}.routes(api)

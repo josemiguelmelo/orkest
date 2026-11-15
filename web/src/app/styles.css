@@ -1080,6 +1080,250 @@ input[type='checkbox'] {
   gap: 22px;
   align-items: start;
 }
+.task-back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 14px;
+  color: var(--muted);
+  font-size: 12px;
+  text-decoration: none;
+}
+.task-back-link:hover {
+  color: var(--primary);
+}
+.task-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 22px 24px;
+  margin-bottom: 18px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: linear-gradient(
+    120deg,
+    color-mix(in srgb, var(--primary) 5%, var(--surface)),
+    var(--surface) 62%
+  );
+}
+.task-page-heading-copy {
+  min-width: 0;
+}
+.task-page-heading-copy .eyebrow {
+  margin-bottom: 5px;
+}
+.task-page-heading-copy h1 {
+  overflow-wrap: anywhere;
+  font-size: clamp(23px, 3vw, 31px);
+  line-height: 1.2;
+}
+.task-page-heading-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  font-size: 11px;
+}
+.task-work-state,
+.task-automation-state {
+  display: inline-flex;
+  align-items: center;
+  min-height: 23px;
+  padding: 2px 8px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+}
+.task-automation-state {
+  border-color: color-mix(in srgb, var(--primary) 28%, var(--border));
+  color: var(--primary);
+}
+.task-page-actions {
+  justify-content: flex-end;
+  flex: 0 0 auto;
+}
+.task-page-tabs {
+  display: flex;
+  gap: 4px;
+  width: fit-content;
+  padding: 3px;
+  margin: 18px 0;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface-muted);
+}
+.task-page-tabs ~ [role='tabpanel'][hidden] {
+  display: none;
+}
+.task-page-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 36px;
+  padding: 7px 13px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  cursor: pointer;
+}
+.task-page-tab[aria-selected='true'] {
+  background: var(--surface);
+  color: var(--foreground);
+  box-shadow: 0 1px 3px #18243b14;
+}
+.task-tab-presence {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 6px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.2;
+}
+.task-tab-presence > span {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+.task-tab-presence.is-online {
+  border-color: color-mix(in srgb, #16834b 30%, var(--border));
+  color: #167342;
+}
+.task-tab-presence.is-online > span {
+  background: #16834b;
+  box-shadow: 0 0 0 3px color-mix(in srgb, #16834b 12%, transparent);
+}
+.task-tab-presence.is-error {
+  border-color: color-mix(in srgb, var(--danger) 30%, var(--border));
+  color: var(--danger);
+}
+.task-tab-presence.is-error > span {
+  background: var(--danger);
+}
+.task-editor-shell {
+  display: flex;
+  height: calc(100vh - 245px);
+  min-height: 560px;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid #293342;
+  border-radius: 11px;
+  background: #111820;
+  box-shadow: 0 12px 34px #1118201a;
+}
+.task-editor-chrome {
+  display: flex;
+  min-height: 48px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 7px 14px;
+  border-bottom: 1px solid #303947;
+  background: #1c2530;
+  color: #e5eaf0;
+}
+.task-editor-workspace-label,
+.task-editor-chrome-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.task-editor-workspace-label > svg {
+  color: #83a2ff;
+}
+.task-editor-workspace-label strong,
+.task-editor-workspace-label small {
+  display: block;
+}
+.task-editor-workspace-label strong {
+  font-size: 12px;
+  font-weight: 600;
+}
+.task-editor-workspace-label small {
+  color: #9ba8b7;
+  font-size: 10px;
+}
+.task-editor-chrome .button {
+  min-height: 28px;
+  border-color: #3a4655;
+  background: #25303c;
+  color: #d9e0e8;
+}
+.task-editor-chrome .button:hover {
+  background: #303d4b;
+}
+.task-editor-status {
+  margin: 0;
+  color: #aeb9c6;
+  font-size: 11px;
+}
+.task-editor-status::before {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--muted);
+  content: '';
+}
+.task-editor-status.is-ready::before {
+  background: #16834b;
+  box-shadow: 0 0 0 3px color-mix(in srgb, #16834b 13%, transparent);
+}
+.task-editor-status.failed::before,
+.task-editor-status.unavailable::before {
+  background: #e16d72;
+}
+.task-editor-status.is-loading::before {
+  background: var(--primary);
+  animation: task-status-pulse 1.2s ease-in-out infinite;
+}
+@keyframes task-status-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+.task-editor-surface {
+  display: block;
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  border: 0;
+  background: #111827;
+}
+.task-editor-connecting {
+  display: grid;
+  flex: 1;
+  min-height: 360px;
+  place-content: center;
+  justify-items: center;
+  gap: 10px;
+  padding: 24px;
+  color: #c1ccd8;
+  text-align: center;
+}
+.task-editor-connecting strong {
+  color: #f0f3f7;
+  font-size: 14px;
+}
+.task-editor-connecting span {
+  max-width: 440px;
+  color: #9ba8b7;
+  font-size: 12px;
+}
+.task-editor-notice {
+  padding: 10px 14px;
+  background: var(--surface-muted);
+  font-size: 12px;
+}
 .task-conversation-column {
   min-width: 0;
 }
@@ -2404,6 +2648,38 @@ input[type='checkbox'] {
   }
   .topbar {
     padding: 0 24px;
+  }
+}
+@media (max-width: 640px) {
+  .task-page-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .task-page-header {
+    padding: 18px;
+  }
+  .task-page-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+  .task-page-tabs {
+    width: 100%;
+  }
+  .task-page-tab {
+    flex: 1;
+    justify-content: center;
+    padding-inline: 7px;
+  }
+  .task-tab-presence {
+    font-size: 9px;
+    padding-inline: 5px;
+  }
+  .task-editor-shell {
+    height: calc(100dvh - 250px);
+    min-height: 480px;
+  }
+  .task-editor-chrome {
+    padding-inline: 10px;
   }
 }
 @media (max-width: 700px) {

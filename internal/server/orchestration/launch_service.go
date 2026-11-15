@@ -13,6 +13,7 @@ import (
 )
 
 type LaunchService struct {
+	editorGuard   ExecutionGuard
 	repo          TaskExecutionRepository
 	executor      AgentctlStarter
 	client        AgentctlClient
@@ -79,6 +80,11 @@ func (s *LaunchService) Start(ctx context.Context, config orchestrationmodel.Run
 		}
 		return launch, fmt.Errorf("%s failed: %w", stage, cause)
 	}
+	unlock, guardErr := guardExecution(ctx, s.editorGuard, config.OrganizationID, config.WorkspaceID, config.TaskID)
+	if guardErr != nil {
+		return fail("editor_handoff", guardErr)
+	}
+	defer unlock()
 	process, err := s.executor.StartAgentctl(ctx, config)
 	launch.ProcessID, launch.Endpoint = strings.TrimSpace(process.ID), strings.TrimSpace(process.Endpoint)
 	if err != nil {
@@ -270,6 +276,11 @@ func (s *LaunchService) deliverPrompt(ctx context.Context, launch orchestrationm
 			return errors.New("agent execution identity mismatch")
 		}
 	}
+	unlock, err := guardExecution(ctx, s.editorGuard, launch.OrganizationID, launch.WorkspaceID, launch.TaskID)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	if err := s.client.Prompt(ctx, launch.Endpoint, commandID, prompt); err != nil {
 		return err
 	}
@@ -293,6 +304,11 @@ func (s *LaunchService) TaskQueue(ctx context.Context, orgID, workspaceID, taskI
 			return s.completion.ClosePending(ctx, launch)
 		}
 	}
+	unlock, err := guardExecution(ctx, s.editorGuard, launch.OrganizationID, launch.WorkspaceID, launch.TaskID)
+	if err != nil {
+		return err
+	}
+	defer unlock()
 	client := s.client
 	return client.Queue(ctx, launch.Endpoint, discard)
 }
