@@ -556,7 +556,10 @@ func scopeHash(scope engine.Scope) string {
 }
 
 func (e *ExecutorEngine) resourceKey(labels map[string]any) engine.ResourceKey {
-	return engine.ResourceKey{InstallationID: e.config.InstallationID, Class: engine.ResourceClassAgent, Scope: engine.Scope{OrganizationID: nestedStringValue(labels, "orkest.scope")}, ExecutionID: nestedStringValue(labels, "orkest.run"), Qualifier: nestedStringValue(labels, "orkest.runtime")}
+	// Kubernetes stores only a hash of task scope. Keep it out of the domain
+	// scope fields: callers pass returned keys back to Stop/Cleanup, which would
+	// otherwise hash the hash and reject the resource as foreign.
+	return engine.ResourceKey{InstallationID: e.config.InstallationID, Class: engine.ResourceClassAgent, ExecutionID: nestedStringValue(labels, "orkest.run"), Qualifier: nestedStringValue(labels, "orkest.runtime")}
 }
 
 func mergeKey(expected, observed engine.ResourceKey, installation string) engine.ResourceKey {

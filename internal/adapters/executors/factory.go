@@ -94,13 +94,10 @@ func New(ctx context.Context, config Config) (Selection, error) {
 		if err != nil {
 			return Selection{}, err
 		}
-		providers := make(map[string]checkout.Provider, len(config.CodingProviders))
-		for _, provider := range config.CodingProviders {
-			if provider == nil || strings.TrimSpace(provider.ProviderName()) == "" {
-				_ = localEngine.Close()
-				return Selection{}, errors.New("code repository provider name is required")
-			}
-			providers[provider.ProviderName()] = provider
+		providers, providerErr := repositoryProviders(config.CodingProviders)
+		if providerErr != nil {
+			_ = localEngine.Close()
+			return Selection{}, providerErr
 		}
 		executor, err := sharedagentctl.NewSharedAgentCtlExecutor(sharedagentctl.ExecutorConfig{
 			Engine: localEngine, Mode: enginecontract.ExecutionModeNative,
@@ -168,13 +165,10 @@ func newKubernetesSelection(ctx context.Context, config Config) (Selection, erro
 	if err != nil {
 		return Selection{}, err
 	}
-	providers := make(map[string]checkout.Provider, len(config.CodingProviders))
-	for _, provider := range config.CodingProviders {
-		if provider == nil || strings.TrimSpace(provider.ProviderName()) == "" {
-			_ = infrastructure.Close()
-			return Selection{}, errors.New("code repository provider name is required")
-		}
-		providers[provider.ProviderName()] = provider
+	providers, providerErr := repositoryProviders(config.CodingProviders)
+	if providerErr != nil {
+		_ = infrastructure.Close()
+		return Selection{}, providerErr
 	}
 	executor, err := sharedagentctl.NewSharedAgentCtlExecutor(sharedagentctl.ExecutorConfig{
 		Engine: infrastructure, Mode: enginecontract.ExecutionModeContainer,
@@ -212,13 +206,10 @@ func newDockerSelection(ctx context.Context, config Config, engine dockerengine.
 		_ = engine.Close()
 		return Selection{}, err
 	}
-	providers := make(map[string]checkout.Provider, len(config.CodingProviders))
-	for _, provider := range config.CodingProviders {
-		if provider == nil || strings.TrimSpace(provider.ProviderName()) == "" {
-			_ = infrastructure.Close()
-			return Selection{}, errors.New("code repository provider name is required")
-		}
-		providers[provider.ProviderName()] = provider
+	providers, providerErr := repositoryProviders(config.CodingProviders)
+	if providerErr != nil {
+		_ = infrastructure.Close()
+		return Selection{}, providerErr
 	}
 	executor, err := sharedagentctl.NewSharedAgentCtlExecutor(sharedagentctl.ExecutorConfig{
 		Engine: infrastructure, Mode: enginecontract.ExecutionModeContainer,
@@ -238,4 +229,15 @@ func newDockerSelection(ctx context.Context, config Config, engine dockerengine.
 		return Selection{}, err
 	}
 	return selection(Docker, executor, editorExecutor, infrastructure.Close), nil
+}
+
+func repositoryProviders(configured []coderepository.CodingProvider) (map[string]checkout.Provider, error) {
+	providers := make(map[string]checkout.Provider, len(configured))
+	for _, provider := range configured {
+		if provider == nil || strings.TrimSpace(provider.ProviderName()) == "" {
+			return nil, errors.New("code repository provider name is required")
+		}
+		providers[provider.ProviderName()] = provider
+	}
+	return providers, nil
 }

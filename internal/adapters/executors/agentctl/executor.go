@@ -218,11 +218,13 @@ func (e *AgentCtlExecutor) TerminateAgentctl(ctx context.Context, processID stri
 
 func (e *AgentCtlExecutor) TerminateAgentctlByRunID(ctx context.Context, runID string) error {
 	observation, err := e.inspectByRunID(ctx, runID)
-	if err != nil || observation.State == engine.ObservationAbsent || observation.State == engine.ObservationStopped {
+	if err != nil || observation.State == engine.ObservationAbsent {
 		return err
 	}
-	if err = e.engine.Stop(ctx, observation.Resource.Ref); err != nil {
-		return err
+	if observation.State == engine.ObservationActive {
+		if err = e.engine.Stop(ctx, observation.Resource.Ref); err != nil {
+			return err
+		}
 	}
 	return e.engine.Cleanup(ctx, observation.Resource.Ref)
 }
