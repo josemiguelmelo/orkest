@@ -41,10 +41,10 @@ type (
 		Instance
 		Discovery Discovery
 	}
-	// Backend couples storage inspection with the matching editor lifecycle.
+	// EditorExecutor couples storage inspection with the matching editor lifecycle.
 	// Absence is distinct from uncertain observation; Stop must confirm termination
 	// and reject stale identity. Implementations borrow their infrastructure clients.
-	Backend interface {
+	EditorExecutor interface {
 		CheckoutInspector
 		StartEditor(context.Context, Spec) (Instance, error)
 		InspectEditor(context.Context, Scope) (Instance, bool, error)
@@ -84,13 +84,13 @@ type TaskEditorService struct {
 	authorizations *semaphore.Weighted
 	gates          map[string]*semaphore.Weighted
 	tasks          TaskReader
-	backend        Backend
+	backend        EditorExecutor
 	idle           IdleReader
 	mu             sync.Mutex
 	entries        map[Scope]*entry
 }
 
-func NewTaskEditorService(tasks TaskReader, backend Backend, idle IdleReader) (*TaskEditorService, error) {
+func NewTaskEditorService(tasks TaskReader, backend EditorExecutor, idle IdleReader) (*TaskEditorService, error) {
 	if tasks == nil || backend == nil || idle == nil {
 		return nil, errors.New("task editor dependencies required")
 	}

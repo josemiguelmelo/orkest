@@ -2,19 +2,22 @@ package taskeditor
 
 import "context"
 
-// UnavailableBackend keeps unsupported executor configurations explicit without
+// UnavailableEditorExecutor keeps unsupported engine configurations explicit without
 // changing their existing agent execution behavior.
-type UnavailableBackend struct{}
+type UnavailableEditorExecutor struct{}
 
-func (UnavailableBackend) StartEditor(context.Context, Spec) (Instance, error) {
+func (UnavailableEditorExecutor) StartEditor(context.Context, Spec) (Instance, error) {
 	return Instance{}, ErrUnavailable
 }
 
-func (UnavailableBackend) InspectEditor(context.Context, Scope) (Instance, bool, error) {
+func (UnavailableEditorExecutor) InspectEditor(context.Context, Scope) (Instance, bool, error) {
 	return Instance{}, false, ErrUnavailable
 }
-func (UnavailableBackend) StopEditor(context.Context, Instance) error      { return ErrUnavailable }
-func (UnavailableBackend) ListEditors(context.Context) ([]Instance, error) { return nil, nil }
-func (UnavailableBackend) Inspect(context.Context, string, string, string, []Checkout) (Inspection, error) {
+
+func (UnavailableEditorExecutor) StopEditor(context.Context, Instance) error { return ErrUnavailable }
+
+func (UnavailableEditorExecutor) ListEditors(context.Context) ([]Instance, error) { return nil, nil }
+
+func (UnavailableEditorExecutor) Inspect(context.Context, string, string, string, []Checkout) (Inspection, error) {
 	return Inspection{}, ErrUnavailable
 }

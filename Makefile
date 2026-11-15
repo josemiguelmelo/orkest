@@ -1,5 +1,5 @@
 .DEFAULT_GOAL := help
-.PHONY: help setup dev dev-once dev-agentctl dev-web db-up db-down db-logs auth-up lint-install lint fmt sqlc check build test-integration test-postgres test-recovery test-recovery-unit docker-agentctl-base docker-agentctl-opencode docker-agentctl-claude-code docker-agentctl-codex docker-agentctl-github-copilot docker-agentctl-kiro docker-agentctl-images docker-agentctl-push-local test-docker check-runtime-boundaries
+.PHONY: help setup dev dev-once dev-agentctl dev-web db-up db-down db-logs auth-up lint-install lint fmt sqlc check build test-integration test-postgres test-recovery test-recovery-unit docker-agentctl-base docker-agentctl-opencode docker-agentctl-claude-code docker-agentctl-codex docker-agentctl-github-copilot docker-agentctl-kiro docker-agentctl-images docker-agentctl-push-local test-docker test-docker-session-restore test-docker-session-continuation check-runtime-boundaries
 
 GOLANGCI_LINT_VERSION := v2.15.0
 GOLANGCI_LINT := bin/tools/$(GOLANGCI_LINT_VERSION)/golangci-lint
@@ -47,7 +47,9 @@ help:
 	@echo "test-postgres     Test PostgreSQL repositories (requires DATABASE_URL or all POSTGRES_* settings)"
 	@echo "docker-agentctl-images Build the agentctl base and separate runtime images"
 	@echo "docker-agentctl-push-local Build and push runtime images to the local registry"
-	@echo "test-docker       Run Docker Engine smoke test (builds images; requires Docker Engine)"
+	@echo "test-docker       Run shared executor Docker lifecycle, restore and mount checks"
+	@echo "test-docker-session-restore Run Docker session storage restore with an explicit model"
+	@echo "test-docker-session-continuation Credentialed Docker restore/follow-up using an explicit model"
 
 setup:
 	npm --prefix web ci
@@ -156,7 +158,17 @@ docker-agentctl-push-local: docker-agentctl-images
 	$(DOCKER) tag $(AGENTCTL_KIRO_IMAGE) $(CONTAINER_REGISTRY)/$(AGENTCTL_REGISTRY_NAMESPACE)/agentctl-kiro:$(KIRO_VERSION)
 
 test-docker: docker-agentctl-images
-	AGENTCTL_OPENCODE_IMAGE=$(AGENTCTL_OPENCODE_IMAGE) AGENTCTL_CLAUDE_CODE_IMAGE=$(AGENTCTL_CLAUDE_CODE_IMAGE) AGENTCTL_CODEX_IMAGE=$(AGENTCTL_CODEX_IMAGE) AGENTCTL_GITHUB_COPILOT_IMAGE=$(AGENTCTL_GITHUB_COPILOT_IMAGE) AGENTCTL_KIRO_IMAGE=$(AGENTCTL_KIRO_IMAGE) go test -tags=docker ./internal/adapters/executors/docker -run 'TestDockerAgentctlLaunchSmoke|TestDockerSessionRestore' -count=1 -timeout=3m
+	AGENTCTL_OPENCODE_IMAGE=$(AGENTCTL_OPENCODE_IMAGE) go test -tags=docker ./tests/integration -run '^(TestDockerEngineSharedAgentctlLifecycle|TestDockerEngineSharedAgentctlHostMounts)$$' -count=1 -timeout=3m
+
+.PHONY: test-docker-session-restore
+test-docker-session-restore: docker-agentctl-images
+	@{ test -n "$$ORKEST_DOCKER_TEST_MODEL_PROVIDER" && test -n "$$ORKEST_DOCKER_TEST_MODEL_ID"; } || (echo "Set ORKEST_DOCKER_TEST_MODEL_PROVIDER and ORKEST_DOCKER_TEST_MODEL_ID to a model available to OpenCode"; exit 1)
+	AGENTCTL_OPENCODE_IMAGE=$(AGENTCTL_OPENCODE_IMAGE) go test -tags=docker ./tests/integration -run '^TestDockerSessionRestore$$' -count=1 -timeout=5m -v
+
+.PHONY: test-docker-session-continuation
+test-docker-session-continuation: docker-agentctl-images
+	@{ test -n "$$ORKEST_DOCKER_TEST_MODEL_PROVIDER" && test -n "$$ORKEST_DOCKER_TEST_MODEL_ID"; } || (echo "Set ORKEST_DOCKER_TEST_MODEL_PROVIDER and ORKEST_DOCKER_TEST_MODEL_ID to explicitly select the model used by the continuation test"; exit 1)
+	AGENTCTL_OPENCODE_IMAGE=$(AGENTCTL_OPENCODE_IMAGE) go test -tags=docker ./tests/integration -run '^TestDockerLegacyCheckoutContinuation$$' -count=1 -timeout=5m -v
 
 test-recovery-unit:
 	go test -race ./cmd/agentctl ./internal/agentctl/... ./internal/adapters/runtime/... ./internal/adapters/http/agentctl/... ./internal/adapters/runnerclient/... ./internal/server/orchestration -run 'Restore|Recovery|Queue|Session|Delivery|Claim' -count=1 -timeout=3m
@@ -187,9 +199,9 @@ docker-task-editor-images:
 	$(DOCKER) build -f build/docker/task-editor.Dockerfile --target readonly -t orkest/task-editor:4.145.2-ro .
 
 test-task-editor-backend: docker-task-editor-images
-	go test -tags=docker ./internal/adapters/executors/docker -run '^TestDockerEditorLifecycle$$' -count=1 -timeout=3m -v
+	go test -tags=docker ./tests/integration -run '^TestDockerEngineSharedEditorLifecycle$$' -count=1 -timeout=3m -v
 	go test -tags=docker ./internal/adapters/http/server -run '^TestDockerEditorGatewayBrowser$$' -count=1 -timeout=4m -v
 
 .PHONY: test-task-editor-security
 test-task-editor-security: docker-task-editor-images
-	go test -tags=docker,security ./internal/adapters/executors/docker -run '^TestDocker(EditorNetworkIsolation|ProtectedCheckoutMounts)$$' -count=1 -timeout=3m -v
+	go test -tags=docker ./tests/integration -run '^TestDockerEngineEditorsUsePrivateNetworksAndRelayTokens$$' -count=1 -timeout=3m -v

@@ -67,15 +67,20 @@ an operator must fence it before resuming work against the same files.
 
 ## Current qualification limits
 
-This executor has not yet been qualified against a real cluster, shared-volume
-provisioner, all five runtimes, platform restart, or live session continuation.
+The Kubernetes agent engine has deterministic fake-API coverage for worker Pod
+readiness, lifecycle, Secret handling, PVC paths, ownership conflicts and
+uncertain create cleanup. It has not yet been qualified against a real cluster,
+shared-volume provisioner, all five runtimes, platform restart, or live session
+continuation. Operators must provision the documented network rules for
+platform-to-worker control traffic and worker-to-platform MCP traffic.
+
 The current execution-profile image builder still uses the Docker image store;
 profile build and validation in a Docker-free Kubernetes installation are not
-supported yet. Codex host-login Secret mapping, configurable resource requests
-and limits, image-pull Secret references, Pod log streaming, kubeconfig mode,
-network-policy manifests, and end-to-end failure/recovery qualification remain
-follow-up work. The executor therefore does not yet claim full Kubernetes feature
-parity.
+supported yet. Kubeconfig-based remote clusters and end-to-end failure/recovery
+qualification remain unsupported or unverified. The Kubernetes engine does not
+implement task-editor workloads; editor starts remain unavailable because the
+required protected sharing, private gateway routing, denied egress and confirmed
+termination guarantees are not provided by this agent-only integration.
 
 The platform service account must be provisioned by the operator. This executor
 does not create RBAC, namespaces, PVCs, network policies, or Helm resources.

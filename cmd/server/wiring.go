@@ -16,7 +16,7 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/adapters/runnerclient/agentctlhttp"
 
 	"github.com/josemiguelmelo/orkest/internal/adapters/executors"
-	kubernetesexecutor "github.com/josemiguelmelo/orkest/internal/adapters/executors/kubernetes"
+	kubernetesengine "github.com/josemiguelmelo/orkest/internal/adapters/executors/engine/kubernetes"
 	"github.com/josemiguelmelo/orkest/internal/adapters/http/server"
 	"github.com/josemiguelmelo/orkest/internal/adapters/imagebuild"
 	"github.com/josemiguelmelo/orkest/internal/adapters/imagebuild/buildkit"
@@ -178,12 +178,12 @@ func runServer(ctx context.Context, logger *slog.Logger) error {
 		DockerNetwork:            config.AgentctlNetwork,
 		CodexAuthFile:            config.CodexAuthFile,
 		AgentctlBinary:           config.AgentctlBinary,
-		DockerImages:             profileImages,
+		RuntimeImages:            profileImages,
 		ProviderEnv:              splitEnvironmentNames(config.AgentProviderEnv),
 		Environment:              map[string]string{"ORKEST_GIT_AUTHOR_NAME": config.GitAuthorName, "ORKEST_GIT_AUTHOR_EMAIL": config.GitAuthorEmail},
 		CodingProviders:          providers,
 		CodingCredentialResolver: codeRepositories,
-		Kubernetes: kubernetesexecutor.Config{
+		Kubernetes: kubernetesengine.EngineConfig{
 			Namespace:               config.Kubernetes.Namespace,
 			InstallationID:          config.Kubernetes.InstallationID,
 			DataPVC:                 config.Kubernetes.DataPVC,
@@ -205,7 +205,7 @@ func runServer(ctx context.Context, logger *slog.Logger) error {
 	if executorErr != nil {
 		return fmt.Errorf("initialize agent executor: %w", executorErr)
 	}
-	executor := executorSelection.Executor
+	executor := executorSelection.AgentCtlExecutor
 	executorKind := executorSelection.Kind
 	workspaceMounts := workspacemount.New(postgres.NewWorkspaceHostMountsRepository(database), workspaces, executorKind == executors.Docker)
 	defer func() { _ = executorSelection.Close() }()
@@ -233,9 +233,9 @@ func runServer(ctx context.Context, logger *slog.Logger) error {
 	workflows := workflow.NewWorkflowConfigurationService(postgres.NewWorkflowDefinitionPostgresRepository(database), workspaces, stageIntegrations)
 	taskWorkflows := workflowautomation.NewWorkflowAutomationService(postgres.NewTaskTransitionPostgresRepository(database), postgres.NewAutomationEventPostgresRepository(database), workspaces, workflowautomation.WorkflowRuleEvaluator{})
 	tasks := task.NewTaskService(taskRepository, postgres.NewTaskCreationPostgresRepository(database), postgres.NewTaskUpdatePostgresRepository(database), taskWorkflows, workspaces)
-	var backend taskeditor.Backend = taskeditor.UnavailableBackend{}
-	if executorSelection.Editor != nil {
-		backend = executorSelection.Editor
+	var backend taskeditor.EditorExecutor = taskeditor.UnavailableEditorExecutor{}
+	if executorSelection.EditorExecutor != nil {
+		backend = executorSelection.EditorExecutor
 	}
 	editorService, err := taskeditor.NewTaskEditorService(tasks, backend, launchService)
 	if err != nil {
@@ -245,7 +245,7 @@ func runServer(ctx context.Context, logger *slog.Logger) error {
 	if err = editorService.ReconcileStartup(ctx); err != nil {
 		return fmt.Errorf("reconcile editors before work recovery: %w", err)
 	}
-	if executorSelection.Editor != nil {
+	if executorSelection.EditorExecutor != nil {
 		launchService.SetExecutionGuard(editorService)
 		tasks.SetEditorMutationGuard(editorService)
 		communication.SetExecutionGuard(editorService)

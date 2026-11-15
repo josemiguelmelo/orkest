@@ -156,17 +156,19 @@ older platform versions do not enforce saved mount semantics. See
   container ID in launch failure for reconciliation.
 - `make test-docker`: reachable Engine; named contexts need exported
   [socket](../../operations/configuration.md#docker-networking-and-paths).
-  Set `ORKEST_DOCKER_TEST_MODEL_PROVIDER` and `ORKEST_DOCKER_TEST_MODEL_ID` to an
-  available model before running it. Storage tests confirm selection but make no
-  model requests. Fake-client unit tests need no Docker. Full prerequisites:
+  It verifies shared agent launch and real host bind access without model setup.
+  Fake-client unit tests need no Docker. Full prerequisites:
   [testing](../../development/testing.md).
+- `make test-docker-session-restore`: verifies runtime session storage across
+  container replacement and a fresh-session start, without sending a prompt.
+  OpenCode must still be able to resolve the explicitly selected model; set
+  `ORKEST_DOCKER_TEST_MODEL_PROVIDER` and `ORKEST_DOCKER_TEST_MODEL_ID`.
+- `make test-docker-session-continuation`: additionally sends model prompts to
+  prove restoration and follow-up. Set `ORKEST_DOCKER_TEST_MODEL_PROVIDER` and
+  `ORKEST_DOCKER_TEST_MODEL_ID` to the explicitly selected model first.
 - Host-volume access/replacement coverage without model credentials:
-  `go test -tags=docker ./internal/adapters/executors/docker -run '^TestDockerHostMountsReadWriteAndReplacement$' -count=1`.
-  This verifies real bind mounts, not credentialed ACP/model continuation.
-  Set `ORKEST_DOCKER_TOOLCHAIN_TEST_IMAGE` to a built JVM/infrastructure image
-  containing agentctl to additionally check real AWS profile discovery and Gradle
-  property discovery with `--gradle-user-home`, using synthetic, non-secret files.
-  Tool discovery is explicitly skipped when that test-only image is not supplied.
+  `go test -tags=docker ./tests/integration -run '^TestDockerEngineSharedAgentctlHostMounts$' -count=1`.
+  This verifies real read-only and writable binds through the shared executor.
 
 ## Custom toolchains
 

@@ -21,6 +21,24 @@ def layer(path):
 
 def forbidden(source, target):
     owner, dependency = layer(source), layer(target)
+    shared_executor = any(source.startswith(prefix) for prefix in (
+        'internal/adapters/executors/agentctl/', 'internal/adapters/executors/editor/'))
+    concrete_engine = any(source.startswith(prefix) for prefix in (
+        'internal/adapters/executors/engine/docker/',
+        'internal/adapters/executors/engine/local/',
+        'internal/adapters/executors/engine/kubernetes/'))
+    concrete_engines = ('internal/adapters/executors/engine/docker',
+                        'internal/adapters/executors/engine/local',
+                        'internal/adapters/executors/engine/kubernetes')
+    if shared_executor and any(target == prefix or target.startswith(prefix + '/')
+                               for prefix in concrete_engines):
+        return True
+    legacy_and_domain = ('internal/server', 'internal/adapters/executors/local',
+                         'internal/adapters/executors/kubernetes',
+                         'internal/adapters/executors/checkout')
+    if concrete_engine and any(target == prefix or target.startswith(prefix + '/')
+                               for prefix in legacy_and_domain):
+        return True
     if source.endswith('/model') and dependency in ('server', 'worker') and not target.endswith('/model'):
         return True
     if owner in ('server', 'worker'):

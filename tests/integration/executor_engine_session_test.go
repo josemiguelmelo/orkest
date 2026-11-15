@@ -1,25 +1,70 @@
 //go:build docker
 
-package docker
+package integration
 
 import (
 	"context"
 	"errors"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/containerd/errdefs"
+	sharedagentctl "github.com/josemiguelmelo/orkest/internal/adapters/executors/agentctl"
+	"github.com/josemiguelmelo/orkest/internal/adapters/executors/checkout"
+	enginecontract "github.com/josemiguelmelo/orkest/internal/adapters/executors/engine"
+	dockerengine "github.com/josemiguelmelo/orkest/internal/adapters/executors/engine/docker"
 	"github.com/josemiguelmelo/orkest/internal/adapters/runnerclient/agentctlhttp"
 	coreruntime "github.com/josemiguelmelo/orkest/internal/contracts/runtimecatalog"
 	"github.com/josemiguelmelo/orkest/internal/platform/ids"
 	"github.com/josemiguelmelo/orkest/internal/platform/taskstorage"
+	coderepositorymodel "github.com/josemiguelmelo/orkest/internal/server/coderepository/model"
 	orchestrationmodel "github.com/josemiguelmelo/orkest/internal/server/orchestration/model"
 	mobyclient "github.com/moby/moby/client"
 )
+
+type legacyMountEngine struct{ dockerengine.Client }
+
+func (e legacyMountEngine) ContainerCreate(ctx context.Context, options mobyclient.ContainerCreateOptions) (mobyclient.ContainerCreateResult, error) {
+	delete(options.Config.Labels, "orkest.checkout_mount_layout")
+	return e.Client.ContainerCreate(ctx, options)
+}
+
+type sessionCheckoutProvider struct{}
+
+func (sessionCheckoutProvider) PrepareAuthenticatedTaskCheckout(_ context.Context, _ coderepositorymodel.RepositoryMetadata, _ coderepositorymodel.Credentials, path, _ string) error {
+	return os.MkdirAll(path, 0o700)
+}
+
+type sessionCredentialResolver struct{}
+
+func (sessionCredentialResolver) CodingCredential(context.Context, string, string) (coderepositorymodel.Credentials, error) {
+	return coderepositorymodel.Credentials{Token: "session-test-token"}, nil
+}
+
+func initInspectorCheckout(t *testing.T, path string) {
+	t.Helper()
+	if err := os.MkdirAll(path, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	command := exec.Command("git", "init", path)
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("initialize checkout: %v: %s", err, output)
+	}
+}
+
+func runGit(t *testing.T, directory string, args ...string) string {
+	t.Helper()
+	commandArgs := append([]string{"-C", directory}, args...)
+	output, err := exec.Command("git", commandArgs...).CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v: %v: %s", args, err, output)
+	}
+	return string(output)
+}
 
 // TestDockerSessionRestore checks real runtime storage across daemon restart,
 // container replacement, and explicit fresh-session creation without model calls.
@@ -40,11 +85,14 @@ func testDockerSessionRestore(t *testing.T, continuation bool) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
-	repoRoot, err := filepath.Abs("../../../..")
+	var err error
+	root := os.Getenv("ORKEST_DOCKER_TEST_DATA_ROOT")
+	if root == "" {
+		root, err = filepath.Abs("../../tmp")
+	}
 	if err != nil {
 		t.Fatal(err)
 	}
-	root := filepath.Join(repoRoot, "tmp")
 	if err := os.MkdirAll(root, 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -57,15 +105,35 @@ func testDockerSessionRestore(t *testing.T, continuation bool) {
 			t.Error(err)
 		}
 	})
-	image := os.Getenv("AGENTCTL_OPENCODE_IMAGE")
-	executor, err := New(ctx, Config{DataRoot: dataRoot, Images: map[coreruntime.Runtime]string{coreruntime.OpenCode: image}})
+	client, err := dockerengine.NewClient()
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer func() { _ = executor.Close() }()
+	var infrastructureClient dockerengine.Client = client
+	providers := make(map[string]checkout.Provider)
+	var credentials checkout.CredentialResolver
+	if continuation {
+		infrastructureClient = legacyMountEngine{Client: client}
+		providers["test"] = sessionCheckoutProvider{}
+		credentials = sessionCredentialResolver{}
+	}
+	infrastructure, err := dockerengine.New(dockerengine.Config{DataRoot: dataRoot, Client: infrastructureClient})
+	if err != nil {
+		_ = client.Close()
+		t.Fatal(err)
+	}
+	defer func() { _ = infrastructure.Close() }()
+	image := os.Getenv("AGENTCTL_OPENCODE_IMAGE")
+	executor, err := sharedagentctl.NewSharedAgentCtlExecutor(sharedagentctl.ExecutorConfig{
+		Engine: infrastructure, Mode: enginecontract.ExecutionModeContainer,
+		Images: map[coreruntime.Runtime]string{coreruntime.OpenCode: image},
+		Repositories: sharedagentctl.WorkspaceConfig{DataRoot: dataRoot, Repositories: checkout.Preparer{Providers: providers, Credentials: credentials}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
 	httpClient := agentctlhttp.NewHTTPAgentctlClient(&http.Client{Timeout: 35 * time.Second})
 	run := orchestrationmodel.RunConfig{RuntimeConfig: orchestrationmodel.RuntimeConfig{OrganizationID: "restore-org", WorkspaceID: "restore-workspace", TaskID: "restore-task", TaskSessionID: "session-one", RunID: "run-one", Runtime: "opencode", Model: orchestrationmodel.ModelSelection{Provider: provider, ID: model}, Agent: orchestrationmodel.AgentDefinition{Name: "Test", Instructions: "test"}}}
-	engine := executor.client
 	marker := ""
 	if continuation {
 		marker, err = ids.NewUUID()
@@ -74,11 +142,8 @@ func testDockerSessionRestore(t *testing.T, continuation bool) {
 		}
 		work, _ := taskstorage.Directories(dataRoot, run.OrganizationID, run.WorkspaceID, run.TaskID)
 		initInspectorCheckout(t, filepath.Join(work, "repositories", "test", "repo"))
-		executor.config.CodingCredentialResolver = &credentialResolverStub{}
-		executor.repositoryProviders["test"] = &checkoutProviderStub{}
 		run.Repositories = []orchestrationmodel.WorkspaceRepository{{ID: "repo", ProviderName: "test", Name: "repo", URL: "https://example.invalid/repo.git", IntegrationID: "integration", ProviderRepositoryID: "repo", DefaultBranch: "main"}}
 		run.Agent.Instructions = "Follow the user's instructions. Do not use tools for this memory test."
-		executor.client = legacyMountEngine{EngineClient: engine}
 	}
 	start := func() orchestrationmodel.Process {
 		t.Helper()
@@ -90,7 +155,7 @@ func testDockerSessionRestore(t *testing.T, continuation bool) {
 		t.Cleanup(func() {
 			cleanupCtx, stop := context.WithTimeout(context.Background(), 10*time.Second)
 			defer stop()
-			if _, err := executor.client.ContainerRemove(cleanupCtx, id, mobyclient.ContainerRemoveOptions{Force: true}); err != nil && !errdefs.IsNotFound(err) {
+			if _, err := client.ContainerRemove(cleanupCtx, id, mobyclient.ContainerRemoveOptions{Force: true}); err != nil {
 				t.Error(err)
 			}
 		})
@@ -113,10 +178,11 @@ func testDockerSessionRestore(t *testing.T, continuation bool) {
 	if continuation {
 		dockerMemoryPrompt(t, ctx, httpClient, first.Endpoint, "remember", "Remember this private test marker for our next turn: "+marker+". Reply only acknowledged.")
 	}
-	workDir, _, err := executor.taskDirectories(run)
+	workspace, err := infrastructure.ResolveWorkspace(ctx, enginecontract.WorkspaceRequest{Scope: enginecontract.Scope{OrganizationID: run.OrganizationID, WorkspaceID: run.WorkspaceID, TaskID: run.TaskID}, Intent: enginecontract.WorkspaceEnsureForAgent})
 	if err != nil {
 		t.Fatal(err)
 	}
+	workDir := workspace.WorkPath
 	file := filepath.Join(workDir, "untracked.txt")
 	if continuation {
 		file = filepath.Join(workDir, "repositories", "test", "repo", "untracked.txt")
@@ -126,20 +192,17 @@ func testDockerSessionRestore(t *testing.T, continuation bool) {
 		t.Fatal(err)
 	}
 	if !continuation {
-		if _, err := executor.client.ContainerStop(ctx, first.ID, mobyclient.ContainerStopOptions{}); err != nil {
+		if _, err := client.ContainerStop(ctx, first.ID, mobyclient.ContainerStopOptions{}); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := executor.client.ContainerStart(ctx, first.ID, mobyclient.ContainerStartOptions{}); err != nil {
+		if _, err := client.ContainerStart(ctx, first.ID, mobyclient.ContainerStartOptions{}); err != nil {
 			t.Fatal(err)
 		}
-		inspection, err := executor.client.ContainerInspect(ctx, first.ID, mobyclient.ContainerInspectOptions{})
+		inspection, err := infrastructure.Inspect(ctx, enginecontract.Lookup{Ref: enginecontract.ResourceRef{Key: enginecontract.ResourceKey{Class: enginecontract.ResourceClassAgent}, ConcreteID: first.ID}})
 		if err != nil {
 			t.Fatal(err)
 		}
-		first.Endpoint, err = publishedEndpoint(inspection.Container, executor.config.AgentctlPort)
-		if err != nil {
-			t.Fatal(err)
-		}
+		first.Endpoint = inspection.Resource.Endpoint
 		if err := httpClient.WaitHealthy(ctx, first.Endpoint); err != nil {
 			t.Fatal(err)
 		}
@@ -151,7 +214,6 @@ func testDockerSessionRestore(t *testing.T, continuation bool) {
 	if err := executor.TerminateAgentctl(ctx, first.ID); err != nil {
 		t.Fatal(err)
 	}
-	executor.client = engine
 	run.RunID, run.RestoreSession = "run-two", true
 	second := start()
 	if err := httpClient.RestoreAgent(ctx, second.Endpoint); err != nil {

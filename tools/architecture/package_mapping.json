@@ -40,8 +40,6 @@
   "internal/core/secretbox": "internal/platform/secretbox",
   "internal/executionprofile": "internal/server/executionprofile",
   "internal/executors": "internal/adapters/executors",
-  "internal/executors/docker": "internal/adapters/executors/docker",
-  "internal/executors/local": "internal/adapters/executors/local",
   "internal/identity": "internal/server/identity",
   "internal/imagebuild": "internal/adapters/imagebuild",
   "internal/imagebuild/buildkit": "internal/adapters/imagebuild/buildkit",

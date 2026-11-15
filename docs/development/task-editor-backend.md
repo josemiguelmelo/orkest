@@ -249,6 +249,6 @@ preserving the session ID, untracked file and branch. It used pinned OpenCode 2.
 and the explicit previously qualified `opencode/deepseek-v4.1-flash-free` model.
 
 Run the continuation check with `DOCKER_HOST` configured for the local daemon and
-explicit `ORKEST_DOCKER_TEST_MODEL_PROVIDER` / `ORKEST_DOCKER_TEST_MODEL_ID`:
-`go test -tags=docker ./internal/adapters/executors/docker -run '^TestDockerLegacyCheckoutContinuation$' -count=1 -timeout=4m`.
+explicit `ORKEST_DOCKER_TEST_MODEL_PROVIDER` / `ORKEST_DOCKER_TEST_MODEL_ID` using
+`make test-docker-session-continuation`.
 This check makes two model calls; the separate storage-only restore test does not.
