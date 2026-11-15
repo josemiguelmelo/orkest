@@ -7,8 +7,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
+	"net"
 	"sync"
+	"syscall"
 	"time"
 
 	"golang.org/x/sync/semaphore"
@@ -78,7 +81,45 @@ type entry struct {
 	stopRequested bool
 	failed        bool
 	user          string
+	lastWarning   time.Time // protected by TaskEditorService.mu
+	warningCode   string    // protected by TaskEditorService.mu
 }
+
+type lifecycleError struct {
+	stage string
+	err   error
+}
+
+func (e lifecycleError) Error() string { return e.err.Error() }
+func (e lifecycleError) Unwrap() error { return e.err }
+
+func atLifecycleStage(stage string, err error) error {
+	if err == nil {
+		return nil
+	}
+	return lifecycleError{stage: stage, err: err}
+}
+
+func lifecycleErrorStage(err error) string {
+	var staged interface{ LifecycleStage() string }
+	if errors.As(err, &staged) {
+		return staged.LifecycleStage()
+	}
+	var lifecycleErr lifecycleError
+	if errors.As(err, &lifecycleErr) {
+		return lifecycleErr.stage
+	}
+	return "authorize_or_reconcile"
+}
+
+func lifecycleFailureResource(err error) string {
+	var resource interface{ FailureResource() string }
+	if errors.As(err, &resource) {
+		return resource.FailureResource()
+	}
+	return ""
+}
+
 type TaskEditorService struct {
 	lifetime       context.Context
 	close          context.CancelFunc
@@ -136,6 +177,16 @@ func (s *TaskEditorService) Open(ctx context.Context, user string, scope Scope) 
 	}
 	defer unlock()
 	status, err := s.open(ctx, e, user, scope)
+	if err != nil && !errors.Is(err, ErrOwner) {
+		slog.WarnContext(ctx, "task editor open failed",
+			"organization_id", scope.OrganizationID,
+			"workspace_id", scope.WorkspaceID,
+			"task_id", scope.TaskID,
+			"stage", lifecycleErrorStage(err),
+			"failure", lifecycleFailureCode(err),
+			"failure_resource", lifecycleFailureResource(err),
+		)
+	}
 	if !errors.Is(err, ErrOwner) {
 		e.failed = e.stopRequested || (err != nil && !errors.Is(err, ErrUnavailable))
 	}
@@ -156,18 +207,18 @@ func (s *TaskEditorService) open(ctx context.Context, e *entry, user string, sco
 			e.cancel = nil
 			e.access = nil
 		}
-		return Status{}, err
+		return Status{}, atLifecycleStage("inspect", err)
 	}
 	if found && current.UserID != user {
 		return Status{}, ErrOwner
 	}
 	discovery, err := Discover(ctx, s.tasks, s.backend, user, scope.OrganizationID, scope.WorkspaceID, scope.TaskID)
 	if err != nil {
-		return Status{}, errors.Join(err, s.stop(ctx, e, current, found))
+		return Status{}, errors.Join(atLifecycleStage("discover_workspace", err), atLifecycleStage("stop_after_discovery_failure", s.stop(ctx, e, current, found)))
 	}
 	if len(discovery.Roots) == 0 {
 		if err = s.stop(ctx, e, current, found); err != nil {
-			return Status{}, err
+			return Status{}, atLifecycleStage("stop_missing_workspace", err)
 		}
 		return Status{State: "unavailable", Missing: discovery.Missing}, nil
 	}
@@ -185,7 +236,7 @@ func (s *TaskEditorService) open(ctx context.Context, e *entry, user string, sco
 	}
 	if !compatible {
 		if err = s.stop(ctx, e, current, found); err != nil {
-			return Status{}, err
+			return Status{}, atLifecycleStage("stop_incompatible_editor", err)
 		}
 		// All execution deliveries take this same lock. Recheck immediately before creation.
 		if mode == ReadWrite {
@@ -202,7 +253,7 @@ func (s *TaskEditorService) open(ctx context.Context, e *entry, user string, sco
 			if current.ID != "" {
 				err = errors.Join(err, s.stop(ctx, e, current, true))
 			}
-			return Status{}, err
+			return Status{}, atLifecycleStage("start", err)
 		}
 	}
 	if e.instance.Generation != current.Generation || e.access == nil {
@@ -477,7 +528,10 @@ func (s *TaskEditorService) reconcileBatch(ctx context.Context, scopes []Scope) 
 			for scope := range work {
 				opCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 				if err := s.reconcile(opCtx, scope); err != nil && ctx.Err() == nil {
-					slog.Default().Warn("task editor reconciliation deferred", "organization_id", scope.OrganizationID, "workspace_id", scope.WorkspaceID, "task_id", scope.TaskID, "reason", "lifecycle_unavailable")
+					failure := lifecycleFailureCode(err)
+					if s.shouldLogReconcileFailure(scope, failure, time.Now()) {
+						slog.Default().Warn("task editor reconciliation deferred", "organization_id", scope.OrganizationID, "workspace_id", scope.WorkspaceID, "task_id", scope.TaskID, "reason", "lifecycle_unavailable", "stage", lifecycleErrorStage(err), "failure", failure, "failure_resource", lifecycleFailureResource(err))
+					}
 				}
 				cancel()
 			}
@@ -492,6 +546,52 @@ func (s *TaskEditorService) reconcileBatch(ctx context.Context, scopes []Scope) 
 			return
 		}
 	}
+}
+
+func (s *TaskEditorService) shouldLogReconcileFailure(scope Scope, failure string, now time.Time) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	e := s.entries[scope]
+	if e == nil {
+		return true
+	}
+	if e.warningCode == failure && now.Sub(e.lastWarning) < 30*time.Second {
+		return false
+	}
+	e.warningCode = failure
+	e.lastWarning = now
+	return true
+}
+
+func lifecycleFailureCode(err error) string {
+	var coded interface{ FailureCode() string }
+	if errors.As(err, &coded) {
+		return coded.FailureCode()
+	}
+	switch {
+	case errors.Is(err, context.DeadlineExceeded):
+		return "deadline_exceeded"
+	case errors.Is(err, context.Canceled):
+		return "canceled"
+	case errors.Is(err, syscall.ECONNREFUSED):
+		return "connection_refused"
+	}
+	var sqlState interface{ SQLState() string }
+	if errors.As(err, &sqlState) {
+		return "postgres_" + sqlState.SQLState()
+	}
+	var networkError net.Error
+	if errors.As(err, &networkError) && networkError.Timeout() {
+		return "network_timeout"
+	}
+	for {
+		unwrapped := errors.Unwrap(err)
+		if unwrapped == nil {
+			break
+		}
+		err = unwrapped
+	}
+	return fmt.Sprintf("%T", err)
 }
 
 // BeforeTaskMutation prevents a saved selection from racing mounted checkouts.

@@ -252,6 +252,9 @@ func (f *fakeClient) NetworkInspect(_ context.Context, id string, _ client.Netwo
 }
 
 func (f *fakeClient) NetworkConnect(_ context.Context, id string, options client.NetworkConnectOptions) (client.NetworkConnectResult, error) {
+	if id == "bridge" {
+		return client.NetworkConnectResult{}, nil
+	}
 	for name, resource := range f.networks {
 		if id == name || id == resource.ID {
 			resource.Containers[options.Container] = network.EndpointResource{}

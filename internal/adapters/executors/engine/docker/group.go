@@ -24,13 +24,32 @@ import (
 
 const workloadGroupProviderPrefix = "orkest-workload-group-v1:"
 
+type workloadStartError struct {
+	stage    string
+	resource string
+	err      error
+}
+
+func (e workloadStartError) Error() string {
+	return "Docker workload start " + e.stage + ": " + e.err.Error()
+}
+func (e workloadStartError) Unwrap() error { return e.err }
+func (e workloadStartError) FailureCode() string {
+	return "docker_workload_" + e.stage
+}
+func (e workloadStartError) FailureResource() string { return e.resource }
+
+func workloadStartFailure(stage, resource string, err error) error {
+	return errors.Join(workloadStartError{stage: stage, resource: resource, err: err}, engine.ErrUncertain)
+}
+
 func (e *Engine) startInfrastructureWorkloadGroup(ctx context.Context, plan engine.WorkloadPlan) (engine.ResourceGroup, error) {
 	plan.Group.InstallationID = e.installation
 	groupName := infrastructureContainerName(plan.Group)
 	ref := engine.GroupRef{Identity: plan.Group, Provider: workloadGroupProviderPrefix + groupName}
 	prior, err := e.InspectGroup(ctx, engine.GroupRef{Identity: plan.Group})
 	if err != nil {
-		return engine.ResourceGroup{}, fmt.Errorf("reconcile Docker workload group before create: %w", err)
+		return engine.ResourceGroup{}, workloadStartFailure("inspect_existing_group", "", fmt.Errorf("reconcile Docker workload group before create: %w", err))
 	}
 	if prior.State != engine.GroupAbsent {
 		return prior.Group, engine.ErrUncertain
@@ -45,7 +64,7 @@ func (e *Engine) startInfrastructureWorkloadGroup(ctx context.Context, plan engi
 	}
 	networkName, err := e.ensureInfrastructureNetwork(ctx, plan.Group, networkPlan)
 	if err != nil {
-		return engine.ResourceGroup{Ref: ref}, errors.Join(err, engine.ErrUncertain)
+		return engine.ResourceGroup{Ref: ref}, workloadStartFailure("ensure_network", "", err)
 	}
 	storageRequests := make([]engine.StorageBindingRequest, 0, len(plan.Storage))
 	for _, attachment := range plan.Storage {
@@ -56,7 +75,7 @@ func (e *Engine) startInfrastructureWorkloadGroup(ctx context.Context, plan engi
 	}
 	bindings, err := e.ResolveStorage(ctx, engine.StorageRequest{Owner: plan.Group.Owner, Generation: plan.Group.Generation, Bindings: storageRequests})
 	if err != nil {
-		return engine.ResourceGroup{Ref: ref}, err
+		return engine.ResourceGroup{Ref: ref}, workloadStartFailure("resolve_storage", "", err)
 	}
 	storageByName := make(map[string]engine.StorageBinding, len(bindings))
 	for _, binding := range bindings {
@@ -68,32 +87,37 @@ func (e *Engine) startInfrastructureWorkloadGroup(ctx context.Context, plan engi
 	}
 	for _, workload := range plan.Workloads {
 		if err = ctx.Err(); err != nil {
-			return engine.ResourceGroup{Ref: ref}, errors.Join(err, engine.ErrUncertain)
+			return engine.ResourceGroup{Ref: ref}, workloadStartFailure("prepare_component", workload.ID, err)
 		}
 		options, optionErr := e.infrastructureContainerOptions(plan, workload, groupName, networkName, workloadNames, storageByName)
 		if optionErr != nil {
-			return engine.ResourceGroup{Ref: ref}, errors.Join(optionErr, engine.ErrUncertain)
+			return engine.ResourceGroup{Ref: ref}, workloadStartFailure("prepare_component", workload.ID, optionErr)
 		}
 		created, createErr := e.networkClient.ContainerCreate(ctx, options)
 		if createErr != nil || created.ID == "" {
 			if createErr == nil {
 				createErr = engine.ErrUncertain
 			}
-			return engine.ResourceGroup{Ref: ref}, errors.Join(fmt.Errorf("create Docker workload %q: %w", workload.ID, createErr), engine.ErrUncertain)
+			return engine.ResourceGroup{Ref: ref}, workloadStartFailure("create_component", workload.ID, fmt.Errorf("create Docker workload %q: %w", workload.ID, createErr))
+		}
+		if e.config.NetworkName == "" && workloadHasPlatformEndpoint(workload) {
+			if _, connectErr := e.networkClient.NetworkConnect(ctx, "bridge", client.NetworkConnectOptions{Container: created.ID}); connectErr != nil {
+				return engine.ResourceGroup{Ref: ref}, workloadStartFailure("attach_ingress_bridge", workload.ID, connectErr)
+			}
 		}
 	}
 	for _, workload := range plan.Workloads {
 		name := workloadNames[workload.ID]
 		if _, err = e.networkClient.ContainerStart(ctx, name, client.ContainerStartOptions{}); err != nil {
-			return engine.ResourceGroup{Ref: ref}, errors.Join(fmt.Errorf("start Docker workload %q: %w", workload.ID, err), engine.ErrUncertain)
+			return engine.ResourceGroup{Ref: ref}, workloadStartFailure("start_component", workload.ID, fmt.Errorf("start Docker workload %q: %w", workload.ID, err))
 		}
 	}
 	observation, err := e.inspectWorkloadGroup(ctx, ref)
 	if err != nil {
-		return observation.Group, errors.Join(fmt.Errorf("inspect started Docker workload group: %w", err), engine.ErrUncertain)
+		return observation.Group, workloadStartFailure("inspect_started_group", "", fmt.Errorf("inspect started Docker workload group: %w", err))
 	}
 	if observation.State != engine.GroupActive {
-		return observation.Group, engine.ErrUncertain
+		return observation.Group, workloadStartFailure("group_not_active", "", engine.ErrUncertain)
 	}
 	for _, workload := range plan.Workloads {
 		go e.forwardInfrastructureLogs(workloadNames[workload.ID], plan.Group.Owner, workload.ID)
@@ -288,6 +312,15 @@ func (e *Engine) infrastructureContainerOptions(plan engine.WorkloadPlan, worklo
 	}, nil
 }
 
+func workloadHasPlatformEndpoint(workload engine.Workload) bool {
+	for _, endpoint := range workload.Endpoints {
+		if endpoint.Exposure == engine.ExposurePlatform {
+			return true
+		}
+	}
+	return false
+}
+
 func (e *Engine) inspectWorkloadGroup(ctx context.Context, ref engine.GroupRef) (engine.GroupObservation, error) {
 	items, err := e.networkClient.ContainerList(ctx, client.ContainerListOptions{All: true, Filters: client.Filters{}.Add("label", groupLabel+"="+infrastructureContainerName(ref.Identity))})
 	if err != nil {
@@ -307,6 +340,7 @@ func (e *Engine) inspectWorkloadGroup(ctx context.Context, ref engine.GroupRef) 
 	endpointValues := make(map[string]map[string]string, len(items.Items))
 	var metadata map[string]string
 	active, stopped := 0, 0
+	endpointUnavailable := false
 	for _, item := range items.Items {
 		inspection, inspectErr := e.networkClient.ContainerInspect(ctx, item.ID, client.ContainerInspectOptions{})
 		if errdefs.IsNotFound(inspectErr) {
@@ -345,25 +379,31 @@ func (e *Engine) inspectWorkloadGroup(ctx context.Context, ref engine.GroupRef) 
 		resource := engine.Resource{Ref: engine.ResourceRef{Key: engine.ResourceKey{InstallationID: e.installation, ResourceID: labels[groupLabel], ComponentID: component}, ConcreteID: inspection.Container.ID}, State: state}
 		group.Components = append(group.Components, resource)
 		componentEndpoints := make(map[string]string)
-		for label, value := range labels {
-			endpointName, found := strings.CutPrefix(label, "orkest.infrastructure.endpoint.")
-			if !found {
-				continue
-			}
-			var endpoint engine.Endpoint
-			if err = json.Unmarshal([]byte(value), &endpoint); err != nil {
-				return engine.GroupObservation{}, engine.ErrUncertain
-			}
-			address := net.JoinHostPort(workloadNamesFromGroup(ref.Identity, component), fmt.Sprintf("%d", endpoint.ListenPort))
-			if endpoint.Exposure == engine.ExposurePlatform && e.config.NetworkName == "" {
-				address, err = publishedEndpoint(inspection.Container, endpoint.ListenPort)
-				if err != nil {
-					return engine.GroupObservation{}, err
+		if state == engine.ResourceRunning {
+			for label, value := range labels {
+				endpointName, found := strings.CutPrefix(label, "orkest.infrastructure.endpoint.")
+				if !found {
+					continue
 				}
-			} else if endpoint.Protocol == "http" || endpoint.Protocol == "https" {
-				address = endpoint.Protocol + "://" + address
+				var endpoint engine.Endpoint
+				if err = json.Unmarshal([]byte(value), &endpoint); err != nil {
+					return engine.GroupObservation{}, engine.ErrUncertain
+				}
+				address := net.JoinHostPort(workloadNamesFromGroup(ref.Identity, component), fmt.Sprintf("%d", endpoint.ListenPort))
+				if endpoint.Exposure == engine.ExposurePlatform && e.config.NetworkName == "" {
+					address, err = publishedEndpoint(inspection.Container, endpoint.ListenPort)
+					if err != nil {
+						if !errors.Is(err, errWorkloadHasNoLoopbackPortBinding) {
+							return engine.GroupObservation{}, err
+						}
+						endpointUnavailable = true
+						continue
+					}
+				} else if endpoint.Protocol == "http" || endpoint.Protocol == "https" {
+					address = endpoint.Protocol + "://" + address
+				}
+				componentEndpoints[endpointName] = address
 			}
-			componentEndpoints[endpointName] = address
 		}
 		endpointValues[component] = componentEndpoints
 	}
@@ -405,6 +445,9 @@ func (e *Engine) inspectWorkloadGroup(ctx context.Context, ref engine.GroupRef) 
 		}
 	}
 	if active == len(group.Components) {
+		if endpointUnavailable {
+			return engine.GroupObservation{State: engine.GroupUncertain, Group: group}, nil
+		}
 		return engine.GroupObservation{State: engine.GroupActive, Group: group}, nil
 	}
 	if stopped == len(group.Components) {
@@ -429,20 +472,34 @@ func (e *Engine) stopWorkloadGroup(ctx context.Context, group engine.ResourceGro
 func (e *Engine) waitForWorkloadGroupStop(ctx context.Context, ref engine.GroupRef) error {
 	ticker := time.NewTicker(50 * time.Millisecond)
 	defer ticker.Stop()
+	stopCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
 	for {
 		observation, err := e.inspectWorkloadGroup(ctx, ref)
 		if err != nil {
 			return err
 		}
-		if observation.State == engine.GroupAbsent || observation.State == engine.GroupStopped {
+		if observation.State == engine.GroupAbsent || observation.State == engine.GroupStopped || workloadGroupComponentsStopped(observation.Group) {
 			return nil
 		}
 		select {
-		case <-ctx.Done():
-			return errors.Join(ctx.Err(), engine.ErrUncertain)
+		case <-stopCtx.Done():
+			return errors.Join(stopCtx.Err(), engine.ErrUncertain)
 		case <-ticker.C:
 		}
 	}
+}
+
+func workloadGroupComponentsStopped(group engine.ResourceGroup) bool {
+	if len(group.Components) == 0 {
+		return false
+	}
+	for _, component := range group.Components {
+		if component.State == engine.ResourceRunning {
+			return false
+		}
+	}
+	return true
 }
 
 func (e *Engine) cleanupWorkloadGroup(ctx context.Context, group engine.ResourceGroup, ref engine.GroupRef) error {

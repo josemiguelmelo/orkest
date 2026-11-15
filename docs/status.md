@@ -78,8 +78,11 @@ Only the requesting mutating user may attach or explicitly Stop. The task page
 embeds VS Code and requests editor shutdown on page exit or refresh; full browser
 journeys remain to be qualified. Docker is implemented; Local and Kubernetes
 editor backends are required but return unavailable. One active platform
-coordinator remains a deployment constraint. Editor networks have no internet
-egress; controlled egress is deferred. Agent and editor executors use the
+coordinator remains a deployment constraint. The editor shell remains on an
+egress-denied network. The Docker forwarding workload also joins the default
+bridge for loopback port publishing and therefore has outbound network capability;
+it receives no task checkout, agent state, provider credentials or configured host
+mounts. Agent and editor executors use the
 provider-neutral infrastructure engine contract; engines do not branch on executor
 identity. Docker, Kubernetes and Local realize their supported workload primitives.
 Focused race, lint, architecture, real Docker security, and Chromium gateway checks

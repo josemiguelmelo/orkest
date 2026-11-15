@@ -42,6 +42,22 @@ type EditorExecutor struct {
 	tokens  map[string]string
 }
 
+type editorStartError struct {
+	stage string
+	err   error
+}
+
+func (e editorStartError) Error() string          { return e.err.Error() }
+func (e editorStartError) Unwrap() error          { return e.err }
+func (e editorStartError) LifecycleStage() string { return "start/" + e.stage }
+
+func atEditorStartStage(stage string, err error) error {
+	if err == nil {
+		return nil
+	}
+	return editorStartError{stage: stage, err: err}
+}
+
 var _ taskeditor.EditorExecutor = (*EditorExecutor)(nil)
 
 func New(infrastructure engine.InfrastructureEngine, config Config) (*EditorExecutor, error) {
@@ -107,46 +123,46 @@ func (e *EditorExecutor) Inspect(ctx context.Context, organizationID, workspaceI
 func (e *EditorExecutor) StartEditor(ctx context.Context, spec taskeditor.Spec) (taskeditor.Instance, error) {
 	instance := spec.Instance
 	if len(instance.Generation) != 64 {
-		return taskeditor.Instance{}, errors.New("invalid editor generation")
+		return taskeditor.Instance{}, atEditorStartStage("validate_generation", errors.New("invalid editor generation"))
 	}
 	if _, err := hex.DecodeString(instance.Generation); err != nil {
-		return taskeditor.Instance{}, errors.New("invalid editor generation")
+		return taskeditor.Instance{}, atEditorStartStage("validate_generation", errors.New("invalid editor generation"))
 	}
 	if instance.UserID == "" || instance.Fingerprint == "" {
-		return taskeditor.Instance{}, errors.New("editor owner and fingerprint are required")
+		return taskeditor.Instance{}, atEditorStartStage("validate_identity", errors.New("editor owner and fingerprint are required"))
 	}
 	if instance.Mode != taskeditor.ReadOnly && instance.Mode != taskeditor.ReadWrite {
-		return taskeditor.Instance{}, errors.New("invalid editor mode")
+		return taskeditor.Instance{}, atEditorStartStage("validate_mode", errors.New("invalid editor mode"))
 	}
 	if len(spec.Discovery.Roots) != 1 || spec.Discovery.Roots[0].Path != taskTarget || len(spec.Discovery.Manifest) == 0 {
-		return taskeditor.Instance{}, taskeditor.ErrUnavailable
+		return taskeditor.Instance{}, atEditorStartStage("validate_discovery", taskeditor.ErrUnavailable)
 	}
 	storageID := taskstorage.Identity(instance.Scope.OrganizationID, instance.Scope.WorkspaceID, instance.Scope.TaskID)
 	bindings, err := e.engine.ResolveStorage(ctx, engine.StorageRequest{Owner: storageID, Generation: instance.Generation, Bindings: []engine.StorageBindingRequest{{Name: "work", StorageID: storageID, Subpath: "work", Durable: true}}})
 	if err != nil {
-		return taskeditor.Instance{}, err
+		return taskeditor.Instance{}, atEditorStartStage("resolve_storage", err)
 	}
 	if len(bindings) != 1 {
-		return taskeditor.Instance{}, engine.ErrInvalidSpec
+		return taskeditor.Instance{}, atEditorStartStage("validate_storage", engine.ErrInvalidSpec)
 	}
 	resolvedWork, resolveErr := filepath.EvalSymlinks(bindings[0].HostPath)
 	if resolveErr != nil || resolvedWork != spec.Discovery.Roots[0].StorageRef {
-		return taskeditor.Instance{}, errors.New("editor task workspace changed after discovery")
+		return taskeditor.Instance{}, atEditorStartStage("verify_workspace_identity", errors.New("editor task workspace changed after discovery"))
 	}
 	plan, token, planErr := e.infrastructurePlan(instance, storageID, spec.Discovery.Manifest)
 	if planErr != nil {
-		return taskeditor.Instance{}, planErr
+		return taskeditor.Instance{}, atEditorStartStage("build_plan", planErr)
 	}
 	if err = e.engine.ValidatePlan(ctx, plan); err != nil {
-		return taskeditor.Instance{}, err
+		return taskeditor.Instance{}, atEditorStartStage("validate_plan", err)
 	}
 	if err = e.engine.ValidateStorageAccess(ctx, engine.StorageAccessRequest{StorageID: storageID, Subpath: "work"}); err != nil {
-		return taskeditor.Instance{}, fmt.Errorf("validate task storage admission for editor: %w", err)
+		return taskeditor.Instance{}, atEditorStartStage("validate_storage_access", fmt.Errorf("validate task storage admission for editor: %w", err))
 	}
 	group, startErr := e.engine.StartPlan(ctx, plan)
 	instance.ID, err = engine.EncodeGroupRef(group.Ref)
 	if err != nil {
-		return instance, err
+		return instance, atEditorStartStage("encode_group_reference", err)
 	}
 	instance.Endpoint = group.Endpoints[plan.Metadata["endpoint"]]
 	instance.GatewayToken = token
@@ -157,13 +173,13 @@ func (e *EditorExecutor) StartEditor(ctx context.Context, spec taskeditor.Spec) 
 		e.tokenMu.Unlock()
 	}
 	if startErr != nil {
-		return instance, fmt.Errorf("start editor infrastructure plan: %w", startErr)
+		return instance, atEditorStartStage("start_plan", fmt.Errorf("start editor infrastructure plan: %w", startErr))
 	}
 	if instance.Endpoint == "" {
-		return instance, engine.ErrUncertain
+		return instance, atEditorStartStage("resolve_endpoint", engine.ErrUncertain)
 	}
 	if err = waitForEditorReady(ctx, instance.Endpoint, token); err != nil {
-		return instance, err
+		return instance, atEditorStartStage("wait_for_readiness", err)
 	}
 	return instance, nil
 }

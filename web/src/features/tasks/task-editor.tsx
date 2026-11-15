@@ -57,6 +57,7 @@ export function TaskEditorAccess({
   const attemptedActivation = useRef(-1);
   const opening = useRef(false);
   const openEditorRef = useRef<() => void>(() => {});
+  const exitCleanupTimer = useRef<number | undefined>(undefined);
   const status = query.data;
   const ready = status?.state === 'ready';
   const missing = status?.missing ?? [];
@@ -119,10 +120,19 @@ export function TaskEditorAccess({
 
   useEffect(() => {
     if (!permissions.editWorkspace) return;
+    if (exitCleanupTimer.current !== undefined) {
+      window.clearTimeout(exitCleanupTimer.current);
+      exitCleanupTimer.current = undefined;
+    }
     window.addEventListener('pagehide', stopOnExit);
     return () => {
       window.removeEventListener('pagehide', stopOnExit);
-      stopOnExit();
+      // React Strict Mode runs effect cleanup and setup back-to-back in
+      // development. Defer unmount shutdown so the next setup can cancel it.
+      exitCleanupTimer.current = window.setTimeout(() => {
+        exitCleanupTimer.current = undefined;
+        stopOnExit();
+      }, 0);
     };
   }, [permissions.editWorkspace, stopOnExit]);
 

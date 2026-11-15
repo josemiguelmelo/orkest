@@ -66,6 +66,8 @@ type Engine struct {
 
 var _ engine.InfrastructureEngine = (*Engine)(nil)
 
+var errWorkloadHasNoLoopbackPortBinding = errors.New("workload has no loopback port binding")
+
 // NewClient constructs the Docker API client owned by the infrastructure engine.
 func NewClient() (Client, error) { return client.New(client.FromEnv) }
 
@@ -203,5 +205,5 @@ func publishedEndpoint(inspected container.InspectResponse, containerPort int) (
 			return "http://127.0.0.1:" + binding.HostPort, nil
 		}
 	}
-	return "", errors.New("workload has no loopback port binding")
+	return "", errWorkloadHasNoLoopbackPortBinding
 }

@@ -342,7 +342,7 @@ func (e *Engine) CleanupGroup(ctx context.Context, ref engine.GroupRef) error {
 		if err != nil || observation.State == engine.GroupAbsent {
 			return err
 		}
-		if observation.State != engine.GroupStopped {
+		if observation.State != engine.GroupStopped && !workloadGroupComponentsStopped(observation.Group) {
 			return errors.New("refusing to remove active or uncertain Docker workload group")
 		}
 		return e.cleanupWorkloadGroup(ctx, observation.Group, ref)

@@ -26,8 +26,12 @@ it requires both denied egress and platform ingress and includes an authenticate
 forwarding workload in the plan. Docker supports direct routing when the platform
 is attached to the configured Docker network; otherwise it publishes only the
 forwarder on loopback. The editor shell remains on an egress-denied network. The
-token is held by the executor for the generation and is excluded from manifests,
-metadata and public lifecycle responses.
+Docker Engine 29 does not publish ports for a container attached only to internal
+networks, so the forwarding workload also joins Docker's default bridge before it
+starts. The forwarder has no task checkout, agent state, provider credentials or
+configured host mounts; it does have outbound network capability through that
+bridge. The token is held by the executor for the generation and is excluded from
+manifests, metadata and public lifecycle responses.
 
 Docker is the only editor backend currently supported. Local and Kubernetes
 engines support other generic plans but do not enforce the editor's full network,
