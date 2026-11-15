@@ -60,8 +60,11 @@ remains supported. See [workflow stage integrations](workflow-stage-integrations
 - Declarations neither impose execution order nor create movement rules.
 - Dispatch selects current revisions matching source stage/output/kind from the newest
   matching producing stage-entry version, preserving multiple outputs (such as per-repository PRs).
-- Missing optional input → empty array. Missing required input → reject consumer start,
-  expose automation failure, retain stage movement. Outputs never gate producer completion.
+- Missing optional input → empty array. Missing required input blocks an automatic
+  consumer start and exposes automation failure while retaining stage movement. An
+  explicit user message may still start work; unavailable required inputs are listed
+  in the agent context and the message proceeds with available artifacts. Outputs
+  never gate producer completion.
 - Every start gets named inputs/expected outputs, including explicit prompts and
   continued sessions. Inputs are pinned; recovery reuses saved prompt/identities.
   Runs without artifact bindings still receive publishing instructions.
