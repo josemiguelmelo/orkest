@@ -82,6 +82,11 @@ type AgentSkill struct {
 	SkillID     string `json:"skill_id"`
 }
 
+type AuthBootstrapState struct {
+	ID          int16 `json:"id"`
+	Initialized bool  `json:"initialized"`
+}
+
 type CodeRepository struct {
 	ID                   string             `json:"id"`
 	WorkspaceID          string             `json:"workspace_id"`
@@ -147,6 +152,23 @@ type ExecutionProfileBuild struct {
 	Owner             string             `json:"owner"`
 	LeaseUntil        pgtype.Timestamptz `json:"lease_until"`
 	CreatedAt         pgtype.Timestamptz `json:"created_at"`
+}
+
+type LocalCredential struct {
+	UserID             string             `json:"user_id"`
+	NormalizedUsername string             `json:"normalized_username"`
+	NormalizedEmail    string             `json:"normalized_email"`
+	PasswordHash       string             `json:"password_hash"`
+	CreatedAt          pgtype.Timestamptz `json:"created_at"`
+	UpdatedAt          pgtype.Timestamptz `json:"updated_at"`
+}
+
+type LocalSession struct {
+	TokenHash []byte             `json:"token_hash"`
+	UserID    string             `json:"user_id"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
+	RevokedAt pgtype.Timestamptz `json:"revoked_at"`
 }
 
 type McpServer struct {
@@ -333,11 +355,18 @@ type TaskStageHistory struct {
 
 type User struct {
 	ID              string             `json:"id"`
-	KeycloakSubject string             `json:"keycloak_subject"`
+	KeycloakSubject pgtype.Text        `json:"keycloak_subject"`
 	Username        string             `json:"username"`
 	Email           string             `json:"email"`
 	CreatedAt       pgtype.Timestamptz `json:"created_at"`
 	PlatformAdmin   bool               `json:"platform_admin"`
+}
+
+type UserAuthIdentity struct {
+	Provider  string             `json:"provider"`
+	Subject   string             `json:"subject"`
+	UserID    string             `json:"user_id"`
+	CreatedAt pgtype.Timestamptz `json:"created_at"`
 }
 
 type WorkflowCommand struct {

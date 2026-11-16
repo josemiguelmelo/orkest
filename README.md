@@ -56,6 +56,8 @@ make dev
 ```
 
 - Open <http://127.0.0.1:8080>; `/auth/login` uses imported Keycloak credentials `local` / `local`.
+- Local sign-in is always available with the initial `admin` / `admin` account;
+  set a stronger bootstrap password before exposing the service.
 - `make dev`: Air backend reload; `make dev-once`: one run. Rebuild `web/dist` after
   frontend changes or use [Vite](docs/development/webapp.md#development).
 - Settings: `.env.example`, overridden by shell variables; [networking/credentials](docs/operations/configuration.md).

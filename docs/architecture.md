@@ -52,8 +52,8 @@ from validation that rejects duplicate IDs.
 ```mermaid
 flowchart LR
     UI[React workbench] -->|HTTP| API[Orkest API]
-    UI -->|Sign in| Auth[Keycloak]
-    API -->|Verify identity| Auth
+    UI -->|Sign in| Auth[Keycloak OIDC or Orkest local auth]
+    API -->|Verify identity or local session| Auth
     API -->|Persist state| DB[(PostgreSQL)]
     API -->|Launch or inspect| Executor[Executor selection and infrastructure engine]
     Executor -->|Create environment| Worker[Independent agentctl process]
@@ -69,6 +69,9 @@ flowchart LR
   from `ORKEST_WEB_DIR`, not embedded in the Go binary.
 - `cmd/server/wiring.go` composes the platform; `cmd/agentctl/wiring.go` and
   `daemon.go` compose and supervise the independent worker.
+- Platform authentication supports local Orkest sessions and Keycloak OIDC. Local
+  password credentials and hashed revocable sessions are stored separately from
+  user profiles; verified-email linking retains the existing user ID.
 
 ## Platform ownership
 

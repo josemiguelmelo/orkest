@@ -590,6 +590,8 @@ function Members({ workspace }: { workspace: boolean }) {
   const orgMembers = useQuery({ ...membersQuery(scope, false), enabled: workspace });
   const refresh = useRefresh();
   const [editing, setEditing] = useState<Membership | null | undefined>();
+  const [provisioning, setProvisioning] = useState(false);
+  const [promotedUsers, setPromotedUsers] = useState<string[]>([]);
   const manageable = workspace ? permissions.workspaceAdmin : permissions.organizationAdmin;
   const owners = members.data?.filter((m) => m.role === 'owner').length ?? 0;
   const canEdit = (member: Membership) =>
@@ -601,7 +603,14 @@ function Members({ workspace }: { workspace: boolean }) {
           <Users size={17} style={{ display: 'inline', marginRight: 8 }} />
           {workspace ? 'Workspace' : 'Organization'} members
         </h2>
-        {manageable && <CreateButton onClick={() => setEditing(null)}>Add member</CreateButton>}
+        {manageable && (
+          <div className="actions">
+            {!workspace && (
+              <CreateButton onClick={() => setProvisioning(true)}>Provision account</CreateButton>
+            )}
+            <CreateButton onClick={() => setEditing(null)}>Add member</CreateButton>
+          </div>
+        )}
       </div>
       {members.isPending ? (
         <Loading />
@@ -666,6 +675,27 @@ function Members({ workspace }: { workspace: boolean }) {
                           />
                         </>
                       )}
+                      {!workspace &&
+                        session.platformAdmin &&
+                        !promotedUsers.includes(member.user.id) && (
+                          <ConfirmButton
+                            label="Promote to platform admin"
+                            title="Promote user to platform administrator?"
+                            description="This grants platform-wide administration privileges."
+                            triggerVariant="outline"
+                            onConfirm={async () => {
+                              const response = await fetch(
+                                `/api/users/${encodeURIComponent(member.user.id)}/platform-admin`,
+                                { method: 'POST' },
+                              );
+                              if (!response.ok) throw new Error('Could not promote this user.');
+                              setPromotedUsers((current) => [...current, member.user.id]);
+                            }}
+                          />
+                        )}
+                      {!workspace &&
+                        session.platformAdmin &&
+                        promotedUsers.includes(member.user.id) && <Badge>Platform admin</Badge>}
                     </div>
                   </td>
                 </tr>
@@ -683,7 +713,108 @@ function Members({ workspace }: { workspace: boolean }) {
           onClose={() => setEditing(undefined)}
         />
       )}
+      {provisioning && <ProvisionAccountDialog onClose={() => setProvisioning(false)} />}
     </section>
+  );
+}
+
+function ProvisionAccountDialog({ onClose }: { onClose: () => void }) {
+  const { scope } = useApp();
+  const refresh = useRefresh();
+  const action = useAction();
+  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [role, setRole] = useState<'admin' | 'member'>('member');
+  return (
+    <Dialog
+      title="Provision account"
+      description="Create a normal Orkest account with organization access. Platform-admin status is granted separately."
+      open
+      onOpenChange={(open) => {
+        if (!open && !action.pending) onClose();
+      }}
+    >
+      <form
+        className="form-stack"
+        onSubmit={async (event) => {
+          event.preventDefault();
+          if (
+            await action.run(async () => {
+              const response = await fetch(
+                `/api/organizations/${encodeURIComponent(scope.orgID)}/accounts`,
+                {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ username, email, password, role }),
+                },
+              );
+              if (!response.ok)
+                throw new Error(
+                  'Account could not be provisioned. Check the username, email, and your organization permissions.',
+                );
+              await refresh(scope);
+            })
+          )
+            onClose();
+        }}
+      >
+        <label>
+          Username
+          <input
+            autoComplete="off"
+            value={username}
+            onChange={(event) => setUsername(event.target.value)}
+            required
+            maxLength={64}
+          />
+        </label>
+        <label>
+          Email
+          <input
+            type="email"
+            autoComplete="off"
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            required
+          />
+        </label>
+        <label>
+          Initial password
+          <input
+            type="password"
+            autoComplete="new-password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            required
+            minLength={12}
+          />
+        </label>
+        <label>
+          Organization role
+          <select
+            value={role}
+            onChange={(event) => setRole(event.target.value as 'admin' | 'member')}
+          >
+            <option value="member">Member</option>
+            <option value="admin">Admin</option>
+          </select>
+        </label>
+        {Boolean(action.error) && (
+          <p className="error-text" role="alert">
+            {String(action.error)}
+          </p>
+        )}
+        <div className="dialog-actions">
+          <Button type="button" variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="submit" disabled={action.pending}>
+            {action.pending ? 'Provisioning…' : 'Provision account'}
+          </Button>
+        </div>
+      </form>
+    </Dialog>
   );
 }
 function MemberDialog({

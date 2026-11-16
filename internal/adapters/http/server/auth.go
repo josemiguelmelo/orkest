@@ -5,13 +5,16 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
@@ -28,18 +31,24 @@ const (
 	refreshCookie = "orkest_refresh"
 )
 
-type oidcAuth struct {
+type platformAuth struct {
 	config        oauth2.Config
 	httpClient    *http.Client
 	verifier      *oidc.IDTokenVerifier
 	secure        bool
 	users         *identity.UserRegistrationService
 	organizations *organization.OrganizationService
+	local         *identity.LocalAuthenticationService
+	loginMu       sync.Mutex
+	loginFailures map[string][]time.Time
 }
 
 type userContextKey struct{}
 
-func newOIDCAuth(ctx context.Context, users *identity.UserRegistrationService, organizations *organization.OrganizationService) (*oidcAuth, error) {
+func newPlatformAuth(ctx context.Context, users *identity.UserRegistrationService, organizations *organization.OrganizationService, local *identity.LocalAuthenticationService) (*platformAuth, error) {
+	if local == nil {
+		return nil, fmt.Errorf("local authentication service is required")
+	}
 	issuer := envOr("OIDC_ISSUER_URL", "http://localhost:8082/realms/orkest")
 	clientID := envOr("OIDC_CLIENT_ID", "orkest-web")
 	httpClient, err := oidcHTTPClient(issuer, os.Getenv("OIDC_INTERNAL_ISSUER_URL"))
@@ -57,7 +66,7 @@ func newOIDCAuth(ctx context.Context, users *identity.UserRegistrationService, o
 	if err != nil {
 		return nil, fmt.Errorf("configure public OIDC authorization endpoint: %w", err)
 	}
-	return &oidcAuth{
+	return &platformAuth{
 		config: oauth2.Config{
 			ClientID: clientID, ClientSecret: envOr("OIDC_CLIENT_SECRET", "orkest-local-secret"),
 			Endpoint: endpoint, RedirectURL: redirectURL,
@@ -65,7 +74,7 @@ func newOIDCAuth(ctx context.Context, users *identity.UserRegistrationService, o
 		},
 		httpClient: httpClient,
 		verifier:   provider.Verifier(&oidc.Config{ClientID: clientID}), users: users, organizations: organizations,
-		secure: strings.EqualFold(os.Getenv("OIDC_COOKIE_SECURE"), "true"),
+		local: local, secure: strings.EqualFold(envOr("ORKEST_COOKIE_SECURE", os.Getenv("OIDC_COOKIE_SECURE")), "true"),
 	}, nil
 }
 
@@ -123,7 +132,7 @@ func (t *oidcIssuerTransport) RoundTrip(request *http.Request) (*http.Response, 
 	return t.base.RoundTrip(clone)
 }
 
-func (a *oidcAuth) login(w http.ResponseWriter, r *http.Request) {
+func (a *platformAuth) login(w http.ResponseWriter, r *http.Request) {
 	state, err := randomState()
 	if err != nil {
 		http.Error(w, "could not start login", http.StatusInternalServerError)
@@ -139,7 +148,12 @@ func (a *oidcAuth) login(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, a.config.AuthCodeURL(state, oidc.Nonce(nonce)), http.StatusFound)
 }
 
-func (a *oidcAuth) callback(w http.ResponseWriter, r *http.Request) {
+func (a *platformAuth) methods(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]bool{"local": true, "keycloak": true})
+}
+
+func (a *platformAuth) callback(w http.ResponseWriter, r *http.Request) {
 	state, err := r.Cookie("orkest_oauth_state")
 	nonce, nonceErr := r.Cookie("orkest_oauth_nonce")
 	if err != nil || nonceErr != nil || state.Value == "" || nonce.Value == "" || r.URL.Query().Get("state") != state.Value {
@@ -165,18 +179,33 @@ func (a *oidcAuth) callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var tokenClaims struct {
-		Nonce    string `json:"nonce"`
-		Subject  string `json:"sub"`
-		Email    string `json:"email"`
-		Username string `json:"preferred_username"`
+		Nonce         string `json:"nonce"`
+		Subject       string `json:"sub"`
+		Email         string `json:"email"`
+		EmailVerified bool   `json:"email_verified"`
+		Username      string `json:"preferred_username"`
 	}
 	if err := idToken.Claims(&tokenClaims); err != nil || tokenClaims.Nonce != nonce.Value || tokenClaims.Subject == "" {
 		http.Error(w, "login failed", http.StatusUnauthorized)
 		return
 	}
-	if _, err := a.users.EnsureUserProfile(r.Context(), tokenClaims.Subject, tokenClaims.Username, tokenClaims.Email); err != nil {
+	if tokenClaims.EmailVerified {
+		_, err = a.local.LinkKeycloakIdentity(r.Context(), tokenClaims.Subject, tokenClaims.Email, true)
+		if errors.Is(err, identity.ErrNoLocalAccountToLink) {
+			_, err = a.users.EnsureUserProfile(r.Context(), tokenClaims.Subject, tokenClaims.Username, tokenClaims.Email)
+		}
+	} else {
+		var hasLocalAccount bool
+		hasLocalAccount, err = a.local.HasAccountEmail(r.Context(), tokenClaims.Email)
+		if err == nil && hasLocalAccount {
+			err = identity.ErrInvalidCredentials
+		} else if err == nil {
+			_, err = a.users.EnsureUserProfile(r.Context(), tokenClaims.Subject, tokenClaims.Username, tokenClaims.Email)
+		}
+	}
+	if err != nil {
 		logServerError(r, "register authenticated user", err)
-		http.Error(w, "login failed", http.StatusInternalServerError)
+		http.Error(w, "login failed", http.StatusUnauthorized)
 		return
 	}
 	maxAge := int(time.Until(idToken.Expiry).Seconds())
@@ -191,13 +220,94 @@ func (a *oidcAuth) callback(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
-func (a *oidcAuth) logout(w http.ResponseWriter, r *http.Request) {
+func (a *platformAuth) logout(w http.ResponseWriter, r *http.Request) {
+	localToken := ""
+	if header := r.Header.Get("Authorization"); strings.HasPrefix(header, "Bearer local.") {
+		localToken = strings.TrimPrefix(header, "Bearer ")
+	} else if cookie, err := r.Cookie(sessionCookie); err == nil {
+		localToken = cookie.Value
+	}
+	if localToken != "" {
+		if err := a.local.RevokeSession(r.Context(), localToken); err != nil {
+			logServerError(r, "revoke local session", err)
+		}
+	}
 	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: "", Path: "/", HttpOnly: true, Secure: a.secure, SameSite: http.SameSiteLaxMode, MaxAge: -1})
 	http.SetCookie(w, &http.Cookie{Name: refreshCookie, Value: "", Path: "/", HttpOnly: true, Secure: a.secure, SameSite: http.SameSiteLaxMode, MaxAge: -1})
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (a *oidcAuth) currentUser(w http.ResponseWriter, r *http.Request) {
+func (a *platformAuth) localLogin(w http.ResponseWriter, r *http.Request) {
+	var request struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	if !decodeBody(w, r, &request) {
+		return
+	}
+	client := r.RemoteAddr
+	if host, _, err := net.SplitHostPort(client); err == nil {
+		client = host
+	}
+	if !a.allowLocalLogin(client, time.Now()) {
+		writeError(w, http.StatusTooManyRequests, "login_rate_limited")
+		return
+	}
+	_, token, err := a.local.Authenticate(r.Context(), request.Username, request.Password)
+	if err != nil {
+		if errors.Is(err, identity.ErrInvalidCredentials) {
+			writeError(w, http.StatusUnauthorized, "invalid_credentials")
+		} else {
+			logServerError(r, "authenticate local account", err)
+			writeError(w, http.StatusInternalServerError, "internal_error")
+		}
+		return
+	}
+	a.clearLocalLoginFailures(client)
+	http.SetCookie(w, &http.Cookie{Name: sessionCookie, Value: token, Path: "/", HttpOnly: true, Secure: a.secure, SameSite: http.SameSiteLaxMode, MaxAge: 12 * 60 * 60, Expires: time.Now().Add(12 * time.Hour)})
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (a *platformAuth) allowLocalLogin(client string, now time.Time) bool {
+	a.loginMu.Lock()
+	defer a.loginMu.Unlock()
+	if a.loginFailures == nil {
+		a.loginFailures = make(map[string][]time.Time)
+	}
+	a.pruneLocalLoginFailures(now)
+	if len(a.loginFailures[client]) >= 10 {
+		return false
+	}
+	if _, exists := a.loginFailures[client]; !exists && len(a.loginFailures) >= 10_000 {
+		return false
+	}
+	a.loginFailures[client] = append(a.loginFailures[client], now)
+	return true
+}
+
+func (a *platformAuth) clearLocalLoginFailures(client string) {
+	a.loginMu.Lock()
+	delete(a.loginFailures, client)
+	a.loginMu.Unlock()
+}
+
+func (a *platformAuth) pruneLocalLoginFailures(now time.Time) {
+	for client, failures := range a.loginFailures {
+		kept := failures[:0]
+		for _, at := range failures {
+			if now.Sub(at) < 15*time.Minute {
+				kept = append(kept, at)
+			}
+		}
+		if len(kept) == 0 {
+			delete(a.loginFailures, client)
+		} else {
+			a.loginFailures[client] = kept
+		}
+	}
+}
+
+func (a *platformAuth) currentUser(w http.ResponseWriter, r *http.Request) {
 	user, ok := r.Context().Value(userContextKey{}).(identitymodel.User)
 	if !ok {
 		writeError(w, http.StatusUnauthorized, "unauthorized")
@@ -215,21 +325,45 @@ func (a *oidcAuth) currentUser(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "internal_error")
 		return
 	}
+	hasLocalPassword := false
+	if a.local != nil {
+		hasLocalPassword, err = a.local.HasLocalPassword(r.Context(), user.ID)
+		if err != nil {
+			logServerError(r, "load current user authentication settings", err)
+			writeError(w, http.StatusInternalServerError, "internal_error")
+			return
+		}
+	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(struct {
-		PlatformAdmin bool                             `json:"platformAdmin"`
-		User          identitymodel.User               `json:"user"`
-		Organizations []organizationmodel.Organization `json:"organizations"`
-	}{platformAdmin, user, organizations})
+		PlatformAdmin    bool                             `json:"platformAdmin"`
+		HasLocalPassword bool                             `json:"hasLocalPassword"`
+		User             identitymodel.User               `json:"user"`
+		Organizations    []organizationmodel.Organization `json:"organizations"`
+	}{platformAdmin, hasLocalPassword, user, organizations})
 }
 
-func (a *oidcAuth) middleware(next http.Handler) http.Handler {
+func (a *platformAuth) middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		raw := ""
 		if header := r.Header.Get("Authorization"); strings.HasPrefix(header, "Bearer ") {
 			raw = strings.TrimPrefix(header, "Bearer ")
 		} else if cookie, err := r.Cookie(sessionCookie); err == nil {
 			raw = cookie.Value
+		}
+		if strings.HasPrefix(raw, "local.") {
+			user, err := a.local.UserForSession(r.Context(), raw)
+			if err != nil {
+				if errors.Is(err, identity.ErrInvalidCredentials) {
+					writeError(w, http.StatusUnauthorized, "unauthorized")
+				} else {
+					logServerError(r, "load local session", err)
+					writeError(w, http.StatusInternalServerError, "internal_error")
+				}
+				return
+			}
+			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), userContextKey{}, user)))
+			return
 		}
 		var token *oidc.IDToken
 		var err error
@@ -277,7 +411,7 @@ func shouldRefreshSession(raw, authorization string, verifyErr error) bool {
 	return authorization == "" && (raw == "" || verifyErr != nil)
 }
 
-func (a *oidcAuth) refreshSession(ctx context.Context, refreshToken string) (*oauth2.Token, error) {
+func (a *platformAuth) refreshSession(ctx context.Context, refreshToken string) (*oauth2.Token, error) {
 	ctx = context.WithValue(ctx, oauth2.HTTPClient, a.httpClient)
 	// x/oauth2's refresh token source omits scope. Keycloak only returns a new
 	// ID token when the refresh grant explicitly asks for the OpenID scope.

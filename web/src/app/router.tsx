@@ -13,14 +13,18 @@ const Organization = lazy(() =>
 const WorkflowSettings = lazy(() =>
   import('../features/workflow/workflow').then((m) => ({ default: m.WorkflowPage })),
 );
-const ScheduledJobs = lazy(() => import('../features/scheduled-jobs/jobs').then(m => ({ default: m.ScheduledJobsPage })));
+const ScheduledJobs = lazy(() =>
+  import('../features/scheduled-jobs/jobs').then((m) => ({ default: m.ScheduledJobsPage })),
+);
 const Tasks = lazy(() => import('../features/tasks/tasks').then((m) => ({ default: m.TasksPage })));
 const Task = lazy(() => import('../features/tasks/tasks').then((m) => ({ default: m.TaskPage })));
 const Profiles = lazy(() =>
   import('../features/execution-profiles/profiles').then((m) => ({ default: m.ProfilesPage })),
 );
 const AgentRuntimeProfiles = lazy(() =>
-  import('../features/agent-runtime-profiles/profiles').then((m) => ({ default: m.AgentRuntimeProfilesPage })),
+  import('../features/agent-runtime-profiles/profiles').then((m) => ({
+    default: m.AgentRuntimeProfilesPage,
+  })),
 );
 const Agents = lazy(() =>
   import('../features/agents/agents').then((m) => ({ default: m.AgentsPage })),
@@ -40,6 +44,9 @@ const Integrations = lazy(() =>
 );
 const WorkspaceSettings = lazy(() =>
   import('../features/settings/organizations').then((m) => ({ default: m.WorkspaceSettingsPage })),
+);
+const UserSettings = lazy(() =>
+  import('../features/settings/user').then((m) => ({ default: m.UserSettingsPage })),
 );
 const root = createRootRoute({
   component: Shell,
@@ -65,6 +72,11 @@ const globalSkills = createRoute({
   getParentRoute: () => root,
   path: 'skills',
   component: loading(Skills),
+});
+const userSettings = createRoute({
+  getParentRoute: () => root,
+  path: 'settings',
+  component: loading(UserSettings),
 });
 const organization = createRoute({
   getParentRoute: () => root,
@@ -111,7 +123,11 @@ const workspaceIndex = createRoute({
   component: loading(Tasks),
   validateSearch: taskSearchSchema,
 });
-const scheduledJobs = createRoute({ getParentRoute: () => workspace, path: 'scheduled-jobs', component: loading(ScheduledJobs) });
+const scheduledJobs = createRoute({
+  getParentRoute: () => workspace,
+  path: 'scheduled-jobs',
+  component: loading(ScheduledJobs),
+});
 const agents = createRoute({
   getParentRoute: () => workspace,
   path: 'agents',
@@ -164,6 +180,7 @@ const settings = createRoute({
 });
 const tree = root.addChildren([
   home,
+  userSettings,
   globalSkills,
   organization.addChildren([
     organizationIndex,

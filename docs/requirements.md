@@ -12,7 +12,7 @@ provides monitoring, chat, approvals, and recovery through agentctl and ACP.
 ## 2. Confirmed MVP scope
 
 - Multiple organizations, users, and workspaces from day one.
-- Keycloak authentication: username/password and configured SSO.
+- Orkest-provisioned username/password authentication and configured Keycloak OIDC authentication.
 - Roles: organization Owner/Admin/Member; workspace Admin/Member/Viewer.
 - Extensible adapters for OpenCode, Claude Code, Codex, GitHub Copilot CLI, and Kiro CLI.
 - Built-in platform tools; user-defined tools excluded.
@@ -43,9 +43,21 @@ Rules for the terms in the [glossary](glossary.md).
 
 ### 3.1 Organization, User, Workspace
 
-- Keycloak authenticates; Orkest authorizes.
-- First login creates a profile keyed by verified subject with username/email;
-  later logins do not overwrite it.
+- Keycloak OIDC and Orkest local credentials authenticate; Orkest authorizes.
+- Local accounts are provisioned by organization Owners/Admins or platform
+  administrators and receive only the explicitly selected organization role.
+  Provisioning never grants platform-administrator status.
+- A platform administrator may separately promote an existing user.
+- Local credentials are username/password; local accounts do not self-register.
+  Users may change their local password after confirming the current password.
+  Email verification and password recovery are excluded for now.
+- A later Keycloak login links to a provisioned local account by normalized email
+  only when Keycloak asserts `email_verified: true`. Missing, ambiguous, or
+  conflicting identities fail visibly; users and memberships are never merged.
+- Local authentication sessions are opaque, revocable, and persisted as token
+  hashes; local password hashes use Argon2id.
+- Existing Keycloak-only first-login profile creation remains supported. Profiles
+  retain their Orkest user ID across authentication methods.
 - Organization membership is required for workspace membership; invitations are deferred.
 
 | Role | Authority |

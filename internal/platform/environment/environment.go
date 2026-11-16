@@ -16,9 +16,9 @@ func LoadEnvironment(path string) error {
 	return nil
 }
 
-// EnvironmentDefault returns the environment variable value when set, or fallback otherwise.
+// EnvironmentDefault returns a non-empty environment variable value, or fallback otherwise.
 func EnvironmentDefault(name, fallback string) string {
-	if value, ok := os.LookupEnv(name); ok {
+	if value := os.Getenv(name); value != "" {
 		return value
 	}
 	return fallback

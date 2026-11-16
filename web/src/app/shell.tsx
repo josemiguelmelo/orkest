@@ -1,4 +1,4 @@
-import type { JSX, ReactNode } from 'react';
+import type { FormEvent, JSX, ReactNode } from 'react';
 import { useEffect, useState } from 'react';
 import { Link, Outlet, useNavigate, useParams, useRouterState } from '@tanstack/react-router';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -70,6 +70,40 @@ export function Shell(): JSX.Element {
   return <AuthenticatedShell session={me.data} />;
 }
 function Login() {
+  const [methods, setMethods] = useState<{ local: boolean; keycloak: boolean }>({
+    local: false,
+    keycloak: false,
+  });
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  useEffect(() => {
+    void fetch('/auth/methods')
+      .then((response) => response.json())
+      .then(setMethods)
+      .catch(() => setMethods({ local: true, keycloak: true }));
+  }, []);
+  async function signIn(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setError('');
+    setSubmitting(true);
+    try {
+      const response = await fetch('/auth/local/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
+      if (response.status === 429)
+        throw new Error('Too many sign-in attempts. Try again in 15 minutes.');
+      if (!response.ok) throw new Error('Invalid username or password.');
+      window.location.reload();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : 'Sign in failed.');
+    } finally {
+      setSubmitting(false);
+    }
+  }
   return (
     <main className="login">
       <section className="login-card">
@@ -80,10 +114,43 @@ function Login() {
         <p className="muted">
           Organize tasks, configure agents, and connect the tools your team uses.
         </p>
-        <a className="button button-primary" href="/auth/login">
-          Sign in with Keycloak <ChevronRight size={16} />
-        </a>
-        <p className="muted spacer">Authentication is managed by your organization.</p>
+        {methods.local && (
+          <form className="login-form" onSubmit={signIn}>
+            <label>
+              Username
+              <input
+                autoComplete="username"
+                value={username}
+                onChange={(event) => setUsername(event.target.value)}
+                required
+              />
+            </label>
+            <label>
+              Password
+              <input
+                type="password"
+                autoComplete="current-password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                required
+              />
+            </label>
+            {error && (
+              <p role="alert" className="error-text">
+                {error}
+              </p>
+            )}
+            <button className="button button-primary" type="submit" disabled={submitting}>
+              {submitting ? 'Signing in…' : 'Sign in'} <ChevronRight size={16} />
+            </button>
+          </form>
+        )}
+        {methods.keycloak && (
+          <a className="button button-outline spacer" href="/auth/login">
+            Sign in with Keycloak <ChevronRight size={16} />
+          </a>
+        )}
+        <p className="muted spacer">Accounts are provisioned by an administrator.</p>
       </section>
     </main>
   );
@@ -249,7 +316,9 @@ function ShellContent({ session }: { session: CurrentUser }) {
                 <Workflow size={17} />
                 <span>Workflows</span>
                 <ChevronDown
-                  className={workflowsExpanded ? 'nav-disclosure-icon is-open' : 'nav-disclosure-icon'}
+                  className={
+                    workflowsExpanded ? 'nav-disclosure-icon is-open' : 'nav-disclosure-icon'
+                  }
                   size={15}
                   aria-hidden="true"
                 />
@@ -262,7 +331,14 @@ function ShellContent({ session }: { session: CurrentUser }) {
                       className={`nav-link nav-sub-link${selectedWorkflowID === item.id && (isTaskBoard || isTaskPage) ? ' is-current' : ''}`}
                       to="/organizations/$orgId/workspaces/$workspaceId/tasks"
                       params={workspaceParams}
-                      search={{ view: 'board', workflow: item.id, q: '', status: 'all', agent: '', sort: 'updated' }}
+                      search={{
+                        view: 'board',
+                        workflow: item.id,
+                        q: '',
+                        status: 'all',
+                        agent: '',
+                        sort: 'updated',
+                      }}
                       activeOptions={{ exact: true, includeSearch: true }}
                     >
                       <PanelsTopLeft size={15} />
@@ -279,7 +355,14 @@ function ShellContent({ session }: { session: CurrentUser }) {
                   </Link>
                 </div>
               )}
-              <Link className="nav-link" to="/organizations/$orgId/workspaces/$workspaceId/scheduled-jobs" params={workspaceParams}><Workflow size={17} />Scheduled jobs</Link>
+              <Link
+                className="nav-link"
+                to="/organizations/$orgId/workspaces/$workspaceId/scheduled-jobs"
+                params={workspaceParams}
+              >
+                <Workflow size={17} />
+                Scheduled jobs
+              </Link>
               <Link
                 className="nav-link"
                 to="/organizations/$orgId/workspaces/$workspaceId/agents"
@@ -380,6 +463,10 @@ function ShellContent({ session }: { session: CurrentUser }) {
             </Link>
           </nav>
           <div className="sidebar-footer">
+            <Link className="nav-link" to="/settings" onClick={() => setMobile(false)}>
+              <Settings size={17} />
+              User settings
+            </Link>
             <a className="nav-link" href="/docs/" target="_blank" rel="noreferrer">
               <CircleHelp size={17} />
               API documentation

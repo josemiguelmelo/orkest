@@ -32,6 +32,9 @@ const messages: Record<string, string> = {
   invalid_request: 'Some values are invalid. Check the form and try again.',
   conflict:
     'This item is still in use, or its current state prevents this change. Remove dependent resources and try again.',
+  current_password_invalid: 'The current password is incorrect.',
+  local_password_unavailable:
+    'This account uses Keycloak sign-in. Manage its password with your identity provider.',
   integration_encryption_not_configured: 'Credential encryption is not configured on the server.',
   integration_credential_required: 'A credential is required to validate this connection.',
   integration_validation_failed:
@@ -84,7 +87,8 @@ client.setConfig({ baseUrl: window.location.origin, credentials: 'same-origin' }
 client.interceptors.error.use((error, response) => {
   if (response && !response.ok) {
     const parsed = errorSchema.safeParse(error);
-    if (response.status === 401) window.dispatchEvent(new Event('orkest:session-expired'));
+    if (response.status === 401 && (!parsed.success || parsed.data.error === 'unauthorized'))
+      window.dispatchEvent(new Event('orkest:session-expired'));
     return new ApiError(response.status, parsed.success ? parsed.data.error : 'request_failed');
   }
   if (error instanceof z.ZodError)

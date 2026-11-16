@@ -17,6 +17,7 @@ export const session: CurrentUser = {
   user: { id: 'user-1', username: 'Alex', email: 'alex@example.test' },
   organizations: [organization],
   platformAdmin: false,
+  hasLocalPassword: true,
 };
 export const agent: Agent = {
   id: 'agent-1',

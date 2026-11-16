@@ -15,6 +15,11 @@ before task execution. Compose connects workers through the shared Docker networ
 The platform image builds `cmd/server` and installs it as `orkest`; the shipped
 binary name remains `bin/orkest` for host builds.
 
+Both username/password and Keycloak sign-in methods are always enabled. The
+initial local platform administrator defaults to `admin` / `admin`; set
+`ORKEST_BOOTSTRAP_ADMIN_PASSWORD` before exposing the service. Bootstrap settings
+never reset an existing account password.
+
 Compose forwards the settings explicitly listed in [compose.yaml](../../compose.yaml),
 not every variable in `.env`. Use an environment override for settings the platform
 service does not forward, including additional runtime-image selectors.

@@ -10,7 +10,7 @@ The platform and agentctl share one Go module. The UI is a React application.
 | Logging | `log/slog` | Structured, redacted diagnostics |
 | Persistence | PostgreSQL, pgx | Durable product and execution state |
 | Schema and queries | Goose, sqlc | Versioned migrations and generated query code |
-| Identity | Keycloak, OIDC | Authentication; Orkest owns authorization |
+| Identity | Orkest local credentials and Keycloak OIDC | Authentication; Orkest owns authorization and local sessions |
 | Frontend | React, TypeScript, Vite | Management workbench |
 | UI state and forms | TanStack Router/Query, React Hook Form, Zod | Navigation, scoped caches, validation |
 | UI primitives | Tailwind, Radix | Owned components and accessible interactions |

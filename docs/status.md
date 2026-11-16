@@ -6,7 +6,7 @@ defines intended scope.
 
 | Area | Implementation | Verification boundary |
 | --- | --- | --- |
-| Identity, memberships, workspace isolation | Implemented | Unit, PostgreSQL, and browser suites; backend remains authoritative |
+| Identity, memberships, workspace isolation | Keycloak OIDC and administrator-provisioned local username/password; shared Orkest identities, email-based verified Keycloak linking, revocable DB sessions, and explicit platform-admin promotion | Local auth and provisioning need PostgreSQL/browser qualification; backend remains authoritative |
 | Task CRUD, workflow rules, artifacts | Implemented | Deterministic and PostgreSQL suites; live multi-stage agents need credentials |
 | Workflow-independent scheduled jobs | Implemented | Daily/weekly/crontab calendars, timezone-aware upcoming-run preview, isolated occurrences, fenced delivery, workspace quota, scoped UI/API and durable activity; live model/email/PR effects require separate qualification |
 | Direct conversations and durable sessions | Implemented | Queue, replay, reservation, outbox and ownership coverage; credential-dependent worker restart requires fresh Git credentials before restore |

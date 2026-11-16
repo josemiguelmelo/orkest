@@ -35,6 +35,7 @@ export type CurrentUser = {
     user: User;
     organizations: Array<Organization>;
     readonly platformAdmin: boolean;
+    readonly hasLocalPassword: boolean;
 };
 export type User = {
     id: string;
@@ -1758,6 +1759,97 @@ export type StartLoginData = {
     query?: never;
     url: '/auth/login';
 };
+export type GetAuthenticationMethodsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/auth/methods';
+};
+export type GetAuthenticationMethodsResponses = {
+    /**
+     * Enabled authentication methods
+     */
+    200: {
+        local: boolean;
+        keycloak: boolean;
+    };
+};
+export type GetAuthenticationMethodsResponse = GetAuthenticationMethodsResponses[keyof GetAuthenticationMethodsResponses];
+export type LoginWithPasswordData = {
+    body: {
+        username: string;
+        password: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/auth/local/login';
+};
+export type LoginWithPasswordErrors = {
+    /**
+     * Missing or invalid credentials
+     */
+    401: Error;
+    /**
+     * Login attempts are rate limited for this source IP
+     */
+    429: unknown;
+};
+export type LoginWithPasswordError = LoginWithPasswordErrors[keyof LoginWithPasswordErrors];
+export type LoginWithPasswordResponses = {
+    /**
+     * Login succeeded and a session cookie was set
+     */
+    204: void;
+};
+export type LoginWithPasswordResponse = LoginWithPasswordResponses[keyof LoginWithPasswordResponses];
+export type ProvisionLocalAccountData = {
+    body: {
+        username: string;
+        email: string;
+        password: string;
+        role: 'owner' | 'admin' | 'member';
+    };
+    path: {
+        orgID: string;
+    };
+    query?: never;
+    url: '/api/organizations/{orgID}/accounts';
+};
+export type ProvisionLocalAccountErrors = {
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+};
+export type ProvisionLocalAccountError = ProvisionLocalAccountErrors[keyof ProvisionLocalAccountErrors];
+export type ProvisionLocalAccountResponses = {
+    /**
+     * Account provisioned
+     */
+    201: unknown;
+};
+export type PromotePlatformAdminData = {
+    body?: never;
+    path: {
+        userID: string;
+    };
+    query?: never;
+    url: '/api/users/{userID}/platform-admin';
+};
+export type PromotePlatformAdminErrors = {
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+};
+export type PromotePlatformAdminError = PromotePlatformAdminErrors[keyof PromotePlatformAdminErrors];
+export type PromotePlatformAdminResponses = {
+    /**
+     * User promoted to platform administrator
+     */
+    204: void;
+};
+export type PromotePlatformAdminResponse = PromotePlatformAdminResponses[keyof PromotePlatformAdminResponses];
 export type CompleteLoginData = {
     body?: never;
     path?: never;
@@ -1819,6 +1911,41 @@ export type GetCurrentUserResponses = {
     200: CurrentUser;
 };
 export type GetCurrentUserResponse = GetCurrentUserResponses[keyof GetCurrentUserResponses];
+export type ChangeLocalPasswordData = {
+    body: {
+        currentPassword: string;
+        newPassword: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/me/password';
+};
+export type ChangeLocalPasswordErrors = {
+    /**
+     * Invalid fields or current password is incorrect
+     */
+    400: Error;
+    /**
+     * Missing or invalid credentials
+     */
+    401: Error;
+    /**
+     * User does not have a local password to change
+     */
+    409: unknown;
+    /**
+     * Internal server error
+     */
+    500: Error;
+};
+export type ChangeLocalPasswordError = ChangeLocalPasswordErrors[keyof ChangeLocalPasswordErrors];
+export type ChangeLocalPasswordResponses = {
+    /**
+     * Local password changed
+     */
+    204: void;
+};
+export type ChangeLocalPasswordResponse = ChangeLocalPasswordResponses[keyof ChangeLocalPasswordResponses];
 export type ListOrganizationsData = {
     body?: never;
     path?: never;

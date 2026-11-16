@@ -7,7 +7,122 @@ package sqlc
 
 import (
 	"context"
+
+	"github.com/jackc/pgx/v5/pgtype"
 )
+
+const bootstrapLocalAdmin = `-- name: BootstrapLocalAdmin :one
+WITH claimed AS (
+    UPDATE auth_bootstrap_state SET initialized = true
+    WHERE id = 1 AND (initialized = false OR NOT EXISTS (
+        SELECT 1 FROM local_credentials AS credential
+        JOIN users AS target ON target.id = credential.user_id
+        WHERE credential.normalized_username = $1 AND target.platform_admin
+    ))
+    RETURNING id
+), existing AS (
+    UPDATE users AS target SET platform_admin = true
+    FROM local_credentials AS credential, claimed
+    WHERE credential.user_id = target.id
+      AND credential.normalized_username = $1
+    RETURNING target.id, target.username, target.email
+), account AS (
+    INSERT INTO users (id, keycloak_subject, username, email, platform_admin)
+    SELECT $2, NULL, $3, $4, true FROM claimed
+    WHERE NOT EXISTS (SELECT 1 FROM existing)
+    RETURNING id, username, email
+), credential AS (
+    INSERT INTO local_credentials(user_id, normalized_username, normalized_email, password_hash)
+    SELECT id, $1, $5, $6 FROM account
+)
+SELECT id, username, email FROM existing
+UNION ALL
+SELECT id, username, email FROM account
+`
+
+type BootstrapLocalAdminParams struct {
+	NormalizedUsername string `json:"normalized_username"`
+	ID                 string `json:"id"`
+	Username           string `json:"username"`
+	Email              string `json:"email"`
+	NormalizedEmail    string `json:"normalized_email"`
+	PasswordHash       string `json:"password_hash"`
+}
+
+type BootstrapLocalAdminRow struct {
+	ID       string `json:"id"`
+	Username string `json:"username"`
+	Email    string `json:"email"`
+}
+
+func (q *Queries) BootstrapLocalAdmin(ctx context.Context, arg BootstrapLocalAdminParams) (BootstrapLocalAdminRow, error) {
+	row := q.db.QueryRow(ctx, bootstrapLocalAdmin,
+		arg.NormalizedUsername,
+		arg.ID,
+		arg.Username,
+		arg.Email,
+		arg.NormalizedEmail,
+		arg.PasswordHash,
+	)
+	var i BootstrapLocalAdminRow
+	err := row.Scan(&i.ID, &i.Username, &i.Email)
+	return i, err
+}
+
+const bootstrapLocalAdminRequired = `-- name: BootstrapLocalAdminRequired :one
+SELECT NOT EXISTS (
+    SELECT 1 FROM local_credentials AS credential
+    JOIN users AS target ON target.id = credential.user_id
+    WHERE credential.normalized_username = $1 AND target.platform_admin
+)
+`
+
+func (q *Queries) BootstrapLocalAdminRequired(ctx context.Context, normalizedUsername string) (bool, error) {
+	row := q.db.QueryRow(ctx, bootstrapLocalAdminRequired, normalizedUsername)
+	var not_exists bool
+	err := row.Scan(&not_exists)
+	return not_exists, err
+}
+
+const createLocalSession = `-- name: CreateLocalSession :exec
+INSERT INTO local_sessions(token_hash, user_id, expires_at) VALUES($1, $2, $3)
+`
+
+type CreateLocalSessionParams struct {
+	TokenHash []byte             `json:"token_hash"`
+	UserID    string             `json:"user_id"`
+	ExpiresAt pgtype.Timestamptz `json:"expires_at"`
+}
+
+func (q *Queries) CreateLocalSession(ctx context.Context, arg CreateLocalSessionParams) error {
+	_, err := q.db.Exec(ctx, createLocalSession, arg.TokenHash, arg.UserID, arg.ExpiresAt)
+	return err
+}
+
+const hasLocalAccountEmail = `-- name: HasLocalAccountEmail :one
+SELECT EXISTS(
+    SELECT 1 FROM users WHERE lower(trim(email)) = lower(trim($1))
+      AND id IN (SELECT user_id FROM local_credentials)
+)
+`
+
+func (q *Queries) HasLocalAccountEmail(ctx context.Context, btrim string) (bool, error) {
+	row := q.db.QueryRow(ctx, hasLocalAccountEmail, btrim)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const hasLocalPassword = `-- name: HasLocalPassword :one
+SELECT EXISTS(SELECT 1 FROM local_credentials WHERE user_id = $1)
+`
+
+func (q *Queries) HasLocalPassword(ctx context.Context, userID string) (bool, error) {
+	row := q.db.QueryRow(ctx, hasLocalPassword, userID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
 
 const isPlatformAdmin = `-- name: IsPlatformAdmin :one
 SELECT platform_admin FROM users WHERE id = $1
@@ -20,19 +135,178 @@ func (q *Queries) IsPlatformAdmin(ctx context.Context, id string) (bool, error) 
 	return platform_admin, err
 }
 
+const linkKeycloakIdentityByEmail = `-- name: LinkKeycloakIdentityByEmail :one
+WITH candidate AS (
+    SELECT id FROM users WHERE lower(trim(email)) = lower(trim($1))
+      AND id IN (SELECT user_id FROM local_credentials)
+), linked AS (
+    UPDATE users AS target SET keycloak_subject = $2
+    WHERE target.id = (SELECT id FROM candidate) AND (SELECT count(*) FROM candidate) = 1
+      AND (target.keycloak_subject IS NULL OR target.keycloak_subject = $2)
+      AND NOT EXISTS (SELECT 1 FROM users WHERE users.keycloak_subject = $2 AND users.id <> target.id)
+    RETURNING id, username, email
+), identity AS (
+    INSERT INTO user_auth_identities(provider, subject, user_id)
+    SELECT 'keycloak', $2, id FROM linked
+    ON CONFLICT(provider, subject) DO NOTHING
+)
+SELECT linked.id, linked.username, linked.email,
+       (SELECT count(*) FROM candidate)::bigint AS candidate_count
+FROM (SELECT 1) seed LEFT JOIN linked ON true
+`
+
+type LinkKeycloakIdentityByEmailParams struct {
+	Email   string      `json:"email"`
+	Subject pgtype.Text `json:"subject"`
+}
+
+type LinkKeycloakIdentityByEmailRow struct {
+	ID             pgtype.Text `json:"id"`
+	Username       pgtype.Text `json:"username"`
+	Email          pgtype.Text `json:"email"`
+	CandidateCount int64       `json:"candidate_count"`
+}
+
+func (q *Queries) LinkKeycloakIdentityByEmail(ctx context.Context, arg LinkKeycloakIdentityByEmailParams) (LinkKeycloakIdentityByEmailRow, error) {
+	row := q.db.QueryRow(ctx, linkKeycloakIdentityByEmail, arg.Email, arg.Subject)
+	var i LinkKeycloakIdentityByEmailRow
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.Email,
+		&i.CandidateCount,
+	)
+	return i, err
+}
+
+const localCredentialByUserID = `-- name: LocalCredentialByUserID :one
+SELECT u.id, u.username, u.email, c.password_hash
+FROM local_credentials c JOIN users u ON u.id = c.user_id
+WHERE c.user_id = $1
+`
+
+type LocalCredentialByUserIDRow struct {
+	ID           string `json:"id"`
+	Username     string `json:"username"`
+	Email        string `json:"email"`
+	PasswordHash string `json:"password_hash"`
+}
+
+func (q *Queries) LocalCredentialByUserID(ctx context.Context, userID string) (LocalCredentialByUserIDRow, error) {
+	row := q.db.QueryRow(ctx, localCredentialByUserID, userID)
+	var i LocalCredentialByUserIDRow
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.Email,
+		&i.PasswordHash,
+	)
+	return i, err
+}
+
+const localCredentialByUsername = `-- name: LocalCredentialByUsername :one
+SELECT u.id, u.username, u.email, c.password_hash
+FROM local_credentials c JOIN users u ON u.id = c.user_id
+WHERE c.normalized_username = $1
+`
+
+type LocalCredentialByUsernameRow struct {
+	ID           string `json:"id"`
+	Username     string `json:"username"`
+	Email        string `json:"email"`
+	PasswordHash string `json:"password_hash"`
+}
+
+func (q *Queries) LocalCredentialByUsername(ctx context.Context, normalizedUsername string) (LocalCredentialByUsernameRow, error) {
+	row := q.db.QueryRow(ctx, localCredentialByUsername, normalizedUsername)
+	var i LocalCredentialByUsernameRow
+	err := row.Scan(
+		&i.ID,
+		&i.Username,
+		&i.Email,
+		&i.PasswordHash,
+	)
+	return i, err
+}
+
+const promotePlatformAdmin = `-- name: PromotePlatformAdmin :execrows
+UPDATE users SET platform_admin = true WHERE id = $1
+`
+
+func (q *Queries) PromotePlatformAdmin(ctx context.Context, id string) (int64, error) {
+	result, err := q.db.Exec(ctx, promotePlatformAdmin, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const provisionLocalAccount = `-- name: ProvisionLocalAccount :one
+WITH new_user AS (
+    INSERT INTO users (id, keycloak_subject, username, email)
+    VALUES ($1, NULL, $2, $3)
+    RETURNING id, username, email
+), credential AS (
+    INSERT INTO local_credentials(user_id, normalized_username, normalized_email, password_hash)
+    SELECT id, $4, $5, $6 FROM new_user
+), membership AS (
+    INSERT INTO organization_memberships(organization_id, user_id, role)
+    SELECT $7, id, $8 FROM new_user
+)
+SELECT id, username, email FROM new_user
+`
+
+type ProvisionLocalAccountParams struct {
+	ID                 string `json:"id"`
+	Username           string `json:"username"`
+	Email              string `json:"email"`
+	NormalizedUsername string `json:"normalized_username"`
+	NormalizedEmail    string `json:"normalized_email"`
+	PasswordHash       string `json:"password_hash"`
+	OrganizationID     string `json:"organization_id"`
+	Role               string `json:"role"`
+}
+
+type ProvisionLocalAccountRow struct {
+	ID       string `json:"id"`
+	Username string `json:"username"`
+	Email    string `json:"email"`
+}
+
+func (q *Queries) ProvisionLocalAccount(ctx context.Context, arg ProvisionLocalAccountParams) (ProvisionLocalAccountRow, error) {
+	row := q.db.QueryRow(ctx, provisionLocalAccount,
+		arg.ID,
+		arg.Username,
+		arg.Email,
+		arg.NormalizedUsername,
+		arg.NormalizedEmail,
+		arg.PasswordHash,
+		arg.OrganizationID,
+		arg.Role,
+	)
+	var i ProvisionLocalAccountRow
+	err := row.Scan(&i.ID, &i.Username, &i.Email)
+	return i, err
+}
+
 const registerUser = `-- name: RegisterUser :one
-INSERT INTO users (id, keycloak_subject, username, email)
-VALUES ($1, $2, $3, $4)
-ON CONFLICT (keycloak_subject) DO UPDATE
-SET keycloak_subject = EXCLUDED.keycloak_subject
-RETURNING id, username, email
+WITH registered AS (
+    INSERT INTO users (id, keycloak_subject, username, email)
+    VALUES ($1, $2, $3, $4)
+    ON CONFLICT (keycloak_subject) DO UPDATE SET keycloak_subject = EXCLUDED.keycloak_subject
+    RETURNING id, username, email
+), identity AS (
+    INSERT INTO user_auth_identities(provider, subject, user_id)
+    SELECT 'keycloak', $2, id FROM registered ON CONFLICT(provider, subject) DO NOTHING
+)
+SELECT id, username, email FROM registered
 `
 
 type RegisterUserParams struct {
-	ID              string `json:"id"`
-	KeycloakSubject string `json:"keycloak_subject"`
-	Username        string `json:"username"`
-	Email           string `json:"email"`
+	ID              string      `json:"id"`
+	KeycloakSubject pgtype.Text `json:"keycloak_subject"`
+	Username        string      `json:"username"`
+	Email           string      `json:"email"`
 }
 
 type RegisterUserRow struct {
@@ -49,6 +323,54 @@ func (q *Queries) RegisterUser(ctx context.Context, arg RegisterUserParams) (Reg
 		arg.Email,
 	)
 	var i RegisterUserRow
+	err := row.Scan(&i.ID, &i.Username, &i.Email)
+	return i, err
+}
+
+const revokeLocalSession = `-- name: RevokeLocalSession :exec
+UPDATE local_sessions SET revoked_at = now() WHERE token_hash = $1 AND revoked_at IS NULL
+`
+
+func (q *Queries) RevokeLocalSession(ctx context.Context, tokenHash []byte) error {
+	_, err := q.db.Exec(ctx, revokeLocalSession, tokenHash)
+	return err
+}
+
+const updateLocalPassword = `-- name: UpdateLocalPassword :execrows
+UPDATE local_credentials
+SET password_hash = $1, updated_at = now()
+WHERE user_id = $2 AND password_hash = $3
+`
+
+type UpdateLocalPasswordParams struct {
+	NewPassword string `json:"new_password"`
+	UserID      string `json:"user_id"`
+	CurrentHash string `json:"current_hash"`
+}
+
+func (q *Queries) UpdateLocalPassword(ctx context.Context, arg UpdateLocalPasswordParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateLocalPassword, arg.NewPassword, arg.UserID, arg.CurrentHash)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const userForLocalSession = `-- name: UserForLocalSession :one
+SELECT u.id, u.username, u.email
+FROM local_sessions s JOIN users u ON u.id = s.user_id
+WHERE s.token_hash = $1 AND s.revoked_at IS NULL AND s.expires_at > now()
+`
+
+type UserForLocalSessionRow struct {
+	ID       string `json:"id"`
+	Username string `json:"username"`
+	Email    string `json:"email"`
+}
+
+func (q *Queries) UserForLocalSession(ctx context.Context, tokenHash []byte) (UserForLocalSessionRow, error) {
+	row := q.db.QueryRow(ctx, userForLocalSession, tokenHash)
+	var i UserForLocalSessionRow
 	err := row.Scan(&i.ID, &i.Username, &i.Email)
 	return i, err
 }
