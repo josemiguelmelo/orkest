@@ -1,4 +1,40 @@
 import * as z from 'zod';
+export declare const zPlatformAdminOverview: z.ZodObject<{
+    enabledUsers: z.ZodCoercedBigInt<unknown>;
+    organizations: z.ZodCoercedBigInt<unknown>;
+    workspaces: z.ZodCoercedBigInt<unknown>;
+    runsLast30Days: z.ZodCoercedBigInt<unknown>;
+}, z.core.$strip>;
+export declare const zCodexAuthSource: z.ZodObject<{
+    configured: z.ZodBoolean;
+    type: z.ZodEnum<{
+        "": "";
+        file: "file";
+        kubernetes_secret: "kubernetes_secret";
+    }>;
+    location: z.ZodOptional<z.ZodString>;
+}, z.core.$strip>;
+export declare const zPlatformRuntimeConfiguration: z.ZodObject<{
+    executor: z.ZodString;
+    agentctlImages: z.ZodRecord<z.ZodString, z.ZodString>;
+    agentMcpUrl: z.ZodString;
+    agentMcpSource: z.ZodEnum<{
+        default: "default";
+        environment_override: "environment_override";
+        kubernetes_service: "kubernetes_service";
+    }>;
+    dataDirectory: z.ZodString;
+    codexAuth: z.ZodObject<{
+        configured: z.ZodBoolean;
+        type: z.ZodEnum<{
+            "": "";
+            file: "file";
+            kubernetes_secret: "kubernetes_secret";
+        }>;
+        location: z.ZodOptional<z.ZodString>;
+    }, z.core.$strip>;
+    loadedAt: z.ZodISODateTime;
+}, z.core.$strip>;
 export declare const zTaskEditorStatus: z.ZodObject<{
     state: z.ZodEnum<{
         ready: "ready";
@@ -1664,6 +1700,39 @@ export declare const zPromotePlatformAdminPath: z.ZodObject<{
  * User promoted to platform administrator
  */
 export declare const zPromotePlatformAdminResponse: z.ZodVoid;
+/**
+ * Platform account and run counts
+ */
+export declare const zGetPlatformAdminOverviewResponse: z.ZodObject<{
+    enabledUsers: z.ZodCoercedBigInt<unknown>;
+    organizations: z.ZodCoercedBigInt<unknown>;
+    workspaces: z.ZodCoercedBigInt<unknown>;
+    runsLast30Days: z.ZodCoercedBigInt<unknown>;
+}, z.core.$strip>;
+/**
+ * Read-only effective platform runtime configuration
+ */
+export declare const zGetPlatformRuntimeConfigurationResponse: z.ZodObject<{
+    executor: z.ZodString;
+    agentctlImages: z.ZodRecord<z.ZodString, z.ZodString>;
+    agentMcpUrl: z.ZodString;
+    agentMcpSource: z.ZodEnum<{
+        default: "default";
+        environment_override: "environment_override";
+        kubernetes_service: "kubernetes_service";
+    }>;
+    dataDirectory: z.ZodString;
+    codexAuth: z.ZodObject<{
+        configured: z.ZodBoolean;
+        type: z.ZodEnum<{
+            "": "";
+            file: "file";
+            kubernetes_secret: "kubernetes_secret";
+        }>;
+        location: z.ZodOptional<z.ZodString>;
+    }, z.core.$strip>;
+    loadedAt: z.ZodISODateTime;
+}, z.core.$strip>;
 /**
  * Session cleared
  */

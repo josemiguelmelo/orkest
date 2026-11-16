@@ -42,6 +42,7 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/server/mcpserver"
 	"github.com/josemiguelmelo/orkest/internal/server/orchestration"
 	"github.com/josemiguelmelo/orkest/internal/server/organization"
+	"github.com/josemiguelmelo/orkest/internal/server/platformadmin"
 	"github.com/josemiguelmelo/orkest/internal/server/scheduledjob"
 	"github.com/josemiguelmelo/orkest/internal/server/skill"
 	"github.com/josemiguelmelo/orkest/internal/server/task"
@@ -106,6 +107,46 @@ func isDNSLabel(value string) bool {
 	}
 	first := rune(value[0])
 	return (first >= 'a' && first <= 'z' || first >= '0' && first <= '9') && value[len(value)-1] != '-'
+}
+
+func platformRuntimeConfiguration(config serverConfiguration, dataRoot string, executorKind executors.Kind, kubernetesExecutor bool, mcpEndpoint string) httpapi.PlatformRuntimeConfiguration {
+	images := make(map[string]string, len(coreruntime.Providers()))
+	configuredImages := map[coreruntime.Runtime]string{
+		coreruntime.OpenCode: config.AgentctlOpencodeImage, coreruntime.ClaudeCode: config.AgentctlClaudeCodeImage,
+		coreruntime.Codex: config.AgentctlCodexImage, coreruntime.GitHubCopilot: config.AgentctlGitHubCopilotImage,
+		coreruntime.Kiro: config.AgentctlKiroImage,
+	}
+	for _, provider := range coreruntime.Providers() {
+		image := strings.TrimSpace(configuredImages[provider.Runtime()])
+		if image == "" {
+			image = provider.DefaultImage()
+		}
+		images[string(provider.Runtime())] = image
+	}
+	configuration := httpapi.PlatformRuntimeConfiguration{
+		Executor: string(executorKind), AgentctlImages: images, AgentMCPURL: mcpEndpoint,
+		AgentMCPSource: "default", DataDirectory: dataRoot, LoadedAt: time.Now().UTC(),
+	}
+	if kubernetesExecutor {
+		configuration.AgentMCPSource = "kubernetes_service"
+	} else if strings.TrimSpace(config.AgentMCPURL) != "" {
+		configuration.AgentMCPSource = "environment_override"
+	}
+	if kubernetesExecutor {
+		if strings.TrimSpace(config.Kubernetes.CodexAuthSecret) != "" {
+			configuration.CodexAuth = httpapi.CodexAuthSource{Configured: true, Type: "kubernetes_secret", Location: config.Kubernetes.CodexAuthSecret + "/" + config.Kubernetes.CodexAuthSecretKey}
+		}
+	} else if strings.TrimSpace(config.CodexAuthFile) != "" {
+		configuration.CodexAuth = httpapi.CodexAuthSource{Configured: true, Type: "file", Location: config.CodexAuthFile}
+	} else if executorKind == executors.Local {
+		if home, err := os.UserHomeDir(); err == nil {
+			path := filepath.Join(home, ".codex", "auth.json")
+			if info, err := os.Stat(path); err == nil && !info.IsDir() {
+				configuration.CodexAuth = httpapi.CodexAuthSource{Configured: true, Type: "file", Location: path}
+			}
+		}
+	}
+	return configuration
 }
 
 // Run owns the platform HTTP lifecycle; it does not own agent processes.
@@ -369,6 +410,8 @@ func runServer(ctx context.Context, logger *slog.Logger) error {
 		Editor:        editorGateway,
 		ScheduledJobs: jobService, JobDispatcher: jobDispatcher,
 		Users:             users,
+		PlatformOverview:  platformadmin.NewOverviewService(postgres.NewPlatformAdminPostgresRepository(database)),
+		PlatformConfig:    platformRuntimeConfiguration(config, dataRoot, executorKind, kubernetesExecutor, mcpEndpoint),
 		LocalAuth:         localAuth,
 		Organizations:     organizations,
 		Workspaces:        workspaces,

@@ -13,6 +13,13 @@ SELECT id, username, email FROM registered;
 -- name: IsPlatformAdmin :one
 SELECT platform_admin FROM users WHERE id = $1;
 
+-- name: PlatformAdminOverview :one
+SELECT
+    (SELECT count(*) FROM users) AS enabled_users,
+    (SELECT count(*) FROM organizations) AS organizations,
+    (SELECT count(*) FROM workspaces) AS workspaces,
+    (SELECT count(*) FROM agent_launches WHERE created_at >= now() - interval '30 days') AS runs_last_30_days;
+
 -- name: PromotePlatformAdmin :execrows
 UPDATE users SET platform_admin = true WHERE id = $1;
 

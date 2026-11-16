@@ -537,6 +537,24 @@ paths:
       responses:
         "204": {description: User promoted to platform administrator}
         "403": {$ref: "#/components/responses/Forbidden"}
+  /api/platform-admin/overview:
+    get:
+      tags: [System]
+      operationId: getPlatformAdminOverview
+      summary: Read platform analytics as a platform administrator
+      security: [{cookieAuth: []}]
+      responses:
+        "200": {description: Platform account and run counts, content: {application/json: {schema: {$ref: "#/components/schemas/PlatformAdminOverview"}}}}
+        "403": {$ref: "#/components/responses/Forbidden"}
+  /api/platform-admin/runtime-configuration:
+    get:
+      tags: [System]
+      operationId: getPlatformRuntimeConfiguration
+      summary: Read effective runtime configuration as a platform administrator
+      security: [{cookieAuth: []}]
+      responses:
+        "200": {description: Read-only effective platform runtime configuration, content: {application/json: {schema: {$ref: "#/components/schemas/PlatformRuntimeConfiguration"}}}}
+        "403": {$ref: "#/components/responses/Forbidden"}
   /auth/callback:
     get:
       tags: [Authentication]
@@ -2480,6 +2498,32 @@ components:
           schema:
             $ref: "#/components/schemas/Error"
   schemas:
+    PlatformAdminOverview:
+      type: object
+      required: [enabledUsers, organizations, workspaces, runsLast30Days]
+      properties:
+        enabledUsers: {type: integer, format: int64}
+        organizations: {type: integer, format: int64}
+        workspaces: {type: integer, format: int64}
+        runsLast30Days: {type: integer, format: int64}
+    PlatformRuntimeConfiguration:
+      type: object
+      required: [executor, agentctlImages, agentMcpUrl, agentMcpSource, dataDirectory, codexAuth, loadedAt]
+      properties:
+        executor: {type: string}
+        agentctlImages: {type: object, additionalProperties: {type: string}}
+        agentMcpUrl: {type: string}
+        agentMcpSource: {type: string, enum: [default, environment_override, kubernetes_service]}
+        dataDirectory: {type: string}
+        codexAuth: {$ref: "#/components/schemas/CodexAuthSource"}
+        loadedAt: {type: string, format: date-time}
+    CodexAuthSource:
+      type: object
+      required: [configured, type]
+      properties:
+        configured: {type: boolean}
+        type: {type: string, enum: ["", file, kubernetes_secret]}
+        location: {type: string}
     TaskEditorStatus:
       type: object
       required: [state]

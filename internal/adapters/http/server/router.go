@@ -19,6 +19,7 @@ import (
 	"github.com/josemiguelmelo/orkest/internal/server/mcpserver"
 	"github.com/josemiguelmelo/orkest/internal/server/orchestration"
 	"github.com/josemiguelmelo/orkest/internal/server/organization"
+	"github.com/josemiguelmelo/orkest/internal/server/platformadmin"
 	"github.com/josemiguelmelo/orkest/internal/server/scheduledjob"
 	"github.com/josemiguelmelo/orkest/internal/server/skill"
 	skillmodel "github.com/josemiguelmelo/orkest/internal/server/skill/model"
@@ -58,6 +59,8 @@ type RouterDependencies struct {
 	HostMounts        *workspacemount.WorkspaceMountService
 	Artifacts         *artifact.ArtifactService
 	AgentTools        *appmcp.AgentTools
+	PlatformOverview  *platformadmin.OverviewService
+	PlatformConfig    PlatformRuntimeConfiguration
 }
 
 // NewRouter validates the served OpenAPI contract before exposing routes.
@@ -123,6 +126,9 @@ func NewRouter(ctx context.Context, deps RouterDependencies) (*chi.Mux, error) {
 			api.Get("/me", auth.currentUser)
 			api.Put("/me/password", accountAPI{accounts: auth.local}.changePassword)
 			api.Post("/users/{userID}/platform-admin", accountAPI{users: deps.Users}.promotePlatformAdmin)
+			if deps.PlatformOverview != nil {
+				platformAdminAPI{users: deps.Users, overview: deps.PlatformOverview, configuration: deps.PlatformConfig}.routes(api)
+			}
 			api.Post("/organizations/{orgID}/accounts", accountAPI{accounts: auth.local}.provision)
 			deps.Editor.routes(api)
 			api.Get("/runtime-providers", listRuntimeProviders)
