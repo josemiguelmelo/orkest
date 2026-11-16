@@ -12,9 +12,12 @@
 | `DATABASE_URL` | Full PostgreSQL URL; overrides component settings |
 | `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USERNAME`, `POSTGRES_PASSWORD`, `POSTGRES_DB` | All five are required without `DATABASE_URL` |
 | `HTTP_ADDR`, `ORKEST_WEB_DIR` | Platform address and built frontend directory |
+| `ORKEST_COOKIE_SECURE` | Set true when serving over HTTPS |
+| `ORKEST_BOOTSTRAP_ADMIN_USERNAME`, `ORKEST_BOOTSTRAP_ADMIN_EMAIL`, `ORKEST_BOOTSTRAP_ADMIN_PASSWORD` | Initial local platform-admin account; defaults to `admin` / `admin`; later starts never reset its password |
 | `OIDC_ISSUER_URL` | Browser-visible Keycloak issuer |
 | `OIDC_INTERNAL_ISSUER_URL` | Optional backend issuer address when browser/backend networking differs |
-| `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_REDIRECT_URL`, `OIDC_COOKIE_SECURE` | Client, callback, and cookie configuration |
+| `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_REDIRECT_URL` | OIDC client and callback; Keycloak sign-in is always enabled |
+| `OIDC_COOKIE_SECURE` | Legacy cookie-secure setting; prefer `ORKEST_COOKIE_SECURE` |
 | `KEYCLOAK_PORT` | Compose's Keycloak host port (8082 by default) |
 
 Compose uses only the environment/interpolation entries declared in

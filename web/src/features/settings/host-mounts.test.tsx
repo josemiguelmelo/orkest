@@ -33,6 +33,7 @@ function renderPanel(settings: WorkspaceHostMountSettings, role: 'admin' | 'view
             user: { id: 'user', username: 'User', email: 'user@example.test' },
             organizations: [],
             platformAdmin: false,
+            hasLocalPassword: true,
           },
           organization: undefined,
           workspace: undefined,

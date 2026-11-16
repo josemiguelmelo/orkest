@@ -468,6 +468,75 @@ paths:
       responses:
         "302":
           description: Redirect to the OIDC provider
+  /auth/methods:
+    get:
+      tags: [Authentication]
+      operationId: getAuthenticationMethods
+      summary: List enabled sign-in methods
+      responses:
+        "200":
+          description: Enabled authentication methods
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [local, keycloak]
+                properties:
+                  local: {type: boolean}
+                  keycloak: {type: boolean}
+  /auth/local/login:
+    post:
+      tags: [Authentication]
+      operationId: loginWithPassword
+      summary: Sign in with a provisioned username and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: {type: string}
+                password: {type: string, format: password}
+      responses:
+        "204": {description: Login succeeded and a session cookie was set}
+        "401": {$ref: "#/components/responses/Unauthorized"}
+        "429": {description: Login attempts are rate limited for this source IP}
+  /api/organizations/{orgID}/accounts:
+    post:
+      tags: [Users]
+      operationId: provisionLocalAccount
+      summary: Provision a username/password account in an organization
+      security: [{cookieAuth: []}]
+      parameters:
+        - {in: path, name: orgID, required: true, schema: {type: string}}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, email, password, role]
+              properties:
+                username: {type: string, maxLength: 64}
+                email: {type: string, format: email}
+                password: {type: string, format: password, minLength: 12}
+                role: {type: string, enum: [owner, admin, member]}
+      responses:
+        "201": {description: Account provisioned}
+        "403": {$ref: "#/components/responses/Forbidden"}
+  /api/users/{userID}/platform-admin:
+    post:
+      tags: [Users]
+      operationId: promotePlatformAdmin
+      summary: Explicitly promote a user to platform administrator
+      security: [{cookieAuth: []}]
+      parameters:
+        - {in: path, name: userID, required: true, schema: {type: string}}
+      responses:
+        "204": {description: User promoted to platform administrator}
+        "403": {$ref: "#/components/responses/Forbidden"}
   /auth/callback:
     get:
       tags: [Authentication]
@@ -492,7 +561,7 @@ paths:
     get:
       tags: [Users]
       operationId: getCurrentUser
-      summary: Return the authenticated Keycloak identity
+      summary: Return the authenticated Orkest user and memberships
       security: [{bearerAuth: []}, {cookieAuth: []}]
       responses:
         "200":
@@ -507,6 +576,35 @@ paths:
           $ref: "#/components/responses/Forbidden"
         "404":
           $ref: "#/components/responses/NotFound"
+        "500":
+          $ref: "#/components/responses/InternalServerError"
+  /api/me/password:
+    put:
+      tags: [Users]
+      operationId: changeLocalPassword
+      summary: Change the authenticated user's local password
+      security: [{bearerAuth: []}, {cookieAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [currentPassword, newPassword]
+              properties:
+                currentPassword: {type: string, format: password, minLength: 1, maxLength: 1024}
+                newPassword: {type: string, format: password, minLength: 12, maxLength: 1024}
+      responses:
+        "204": {description: Local password changed}
+        "400":
+          description: Invalid fields or current password is incorrect
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/Error"}
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "409":
+          description: User does not have a local password to change
         "500":
           $ref: "#/components/responses/InternalServerError"
   /api/organizations:
@@ -2425,10 +2523,14 @@ components:
         - user
         - organizations
         - platformAdmin
+        - hasLocalPassword
       properties:
         user: {$ref: "#/components/schemas/User"}
         organizations: {type: array, items: {$ref: "#/components/schemas/Organization"}}
         platformAdmin:
+          type: boolean
+          readOnly: true
+        hasLocalPassword:
           type: boolean
           readOnly: true
     User:

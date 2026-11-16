@@ -38,6 +38,7 @@ type RouterDependencies struct {
 	ScheduledJobs     *scheduledjob.ScheduledJobService
 	JobDispatcher     *orchestration.JobDispatcher
 	Users             *identity.UserRegistrationService
+	LocalAuth         *identity.LocalAuthenticationService
 	Organizations     *organization.OrganizationService
 	Workspaces        *workspace.WorkspaceService
 	Agents            *agent.AgentDefinitionUseCase
@@ -96,7 +97,7 @@ func NewRouter(ctx context.Context, deps RouterDependencies) (*chi.Mux, error) {
 	}
 	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
-	auth, err := newOIDCAuth(ctx, deps.Users, deps.Organizations)
+	auth, err := newPlatformAuth(ctx, deps.Users, deps.Organizations, deps.LocalAuth)
 	if err != nil {
 		return nil, err
 	}
@@ -109,6 +110,8 @@ func NewRouter(ctx context.Context, deps RouterDependencies) (*chi.Mux, error) {
 	})
 	router.Get("/auth/login", auth.login)
 	router.Get("/auth/callback", auth.callback)
+	router.Get("/auth/methods", auth.methods)
+	router.Post("/auth/local/login", auth.localLogin)
 	router.Post("/auth/logout", auth.logout)
 	if deps.AgentTools != nil {
 		router.Handle("/mcp/agent-tools", deps.AgentTools.Handler())
@@ -118,6 +121,9 @@ func NewRouter(ctx context.Context, deps RouterDependencies) (*chi.Mux, error) {
 		api.Use(auth.middleware)
 		api.Route("/api", func(api chi.Router) {
 			api.Get("/me", auth.currentUser)
+			api.Put("/me/password", accountAPI{accounts: auth.local}.changePassword)
+			api.Post("/users/{userID}/platform-admin", accountAPI{users: deps.Users}.promotePlatformAdmin)
+			api.Post("/organizations/{orgID}/accounts", accountAPI{accounts: auth.local}.provision)
 			deps.Editor.routes(api)
 			api.Get("/runtime-providers", listRuntimeProviders)
 			organizationAPI{organizations: deps.Organizations, workspaces: deps.Workspaces}.routes(api)

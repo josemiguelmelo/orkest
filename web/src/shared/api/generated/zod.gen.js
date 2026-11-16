@@ -50,7 +50,8 @@ export const zOrganization = z.object({
 export const zCurrentUser = z.object({
     user: zUser,
     organizations: z.array(zOrganization),
-    platformAdmin: z.boolean().readonly()
+    platformAdmin: z.boolean().readonly(),
+    hasLocalPassword: z.boolean().readonly()
 });
 export const zWorkspace = z.object({
     id: z.string(),
@@ -966,6 +967,41 @@ export const zGetHealthResponse = z.object({
     status: z.enum(['ok'])
 });
 /**
+ * Enabled authentication methods
+ */
+export const zGetAuthenticationMethodsResponse = z.object({
+    local: z.boolean(),
+    keycloak: z.boolean()
+});
+export const zLoginWithPasswordBody = z.object({
+    username: z.string(),
+    password: z.string()
+});
+/**
+ * Login succeeded and a session cookie was set
+ */
+export const zLoginWithPasswordResponse = z.void();
+export const zProvisionLocalAccountBody = z.object({
+    username: z.string().max(64),
+    email: z.email(),
+    password: z.string().min(12),
+    role: z.enum([
+        'owner',
+        'admin',
+        'member'
+    ])
+});
+export const zProvisionLocalAccountPath = z.object({
+    orgID: z.string()
+});
+export const zPromotePlatformAdminPath = z.object({
+    userID: z.string()
+});
+/**
+ * User promoted to platform administrator
+ */
+export const zPromotePlatformAdminResponse = z.void();
+/**
  * Session cleared
  */
 export const zLogoutResponse = z.void();
@@ -973,6 +1009,14 @@ export const zLogoutResponse = z.void();
  * Internal user profile and organization memberships
  */
 export const zGetCurrentUserResponse = zCurrentUser;
+export const zChangeLocalPasswordBody = z.object({
+    currentPassword: z.string().min(1).max(1024),
+    newPassword: z.string().min(12).max(1024)
+});
+/**
+ * Local password changed
+ */
+export const zChangeLocalPasswordResponse = z.void();
 /**
  * Organizations the user belongs to
  */

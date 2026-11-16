@@ -10,3 +10,7 @@ type UserRegistrationRepository interface {
 	RegisterUser(context.Context, string, string, string) (identitymodel.User, error)
 	IsPlatformAdmin(context.Context, string) (bool, error)
 }
+
+type PlatformAdminManagementRepository interface {
+	PromotePlatformAdmin(context.Context, string) (int64, error)
+}

@@ -5,6 +5,7 @@ Start with [local setup](../README.md).
 | Topic | Read |
 | --- | --- |
 | Product requirements | [Requirements](requirements.md) |
+| Authentication | [Local accounts, Keycloak linking, and bootstrap](guides/authentication.md) |
 | Domain terms | [Glossary](glossary.md) |
 | Code organization | [Architecture](architecture.md), [technology stack](tech-stack.md) |
 | Runtime flows | [Architecture flow diagrams](architecture/flows/README.md) |

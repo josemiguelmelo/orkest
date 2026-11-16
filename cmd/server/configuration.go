@@ -15,41 +15,45 @@ type kubernetesServerConfiguration struct {
 
 // serverConfiguration snapshots composition settings once before startup I/O.
 type serverConfiguration struct {
-	EditorImage, EditorReadonlyImage, EditorOrigin, PlatformOrigin string
-	DataDir                                                        string
-	HTTPAddr                                                       string
-	IntegrationEncryptionKey                                       string
-	AgentctlOpencodeImage                                          string
-	AgentctlClaudeCodeImage                                        string
-	AgentctlCodexImage                                             string
-	AgentctlGitHubCopilotImage                                     string
-	AgentctlKiroImage                                              string
-	ExecutionImageRepository                                       string
-	Executor                                                       string
-	AgentctlNetwork                                                string
-	CodexAuthFile                                                  string
-	AgentctlBinary                                                 string
-	AgentProviderEnv                                               string
-	GitAuthorName                                                  string
-	GitAuthorEmail                                                 string
-	AgentMCPURL                                                    string
-	AgentMCPTokenKey                                               string
-	DockerRegistryHost                                             string
-	BuildKitRegistryHost                                           string
-	ImageBuilder                                                   string
-	BuildctlBinary                                                 string
-	BuildKitAddr                                                   string
-	BuildKitTLSCA                                                  string
-	BuildKitTLSCert                                                string
-	BuildKitTLSKey                                                 string
-	BuildKitDaemonless                                             string
-	ExecutionProfileBuildWorkers                                   string
-	Kubernetes                                                     kubernetesServerConfiguration
+	BootstrapAdminUsername, BootstrapAdminEmail, BootstrapAdminPassword string
+	EditorImage, EditorReadonlyImage, EditorOrigin, PlatformOrigin      string
+	DataDir                                                             string
+	HTTPAddr                                                            string
+	IntegrationEncryptionKey                                            string
+	AgentctlOpencodeImage                                               string
+	AgentctlClaudeCodeImage                                             string
+	AgentctlCodexImage                                                  string
+	AgentctlGitHubCopilotImage                                          string
+	AgentctlKiroImage                                                   string
+	ExecutionImageRepository                                            string
+	Executor                                                            string
+	AgentctlNetwork                                                     string
+	CodexAuthFile                                                       string
+	AgentctlBinary                                                      string
+	AgentProviderEnv                                                    string
+	GitAuthorName                                                       string
+	GitAuthorEmail                                                      string
+	AgentMCPURL                                                         string
+	AgentMCPTokenKey                                                    string
+	DockerRegistryHost                                                  string
+	BuildKitRegistryHost                                                string
+	ImageBuilder                                                        string
+	BuildctlBinary                                                      string
+	BuildKitAddr                                                        string
+	BuildKitTLSCA                                                       string
+	BuildKitTLSCert                                                     string
+	BuildKitTLSKey                                                      string
+	BuildKitDaemonless                                                  string
+	ExecutionProfileBuildWorkers                                        string
+	Kubernetes                                                          kubernetesServerConfiguration
 }
 
 func loadServerConfiguration() serverConfiguration {
 	config := serverConfiguration{
-		EditorImage: os.Getenv("ORKEST_EDITOR_IMAGE"), EditorReadonlyImage: os.Getenv("ORKEST_EDITOR_READONLY_IMAGE"), EditorOrigin: os.Getenv("ORKEST_EDITOR_ORIGIN"), PlatformOrigin: os.Getenv("ORKEST_PLATFORM_ORIGIN"),
+		BootstrapAdminUsername: environmentOrDefault("ORKEST_BOOTSTRAP_ADMIN_USERNAME", "admin"),
+		BootstrapAdminEmail:    environmentOrDefault("ORKEST_BOOTSTRAP_ADMIN_EMAIL", "admin@orkest.local"),
+		BootstrapAdminPassword: environmentOrDefault("ORKEST_BOOTSTRAP_ADMIN_PASSWORD", "admin"),
+		EditorImage:            os.Getenv("ORKEST_EDITOR_IMAGE"), EditorReadonlyImage: os.Getenv("ORKEST_EDITOR_READONLY_IMAGE"), EditorOrigin: os.Getenv("ORKEST_EDITOR_ORIGIN"), PlatformOrigin: os.Getenv("ORKEST_PLATFORM_ORIGIN"),
 		DataDir:                      os.Getenv("ORKEST_DATA_DIR"),
 		HTTPAddr:                     os.Getenv("HTTP_ADDR"),
 		IntegrationEncryptionKey:     os.Getenv("ORKEST_INTEGRATION_ENCRYPTION_KEY"),
@@ -112,4 +116,11 @@ func loadServerConfiguration() serverConfiguration {
 		config.GitAuthorEmail = "agent@orkest.local"
 	}
 	return config
+}
+
+func environmentOrDefault(key, fallback string) string {
+	if value, ok := os.LookupEnv(key); ok && value != "" {
+		return value
+	}
+	return fallback
 }

@@ -77,6 +77,7 @@ export declare const zCurrentUser: z.ZodObject<{
         }>>;
     }, z.core.$strip>>;
     platformAdmin: z.ZodReadonly<z.ZodBoolean>;
+    hasLocalPassword: z.ZodReadonly<z.ZodBoolean>;
 }, z.core.$strip>;
 export declare const zWorkspace: z.ZodObject<{
     id: z.ZodString;
@@ -1629,6 +1630,41 @@ export declare const zGetHealthResponse: z.ZodObject<{
     }>;
 }, z.core.$strip>;
 /**
+ * Enabled authentication methods
+ */
+export declare const zGetAuthenticationMethodsResponse: z.ZodObject<{
+    local: z.ZodBoolean;
+    keycloak: z.ZodBoolean;
+}, z.core.$strip>;
+export declare const zLoginWithPasswordBody: z.ZodObject<{
+    username: z.ZodString;
+    password: z.ZodString;
+}, z.core.$strip>;
+/**
+ * Login succeeded and a session cookie was set
+ */
+export declare const zLoginWithPasswordResponse: z.ZodVoid;
+export declare const zProvisionLocalAccountBody: z.ZodObject<{
+    username: z.ZodString;
+    email: z.ZodEmail;
+    password: z.ZodString;
+    role: z.ZodEnum<{
+        owner: "owner";
+        admin: "admin";
+        member: "member";
+    }>;
+}, z.core.$strip>;
+export declare const zProvisionLocalAccountPath: z.ZodObject<{
+    orgID: z.ZodString;
+}, z.core.$strip>;
+export declare const zPromotePlatformAdminPath: z.ZodObject<{
+    userID: z.ZodString;
+}, z.core.$strip>;
+/**
+ * User promoted to platform administrator
+ */
+export declare const zPromotePlatformAdminResponse: z.ZodVoid;
+/**
  * Session cleared
  */
 export declare const zLogoutResponse: z.ZodVoid;
@@ -1651,7 +1687,16 @@ export declare const zGetCurrentUserResponse: z.ZodObject<{
         }>>;
     }, z.core.$strip>>;
     platformAdmin: z.ZodReadonly<z.ZodBoolean>;
+    hasLocalPassword: z.ZodReadonly<z.ZodBoolean>;
 }, z.core.$strip>;
+export declare const zChangeLocalPasswordBody: z.ZodObject<{
+    currentPassword: z.ZodString;
+    newPassword: z.ZodString;
+}, z.core.$strip>;
+/**
+ * Local password changed
+ */
+export declare const zChangeLocalPasswordResponse: z.ZodVoid;
 /**
  * Organizations the user belongs to
  */

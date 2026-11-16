@@ -148,8 +148,17 @@ func runServer(ctx context.Context, logger *slog.Logger) error {
 		return err
 	}
 	defer database.Close()
-	users := identity.NewUserRegistrationService(postgres.NewUserPostgresRepository(database))
+	userRepository := postgres.NewUserPostgresRepository(database)
+	users := identity.NewUserRegistrationService(userRepository)
 	organizations := organization.NewOrganizationService(postgres.NewOrganizationPostgresRepository(database))
+	localAuth := identity.NewLocalAuthenticationService(userRepository, users, organizations)
+	bootstrapped, bootstrapErr := localAuth.BootstrapPlatformAdmin(ctx, config.BootstrapAdminUsername, config.BootstrapAdminEmail, config.BootstrapAdminPassword)
+	if bootstrapErr != nil {
+		return fmt.Errorf("ensure initial local platform administrator: %w", bootstrapErr)
+	}
+	if bootstrapped {
+		logger.Info("ensured initial local platform administrator")
+	}
 	workspaces := workspace.NewWorkspaceService(postgres.NewWorkspacePostgresRepository(database), organizations)
 	skillCatalog := skill.NewCatalogService(postgres.NewSkillCatalogPostgresRepository(database), organizations, workspaces, users)
 	var secretBox *secretbox.Box
@@ -360,6 +369,7 @@ func runServer(ctx context.Context, logger *slog.Logger) error {
 		Editor:        editorGateway,
 		ScheduledJobs: jobService, JobDispatcher: jobDispatcher,
 		Users:             users,
+		LocalAuth:         localAuth,
 		Organizations:     organizations,
 		Workspaces:        workspaces,
 		Agents:            agents,
