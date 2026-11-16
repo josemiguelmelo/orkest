@@ -48,6 +48,9 @@ const WorkspaceSettings = lazy(() =>
 const UserSettings = lazy(() =>
   import('../features/settings/user').then((m) => ({ default: m.UserSettingsPage })),
 );
+const PlatformAdmin = lazy(() =>
+  import('../features/platform-admin/admin').then((m) => ({ default: m.PlatformAdminPage })),
+);
 const root = createRootRoute({
   component: Shell,
   notFoundComponent: () => (
@@ -72,6 +75,11 @@ const globalSkills = createRoute({
   getParentRoute: () => root,
   path: 'skills',
   component: loading(Skills),
+});
+const platformAdmin = createRoute({
+  getParentRoute: () => root,
+  path: 'platform-admin',
+  component: loading(PlatformAdmin),
 });
 const userSettings = createRoute({
   getParentRoute: () => root,
@@ -182,6 +190,7 @@ const tree = root.addChildren([
   home,
   userSettings,
   globalSkills,
+  platformAdmin,
   organization.addChildren([
     organizationIndex,
     organizationSkills,

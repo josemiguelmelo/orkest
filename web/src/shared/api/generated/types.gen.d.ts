@@ -1,6 +1,28 @@
 export type ClientOptions = {
     baseUrl: `${string}://${string}` | (string & {});
 };
+export type PlatformAdminOverview = {
+    enabledUsers: number;
+    organizations: number;
+    workspaces: number;
+    runsLast30Days: number;
+};
+export type PlatformRuntimeConfiguration = {
+    executor: string;
+    agentctlImages: {
+        [key: string]: string;
+    };
+    agentMcpUrl: string;
+    agentMcpSource: 'default' | 'environment_override' | 'kubernetes_service';
+    dataDirectory: string;
+    codexAuth: CodexAuthSource;
+    loadedAt: string;
+};
+export type CodexAuthSource = {
+    configured: boolean;
+    type: '' | 'file' | 'kubernetes_secret';
+    location?: string;
+};
 export type TaskEditorStatus = {
     state: 'ready' | 'stopped' | 'unavailable' | 'failed';
     mode?: 'ro' | 'rw';
@@ -1850,6 +1872,46 @@ export type PromotePlatformAdminResponses = {
     204: void;
 };
 export type PromotePlatformAdminResponse = PromotePlatformAdminResponses[keyof PromotePlatformAdminResponses];
+export type GetPlatformAdminOverviewData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/platform-admin/overview';
+};
+export type GetPlatformAdminOverviewErrors = {
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+};
+export type GetPlatformAdminOverviewError = GetPlatformAdminOverviewErrors[keyof GetPlatformAdminOverviewErrors];
+export type GetPlatformAdminOverviewResponses = {
+    /**
+     * Platform account and run counts
+     */
+    200: PlatformAdminOverview;
+};
+export type GetPlatformAdminOverviewResponse = GetPlatformAdminOverviewResponses[keyof GetPlatformAdminOverviewResponses];
+export type GetPlatformRuntimeConfigurationData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/platform-admin/runtime-configuration';
+};
+export type GetPlatformRuntimeConfigurationErrors = {
+    /**
+     * Insufficient role permissions
+     */
+    403: Error;
+};
+export type GetPlatformRuntimeConfigurationError = GetPlatformRuntimeConfigurationErrors[keyof GetPlatformRuntimeConfigurationErrors];
+export type GetPlatformRuntimeConfigurationResponses = {
+    /**
+     * Read-only effective platform runtime configuration
+     */
+    200: PlatformRuntimeConfiguration;
+};
+export type GetPlatformRuntimeConfigurationResponse = GetPlatformRuntimeConfigurationResponses[keyof GetPlatformRuntimeConfigurationResponses];
 export type CompleteLoginData = {
     body?: never;
     path?: never;

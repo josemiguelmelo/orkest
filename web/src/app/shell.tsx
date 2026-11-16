@@ -461,6 +461,12 @@ function ShellContent({ session }: { session: CurrentUser }) {
               <NotebookText size={17} />
               Global skills
             </Link>
+            {session.platformAdmin && (
+              <Link className="nav-link" to="/platform-admin">
+                <Shield size={17} />
+                Platform administration
+              </Link>
+            )}
           </nav>
           <div className="sidebar-footer">
             <Link className="nav-link" to="/settings" onClick={() => setMobile(false)}>

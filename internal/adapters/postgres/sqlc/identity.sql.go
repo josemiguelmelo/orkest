@@ -229,6 +229,33 @@ func (q *Queries) LocalCredentialByUsername(ctx context.Context, normalizedUsern
 	return i, err
 }
 
+const platformAdminOverview = `-- name: PlatformAdminOverview :one
+SELECT
+    (SELECT count(*) FROM users) AS enabled_users,
+    (SELECT count(*) FROM organizations) AS organizations,
+    (SELECT count(*) FROM workspaces) AS workspaces,
+    (SELECT count(*) FROM agent_launches WHERE created_at >= now() - interval '30 days') AS runs_last_30_days
+`
+
+type PlatformAdminOverviewRow struct {
+	EnabledUsers   int64 `json:"enabled_users"`
+	Organizations  int64 `json:"organizations"`
+	Workspaces     int64 `json:"workspaces"`
+	RunsLast30Days int64 `json:"runs_last_30_days"`
+}
+
+func (q *Queries) PlatformAdminOverview(ctx context.Context) (PlatformAdminOverviewRow, error) {
+	row := q.db.QueryRow(ctx, platformAdminOverview)
+	var i PlatformAdminOverviewRow
+	err := row.Scan(
+		&i.EnabledUsers,
+		&i.Organizations,
+		&i.Workspaces,
+		&i.RunsLast30Days,
+	)
+	return i, err
+}
+
 const promotePlatformAdmin = `-- name: PromotePlatformAdmin :execrows
 UPDATE users SET platform_admin = true WHERE id = $1
 `
